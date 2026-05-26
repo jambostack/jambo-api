@@ -1,0 +1,12 @@
+<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- J stem + hook -->
+  <path
+    d="M 25 7 L 25 26 Q 25 33 19 33 Q 13 33 13 27 L 13 24"
+    stroke="#15803d"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- API node accent dot -->
+  <circle cx="31" cy="8" r="2.5" fill="#15803d" opacity="0.5"/>
+</svg>

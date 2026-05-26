@@ -1,0 +1,14 @@
+framework:
+    rate_limiter:
+        login_limiter:
+            policy: sliding_window
+            limit: 5
+            interval: '60 seconds'
+        register_limiter:
+            policy: sliding_window
+            limit: 3
+            interval: '60 seconds'
+        password_reset_limiter:
+            policy: sliding_window
+            limit: 3
+            interval: '60 seconds'
