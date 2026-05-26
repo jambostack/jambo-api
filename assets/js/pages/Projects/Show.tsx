@@ -1,7 +1,7 @@
 import { Head, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { Link } from '@inertiajs/react';
-import { Copy, Save, Layers, FileText, Image, Webhook } from 'lucide-react';
+import { Copy, Save, Layers, FileText, Image, Webhook, Download, Upload } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,6 +20,8 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 
 import ProjectSidebar from './ProjectSidebar';
 import ProjectsLayout from './layout';
+import ExportModal from './Export/ExportModal';
+import ImportModal from './Import/ImportModal';
 import { useTranslation } from '@/lib/i18n';
 
 interface Props {
@@ -39,6 +41,9 @@ export default function Show({ project }: Props) {
     const [cloneModalOpen, setCloneModalOpen] = useState(false);
     const [cloneName, setCloneName] = useState(project.name + ' Copy');
     const [cloneDesc, setCloneDesc] = useState(project.description ?? '');
+
+    const [exportModalOpen, setExportModalOpen] = useState(false);
+    const [importModalOpen, setImportModalOpen] = useState(false);
 
     const slugify = (str: string) => str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
@@ -151,6 +156,24 @@ export default function Show({ project }: Props) {
                                                 <span className="hidden sm:inline">{t('projects.show.clone_btn')}</span>
                                             </Button>
                                         )}
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="flex items-center gap-1"
+                                            onClick={() => setExportModalOpen(true)}
+                                        >
+                                            <Download className="h-4 w-4" />
+                                            <span className="hidden sm:inline">{t('projects.export.button')}</span>
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="flex items-center gap-1"
+                                            onClick={() => setImportModalOpen(true)}
+                                        >
+                                            <Upload className="h-4 w-4" />
+                                            <span className="hidden sm:inline">{t('projects.import.button')}</span>
+                                        </Button>
                                     </div>
                                 </div>
                             </CardHeader>
@@ -313,6 +336,18 @@ export default function Show({ project }: Props) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ExportModal
+                open={exportModalOpen}
+                onOpenChange={setExportModalOpen}
+                projectUuid={project.uuid}
+                projectName={project.name}
+            />
+
+            <ImportModal
+                open={importModalOpen}
+                onOpenChange={setImportModalOpen}
+            />
         </AppLayout>
     );
 }

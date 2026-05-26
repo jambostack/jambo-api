@@ -33,3 +33,19 @@ services:
     App\Service\ApiTokenChecker:
         arguments:
             $appSecret: '%kernel.secret%'
+
+    App\Service\ExportImport\Export\MediaExportHandler:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+
+    App\Service\ExportImport\Import\MediaImportHandler:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+
+    App\Service\ExportImport\ProjectExporter:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+
+    App\Service\ExportImport\ProjectImporter:
+        arguments:
+            $projectDir: '%kernel.project_dir%'

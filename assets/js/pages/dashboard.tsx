@@ -6,10 +6,11 @@ import { useTranslation } from '@/lib/i18n';
 
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Folder, Plus } from 'lucide-react';
+import { ArrowRight, Folder, Plus, Upload } from 'lucide-react';
 import { SearchBar } from '@/components/ui/search-bar';
 
 import CreateProjectModal from '@/pages/Projects/CreateProjectModal';
+import ImportModal from '@/pages/Projects/Import/ImportModal';
 
 interface Props {
     projects: Project[];
@@ -40,6 +41,7 @@ export default function Dashboard({ projects }: Props) {
     const can = usePage().props.userCan as UserCan;
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     const breadcrumbs: BreadcrumbItem[] = [
@@ -69,14 +71,25 @@ export default function Dashboard({ projects }: Props) {
                         </p>
                     </div>
                     {can.create_project && (
-                        <Button
-                            size="sm"
-                            className="self-start sm:self-auto gap-1.5"
-                            onClick={() => setIsCreateModalOpen(true)}
-                        >
-                            <Plus className="h-4 w-4" />
-                            {t('dashboard.new_project')}
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="self-start sm:self-auto gap-1.5"
+                                onClick={() => setIsImportModalOpen(true)}
+                            >
+                                <Upload className="h-4 w-4" />
+                                {t('projects.import.button')}
+                            </Button>
+                            <Button
+                                size="sm"
+                                className="self-start sm:self-auto gap-1.5"
+                                onClick={() => setIsCreateModalOpen(true)}
+                            >
+                                <Plus className="h-4 w-4" />
+                                {t('dashboard.new_project')}
+                            </Button>
+                        </div>
                     )}
                 </div>
 
@@ -159,6 +172,12 @@ export default function Dashboard({ projects }: Props) {
             </div>
 
             <CreateProjectModal open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} />
+
+            <ImportModal
+                open={isImportModalOpen}
+                onOpenChange={setIsImportModalOpen}
+                projects={projects.map((p) => ({ uuid: p.uuid, name: p.name }))}
+            />
         </AppLayout>
     );
 }
