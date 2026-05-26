@@ -5,7 +5,9 @@ namespace App\Controller;
 use App\Entity\Collection;
 use App\Entity\Field;
 use App\Entity\Project;
+use App\Repository\CollectionRepository;
 use App\Repository\FieldRepository;
+use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -15,12 +17,17 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/fields', name: 'api_field_')]
 class FieldController extends AbstractController
 {
-    public function __construct(private FieldRepository $fieldRepository) {}
+    public function __construct(
+        private EntityManagerInterface $em,
+        private FieldRepository $fieldRepository,
+        private ProjectRepository $projectRepository,
+        private CollectionRepository $collectionRepository,
+    ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
-    public function index(string $projectUuid, string $collectionSlug, EntityManagerInterface $em): JsonResponse
+    public function index(string $projectUuid, string $collectionSlug): JsonResponse
     {
-        $collection = $this->findCollection($projectUuid, $collectionSlug, $em);
+        $collection = $this->findCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
         }
@@ -33,14 +40,14 @@ class FieldController extends AbstractController
     }
 
     #[Route('', name: 'create', methods: ['POST'])]
-    public function create(string $projectUuid, string $collectionSlug, Request $request, EntityManagerInterface $em): JsonResponse
+    public function create(string $projectUuid, string $collectionSlug, Request $request): JsonResponse
     {
-        $collection = $this->findCollection($projectUuid, $collectionSlug, $em);
+        $collection = $this->findCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
         }
 
-        $data = json_decode($request->getContent(), true);
+        $data = $request->toArray();
 
         if (empty($data['name']) || empty($data['type'])) {
             return $this->json(['error' => 'name and type are required'], 422);
@@ -55,16 +62,16 @@ class FieldController extends AbstractController
         $field->isRequired = $data['is_required'] ?? false;
         $field->collection = $collection;
 
-        $em->persist($field);
-        $em->flush();
+        $this->em->persist($field);
+        $this->em->flush();
 
         return $this->json(['data' => $this->serialize($field)], 201);
     }
 
     #[Route('/{fieldSlug}', name: 'show', methods: ['GET'])]
-    public function show(string $projectUuid, string $collectionSlug, string $fieldSlug, EntityManagerInterface $em): JsonResponse
+    public function show(string $projectUuid, string $collectionSlug, string $fieldSlug): JsonResponse
     {
-        $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug, $em);
+        $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug);
         if ($field instanceof JsonResponse) {
             return $field;
         }
@@ -73,14 +80,14 @@ class FieldController extends AbstractController
     }
 
     #[Route('/{fieldSlug}', name: 'update', methods: ['PUT', 'PATCH'])]
-    public function update(string $projectUuid, string $collectionSlug, string $fieldSlug, Request $request, EntityManagerInterface $em): JsonResponse
+    public function update(string $projectUuid, string $collectionSlug, string $fieldSlug, Request $request): JsonResponse
     {
-        $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug, $em);
+        $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug);
         if ($field instanceof JsonResponse) {
             return $field;
         }
 
-        $data = json_decode($request->getContent(), true);
+        $data = $request->toArray();
 
         if (isset($data['name'])) {
             $field->name = $data['name'];
@@ -101,52 +108,52 @@ class FieldController extends AbstractController
             $field->isRequired = (bool) $data['is_required'];
         }
 
-        $em->flush();
+        $this->em->flush();
 
         return $this->json(['data' => $this->serialize($field)]);
     }
 
     #[Route('/reorder', name: 'reorder', methods: ['POST'], priority: 10)]
-    public function reorder(string $projectUuid, string $collectionSlug, Request $request, EntityManagerInterface $em): JsonResponse
+    public function reorder(string $projectUuid, string $collectionSlug, Request $request): JsonResponse
     {
-        $collection = $this->findCollection($projectUuid, $collectionSlug, $em);
+        $collection = $this->findCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
         }
 
         foreach ($request->toArray()['fields'] ?? [] as $item) {
-            $field = $em->getRepository(Field::class)->findOneBy(['id' => (int) $item['id'], 'collection' => $collection]);
+            $field = $this->fieldRepository->findOneBy(['id' => (int) $item['id'], 'collection' => $collection]);
             if ($field) {
                 $field->order = (int) $item['order'];
             }
         }
-        $em->flush();
+        $this->em->flush();
 
         return $this->json(null, 204);
     }
 
     #[Route('/{fieldSlug}', name: 'delete', methods: ['DELETE'])]
-    public function delete(string $projectUuid, string $collectionSlug, string $fieldSlug, EntityManagerInterface $em): JsonResponse
+    public function delete(string $projectUuid, string $collectionSlug, string $fieldSlug): JsonResponse
     {
-        $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug, $em);
+        $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug);
         if ($field instanceof JsonResponse) {
             return $field;
         }
 
         $field->deletedAt = new \DateTimeImmutable();
-        $em->flush();
+        $this->em->flush();
 
         return $this->json(null, 204);
     }
 
-    private function findCollection(string $projectUuid, string $collectionSlug, EntityManagerInterface $em): Collection|JsonResponse
+    private function findCollection(string $projectUuid, string $collectionSlug): Collection|JsonResponse
     {
-        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $collection = $em->getRepository(Collection::class)->findOneBy(['slug' => $collectionSlug, 'project' => $project]);
+        $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if (!$collection) {
             return $this->json(['error' => 'Collection not found'], 404);
         }
@@ -154,9 +161,9 @@ class FieldController extends AbstractController
         return $collection;
     }
 
-    private function findField(string $projectUuid, string $collectionSlug, string $fieldSlug, EntityManagerInterface $em): Field|JsonResponse
+    private function findField(string $projectUuid, string $collectionSlug, string $fieldSlug): Field|JsonResponse
     {
-        $collection = $this->findCollection($projectUuid, $collectionSlug, $em);
+        $collection = $this->findCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
         }
@@ -181,5 +188,4 @@ class FieldController extends AbstractController
             'is_required' => $field->isRequired,
         ];
     }
-
 }

@@ -2,18 +2,18 @@
 
 namespace App\Controller\UserManagement;
 
-use App\Controller\InertiaController;
 use App\Entity\Role;
 use App\Repository\PermissionRepository;
 use App\Repository\RoleRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/roles', name: 'api_roles_')]
-class RoleController extends InertiaController
+class RoleController extends AbstractController
 {
     public function __construct(
         private RoleRepository $roleRepository,

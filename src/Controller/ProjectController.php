@@ -10,12 +10,13 @@ use App\Repository\ProjectRepository;
 use App\Repository\RoleRepository;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api/projects', name: 'api_project_')]
-class ProjectController extends InertiaController
+class ProjectController extends AbstractController
 {
     public function __construct(
         private ProjectRepository $projectRepository,

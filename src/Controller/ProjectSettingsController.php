@@ -7,12 +7,13 @@ use App\Repository\ApiTokenRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api/projects/{projectUuid}/settings', name: 'api_project_settings_')]
-class ProjectSettingsController extends InertiaController
+class ProjectSettingsController extends AbstractController
 {
     public function __construct(
         private ProjectRepository $projectRepository,

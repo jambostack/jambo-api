@@ -2,11 +2,11 @@
 
 namespace App\Controller\UserManagement;
 
-use App\Controller\InertiaController;
 use App\Entity\User;
 use App\Repository\RoleRepository;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -14,7 +14,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/users', name: 'api_users_')]
-class UserController extends InertiaController
+class UserController extends AbstractController
 {
     public function __construct(
         private UserRepository $userRepository,

@@ -4,6 +4,8 @@ namespace App\Controller;
 
 use App\Entity\Collection;
 use App\Entity\Project;
+use App\Repository\CollectionRepository;
+use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -13,18 +15,21 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/projects/{projectUuid}/collections', name: 'api_collection_')]
 class CollectionController extends AbstractController
 {
+    public function __construct(
+        private EntityManagerInterface $em,
+        private ProjectRepository $projectRepository,
+        private CollectionRepository $collectionRepository,
+    ) {}
+
     #[Route('', name: 'index', methods: ['GET'])]
-    public function index(string $projectUuid, EntityManagerInterface $em): JsonResponse
+    public function index(string $projectUuid): JsonResponse
     {
-        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $collections = $em->getRepository(Collection::class)->findBy(
-            ['project' => $project],
-            ['order' => 'ASC']
-        );
+        $collections = $this->collectionRepository->findByProject($project);
 
         return $this->json([
             'data' => array_map(fn($c) => $this->serialize($c), $collections),
@@ -32,14 +37,14 @@ class CollectionController extends AbstractController
     }
 
     #[Route('', name: 'create', methods: ['POST'])]
-    public function create(string $projectUuid, Request $request, EntityManagerInterface $em): JsonResponse
+    public function create(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $data = json_decode($request->getContent(), true);
+        $data = $request->toArray();
 
         if (empty($data['name'])) {
             return $this->json(['error' => 'name is required'], 422);
@@ -53,22 +58,22 @@ class CollectionController extends AbstractController
         $collection->order = $data['order'] ?? 0;
         $collection->project = $project;
 
-        $em->persist($collection);
-        $em->flush();
+        $this->em->persist($collection);
+        $this->em->flush();
 
         return $this->json(['data' => $this->serialize($collection)], 201);
     }
 
     #[Route('/reorder', name: 'reorder', methods: ['POST'], priority: 10)]
-    public function reorder(string $projectUuid, Request $request, EntityManagerInterface $em): JsonResponse
+    public function reorder(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
 
         foreach ($request->toArray()['collections'] ?? [] as $item) {
-            $collection = $em->getRepository(Collection::class)->findOneBy([
+            $collection = $this->collectionRepository->findOneBy([
                 'id'      => (int) $item['id'],
                 'project' => $project,
             ]);
@@ -77,15 +82,15 @@ class CollectionController extends AbstractController
             }
         }
 
-        $em->flush();
+        $this->em->flush();
 
         return $this->json(null, 204);
     }
 
     #[Route('/{slug}', name: 'show', methods: ['GET'])]
-    public function show(string $projectUuid, string $slug, EntityManagerInterface $em): JsonResponse
+    public function show(string $projectUuid, string $slug): JsonResponse
     {
-        $collection = $this->findCollection($projectUuid, $slug, $em);
+        $collection = $this->findCollection($projectUuid, $slug);
         if ($collection instanceof JsonResponse) {
             return $collection;
         }
@@ -94,14 +99,14 @@ class CollectionController extends AbstractController
     }
 
     #[Route('/{slug}', name: 'update', methods: ['PUT', 'PATCH'])]
-    public function update(string $projectUuid, string $slug, Request $request, EntityManagerInterface $em): JsonResponse
+    public function update(string $projectUuid, string $slug, Request $request): JsonResponse
     {
-        $collection = $this->findCollection($projectUuid, $slug, $em);
+        $collection = $this->findCollection($projectUuid, $slug);
         if ($collection instanceof JsonResponse) {
             return $collection;
         }
 
-        $data = json_decode($request->getContent(), true);
+        $data = $request->toArray();
 
         if (isset($data['name'])) {
             $collection->name = $data['name'];
@@ -119,33 +124,33 @@ class CollectionController extends AbstractController
             $collection->order = (int) $data['order'];
         }
 
-        $em->flush();
+        $this->em->flush();
 
         return $this->json(['data' => $this->serialize($collection)]);
     }
 
     #[Route('/{slug}', name: 'delete', methods: ['DELETE'])]
-    public function delete(string $projectUuid, string $slug, EntityManagerInterface $em): JsonResponse
+    public function delete(string $projectUuid, string $slug): JsonResponse
     {
-        $collection = $this->findCollection($projectUuid, $slug, $em);
+        $collection = $this->findCollection($projectUuid, $slug);
         if ($collection instanceof JsonResponse) {
             return $collection;
         }
 
-        $em->remove($collection);
-        $em->flush();
+        $this->em->remove($collection);
+        $this->em->flush();
 
         return $this->json(null, 204);
     }
 
-    private function findCollection(string $projectUuid, string $slug, EntityManagerInterface $em): Collection|JsonResponse
+    private function findCollection(string $projectUuid, string $slug): Collection|JsonResponse
     {
-        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $collection = $em->getRepository(Collection::class)->findOneBy(['slug' => $slug, 'project' => $project]);
+        $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $slug);
         if (!$collection) {
             return $this->json(['error' => 'Collection not found'], 404);
         }
@@ -166,5 +171,4 @@ class CollectionController extends AbstractController
             'fields_count' => $collection->fields->count(),
         ];
     }
-
 }

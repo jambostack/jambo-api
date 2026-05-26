@@ -7,12 +7,13 @@ use App\Repository\CollectionRepository;
 use App\Repository\ColumnSettingRepository;
 use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/column-settings', name: 'api_column_settings_')]
-class ColumnSettingController extends InertiaController
+class ColumnSettingController extends AbstractController
 {
     public function __construct(
         private ProjectRepository $projectRepository,

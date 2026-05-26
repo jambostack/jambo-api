@@ -2,16 +2,16 @@
 
 namespace App\Controller\Settings;
 
-use App\Controller\InertiaController;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
-class PasswordController extends InertiaController
+class PasswordController extends AbstractController
 {
     public function __construct(
         private EntityManagerInterface $em,

@@ -67,7 +67,7 @@ class PageController extends InertiaController
     #[Route('/projects/{project}', name: 'projects_show', requirements: ['project' => '\d+'], priority: 10)]
     public function projectShow(int $project, Request $request): Response
     {
-        $project = $this->em->find(Project::class, $project);
+        $project = $this->projectRepository->find($project);
         if (!$project) {
             throw $this->createNotFoundException();
         }
@@ -125,7 +125,7 @@ class PageController extends InertiaController
     {
         [$project, $collection] = $this->resolveProjectAndCollection($project, $collection);
 
-        $entry = $this->em->find(ContentEntry::class, $contentEntry);
+        $entry = $this->entryRepository->find($contentEntry);
         if (!$entry || $entry->collection->id !== $collection->id) {
             throw $this->createNotFoundException();
         }
@@ -159,7 +159,7 @@ class PageController extends InertiaController
     #[Route('/projects/{project}/assets', name: 'assets_index', requirements: ['project' => '\d+'], priority: 10)]
     public function assets(int $project, Request $request): Response
     {
-        $project = $this->em->find(Project::class, $project);
+        $project = $this->projectRepository->find($project);
         if (!$project) {
             throw $this->createNotFoundException();
         }
@@ -235,7 +235,7 @@ class PageController extends InertiaController
     #[Route('/projects/{project}/settings/api-access', name: 'projects_settings_api_access', requirements: ['project' => '\d+'], priority: 10)]
     public function settingsApiAccess(int $project, Request $request): Response
     {
-        $project = $this->em->find(Project::class, $project);
+        $project = $this->projectRepository->find($project);
         if (!$project) {
             throw $this->createNotFoundException();
         }
@@ -319,7 +319,7 @@ class PageController extends InertiaController
 
     private function settingsPage(int $project, Request $request, string $component): Response
     {
-        $project = $this->em->find(Project::class, $project);
+        $project = $this->projectRepository->find($project);
         if (!$project) {
             throw $this->createNotFoundException();
         }
@@ -333,13 +333,13 @@ class PageController extends InertiaController
 
     private function resolveProjectAndCollection(int $project, int $collection): array
     {
-        $project = $this->em->find(Project::class, $project);
+        $project = $this->projectRepository->find($project);
         if (!$project) {
             throw $this->createNotFoundException('Project not found');
         }
         $this->denyProjectAccess($project);
 
-        $collection = $this->em->find(Collection::class, $collection);
+        $collection = $this->collectionRepository->find($collection);
         if (!$collection || $collection->project->id !== $project->id || $collection->isDeleted()) {
             throw $this->createNotFoundException('Collection not found');
         }
@@ -419,7 +419,7 @@ class PageController extends InertiaController
         // Enrich relation options with the target collection's slug so the
         // frontend can build API URLs without resolving integer IDs itself.
         if ($field->type === 'relation' && isset($options['relation']['collection'])) {
-            $targetColl = $this->em->find(Collection::class, (int) $options['relation']['collection']);
+            $targetColl = $this->collectionRepository->find((int) $options['relation']['collection']);
             if ($targetColl) {
                 $options['relation']['collection_slug'] = $targetColl->slug;
             }

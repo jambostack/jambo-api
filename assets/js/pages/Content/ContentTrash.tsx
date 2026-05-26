@@ -1,16 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
-import { router } from "@inertiajs/react";
+import { useRef, useState } from "react";
+import { router, usePage } from "@inertiajs/react";
 import axios from "axios";
 import { toast } from "sonner";
+import moment from "moment";
 import { useTranslation } from '@/lib/i18n';
 
-import type { Collection, Project, Field } from "@/types";
-import type { ContentEntry } from "@/types/content";
+import type { Collection, Project, Field, ContentEntry, ColumnDef, UserCan } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
     Trash2,
     RotateCcw,
@@ -25,14 +23,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
+import { DataTable, DataTableRef } from "@/components/ui/data-table";
 
 interface Props {
     collection: Collection & { fields: Field[] };
@@ -42,57 +33,29 @@ interface Props {
 type TrashedEntry = ContentEntry & { deleted_at: string };
 
 export default function ContentTrash({ collection, project }: Props) {
-    const [entries, setEntries] = useState<TrashedEntry[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [selected, setSelected] = useState<string[]>([]);
-    const [processing, setProcessing] = useState(false);
+    const dataTableRef = useRef<DataTableRef>(null);
+    const [selectedItems, setSelectedItems] = useState<TrashedEntry[]>([]);
     const [restoreDialog, setRestoreDialog] = useState(false);
     const [forceDeleteDialog, setForceDeleteDialog] = useState(false);
+    const [processing, setProcessing] = useState(false);
+
+    const can = usePage().props.userCan as UserCan;
     const t = useTranslation();
 
     const baseUrl = `/api/projects/${project.uuid}/collections/${collection.slug}/entries`;
-
-    const fetchTrashed = useCallback(async () => {
-        setLoading(true);
-        try {
-            const res = await axios.get(`${baseUrl}/trash`);
-            setEntries(res.data.data ?? []);
-        } catch {
-            toast.error(t('content.failed_load_trash'));
-        } finally {
-            setLoading(false);
-        }
-    }, [baseUrl]);
-
-    useEffect(() => {
-        fetchTrashed();
-    }, [fetchTrashed]);
-
-    const allSelected = entries.length > 0 && selected.length === entries.length;
-    const someSelected = selected.length > 0;
-
-    const toggleAll = () => {
-        setSelected(allSelected ? [] : entries.map((e) => e.uuid));
-    };
-
-    const toggleOne = (uuid: string) => {
-        setSelected((prev) =>
-            prev.includes(uuid) ? prev.filter((u) => u !== uuid) : [...prev, uuid]
-        );
-    };
 
     const handleRestore = async () => {
         setProcessing(true);
         try {
             await Promise.all(
-                selected.map((uuid) =>
-                    axios.patch(`${baseUrl}/${uuid}/restore`)
+                selectedItems.map((item) =>
+                    axios.patch(`${baseUrl}/${item.uuid}/restore`)
                 )
             );
-            toast.success(`${selected.length} entr${selected.length > 1 ? "ies" : "y"} restored`);
-            setSelected([]);
+            toast.success(`${selectedItems.length} entr${selectedItems.length > 1 ? "ies" : "y"} restored`);
+            setSelectedItems([]);
             setRestoreDialog(false);
-            fetchTrashed();
+            dataTableRef.current?.fetchData();
         } catch {
             toast.error(t('content.failed_restore'));
         } finally {
@@ -104,14 +67,14 @@ export default function ContentTrash({ collection, project }: Props) {
         setProcessing(true);
         try {
             await Promise.all(
-                selected.map((uuid) =>
-                    axios.delete(`${baseUrl}/${uuid}/force-delete`)
+                selectedItems.map((item) =>
+                    axios.delete(`${baseUrl}/${item.uuid}/force-delete`)
                 )
             );
-            toast.success(`${selected.length} entr${selected.length > 1 ? "ies" : "y"} permanently deleted`);
-            setSelected([]);
+            toast.success(`${selectedItems.length} entr${selectedItems.length > 1 ? "ies" : "y"} permanently deleted`);
+            setSelectedItems([]);
             setForceDeleteDialog(false);
-            fetchTrashed();
+            dataTableRef.current?.fetchData();
         } catch {
             toast.error(t('content.failed_delete'));
         } finally {
@@ -120,54 +83,188 @@ export default function ContentTrash({ collection, project }: Props) {
     };
 
     const handleRestoreSingle = async (uuid: string) => {
-        setProcessing(true);
         try {
             await axios.patch(`${baseUrl}/${uuid}/restore`);
             toast.success(t('content.restore_btn'));
-            fetchTrashed();
+            dataTableRef.current?.fetchData();
         } catch {
             toast.error(t('content.failed_restore_entry'));
-        } finally {
-            setProcessing(false);
         }
     };
 
     const handleForceDeleteSingle = async (uuid: string) => {
-        setProcessing(true);
         try {
             await axios.delete(`${baseUrl}/${uuid}/force-delete`);
             toast.success("Entry permanently deleted");
-            fetchTrashed();
+            dataTableRef.current?.fetchData();
         } catch {
             toast.error(t('content.failed_delete_entry'));
-        } finally {
-            setProcessing(false);
         }
     };
 
-    const displayableFields = (collection.fields ?? []).filter(
-        (f) => f.type !== "password" && f.type !== "json" && !f.options?.hideInContentList
-    ).slice(0, 4);
+    const generateColumns = (): ColumnDef[] => {
+        const columns: ColumnDef[] = [
+            {
+                header: t('content.status'),
+                accessorKey: "status",
+                sortable: true,
+                align: "center",
+                width: "w-24",
+                padding: "px-10",
+                filter: {
+                    type: 'select',
+                    options: [
+                        { label: t('content.trashed'), value: 'trashed' },
+                    ]
+                },
+                cell: () => (
+                    <Badge variant="destructive" className="bg-red-600 hover:bg-red-700">
+                        {t('content.trashed')}
+                    </Badge>
+                ),
+            },
+        ];
 
-    const getCellValue = (entry: TrashedEntry, field: Field): string => {
-        const value = entry[field.name];
-        if (value === null || value === undefined || value === "") return "—";
-        if (field.type === "boolean") return value ? t('content.yes') : t('content.no');
-        if (field.type === "richtext" && typeof value === "string") {
-            const plain = value.replace(/<[^>]+>/g, "");
-            return plain.length > 40 ? plain.slice(0, 40) + "…" : plain;
+        if (collection.fields && collection.fields.length > 0) {
+            const displayableFields = collection.fields.filter((field: Field) =>
+                field.type !== 'password' &&
+                field.type !== 'json' &&
+                !field.options?.hideInContentList
+            );
+
+            displayableFields.forEach((field: Field) => {
+                columns.push({
+                    header: field.label,
+                    accessorKey: field.slug,
+                    sortable: true,
+                    cell: (item: ContentEntry) => {
+                        const value = item[field.slug];
+
+                        if (value === null || value === undefined || value === '') {
+                            return <span className="text-muted-foreground">—</span>;
+                        }
+
+                        switch (field.type) {
+                            case 'text':
+                            case 'longtext':
+                                return typeof value === 'string' && value.length > 30
+                                    ? `${value.substring(0, 30)}...`
+                                    : value;
+                            case 'email':
+                            case 'slug':
+                                return value;
+                            case 'richtext':
+                                if (typeof value === 'string') {
+                                    const plain = value.replace(/<[^>]+>/g, "");
+                                    return plain.length > 40 ? plain.slice(0, 40) + "…" : plain;
+                                }
+                                return String(value);
+                            case 'date':
+                                if (!value) return <span className="text-muted-foreground">—</span>;
+                                {
+                                    let format = 'YYYY-MM-DD' + (field.options?.includeTime ? ' HH:mm' : '');
+                                    if (field.options?.mode === 'range') {
+                                        return value.split(' - ').map((date: any) => moment.parseZone(date).format(format)).join(' / ');
+                                    }
+                                    return moment.parseZone(value).format(format);
+                                }
+                            case 'boolean':
+                                return value ? t('content.yes') : t('content.no');
+                            case 'enumeration':
+                                if (Array.isArray(value)) return value.join(', ');
+                                if (typeof value === 'string') {
+                                    try {
+                                        const parsedValue = JSON.parse(value);
+                                        if (Array.isArray(parsedValue)) return parsedValue.join(', ');
+                                    } catch { /* fallback */ }
+                                }
+                                return value;
+                            case 'number':
+                                return value === null ? <span className="text-muted-foreground">—</span> : Number(value).toString();
+                            case 'media':
+                                if (!value) return <span className="text-muted-foreground">—</span>;
+                                if (Array.isArray(value)) return `${value.length} file(s)`;
+                                return <span className="text-muted-foreground">—</span>;
+                            case 'relation':
+                                {
+                                    const ids = Array.isArray(value) ? value : typeof value === 'string' && value.trim() !== '' ? ((): number[] => { try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return value.split(',').map(Number); } })() : [];
+                                    return ids.length > 0 ? `${ids.length} related` : <span className="text-muted-foreground">—</span>;
+                                }
+                            default:
+                                return String(value);
+                        }
+                    }
+                });
+            });
         }
-        if (typeof value === "string" && value.length > 40) {
-            return value.slice(0, 40) + "…";
-        }
-        return String(value);
+
+        columns.push(
+            {
+                header: t('content.deleted_at'),
+                accessorKey: "deleted_at",
+                sortable: true,
+                filter: {
+                    type: 'date',
+                },
+                cell: (item: ContentEntry) => (
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                        {item.deleted_at
+                            ? moment.parseZone(item.deleted_at).format('YYYY-MM-DD HH:mm')
+                            : "—"}
+                    </span>
+                ),
+            },
+            {
+                header: t('content.by'),
+                accessorKey: "deleted_by",
+                cell: (item: ContentEntry) => (
+                    <span className="text-sm text-muted-foreground">
+                        {item.updater?.name ?? "—"}
+                    </span>
+                ),
+            },
+            {
+                header: t('content.actions'),
+                accessorKey: "actions",
+                align: "right",
+                cell: (item: ContentEntry) => (
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleRestoreSingle(item.uuid);
+                            }}
+                        >
+                            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                            {t('content.restore_btn')}
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleForceDeleteSingle(item.uuid);
+                            }}
+                        >
+                            <Trash2 className="h-3.5 w-3.5 mr-1" />
+                            {t('content.delete_action')}
+                        </Button>
+                    </div>
+                ),
+            }
+        );
+
+        return columns;
     };
 
     const backHref = `/projects/${project.id}/collections/${collection.id}`;
 
     return (
         <div>
-            <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+            <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-3">
                     <Button
                         variant="ghost"
@@ -178,125 +275,43 @@ export default function ContentTrash({ collection, project }: Props) {
                         <ArrowLeft className="h-4 w-4" />
                         {t('content.back')}
                     </Button>
-                    <div>
-                        <h1 className="text-xl font-bold flex items-center gap-2">
-                            <Trash2 className="h-5 w-5 text-destructive" />
-                            {t('content.trash_heading')} — {collection.name}
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                            {entries.length} trashed entr{entries.length !== 1 ? "ies" : "y"}
-                        </p>
-                    </div>
+                    <h1 className="text-xl font-bold flex items-center gap-2">
+                        <Trash2 className="h-5 w-5 text-destructive" />
+                        {t('content.trash_heading')} — {collection.name}
+                        <span className="text-sm font-normal text-muted-foreground ml-2">
+                            #<span className="select-all">{collection.slug}</span>
+                        </span>
+                    </h1>
                 </div>
-
-                {someSelected && (
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">{t('content.selected', { count: String(selected.length) })}</span>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setRestoreDialog(true)}
-                            disabled={processing}
-                        >
-                            <RotateCcw className="h-4 w-4 mr-1" />
-                            {t('content.restore_btn')}
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setForceDeleteDialog(true)}
-                            disabled={processing}
-                        >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            {t('content.delete_perm_btn')}
-                        </Button>
-                    </div>
-                )}
             </div>
 
-            {loading ? (
-                <div className="space-y-2">
-                    {[...Array(4)].map((_, i) => (
-                        <Skeleton key={i} className="h-12 w-full" />
-                    ))}
-                </div>
-            ) : entries.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
-                    <Trash2 className="h-10 w-10 opacity-30" />
-                    <p className="text-sm">{t('content.trash_empty')}</p>
-                </div>
-            ) : (
-                <div className="rounded-md border overflow-x-auto">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-10 px-4">
-                                    <Checkbox
-                                        checked={allSelected}
-                                        onCheckedChange={toggleAll}
-                                        aria-label="Select all"
-                                    />
-                                </TableHead>
-                                {displayableFields.map((f) => (
-                                    <TableHead key={f.id}>{f.label}</TableHead>
-                                ))}
-                                <TableHead>{t('content.deleted_at')}</TableHead>
-                                <TableHead>{t('content.by')}</TableHead>
-                                <TableHead className="text-right">{t('content.actions')}</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {entries.map((entry) => (
-                                <TableRow key={entry.uuid} className="opacity-75">
-                                    <TableCell className="px-4">
-                                        <Checkbox
-                                            checked={selected.includes(entry.uuid)}
-                                            onCheckedChange={() => toggleOne(entry.uuid)}
-                                            aria-label={`Select entry ${entry.uuid}`}
-                                        />
-                                    </TableCell>
-                                    {displayableFields.map((f) => (
-                                        <TableCell key={f.id} className="text-sm text-muted-foreground">
-                                            {getCellValue(entry, f)}
-                                        </TableCell>
-                                    ))}
-                                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                                        {entry.deleted_at
-                                            ? new Date(entry.deleted_at).toLocaleString()
-                                            : "—"}
-                                    </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
-                                        {entry.updater?.name ?? "—"}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                disabled={processing}
-                                                onClick={() => handleRestoreSingle(entry.uuid)}
-                                            >
-                                                <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                                                {t('content.restore_btn')}
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="text-destructive hover:text-destructive"
-                                                disabled={processing}
-                                                onClick={() => handleForceDeleteSingle(entry.uuid)}
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5 mr-1" />
-                                                {t('content.delete_action')}
-                                            </Button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-            )}
+            <DataTable
+                ref={dataTableRef}
+                pageName={`trash_${project.id}_${collection.id}`}
+                searchRoute={`${baseUrl}/trash`}
+                searchPlaceholder={`Search trashed ${collection.name}...`}
+                columns={generateColumns()}
+                selectable={true}
+                onSelectionChange={setSelectedItems}
+                selectedItems={selectedItems}
+                itemKey="uuid"
+                actions={[
+                    {
+                        label: t('content.restore_selected'),
+                        onClick: () => setRestoreDialog(true),
+                        icon: <RotateCcw className="h-4 w-4 mr-2" />,
+                        variant: 'outline',
+                        show: selectedItems.length > 0 && can.update_content,
+                    },
+                    {
+                        label: t('content.delete_perm_btn'),
+                        onClick: () => setForceDeleteDialog(true),
+                        icon: <Trash2 className="h-4 w-4 mr-2" />,
+                        variant: 'destructive',
+                        show: selectedItems.length > 0 && can.delete_content,
+                    },
+                ]}
+            />
 
             {/* Bulk restore dialog */}
             <Dialog open={restoreDialog} onOpenChange={setRestoreDialog}>
@@ -304,7 +319,7 @@ export default function ContentTrash({ collection, project }: Props) {
                     <DialogHeader>
                         <DialogTitle>{t('content.restore_entries_title')}</DialogTitle>
                         <DialogDescription>
-                            {t('content.restore_entries_desc', { count: String(selected.length) })}
+                            {t('content.restore_entries_desc', { count: String(selectedItems.length) })}
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -328,7 +343,7 @@ export default function ContentTrash({ collection, project }: Props) {
                             {t('content.delete_entries_title')}
                         </DialogTitle>
                         <DialogDescription>
-                            {t('content.delete_entries_desc', { count: String(selected.length) })}
+                            {t('content.delete_entries_desc', { count: String(selectedItems.length) })}
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>

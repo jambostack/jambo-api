@@ -12,6 +12,7 @@ use App\Repository\FieldRepository;
 use App\Repository\ProjectRepository;
 use App\Service\EavDataFormatterService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -19,7 +20,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Uid\Uuid;
 
 #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries', name: 'api_content_')]
-class ContentController extends InertiaController
+class ContentController extends AbstractController
 {
     public function __construct(
         private ProjectRepository $projectRepository,

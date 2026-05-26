@@ -2,14 +2,14 @@
 
 namespace App\Controller\Settings;
 
-use App\Controller\InertiaController;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/settings', name: 'settings_')]
-class LocaleController extends InertiaController
+class LocaleController extends AbstractController
 {
     private const ALLOWED_LOCALES = ['en', 'fr', 'es', 'ar'];
 

@@ -4,6 +4,8 @@ namespace App\Controller;
 
 use App\Entity\Media;
 use App\Entity\Project;
+use App\Repository\MediaRepository;
+use App\Repository\ProjectRepository;
 use App\Service\MediaSerializer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -17,14 +19,17 @@ use Vich\UploaderBundle\Handler\UploadHandler;
 class MediaController extends AbstractController
 {
     public function __construct(
+        private EntityManagerInterface $em,
         private MediaSerializer $mediaSerializer,
         private UploadHandler $uploadHandler,
+        private ProjectRepository $projectRepository,
+        private MediaRepository $mediaRepository,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
-    public function index(string $projectUuid, Request $request, EntityManagerInterface $em): JsonResponse
+    public function index(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -32,7 +37,7 @@ class MediaController extends AbstractController
         $page    = max(1, (int) $request->query->get('page', 1));
         $perPage = min(100, max(1, (int) $request->query->get('per_page', 20)));
 
-        $qb = $em->createQueryBuilder()
+        $qb = $this->em->createQueryBuilder()
             ->select('m')
             ->from(Media::class, 'm')
             ->where('m.project = :project')
@@ -41,7 +46,7 @@ class MediaController extends AbstractController
             ->setMaxResults($perPage)
             ->setFirstResult(($page - 1) * $perPage);
 
-        $total = (int) $em->createQueryBuilder()
+        $total = (int) $this->em->createQueryBuilder()
             ->select('COUNT(m.id)')
             ->from(Media::class, 'm')
             ->where('m.project = :project')
@@ -60,9 +65,9 @@ class MediaController extends AbstractController
     }
 
     #[Route('', name: 'upload', methods: ['POST'])]
-    public function upload(string $projectUuid, Request $request, EntityManagerInterface $em): JsonResponse
+    public function upload(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -79,37 +84,37 @@ class MediaController extends AbstractController
         $media->originalName = $uploadedFile->getClientOriginalName();
         $media->setFile($uploadedFile);
 
-        $em->persist($media);
-        $em->flush();
+        $this->em->persist($media);
+        $this->em->flush();
 
         return $this->json(['data' => $this->mediaSerializer->serialize($media)], 201);
     }
 
     #[Route('/bulk-destroy', name: 'bulk_destroy', methods: ['DELETE'], priority: 10)]
-    public function bulkDestroy(string $projectUuid, Request $request, EntityManagerInterface $em): JsonResponse
+    public function bulkDestroy(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
 
         $ids = $request->toArray()['asset_ids'] ?? [];
         foreach ($ids as $id) {
-            $media = $em->getRepository(Media::class)->findOneBy(['id' => (int) $id, 'project' => $project]);
+            $media = $this->mediaRepository->findOneBy(['id' => (int) $id, 'project' => $project]);
             if ($media) {
                 $this->uploadHandler->remove($media, 'file');
-                $em->remove($media);
+                $this->em->remove($media);
             }
         }
-        $em->flush();
+        $this->em->flush();
 
         return $this->json(null, 204);
     }
 
     #[Route('/{uuid}', name: 'show', methods: ['GET'])]
-    public function show(string $projectUuid, string $uuid, EntityManagerInterface $em): JsonResponse
+    public function show(string $projectUuid, string $uuid): JsonResponse
     {
-        $media = $this->findMedia($projectUuid, $uuid, $em);
+        $media = $this->findMedia($projectUuid, $uuid);
         if ($media instanceof JsonResponse) {
             return $media;
         }
@@ -118,14 +123,14 @@ class MediaController extends AbstractController
     }
 
     #[Route('/{uuid}', name: 'update', methods: ['PUT', 'PATCH'])]
-    public function update(string $projectUuid, string $uuid, Request $request, EntityManagerInterface $em): JsonResponse
+    public function update(string $projectUuid, string $uuid, Request $request): JsonResponse
     {
-        $media = $this->findMedia($projectUuid, $uuid, $em);
+        $media = $this->findMedia($projectUuid, $uuid);
         if ($media instanceof JsonResponse) {
             return $media;
         }
 
-        $data = json_decode($request->getContent(), true) ?? [];
+        $data = $request->toArray();
         if (array_key_exists('alt', $data)) {
             $media->alt = $data['alt'];
         }
@@ -133,15 +138,15 @@ class MediaController extends AbstractController
             $media->caption = $data['caption'];
         }
 
-        $em->flush();
+        $this->em->flush();
 
         return $this->json(['data' => $this->mediaSerializer->serialize($media)]);
     }
 
     #[Route('/{uuid}/crop', name: 'crop', methods: ['POST'])]
-    public function crop(string $projectUuid, string $uuid, Request $request, EntityManagerInterface $em): JsonResponse
+    public function crop(string $projectUuid, string $uuid, Request $request): JsonResponse
     {
-        $media = $this->findMedia($projectUuid, $uuid, $em);
+        $media = $this->findMedia($projectUuid, $uuid);
         if ($media instanceof JsonResponse) {
             return $media;
         }
@@ -151,46 +156,43 @@ class MediaController extends AbstractController
             return $this->json(['error' => 'No file provided'], 422);
         }
 
-        // setFile() marks the entity for re-upload; VichUploader removes the old file
-        // automatically after the new one is written (delete_on_update: true by default)
         $media->setFile($uploadedFile);
         $media->originalName = $uploadedFile->getClientOriginalName();
-        $em->flush();
+        $this->em->flush();
 
         return $this->json(['data' => $this->mediaSerializer->serialize($media)]);
     }
 
     #[Route('/{uuid}', name: 'delete', methods: ['DELETE'])]
-    public function delete(string $projectUuid, string $uuid, EntityManagerInterface $em): JsonResponse
+    public function delete(string $projectUuid, string $uuid): JsonResponse
     {
-        $media = $this->findMedia($projectUuid, $uuid, $em);
+        $media = $this->findMedia($projectUuid, $uuid);
         if ($media instanceof JsonResponse) {
             return $media;
         }
 
         $this->uploadHandler->remove($media, 'file');
-        $em->remove($media);
-        $em->flush();
+        $this->em->remove($media);
+        $this->em->flush();
 
         return $this->json(null, 204);
     }
 
-    private function findMedia(string $projectUuid, string $uuid, EntityManagerInterface $em): Media|JsonResponse
+    private function findMedia(string $projectUuid, string $uuid): Media|JsonResponse
     {
-        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        // Accept UUID string or fall back to integer ID for backward compatibility
         try {
-            $media = $em->getRepository(Media::class)->findOneBy([
+            $media = $this->mediaRepository->findOneBy([
                 'uuid'    => Uuid::fromString($uuid),
                 'project' => $project,
             ]);
         } catch (\Throwable) {
             $media = is_numeric($uuid)
-                ? $em->getRepository(Media::class)->findOneBy(['id' => (int) $uuid, 'project' => $project])
+                ? $this->mediaRepository->findOneBy(['id' => (int) $uuid, 'project' => $project])
                 : null;
         }
 
@@ -200,5 +202,4 @@ class MediaController extends AbstractController
 
         return $media;
     }
-
 }
