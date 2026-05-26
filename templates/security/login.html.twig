@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In — JamboAPI CMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap" rel="stylesheet">
+    {% block stylesheets %}
+        {{ encore_entry_link_tags('app') }}
+    {% endblock %}
+    <style>
+        :root {
+            --j-primary:    oklch(0.55 0.18 158);
+            --j-primary-d:  oklch(0.68 0.20 158);
+            --j-bg:         oklch(0.99 0.004 155);
+            --j-fg:         oklch(0.12 0.015 170);
+            --j-dark:       oklch(0.13 0.012 165);
+            --j-border:     oklch(0.89 0.008 155);
+            --j-muted:      oklch(0.52 0.012 170);
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'DM Sans', system-ui, sans-serif;
+            background: var(--j-bg);
+            color: var(--j-fg);
+            min-height: 100svh;
+            display: flex;
+        }
+
+        /* ── Brand panel ──────────────────────── */
+        .brand-panel {
+            display: none;
+            width: 440px; flex-shrink: 0;
+            background: var(--j-dark);
+            color: oklch(0.95 0.005 155);
+            padding: 3rem;
+            flex-direction: column; justify-content: space-between;
+            position: relative; overflow: hidden;
+        }
+        @media (min-width: 1024px) { .brand-panel { display: flex; } }
+
+        .brand-panel::before {
+            content: '';
+            position: absolute; inset: 0;
+            background-image:
+                linear-gradient(oklch(1 0 0/0.04) 1px, transparent 1px),
+                linear-gradient(90deg, oklch(1 0 0/0.04) 1px, transparent 1px);
+            background-size: 72px 72px;
+            pointer-events: none;
+        }
+        .glow-top {
+            position: absolute; top: -8rem; right: -8rem;
+            width: 24rem; height: 24rem; border-radius: 50%;
+            background: radial-gradient(circle, var(--j-primary-d), transparent 70%);
+            opacity: .22; pointer-events: none;
+        }
+        .glow-bottom {
+            position: absolute; bottom: -6rem; left: -6rem;
+            width: 18rem; height: 18rem; border-radius: 50%;
+            background: radial-gradient(circle, oklch(0.80 0.22 130), transparent 70%);
+            opacity: .10; pointer-events: none;
+        }
+
+        .brand-logo {
+            position: relative; z-index: 1;
+            display: inline-flex; align-items: center; gap: .75rem;
+            text-decoration: none; color: inherit;
+        }
+        .brand-logo-icon {
+            width: 2.5rem; height: 2.5rem; border-radius: .75rem;
+            background: oklch(0.68 0.20 158 / .18);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem; font-weight: 800;
+            font-family: 'Syne', sans-serif; color: var(--j-primary-d);
+        }
+        .brand-logo-name { font-family: 'Syne',sans-serif; font-size: 1.125rem; font-weight: 700; letter-spacing: -.02em; }
+
+        .brand-hero { position: relative; z-index: 1; }
+        .brand-badge {
+            display: inline-flex; align-items: center; gap: .5rem;
+            padding: .25rem .75rem; border-radius: 999px;
+            font-size: .65rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+            background: oklch(0.68 0.20 158 / .15); color: var(--j-primary-d);
+            border: 1px solid oklch(0.68 0.20 158 / .25); margin-bottom: 1.25rem;
+        }
+        .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+
+        .brand-title {
+            font-family: 'Syne',sans-serif;
+            font-size: clamp(2.25rem,3.5vw,3rem);
+            font-weight: 800; line-height: 1.08; letter-spacing: -.03em; margin-bottom: 1rem;
+        }
+        .brand-title span { color: var(--j-primary-d); }
+        .brand-desc { font-size: .9375rem; line-height: 1.65; color: oklch(0.95 0 0/.5); max-width: 22rem; }
+
+        .brand-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: .75rem; margin-top: 2rem; }
+        .stat-card {
+            background: oklch(1 0 0/.05); border: 1px solid oklch(1 0 0/.08);
+            border-radius: .75rem; padding: .75rem; text-align: center;
+        }
+        .stat-value { font-family: 'Syne',sans-serif; font-size: 1.5rem; font-weight: 800; color: var(--j-primary-d); }
+        .stat-label { font-size: .6rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: oklch(0.95 0 0/.35); margin-top: .25rem; }
+
+        .brand-footer { position: relative; z-index: 1; font-size: .75rem; color: oklch(0.95 0 0/.25); }
+
+        /* ── Form panel ───────────────────────── */
+        .form-panel {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 1.5rem; min-height: 100svh;
+        }
+        @media (min-width: 768px)  { .form-panel { padding: 2.5rem; } }
+        @media (min-width: 1024px) { .form-panel { min-height: 0; } }
+
+        .mobile-logo {
+            display: flex; align-items: center; gap: .75rem;
+            margin-bottom: 2.5rem; text-decoration: none; color: var(--j-fg);
+        }
+        @media (min-width: 1024px) { .mobile-logo { display: none; } }
+        .mobile-logo-icon {
+            width: 2.25rem; height: 2.25rem; border-radius: .625rem;
+            background: oklch(0.55 0.18 158 / .1);
+            display: flex; align-items: center; justify-content: center;
+            font-size: .95rem; font-weight: 800; font-family: 'Syne',sans-serif;
+            color: var(--j-primary);
+        }
+        .mobile-logo-name { font-family: 'Syne',sans-serif; font-size: 1.125rem; font-weight: 700; }
+
+        .form-container { width: 100%; max-width: 380px; }
+        .form-header { text-align: center; margin-bottom: 1.75rem; }
+        .form-title { font-family: 'Syne',sans-serif; font-size: 1.625rem; font-weight: 700; letter-spacing: -.02em; }
+        .form-subtitle { font-size: .875rem; color: var(--j-muted); margin-top: .375rem; }
+
+        .alert-error {
+            background: oklch(0.577 0.245 27.325/.08);
+            border: 1px solid oklch(0.577 0.245 27.325/.25);
+            border-radius: .625rem; padding: .875rem 1rem;
+            font-size: .875rem; color: oklch(0.45 0.2 27); margin-bottom: 1.25rem;
+        }
+
+        .form-group { margin-bottom: 1rem; }
+        .form-label { display: block; font-size: .8125rem; font-weight: 500; margin-bottom: .375rem; }
+        .form-input {
+            display: block; width: 100%; padding: .625rem .875rem;
+            font-family: 'DM Sans',sans-serif; font-size: .9375rem;
+            color: var(--j-fg); background: #fff;
+            border: 1.5px solid var(--j-border); border-radius: .625rem;
+            outline: none; transition: border-color .15s, box-shadow .15s;
+        }
+        .form-input::placeholder { color: var(--j-muted); opacity: .65; }
+        .form-input:focus {
+            border-color: var(--j-primary);
+            box-shadow: 0 0 0 3px oklch(0.55 0.18 158 / .15);
+        }
+
+        .form-submit {
+            display: flex; align-items: center; justify-content: center;
+            width: 100%; padding: .7rem 1rem;
+            font-family: 'DM Sans',sans-serif; font-size: .9375rem; font-weight: 600;
+            color: #fff; background: var(--j-primary);
+            border: none; border-radius: .625rem; cursor: pointer;
+            transition: background .15s, transform .1s, box-shadow .15s;
+            margin-top: 1.5rem;
+            box-shadow: 0 1px 3px oklch(0.55 0.18 158/.3), 0 0 0 1px oklch(0.55 0.18 158/.15);
+        }
+        .form-submit:hover {
+            background: oklch(0.60 0.19 158);
+            box-shadow: 0 4px 12px oklch(0.55 0.18 158/.35), 0 0 0 1px oklch(0.55 0.18 158/.2);
+        }
+        .form-submit:active { transform: scale(.98); }
+
+        .form-links { display: flex; justify-content: center; margin-top: 1.25rem; font-size: .8125rem; }
+        .form-links a { color: var(--j-primary); text-decoration: none; font-weight: 500; }
+        .form-links a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="brand-panel">
+        <div class="glow-top"></div>
+        <div class="glow-bottom"></div>
+        <a href="/" class="brand-logo">
+            <div class="brand-logo-icon">
+                <img src="/logo-dark.svg" alt="JamboAPI" style="width:1.4rem;height:1.4rem;">
+            </div>
+            <span class="brand-logo-name">JamboAPI</span>
+        </a>
+        <div class="brand-hero">
+            <div class="brand-badge"><span class="badge-dot"></span>Headless CMS</div>
+            <h1 class="brand-title">Your content,<br><span>your API.</span></h1>
+            <p class="brand-desc">Structure your content, build flexible schemas, and deliver data anywhere via REST API.</p>
+            <div class="brand-stats">
+                <div class="stat-card"><div class="stat-value">∞</div><div class="stat-label">Collections</div></div>
+                <div class="stat-card"><div class="stat-value">REST</div><div class="stat-label">API Ready</div></div>
+                <div class="stat-card"><div class="stat-value">&lt;/&gt;</div><div class="stat-label">Headless</div></div>
+            </div>
+        </div>
+        <p class="brand-footer">&copy; {{ "now"|date("Y") }} JamboAPI CMS.</p>
+    </div>
+
+    <div class="form-panel">
+        <a href="/" class="mobile-logo">
+            <div class="mobile-logo-icon">
+                <img src="/logo-light.svg" alt="JamboAPI" style="width:1.3rem;height:1.3rem;">
+            </div>
+            <span class="mobile-logo-name">JamboAPI</span>
+        </a>
+        <div class="form-container">
+            <div class="form-header">
+                <h2 class="form-title">Welcome back</h2>
+                <p class="form-subtitle">Sign in to your account to continue</p>
+            </div>
+
+            {% if error %}
+                <div class="alert-error">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
+            {% endif %}
+
+            <form method="post" action="{{ path('app_login') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+                <div class="form-group">
+                    <label class="form-label" for="email">Email address</label>
+                    <input id="email" name="email" type="email" class="form-input"
+                        autocomplete="email" required value="{{ last_username }}" placeholder="you@example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input id="password" name="password" type="password" class="form-input"
+                        autocomplete="current-password" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="form-submit">Sign in</button>
+            </form>
+
+            <div class="form-links">
+                <a href="/forgot-password">Forgot your password?</a>
+            </div>
+        </div>
+    </div>
+
+    {% block javascripts %}
+        {{ encore_entry_script_tags('app') }}
+    {% endblock %}
+</body>
+</html>

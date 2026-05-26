@@ -1,0 +1,6 @@
+{% extends 'base.html.twig' %}
+
+{% block body %}
+    <div id="app"></div>
+    <script type="application/json" data-page="app">{{ page|json_encode(constant('JSON_HEX_TAG'))|raw }}</script>
+{% endblock %}

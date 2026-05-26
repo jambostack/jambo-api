@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Invitation invalide</title>
+    <style>
+        body { font-family: sans-serif; max-width: 500px; margin: 80px auto; text-align: center; }
+        .error { color: #dc2626; margin: 16px 0; }
+        a { color: #6366f1; }
+    </style>
+</head>
+<body>
+    <h1>Invitation invalide</h1>
+    <p class="error">{{ error }}</p>
+    {% if project_name is defined and project_name %}
+        <p>Projet : <strong>{{ project_name }}</strong></p>
+    {% endif %}
+    <p><a href="/">Retour à l'accueil</a></p>
+</body>
+</html>

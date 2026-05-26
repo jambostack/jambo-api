@@ -1,0 +1,92 @@
+{
+    "text": {
+        "label": "Text",
+        "desc": "Single line text (headings, titles)",
+        "icon": "TextCursor",
+        "bg": "bg-yellow-400"
+    },
+    "longtext": {
+        "label": "Long Text",
+        "desc": "Multi line text like descriptions",
+        "icon": "TextAlignLeft",
+        "bg": "bg-yellow-600"
+    },
+    "richtext": {
+        "label": "Rich Text",
+        "desc": "Rich text editor with formatting",
+        "icon": "TextAlignLeft",
+        "bg": "bg-yellow-900"
+    },
+    "slug": {
+        "label": "Slug",
+        "desc": "Like Urls and permalinks",
+        "icon": "Link",
+        "bg": "bg-green-400"
+    },
+    "email": {
+        "label": "E-mail",
+        "desc": "Email field with validation",
+        "icon": "AtSign",
+        "bg": "bg-red-400"
+    },
+    "password": {
+        "label": "Password",
+        "desc": "Password field with encryption",
+        "icon": "Lock",
+        "bg": "bg-blue-400"
+    },
+    "number": {
+        "label": "Number",
+        "desc": "Integer, decimal, float numbers",
+        "icon": "SortNumericUp",
+        "bg": "bg-pink-600"
+    },
+    "enumeration": {
+        "label": "Enumeration",
+        "desc": "List of values",
+        "icon": "ListOrdered",
+        "bg": "bg-green-600"
+    },
+    "boolean": {
+        "label": "Boolean",
+        "desc": "True or false",
+        "icon": "CheckSquare",
+        "bg": "bg-red-600"
+    },
+    "color": {
+        "label": "Color",
+        "desc": "Color picker",
+        "icon": "Tint",
+        "bg": "bg-orange-400"
+    },
+    "date": {
+        "label": "Date",
+        "desc": "Calendar date picker",
+        "icon": "Calendar",
+        "bg": "bg-indigo-600"
+    },
+    "time": {
+        "label": "Time",
+        "desc": "Time picker",
+        "icon": "CalendarCheck",
+        "bg": "bg-purple-600"
+    },
+    "media": {
+        "label": "Media",
+        "desc": "Files from the asset library",
+        "icon": "PhotoVideo",
+        "bg": "bg-gray-500"
+    },
+    "relation": {
+        "label": "Relation",
+        "desc": "Collection relations",
+        "icon": "ExchangeAlt",
+        "bg": "bg-pink-400"
+    },
+    "json": {
+        "label": "JSON",
+        "desc": "Data in JSON format",
+        "icon": "Code",
+        "bg": "bg-red-700"
+    }
+}
