@@ -1,0 +1,88 @@
+<?php
+
+namespace App\Entity;
+
+use App\Repository\CollectionRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection as DoctrineCollection;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Uid\Uuid;
+
+#[ORM\Entity(repositoryClass: CollectionRepository::class)]
+#[ORM\HasLifecycleCallbacks]
+#[ORM\Table(name: '`collection`')]
+class Collection
+{
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
+    public ?int $id = null;
+
+    #[ORM\Column(type: 'uuid', unique: true)]
+    public ?Uuid $uuid = null;
+
+    #[ORM\Column(length: 255)]
+    public string $name {
+        get => $this->name;
+        set { $this->name = $value; }
+    }
+
+    #[ORM\Column(length: 255)]
+    public string $slug {
+        get => $this->slug;
+        set { $this->slug = $value; }
+    }
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    public ?string $description = null {
+        get => $this->description;
+        set { $this->description = $value; }
+    }
+
+    #[ORM\Column]
+    public bool $isSingleton = false {
+        get => $this->isSingleton;
+        set { $this->isSingleton = $value; }
+    }
+
+    #[ORM\Column(name: '`order`')]
+    public int $order = 0 {
+        get => $this->order;
+        set { $this->order = $value; }
+    }
+
+    #[ORM\ManyToOne(targetEntity: Project::class, inversedBy: 'collections')]
+    #[ORM\JoinColumn(nullable: false)]
+    public ?Project $project = null {
+        get => $this->project;
+        set { $this->project = $value; }
+    }
+
+    #[ORM\OneToMany(targetEntity: Field::class, mappedBy: 'collection', cascade: ['persist', 'remove'])]
+    public DoctrineCollection $fields;
+
+    #[ORM\OneToMany(targetEntity: ContentEntry::class, mappedBy: 'collection', cascade: ['persist', 'remove'])]
+    public DoctrineCollection $contentEntries;
+
+    #[ORM\Column(nullable: true)]
+    public ?\DateTimeImmutable $deletedAt = null;
+
+    public function isDeleted(): bool
+    {
+        return $this->deletedAt !== null;
+    }
+
+    public function __construct()
+    {
+        $this->fields = new ArrayCollection();
+        $this->contentEntries = new ArrayCollection();
+    }
+
+    #[ORM\PrePersist]
+    public function setUuidValue(): void
+    {
+        if ($this->uuid === null) {
+            $this->uuid = Uuid::v4();
+        }
+    }
+}
