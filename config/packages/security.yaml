@@ -2,16 +2,31 @@ security:
     password_hashers:
         App\Entity\User:
             algorithm: auto
+        App\Entity\EndUser:
+            algorithm: auto
 
     providers:
         app_user_provider:
             entity:
                 class: App\Entity\User
                 property: email
+        end_user_provider:
+            entity:
+                class: App\Entity\EndUser
+                property: email
+
     firewalls:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)
             security: false
+
+        end_user:
+            pattern: ^/api/[\w-]{36}/auth/(logout|refresh|me)
+            stateless: true
+            provider: end_user_provider
+            custom_authenticators:
+                - App\Security\EndUserJwtAuthenticator
+
         main:
             lazy: true
             provider: app_user_provider
@@ -28,11 +43,14 @@ security:
             logout:
                 path: app_logout
                 target: app_login
+
     access_control:
+        - { path: ^/api/docs, roles: PUBLIC_ACCESS }
         - { path: ^/login, roles: PUBLIC_ACCESS }
         - { path: ^/register, roles: PUBLIC_ACCESS }
         - { path: ^/forgot-password, roles: PUBLIC_ACCESS }
         - { path: ^/reset-password, roles: PUBLIC_ACCESS }
         - { path: ^/public-api, roles: PUBLIC_ACCESS }
+        - { path: '^/api/[\w-]{36}/auth/(register|login|forgot-password|reset-password)', roles: PUBLIC_ACCESS }
         - { path: ^/api, roles: PUBLIC_ACCESS }
         - { path: ^/, roles: ROLE_USER }

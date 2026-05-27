@@ -128,3 +128,15 @@ export interface ProjectMember {
     joined_at: string | null;
     created_at: string;
 }
+
+export interface EndUser {
+    uuid: string;
+    email: string;
+    name: string | null;
+    status: 'active' | 'banned' | 'pending';
+    avatar_url: string | null;
+    custom_fields: Record<string, any> | null;
+    created_at: string;
+    updated_at: string;
+    token_version: number;
+}
