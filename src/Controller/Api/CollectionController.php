@@ -4,11 +4,13 @@ namespace App\Controller\Api;
 
 use App\Repository\CollectionRepository;
 use App\Service\ApiTokenChecker;
+use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
+#[OA\Tag(name: 'Collections')]
 #[Route('/public-api/collections', name: 'public_api_collections_')]
 class CollectionController extends AbstractController
 {
@@ -17,6 +19,22 @@ class CollectionController extends AbstractController
         private CollectionRepository $collectionRepository,
     ) {}
 
+    #[OA\Get(
+        path: '/public-api/collections',
+        summary: 'List all collections for the authenticated project',
+        security: [['ApiToken' => []]],
+        parameters: [
+            new OA\Parameter(name: 'page', in: 'query', schema: new OA\Schema(type: 'integer', default: 1)),
+            new OA\Parameter(name: 'per_page', in: 'query', schema: new OA\Schema(type: 'integer', default: 50, maximum: 200)),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Paginated list of collections', content: new OA\JsonContent(properties: [
+                new OA\Property(property: 'data', type: 'array', items: new OA\Items(ref: '#/components/schemas/Collection')),
+                new OA\Property(property: 'meta', ref: '#/components/schemas/PaginatedMeta'),
+            ])),
+            new OA\Response(response: 401, description: 'Unauthorized', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(Request $request): JsonResponse
     {
@@ -53,6 +71,19 @@ class CollectionController extends AbstractController
         ]);
     }
 
+    #[OA\Get(
+        path: '/public-api/collections/{slug}',
+        summary: 'Get a single collection with its fields',
+        security: [['ApiToken' => []]],
+        parameters: [
+            new OA\Parameter(name: 'slug', in: 'path', required: true, schema: new OA\Schema(type: 'string')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Collection found', content: new OA\JsonContent(ref: '#/components/schemas/Collection')),
+            new OA\Response(response: 401, description: 'Unauthorized', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+            new OA\Response(response: 404, description: 'Collection not found', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
     #[Route('/{slug}', name: 'show', methods: ['GET'])]
     public function show(Request $request, string $slug): JsonResponse
     {

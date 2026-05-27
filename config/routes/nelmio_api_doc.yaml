@@ -1,0 +1,9 @@
+app.swagger_ui:
+    path: /api/docs
+    methods: GET
+    defaults: { _controller: nelmio_api_doc.controller.swagger_ui }
+
+app.swagger_json:
+    path: /api/docs.json
+    methods: GET
+    defaults: { _controller: nelmio_api_doc.controller.swagger }

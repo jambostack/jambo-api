@@ -1,0 +1,25 @@
+nelmio_api_doc:
+    documentation:
+        info:
+            title: JamboAPI
+            description: |
+                Headless CMS REST API. Two authentication schemes are available:
+                - **ApiToken**: static Bearer token for server-to-server content/asset access
+                - **EndUserJWT**: short-lived JWT for end-user authentication flows
+            version: '1.0.0'
+        components:
+            securitySchemes:
+                ApiToken:
+                    type: http
+                    scheme: bearer
+                    description: Static API token generated in project settings (read / write / delete scopes)
+                EndUserJWT:
+                    type: http
+                    scheme: bearer
+                    bearerFormat: JWT
+                    description: JWT issued by /auth/login or /auth/register (15-minute access token)
+    areas:
+        default:
+            path_patterns:
+                - ^/api/
+                - ^/public-api

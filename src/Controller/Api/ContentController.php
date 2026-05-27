@@ -12,11 +12,13 @@ use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
 use App\Service\EavDataFormatterService;
 use Doctrine\ORM\EntityManagerInterface;
+use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
+#[OA\Tag(name: 'Content')]
 #[Route('/api/{projectId}/{collectionSlug}', name: 'public_api_content_', requirements: ['projectId' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
 class ContentController extends AbstractController
 {
@@ -30,6 +32,26 @@ class ContentController extends AbstractController
         private EntityManagerInterface $em,
     ) {}
 
+    #[OA\Get(
+        path: '/api/{projectId}/{collectionSlug}',
+        summary: 'List content entries',
+        parameters: [
+            new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+            new OA\Parameter(name: 'collectionSlug', in: 'path', required: true, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'page', in: 'query', schema: new OA\Schema(type: 'integer', default: 1)),
+            new OA\Parameter(name: 'per_page', in: 'query', schema: new OA\Schema(type: 'integer', default: 15, maximum: 100)),
+            new OA\Parameter(name: 'locale', in: 'query', schema: new OA\Schema(type: 'string', example: 'en')),
+            new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'string', enum: ['draft', 'published'])),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Paginated list of entries', content: new OA\JsonContent(properties: [
+                new OA\Property(property: 'data', type: 'array', items: new OA\Items(ref: '#/components/schemas/ContentEntry')),
+                new OA\Property(property: 'meta', ref: '#/components/schemas/PaginatedMeta'),
+            ])),
+            new OA\Response(response: 403, description: 'Public API disabled', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+            new OA\Response(response: 404, description: 'Project or collection not found', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(Request $request, string $projectId, string $collectionSlug): JsonResponse
     {
@@ -63,8 +85,22 @@ class ContentController extends AbstractController
         ]);
     }
 
+    #[OA\Get(
+        path: '/api/{projectId}/{collectionSlug}/{uuid}',
+        summary: 'Get a single content entry',
+        parameters: [
+            new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+            new OA\Parameter(name: 'collectionSlug', in: 'path', required: true, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'uuid', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+            new OA\Parameter(name: 'locale', in: 'query', schema: new OA\Schema(type: 'string', example: 'en')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Entry found', content: new OA\JsonContent(ref: '#/components/schemas/ContentEntry')),
+            new OA\Response(response: 404, description: 'Entry not found', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
     #[Route('/{uuid}', name: 'show', methods: ['GET'])]
-    public function show(Request $request, string $projectId, string $collectionSlug, string $uuid): JsonResponse
+    public function show(Request $_request, string $projectId, string $collectionSlug, string $uuid): JsonResponse
     {
         $project = $this->resolvePublicProject($projectId);
         if ($project instanceof JsonResponse) {
@@ -84,6 +120,26 @@ class ContentController extends AbstractController
         return $this->json($this->formatter->formatEntry($entry));
     }
 
+    #[OA\Post(
+        path: '/api/{projectId}/{collectionSlug}',
+        summary: 'Create a content entry',
+        security: [['ApiToken' => []]],
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'status', type: 'string', enum: ['draft', 'published'], default: 'draft'),
+                new OA\Property(property: 'locale', type: 'string', example: 'en'),
+            ],
+            additionalProperties: new OA\AdditionalProperties(description: 'Dynamic field values keyed by field slug')
+        )),
+        parameters: [
+            new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+            new OA\Parameter(name: 'collectionSlug', in: 'path', required: true, schema: new OA\Schema(type: 'string')),
+        ],
+        responses: [
+            new OA\Response(response: 201, description: 'Entry created', content: new OA\JsonContent(ref: '#/components/schemas/ContentEntry')),
+            new OA\Response(response: 401, description: 'Unauthorized — token requires write ability', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
     #[Route('', name: 'store', methods: ['POST'])]
     public function store(Request $request, string $projectId, string $collectionSlug): JsonResponse
     {
@@ -118,6 +174,28 @@ class ContentController extends AbstractController
         return $this->json($this->formatter->formatEntry($entry), 201);
     }
 
+    #[OA\Patch(
+        path: '/api/{projectId}/{collectionSlug}/{uuid}',
+        summary: 'Update a content entry (partial)',
+        security: [['ApiToken' => []]],
+        requestBody: new OA\RequestBody(content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'status', type: 'string', enum: ['draft', 'published']),
+                new OA\Property(property: 'locale', type: 'string'),
+            ],
+            additionalProperties: new OA\AdditionalProperties(description: 'Field values to update')
+        )),
+        parameters: [
+            new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+            new OA\Parameter(name: 'collectionSlug', in: 'path', required: true, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'uuid', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Entry updated', content: new OA\JsonContent(ref: '#/components/schemas/ContentEntry')),
+            new OA\Response(response: 401, description: 'Unauthorized', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+            new OA\Response(response: 404, description: 'Entry not found', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
     #[Route('/{uuid}', name: 'update', methods: ['PUT', 'PATCH'])]
     public function update(Request $request, string $projectId, string $collectionSlug, string $uuid): JsonResponse
     {
@@ -154,6 +232,21 @@ class ContentController extends AbstractController
         return $this->json($this->formatter->formatEntry($entry));
     }
 
+    #[OA\Delete(
+        path: '/api/{projectId}/{collectionSlug}/{uuid}',
+        summary: 'Soft-delete a content entry',
+        security: [['ApiToken' => []]],
+        parameters: [
+            new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+            new OA\Parameter(name: 'collectionSlug', in: 'path', required: true, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'uuid', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+        ],
+        responses: [
+            new OA\Response(response: 204, description: 'Deleted'),
+            new OA\Response(response: 401, description: 'Unauthorized', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+            new OA\Response(response: 404, description: 'Entry not found', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
     #[Route('/{uuid}', name: 'destroy', methods: ['DELETE'])]
     public function destroy(Request $request, string $projectId, string $collectionSlug, string $uuid): JsonResponse
     {
@@ -182,10 +275,6 @@ class ContentController extends AbstractController
         return $this->json(null, 204);
     }
 
-    /**
-     * Resolves a project by UUID and enforces the publicApi gate for GET endpoints.
-     * Returns the Project on success, or a JsonResponse on failure.
-     */
     private function resolvePublicProject(string $projectId): Project|JsonResponse
     {
         $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
