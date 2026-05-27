@@ -206,3 +206,79 @@
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
 }
+
+/* ─── Lexical Rich Text Editor ───────────────────────────────────── */
+.lexical-editor-wrapper {
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--foreground);
+    background-color: var(--background);
+}
+
+.lexical-root {
+    position: relative;
+}
+
+.lexical-content-editable {
+    caret-color: var(--foreground);
+}
+
+/* Typography inside the editor */
+.lexical-h1 { font-size: 1.75rem; font-weight: 700; margin: 0.75rem 0 0.25rem; line-height: 1.2; }
+.lexical-h2 { font-size: 1.375rem; font-weight: 600; margin: 0.6rem 0 0.2rem; line-height: 1.25; }
+.lexical-h3 { font-size: 1.125rem; font-weight: 600; margin: 0.5rem 0 0.15rem; line-height: 1.3; }
+.lexical-h4 { font-size: 1rem;     font-weight: 600; margin: 0.4rem 0 0.1rem; }
+.lexical-paragraph { margin: 0 0 0.5rem; }
+
+.lexical-bold          { font-weight: 700; }
+.lexical-italic        { font-style: italic; }
+.lexical-underline     { text-decoration: underline; }
+.lexical-strikethrough { text-decoration: line-through; }
+.lexical-code-inline {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.875em;
+    background-color: var(--muted);
+    color: var(--muted-foreground);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+}
+
+.lexical-ul { list-style: disc; padding-left: 1.5rem; margin: 0.25rem 0; }
+.lexical-ol { list-style: decimal; padding-left: 1.5rem; margin: 0.25rem 0; }
+.lexical-li { margin: 0.1rem 0; }
+
+.lexical-link { color: var(--primary); text-decoration: underline; cursor: pointer; }
+.lexical-link:hover { opacity: 0.8; }
+
+.lexical-code-block {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.875em;
+    background-color: var(--muted);
+    color: var(--muted-foreground);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    display: block;
+    margin: 0.5rem 0;
+    white-space: pre-wrap;
+    overflow-x: auto;
+}
+
+.lexical-placeholder {
+    color: var(--muted-foreground);
+    user-select: none;
+    pointer-events: none;
+}
+
+/* Toolbar buttons */
+.lexical-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 4px;
+}

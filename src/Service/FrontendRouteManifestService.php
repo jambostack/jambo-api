@@ -93,6 +93,18 @@ class FrontendRouteManifestService
         // Collections — reorder API
         'projects.collections.reorder'          => 'api_collection_reorder',
 
+        // End Users — pages
+        'projects.settings.end-users'           => 'projects_settings_end_users',
+        'projects.settings.end-users.create'    => 'projects_settings_end_users_create',
+        'projects.settings.end-users.show'      => 'projects_settings_end_users_show',
+        'projects.settings.end-users.edit'      => 'projects_settings_end_users_edit',
+
+        // End Users — API (POST/PATCH/DELETE)
+        'projects.settings.end-users.store'     => 'projects_settings_end_users_store',
+        'projects.settings.end-users.update'    => 'projects_settings_end_users_update',
+        'projects.settings.end-users.destroy'   => 'projects_settings_end_users_destroy',
+        'projects.settings.end-users.status'    => 'projects_settings_end_users_status',
+
         // Users
         'users.index'                           => 'users_index',
         'users.roles'                           => 'users_roles',

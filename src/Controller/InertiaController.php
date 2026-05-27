@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Repository\AppSettingsRepository;
 use App\Service\FrontendRouteManifestService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -21,6 +22,7 @@ abstract class InertiaController extends AbstractController
     private FrontendRouteManifestService $routeManifest;
     private CacheInterface $cache;
     private TranslatorInterface $translator;
+    private AppSettingsRepository $appSettingsRepository;
 
     #[Required]
     public function setRouteManifest(FrontendRouteManifestService $routeManifest): void
@@ -40,6 +42,12 @@ abstract class InertiaController extends AbstractController
         $this->translator = $translator;
     }
 
+    #[Required]
+    public function setAppSettingsRepository(AppSettingsRepository $appSettingsRepository): void
+    {
+        $this->appSettingsRepository = $appSettingsRepository;
+    }
+
     protected function inertia(Request $request, string $component, array $props = []): Response
     {
         // Shared props available on every page
@@ -48,10 +56,7 @@ abstract class InertiaController extends AbstractController
         // Only include the Ziggy route manifest on the initial full-page load.
         // For subsequent Inertia XHR navigation, window.Ziggy is already set.
         if (!$request->headers->has('X-Inertia')) {
-            $props['ziggy'] = $this->cache->get('inertia_route_manifest', function (ItemInterface $item) use ($request) {
-                $item->expiresAfter(null); // lives until cache:clear
-                return $this->routeManifest->buildManifest($request);
-            });
+            $props['ziggy'] = $this->routeManifest->buildManifest($request);
         }
 
         $page = [
@@ -93,7 +98,26 @@ abstract class InertiaController extends AbstractController
             ],
             'locale'       => $locale,
             'translations' => $this->loadTranslations($locale),
+            'appSettings'  => $this->loadAppSettings(),
         ];
+    }
+
+    private function loadAppSettings(): array
+    {
+        return $this->cache->get('app_settings_data', function (ItemInterface $item) {
+            $item->expiresAfter(300); // 5 minutes
+            $s = $this->appSettingsRepository->getOrCreate();
+
+            return [
+                'appName'      => $s->appName,
+                'logoUrl'      => $s->getLogoUrl(),
+                'logoDarkUrl'  => $s->getLogoDarkUrl(),
+                'logoLightUrl' => $s->getLogoLightUrl(),
+                'iconDarkUrl'  => $s->getIconDarkUrl(),
+                'iconLightUrl' => $s->getIconLightUrl(),
+                'faviconUrl'   => $s->getFaviconUrl(),
+            ];
+        });
     }
 
     private function loadTranslations(string $locale = 'en'): array

@@ -1,10 +1,10 @@
 import { LucideIcon } from 'lucide-react';
 import type { Config } from 'ziggy';
 import type { User, Role, Permission } from './user';
-import type { Project, Asset, Field, Collection, ProjectMember, ProjectMemberRole, ProjectMemberUser } from './project';
+import type { Project, Asset, Field, Collection, EndUser, ProjectMember, ProjectMemberRole, ProjectMemberUser } from './project';
 import type { ContentEntry, ColumnDef } from './content';
 
-export type { User, Role, Permission, Project, Asset, Field, Collection, ProjectMember, ProjectMemberRole, ProjectMemberUser, ContentEntry, ColumnDef };
+export type { User, Role, Permission, Project, Asset, Field, Collection, EndUser, ProjectMember, ProjectMemberRole, ProjectMemberUser, ContentEntry, ColumnDef };
 
 export interface Auth {
     user: User;
@@ -27,6 +27,16 @@ export interface NavItem {
     isActive?: boolean;
 }
 
+export interface AppSettings {
+    appName: string;
+    logoUrl: string | null;
+    logoDarkUrl: string | null;
+    logoLightUrl: string | null;
+    iconDarkUrl: string | null;
+    iconLightUrl: string | null;
+    faviconUrl: string | null;
+}
+
 export interface SharedData {
     name: string;
     quote: { message: string; author: string };
@@ -35,6 +45,7 @@ export interface SharedData {
     sidebarOpen: boolean;
     locale: string;
     translations: Record<string, string>;
+    appSettings: AppSettings;
     [key: string]: unknown;
 }
 

@@ -49,3 +49,7 @@ services:
     App\Service\ExportImport\ProjectImporter:
         arguments:
             $projectDir: '%kernel.project_dir%'
+
+    App\Service\EndUserJwtService:
+        arguments:
+            $appSecret: '%kernel.secret%'

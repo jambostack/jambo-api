@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Collection;
 use App\Entity\ContentEntry;
+use App\Entity\EndUser;
 use App\Entity\Field;
 use App\Entity\Media;
 use App\Entity\Project;
@@ -11,6 +12,7 @@ use App\Entity\ProjectMember;
 use App\Repository\ApiTokenRepository;
 use App\Repository\CollectionRepository;
 use App\Repository\ContentEntryRepository;
+use App\Repository\EndUserRepository;
 use App\Repository\FieldRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
@@ -19,6 +21,7 @@ use App\Service\MediaSerializer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
@@ -35,10 +38,12 @@ class PageController extends InertiaController
         private FieldRepository $fieldRepository,
         private ContentEntryRepository $entryRepository,
         private ApiTokenRepository $apiTokenRepository,
+        private EndUserRepository $endUserRepository,
         private EntityManagerInterface $em,
         private EavDataFormatterService $formatter,
         private MediaSerializer $mediaSerializer,
         private ProjectMemberRepository $memberRepo,
+        private UserPasswordHasherInterface $hasher,
     ) {}
 
     /** Cached ProjectMember resolved by denyProjectAccess() for reuse in buildUserCan(). */
@@ -268,6 +273,272 @@ class PageController extends InertiaController
     }
 
     // -------------------------------------------------------------------------
+    // End Users Management
+    // -------------------------------------------------------------------------
+
+    #[Route('/projects/{project}/settings/end-users', name: 'projects_settings_end_users', requirements: ['project' => '\d+'], priority: 10)]
+    public function settingsEndUsers(int $project, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        $status = $request->query->get('status', '');
+        $search = $request->query->get('search', '');
+        $page   = max(1, (int) $request->query->get('page', 1));
+        $perPage = min(100, max(1, (int) $request->query->get('per_page', 20)));
+
+        $qb = $this->em->createQueryBuilder()
+            ->select('eu')
+            ->from(EndUser::class, 'eu')
+            ->where('eu.project = :project')
+            ->setParameter('project', $project)
+            ->orderBy('eu.createdAt', 'DESC');
+
+        if ($status !== '' && in_array($status, ['active', 'banned', 'pending'], true)) {
+            $qb->andWhere('eu.status = :status')->setParameter('status', $status);
+        }
+        if ($search !== '') {
+            $qb->andWhere('eu.email LIKE :search OR eu.name LIKE :search')
+                ->setParameter('search', '%' . $search . '%');
+        }
+
+        $totalQb = clone $qb;
+        $total = (int) $totalQb->select('COUNT(eu.id)')->getQuery()->getSingleScalarResult();
+
+        $qb->setMaxResults($perPage)->setFirstResult(($page - 1) * $perPage);
+        $endUsers = $qb->getQuery()->getResult();
+
+        return $this->inertia($request, 'Projects/Settings/EndUsers/Index', [
+            'project'   => $this->serializeProject($project, true),
+            'userCan'   => $this->buildUserCan($project),
+            'endUsers'  => [
+                'data'         => array_map(fn (EndUser $eu) => $this->serializeEndUser($eu), $endUsers),
+                'current_page' => $page,
+                'last_page'    => max(1, (int) ceil($total / $perPage)),
+                'total'        => $total,
+                'per_page'     => $perPage,
+            ],
+            'filters' => [
+                'status'   => $status,
+                'search'   => $search,
+                'per_page' => (string) $perPage,
+            ],
+        ]);
+    }
+
+    #[Route('/projects/{project}/settings/end-users/create', name: 'projects_settings_end_users_create', requirements: ['project' => '\d+'], priority: 10)]
+    public function settingsEndUsersCreate(int $project, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        return $this->inertia($request, 'Projects/Settings/EndUsers/Create', [
+            'project' => $this->serializeProject($project, true),
+            'userCan' => $this->buildUserCan($project),
+        ]);
+    }
+
+    #[Route('/projects/{project}/settings/end-users', name: 'projects_settings_end_users_store', requirements: ['project' => '\d+'], methods: ['POST'], priority: 10)]
+    public function settingsEndUsersStore(int $project, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        $data = $request->toArray();
+        $email = $data['email'] ?? '';
+        $password = $data['password'] ?? '';
+        $name = $data['name'] ?? null;
+        $status = $data['status'] ?? 'active';
+
+        if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->json(['errors' => ['email' => 'Valid email is required']], 422);
+        }
+        if (strlen($password) < 8) {
+            return $this->json(['errors' => ['password' => 'Password must be at least 8 characters']], 422);
+        }
+        if (!in_array($status, ['active', 'pending'], true)) {
+            $status = 'active';
+        }
+
+        $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $email);
+        if ($existing) {
+            return $this->json(['errors' => ['email' => 'Email already registered in this project']], 422);
+        }
+
+        $endUser = new EndUser($project, $email);
+        $endUser->name = $name;
+        $endUser->password = $this->hasher->hashPassword($endUser, $password);
+        $endUser->status = $status;
+
+        $this->em->persist($endUser);
+        $this->em->flush();
+
+        return $this->redirectToRoute('projects_settings_end_users', ['project' => $project->id], 303);
+    }
+
+    #[Route('/projects/{project}/settings/end-users/{endUserUuid}', name: 'projects_settings_end_users_show', requirements: ['project' => '\d+', 'endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], priority: 10)]
+    public function settingsEndUsersShow(int $project, string $endUserUuid, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
+        if (!$endUser) {
+            throw $this->createNotFoundException();
+        }
+
+        return $this->inertia($request, 'Projects/Settings/EndUsers/Show', [
+            'project'  => $this->serializeProject($project, true),
+            'userCan'  => $this->buildUserCan($project),
+            'endUser'  => $this->serializeEndUser($endUser),
+        ]);
+    }
+
+    #[Route('/projects/{project}/settings/end-users/{endUserUuid}/edit', name: 'projects_settings_end_users_edit', requirements: ['project' => '\d+', 'endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], priority: 10)]
+    public function settingsEndUsersEdit(int $project, string $endUserUuid, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
+        if (!$endUser) {
+            throw $this->createNotFoundException();
+        }
+
+        return $this->inertia($request, 'Projects/Settings/EndUsers/Edit', [
+            'project'  => $this->serializeProject($project, true),
+            'userCan'  => $this->buildUserCan($project),
+            'endUser'  => $this->serializeEndUser($endUser),
+        ]);
+    }
+
+    #[Route('/projects/{project}/settings/end-users/{endUserUuid}', name: 'projects_settings_end_users_update', requirements: ['project' => '\d+', 'endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['PATCH'], priority: 10)]
+    public function settingsEndUsersUpdate(int $project, string $endUserUuid, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
+        if (!$endUser) {
+            throw $this->createNotFoundException();
+        }
+
+        $data = $request->toArray();
+
+        if (isset($data['email']) && $data['email'] !== $endUser->email) {
+            if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+                return $this->json(['errors' => ['email' => 'Valid email is required']], 422);
+            }
+            $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $data['email']);
+            if ($existing) {
+                return $this->json(['errors' => ['email' => 'Email already registered in this project']], 422);
+            }
+            $endUser->email = $data['email'];
+        }
+
+        if (isset($data['name'])) {
+            $endUser->name = $data['name'] ?: null;
+        }
+
+        if (isset($data['custom_fields'])) {
+            $endUser->customFields = $data['custom_fields'];
+        }
+
+        if (!empty($data['password'])) {
+            if (strlen($data['password']) < 8) {
+                return $this->json(['errors' => ['password' => 'Password must be at least 8 characters']], 422);
+            }
+            $endUser->password = $this->hasher->hashPassword($endUser, $data['password']);
+            $endUser->tokenVersion++;
+        }
+
+        $this->em->flush();
+
+        return $this->redirectToRoute('projects_settings_end_users_show', ['project' => $project->id, 'endUserUuid' => $endUserUuid], 303);
+    }
+
+    #[Route('/projects/{project}/settings/end-users/{endUserUuid}/status', name: 'projects_settings_end_users_status', requirements: ['project' => '\d+', 'endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['PATCH'], priority: 10)]
+    public function settingsEndUsersStatus(int $project, string $endUserUuid, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
+        if (!$endUser) {
+            throw $this->createNotFoundException();
+        }
+
+        $data = $request->toArray();
+        $newStatus = $data['status'] ?? '';
+        if (!in_array($newStatus, ['active', 'banned', 'pending'], true)) {
+            return $this->json(['errors' => ['status' => 'Invalid status']], 422);
+        }
+
+        $endUser->status = $newStatus;
+        if ($newStatus === 'banned') {
+            $endUser->tokenVersion++;
+        }
+        $this->em->flush();
+
+        return $this->redirectToRoute('projects_settings_end_users_show', ['project' => $project->id, 'endUserUuid' => $endUserUuid], 303);
+    }
+
+    #[Route('/projects/{project}/settings/end-users/{endUserUuid}', name: 'projects_settings_end_users_destroy', requirements: ['project' => '\d+', 'endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['DELETE'], priority: 10)]
+    public function settingsEndUsersDestroy(int $project, string $endUserUuid, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
+        if (!$endUser) {
+            throw $this->createNotFoundException();
+        }
+
+        $this->em->remove($endUser);
+        $this->em->flush();
+
+        return $this->redirectToRoute('projects_settings_end_users', ['project' => $project->id], 303);
+    }
+
+    // -------------------------------------------------------------------------
+    // App Settings (admin)
+    // -------------------------------------------------------------------------
+
+    #[Route('/admin/app-settings', name: 'admin_app_settings', priority: 10)]
+    public function adminAppSettings(Request $request): Response
+    {
+        $this->denyAccessUnlessGranted('ROLE_SUPER_ADMIN');
+
+        return $this->inertia($request, 'AdminSettings/AppSettings', [
+            'userCan' => $this->buildUserCan(),
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
     // User Management
     // -------------------------------------------------------------------------
 
@@ -471,6 +742,21 @@ class PageController extends InertiaController
         ];
     }
 
+    private function serializeEndUser(EndUser $eu): array
+    {
+        return [
+            'uuid'          => $eu->uuid?->toString(),
+            'email'         => $eu->email,
+            'name'          => $eu->name,
+            'status'        => $eu->status,
+            'avatar_url'    => $eu->avatarUrl,
+            'custom_fields' => $eu->customFields,
+            'created_at'    => $eu->createdAt->format(\DateTimeInterface::ATOM),
+            'updated_at'    => $eu->updatedAt->format(\DateTimeInterface::ATOM),
+            'token_version' => $eu->tokenVersion,
+        ];
+    }
+
     private function buildUserCan(?Project $project = null): array
     {
         /** @var \App\Entity\User $user */
@@ -514,9 +800,11 @@ class PageController extends InertiaController
             'access_user_access_settings'  => $canProject('project.manage'),
             'access_api_access_settings'   => $canProject('project.manage'),
             'access_webhooks_settings'     => $canProject('project.manage'),
+            'access_end_users_settings'   => $canProject('project.manage'),
             'delete_project'               => $canProject('project.manage'),
             'manage_users'                 => $canSystem('users.manage'),
             'manage_roles'                 => $canSystem('roles.manage'),
+            'access_app_settings'          => $isSuperAdmin,
         ];
     }
 }
