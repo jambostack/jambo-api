@@ -9,11 +9,15 @@ use App\Entity\ContentEntry;
 use App\Entity\ContentFieldValue;
 use App\Entity\Field;
 use App\Entity\Project;
+use App\Repository\EndUserFieldRepository;
+use App\Repository\EndUserRepository;
 use App\Service\ExportImport\Export\ContentExportHandler;
+use App\Service\ExportImport\Export\EndUserExportHandler;
 use App\Service\ExportImport\Export\MediaExportHandler;
 use App\Service\ExportImport\Export\SettingsExportHandler;
 use App\Service\ExportImport\Export\StructureExportHandler;
 use App\Service\ExportImport\Import\ContentImportHandler;
+use App\Service\ExportImport\Import\EndUserImportHandler;
 use App\Service\ExportImport\Import\MediaImportHandler;
 use App\Service\ExportImport\Import\SettingsImportHandler;
 use App\Service\ExportImport\Import\StructureImportHandler;
@@ -72,10 +76,11 @@ class ExportImportRoundtripTest extends TestCase
         // --- Export ---
         $em = $this->createStub(EntityManagerInterface::class);
         $exporter = new ProjectExporter(
-            new StructureExportHandler(),
+            new StructureExportHandler($this->createMock(EndUserFieldRepository::class)),
             new ContentExportHandler(),
             new MediaExportHandler($em, $projectDir),
             new SettingsExportHandler(),
+            new EndUserExportHandler($this->createMock(EndUserRepository::class)),
             $projectDir,
         );
 
@@ -91,10 +96,11 @@ class ExportImportRoundtripTest extends TestCase
 
         // --- Import into a fresh target ---
         $importer = new ProjectImporter(
-            new StructureImportHandler(),
+            new StructureImportHandler($this->createMock(EndUserFieldRepository::class)),
             new ContentImportHandler(),
             new MediaImportHandler($projectDir),
             new SettingsImportHandler(),
+            new EndUserImportHandler($this->createMock(EndUserRepository::class)),
             $projectDir,
         );
 
@@ -165,10 +171,11 @@ class ExportImportRoundtripTest extends TestCase
         // Export
         $em = $this->createStub(EntityManagerInterface::class);
         $exporter = new ProjectExporter(
-            new StructureExportHandler(),
+            new StructureExportHandler($this->createMock(EndUserFieldRepository::class)),
             new ContentExportHandler(),
             new MediaExportHandler($em, $projectDir),
             new SettingsExportHandler(),
+            new EndUserExportHandler($this->createMock(EndUserRepository::class)),
             $projectDir,
         );
 
@@ -193,10 +200,11 @@ class ExportImportRoundtripTest extends TestCase
         $target->collections->add($existingCol);
 
         $importer = new ProjectImporter(
-            new StructureImportHandler(),
+            new StructureImportHandler($this->createMock(EndUserFieldRepository::class)),
             new ContentImportHandler(),
             new MediaImportHandler($projectDir),
             new SettingsImportHandler(),
+            new EndUserImportHandler($this->createMock(EndUserRepository::class)),
             $projectDir,
         );
 

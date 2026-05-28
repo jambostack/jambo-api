@@ -5,12 +5,21 @@ namespace App\Tests\Service\ExportImport\Export;
 use App\Entity\Collection;
 use App\Entity\Field;
 use App\Entity\Project;
+use App\Repository\EndUserFieldRepository;
 use App\Service\ExportImport\Export\StructureExportHandler;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\Uuid;
 
 class StructureExportHandlerTest extends TestCase
 {
+    private function createHandler(): StructureExportHandler
+    {
+        $repo = $this->createMock(EndUserFieldRepository::class);
+        $repo->method('findByProject')->willReturn([]);
+
+        return new StructureExportHandler($repo);
+    }
+
     public function testGetOptionKey(): void
     {
         $this->assertSame('structure', StructureExportHandler::getOptionKey());
@@ -18,7 +27,7 @@ class StructureExportHandlerTest extends TestCase
 
     public function testExportWritesStructureJson(): void
     {
-        $handler = new StructureExportHandler();
+        $handler = $this->createHandler();
 
         $project = new Project();
         $project->name = 'Test Project';
