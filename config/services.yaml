@@ -53,3 +53,18 @@ services:
     App\Service\EndUserJwtService:
         arguments:
             $appSecret: '%kernel.secret%'
+
+    App\Service\ImageTransformService:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+
+    App\Service\SearchService:
+        arguments:
+            $meilisearchHost: '%env(MEILISEARCH_HOST)%'
+            $meilisearchKey: '%env(MEILISEARCH_KEY)%'
+
+    App\Service\AiContentService:
+        arguments:
+            $openaiPlatform: '@ai.traceable_platform.openai'
+            $anthropicPlatform: '@ai.traceable_platform.anthropic'
+            $ollamaPlatform: '@ai.traceable_platform.ollama'
