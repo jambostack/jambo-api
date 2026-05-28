@@ -1,0 +1,17 @@
+{
+  "name": "@jamboapi/sdk",
+  "version": "1.0.0",
+  "description": "JamboApi CMS — TypeScript SDK with full type safety",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["jamboapi", "cms", "headless", "sdk"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.5"
+  }
+}

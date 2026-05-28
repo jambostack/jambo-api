@@ -1,0 +1,19 @@
+{
+  "name": "jamboapi/sdk",
+  "description": "JamboApi CMS — PHP SDK with full type safety",
+  "type": "library",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "JamboApi\\": "src/"
+    }
+  },
+  "require": {
+    "php": ">=8.1",
+    "ext-json": "*"
+  },
+  "suggest": {
+    "symfony/http-client": "For async HTTP support",
+    "symfony/cache": "For response caching"
+  }
+}
