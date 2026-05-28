@@ -991,4 +991,72 @@ return [
     'studio.api.collection_not_found'  => 'Collection introuvable',
     'studio.api.types_generated'       => 'Types TypeScript générés avec succès',
     'studio.api.validation_error'      => 'Erreur de validation des données',
+
+    // AI Toolbar
+    'studio.ai.title'            => 'AI Assistant',
+    'studio.ai.generate_btn'     => 'Générer du contenu',
+    'studio.ai.translate_btn'    => 'Traduire',
+    'studio.ai.seo_btn'          => 'Générer SEO',
+    'studio.ai.summarize_btn'    => 'Résumer le contenu',
+    'studio.ai.generate_title'   => 'Générer du contenu',
+    'studio.ai.generate_desc'    => 'Décrivez le contenu à générer',
+    'studio.ai.generate_ph'      => 'Ex: Un article de blog sur les tendances tech 2026, ton professionnel, 500 mots...',
+    'studio.ai.collection_label' => 'Collection:',
+    'studio.ai.locale_label'     => 'Locale:',
+    'studio.ai.generate_action'  => 'Générer',
+    'studio.ai.translate_title'  => 'Traduire le contenu',
+    'studio.ai.target_lang'      => 'Langue cible',
+    'studio.ai.translate_hint'   => 'Le contenu actuel sera traduit dans la langue sélectionnée.',
+    'studio.ai.translate_action' => 'Traduire',
+    'studio.ai.seo_success'      => 'SEO généré',
+    'studio.ai.no_text'          => 'Aucun contenu texte à résumer',
+    'studio.ai.summary_success'  => 'Résumé généré',
+
+    // Version History
+    'studio.versions.title'      => 'Historique',
+    'studio.versions.empty'      => 'Aucune version',
+    'studio.versions.restore'    => 'Restaurer',
+    'studio.versions.compare'    => 'Comparer v{v1} ↔ v{v2}',
+    'studio.versions.diff_title' => 'Diff v{v1} ↔ v{v2}',
+    'studio.versions.no_diff'    => 'Aucune différence',
+    'studio.versions.close'      => 'Fermer',
+    'studio.versions.restored'   => 'Version restaurée',
+
+    // Search
+    'studio.search.title'          => 'Recherche globale',
+    'studio.search.desc'           => 'Recherche full-text dans tout le contenu du projet',
+    'studio.search.placeholder'    => 'Rechercher...',
+    'studio.search.all_collections'=> 'Toutes les collections',
+    'studio.search.locale'         => 'Locale',
+    'studio.search.all'            => 'Toutes',
+    'studio.search.results'        => '{count} résultat(s)',
+
+    // Audit
+    'studio.audit.title'       => 'Logs d\'audit',
+    'studio.audit.desc'        => 'Actions IA, MCP et API enregistrées',
+    'studio.audit.today'       => '{count} aujourd\'hui',
+    'studio.audit.refresh'     => 'Actualiser',
+    'studio.audit.empty'       => 'Aucun log d\'audit pour le moment.',
+    'studio.audit.by'          => 'par {name}',
+    'studio.audit.source'      => 'Source:',
+    'studio.audit.status'      => 'Statut:',
+    'studio.audit.date'        => 'Date:',
+    'studio.audit.duration'    => 'Durée:',
+    'studio.audit.by_label'    => 'Par:',
+    'studio.audit.error_label' => 'Erreur:',
+    'studio.audit.input'       => 'Entrée (input)',
+    'studio.audit.output'      => 'Sortie (output)',
+
+    // Studio Tabs
+    'studio.tab_search'  => 'Recherche',
+    'studio.tab_audit'   => 'Audit',
+    'studio.tab_graphql' => 'GraphQL',
+
+    // GraphQL Explorer
+    'studio.graphql.title'     => 'Explorateur GraphQL',
+    'studio.graphql.desc'      => 'Requêtes GraphQL interactives sur le schéma de votre projet',
+    'studio.graphql.endpoint'  => 'Endpoint GraphQL',
+    'studio.graphql.copy'      => 'Copier',
+    'studio.graphql.example'   => 'Exemple de requête',
+    'studio.graphql.hint'      => 'Utilisez n\'importe quel client GraphQL (Altair, Insomnia, Postman) pour explorer le schéma complet. Le schema est généré automatiquement depuis vos collections.',
 ];
