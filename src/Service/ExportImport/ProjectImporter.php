@@ -12,16 +12,18 @@ class ProjectImporter
     private array $handlers = [];
 
     public function __construct(
-        Import\StructureImportHandler $structureHandler,
+        private Import\StructureImportHandler $structureHandler,
         Import\ContentImportHandler $contentHandler,
         Import\MediaImportHandler $mediaHandler,
         Import\SettingsImportHandler $settingsHandler,
+        private Import\EndUserImportHandler $endUserHandler,
         private string $projectDir,
     ) {
         $this->handlers['structure'] = $structureHandler;
         $this->handlers['content'] = $contentHandler;
         $this->handlers['media'] = $mediaHandler;
         $this->handlers['settings'] = $settingsHandler;
+        $this->handlers['end_users'] = $endUserHandler;
     }
 
     private function getTempDir(): string
@@ -86,8 +88,8 @@ class ProjectImporter
         $manifest = $this->validateManifest($extractedDir);
         $uuidMap = [];
 
-        // Import in order: structure -> media -> content -> settings
-        $order = ['structure', 'media', 'content', 'settings'];
+        // Import in order: structure -> media -> content -> end_users -> settings
+        $order = ['structure', 'media', 'content', 'end_users', 'settings'];
 
         foreach ($order as $key) {
             if (!in_array($key, $manifest['included'] ?? [], true)) {
@@ -103,6 +105,16 @@ class ProjectImporter
     public function getMediaHandler(): Import\MediaImportHandler
     {
         return $this->handlers['media'];
+    }
+
+    public function getStructureHandler(): Import\StructureImportHandler
+    {
+        return $this->structureHandler;
+    }
+
+    public function getEndUserHandler(): Import\EndUserImportHandler
+    {
+        return $this->endUserHandler;
     }
 
     public function cleanup(string $extractedDir): void

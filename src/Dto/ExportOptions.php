@@ -8,6 +8,7 @@ class ExportOptions
     public bool $content = false;
     public bool $media = false;
     public bool $settings = false;
+    public bool $endUsers = false;
 
     public static function fromRequest(array $data): self
     {
@@ -16,6 +17,7 @@ class ExportOptions
         if (isset($data['content'])) { $options->content = (bool) $data['content']; }
         if (isset($data['media'])) { $options->media = (bool) $data['media']; }
         if (isset($data['settings'])) { $options->settings = (bool) $data['settings']; }
+        if (isset($data['end_users'])) { $options->endUsers = (bool) $data['end_users']; }
         return $options;
     }
 
@@ -27,6 +29,7 @@ class ExportOptions
         if ($this->content) { $enabled[] = 'content'; }
         if ($this->media) { $enabled[] = 'media'; }
         if ($this->settings) { $enabled[] = 'settings'; }
+        if ($this->endUsers) { $enabled[] = 'end_users'; }
         return $enabled;
     }
 }

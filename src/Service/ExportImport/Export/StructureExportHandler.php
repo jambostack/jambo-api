@@ -3,10 +3,13 @@
 namespace App\Service\ExportImport\Export;
 
 use App\Entity\Project;
+use App\Repository\EndUserFieldRepository;
 use App\Service\ExportImport\ExportHandlerInterface;
 
 class StructureExportHandler implements ExportHandlerInterface
 {
+    public function __construct(private EndUserFieldRepository $endUserFieldRepository) {}
+
     public static function getOptionKey(): string
     {
         return 'structure';
@@ -45,12 +48,35 @@ class StructureExportHandler implements ExportHandlerInterface
             ];
         }
 
-        $data = json_encode(['collections' => $collections], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $endUserFields = [];
+        foreach ($this->endUserFieldRepository->findByProject($project) as $field) {
+            if ($field->isSystem) {
+                continue;
+            }
+            $endUserFields[] = [
+                'name'        => $field->name,
+                'slug'        => $field->slug,
+                'type'        => $field->type,
+                'options'     => $field->options,
+                'order'       => $field->order,
+                'is_required' => $field->isRequired,
+            ];
+        }
+
+        $data = json_encode([
+            'collections'     => $collections,
+            'end_user_fields' => $endUserFields,
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
         file_put_contents($tempDir . '/structure.json', $data);
 
         return [
-            'manifest' => ['file' => 'structure.json', 'entityCount' => count($collections)],
-            'files'    => ['structure.json'],
+            'manifest' => [
+                'file'              => 'structure.json',
+                'entityCount'       => count($collections),
+                'endUserFieldCount' => count($endUserFields),
+            ],
+            'files' => ['structure.json'],
         ];
     }
 }

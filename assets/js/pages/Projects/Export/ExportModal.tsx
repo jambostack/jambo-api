@@ -20,6 +20,7 @@ export default function ExportModal({ open, onOpenChange, projectUuid, projectNa
     const [content, setContent] = useState(false);
     const [media, setMedia] = useState(false);
     const [settings, setSettings] = useState(false);
+    const [endUsers, setEndUsers] = useState(false);
     const [processing, setProcessing] = useState(false);
 
     const handleExport = async () => {
@@ -30,6 +31,7 @@ export default function ExportModal({ open, onOpenChange, projectUuid, projectNa
             if (content) params.set('content', '1');
             if (media) params.set('media', '1');
             if (settings) params.set('settings', '1');
+            if (endUsers) params.set('end_users', '1');
 
             const response = await axios.get(
                 `/api/projects/${projectUuid}/export?${params.toString()}`,
@@ -80,6 +82,17 @@ export default function ExportModal({ open, onOpenChange, projectUuid, projectNa
                     <div className="flex items-center space-x-2">
                         <Checkbox id="settings" checked={settings} onCheckedChange={(v) => setSettings(!!v)} />
                         <Label htmlFor="settings">{t('projects.export.settings')}</Label>
+                    </div>
+                    <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox id="end_users" checked={endUsers} onCheckedChange={(v) => setEndUsers(!!v)} />
+                            <Label htmlFor="end_users">{t('projects.export.end_users')}</Label>
+                        </div>
+                        {endUsers && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 pl-6">
+                                {t('projects.export.end_users_warning')}
+                            </p>
+                        )}
                     </div>
                 </div>
                 <DialogFooter>

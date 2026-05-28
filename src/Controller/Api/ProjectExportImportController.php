@@ -8,9 +8,11 @@ use App\Entity\Project;
 use App\Entity\ProjectMember;
 use App\Enum\ProjectMemberStatus;
 use App\Repository\ProjectRepository;
+use App\Service\EndUserSchemaSeeder;
 use App\Service\ExportImport\ProjectExporter;
 use App\Service\ExportImport\ProjectImporter;
 use Doctrine\ORM\EntityManagerInterface;
+use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -19,6 +21,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\Routing\Attribute\Route;
 
+#[OA\Tag(name: 'Export / Import')]
 #[Route('/api/projects', name: 'api_project_export_import_')]
 class ProjectExportImportController extends AbstractController
 {
@@ -27,8 +30,25 @@ class ProjectExportImportController extends AbstractController
         private ProjectExporter $exporter,
         private ProjectImporter $importer,
         private EntityManagerInterface $em,
+        private EndUserSchemaSeeder $endUserSchemaSeeder,
     ) {}
 
+    #[OA\Get(
+        path: '/api/projects/{uuid}/export',
+        summary: 'Export a project as a ZIP archive',
+        security: [['ApiToken' => []]],
+        parameters: [
+            new OA\Parameter(name: 'uuid', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+            new OA\Parameter(name: 'structure', in: 'query', required: false, schema: new OA\Schema(type: 'boolean'), description: 'Include collection structure'),
+            new OA\Parameter(name: 'content', in: 'query', required: false, schema: new OA\Schema(type: 'boolean'), description: 'Include content entries'),
+            new OA\Parameter(name: 'media', in: 'query', required: false, schema: new OA\Schema(type: 'boolean'), description: 'Include media files'),
+            new OA\Parameter(name: 'end_users', in: 'query', required: false, schema: new OA\Schema(type: 'boolean'), description: 'Include end users'),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'ZIP file download'),
+            new OA\Response(response: 404, description: 'Project not found', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
     #[Route('/{uuid}/export', name: 'export', methods: ['GET'])]
     public function export(string $uuid, Request $request): Response
     {
@@ -88,6 +108,33 @@ class ProjectExportImportController extends AbstractController
         ]);
     }
 
+    #[OA\Post(
+        path: '/api/projects/import',
+        summary: 'Import a ZIP archive as a new project',
+        security: [['ApiToken' => []]],
+        requestBody: new OA\RequestBody(required: true, content: new OA\MediaType(
+            mediaType: 'multipart/form-data',
+            schema: new OA\Schema(properties: [
+                new OA\Property(property: 'file', type: 'string', format: 'binary'),
+                new OA\Property(property: 'new_project_name', type: 'string'),
+                new OA\Property(property: 'structure', type: 'boolean'),
+                new OA\Property(property: 'content', type: 'boolean'),
+                new OA\Property(property: 'media', type: 'boolean'),
+                new OA\Property(property: 'end_users', type: 'boolean'),
+            ])
+        )),
+        responses: [
+            new OA\Response(response: 201, description: 'Project created', content: new OA\JsonContent(properties: [
+                new OA\Property(property: 'data', properties: [
+                    new OA\Property(property: 'id', type: 'integer'),
+                    new OA\Property(property: 'uuid', type: 'string', format: 'uuid'),
+                    new OA\Property(property: 'name', type: 'string'),
+                ]),
+            ])),
+            new OA\Response(response: 422, description: 'Validation error', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+            new OA\Response(response: 500, description: 'Import failed', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
     #[Route('/import', name: 'import_new', methods: ['POST'])]
     public function importNew(Request $request): JsonResponse
     {
@@ -128,31 +175,55 @@ class ProjectExportImportController extends AbstractController
                 $this->em->persist($member);
             }
 
-            $this->importer->import($project, $extractedDir, $options);
+            $conn = $this->em->getConnection();
+            $conn->beginTransaction();
+            try {
+                // Flush project first so it has a real ID before any dependent queries
+                $this->em->flush();
 
-            // Persist all created collections, fields, entries and their values
-            foreach ($project->collections as $collection) {
-                $this->em->persist($collection);
-                foreach ($collection->fields as $field) {
-                    $this->em->persist($field);
-                }
-                foreach ($collection->contentEntries as $entry) {
-                    $this->em->persist($entry);
-                    foreach ($entry->fieldValues as $value) {
-                        $this->em->persist($value);
+                $this->importer->import($project, $extractedDir, $options);
+
+                // Persist all created collections, fields, entries and their values
+                foreach ($project->collections as $collection) {
+                    $this->em->persist($collection);
+                    foreach ($collection->fields as $field) {
+                        $this->em->persist($field);
+                    }
+                    foreach ($collection->contentEntries as $entry) {
+                        $this->em->persist($entry);
+                        foreach ($entry->fieldValues as $value) {
+                            $this->em->persist($value);
+                        }
                     }
                 }
-            }
 
-            // Persist imported media
-            foreach ($this->importer->getMediaHandler()->getImportedMedia() as $media) {
-                $this->em->persist($media);
-                if ($media->metadata) {
-                    $this->em->persist($media->metadata);
+                // Persist imported media
+                foreach ($this->importer->getMediaHandler()->getImportedMedia() as $media) {
+                    $this->em->persist($media);
+                    if ($media->metadata) {
+                        $this->em->persist($media->metadata);
+                    }
                 }
-            }
 
-            $this->em->flush();
+                // Seed system EndUser fields — project now has a real ID so findOneBy works correctly
+                $this->endUserSchemaSeeder->seed($project);
+
+                // Persist imported end user fields (custom schema)
+                foreach ($this->importer->getStructureHandler()->getImportedEndUserFields() as $endUserField) {
+                    $this->em->persist($endUserField);
+                }
+
+                // Persist imported end users
+                foreach ($this->importer->getEndUserHandler()->getImportedUsers() as $endUser) {
+                    $this->em->persist($endUser);
+                }
+
+                $this->em->flush();
+                $conn->commit();
+            } catch (\Throwable $e) {
+                $conn->rollBack();
+                throw $e;
+            }
 
             return $this->json([
                 'data' => [
@@ -205,6 +276,32 @@ class ProjectExportImportController extends AbstractController
         }
     }
 
+    #[OA\Post(
+        path: '/api/projects/{uuid}/import/merge',
+        summary: 'Merge a ZIP archive into an existing project',
+        security: [['ApiToken' => []]],
+        requestBody: new OA\RequestBody(required: true, content: new OA\MediaType(
+            mediaType: 'multipart/form-data',
+            schema: new OA\Schema(properties: [
+                new OA\Property(property: 'file', type: 'string', format: 'binary'),
+                new OA\Property(property: 'structure', type: 'boolean'),
+                new OA\Property(property: 'content', type: 'boolean'),
+                new OA\Property(property: 'media', type: 'boolean'),
+                new OA\Property(property: 'end_users', type: 'boolean'),
+            ])
+        )),
+        parameters: [new OA\Parameter(name: 'uuid', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid'))],
+        responses: [
+            new OA\Response(response: 200, description: 'Merge successful', content: new OA\JsonContent(properties: [
+                new OA\Property(property: 'data', properties: [
+                    new OA\Property(property: 'id', type: 'integer'),
+                    new OA\Property(property: 'uuid', type: 'string', format: 'uuid'),
+                ]),
+            ])),
+            new OA\Response(response: 404, description: 'Project not found', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+            new OA\Response(response: 500, description: 'Import failed', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
     #[Route('/{uuid}/import/merge', name: 'import_merge', methods: ['POST'])]
     public function importMerge(string $uuid, Request $request): JsonResponse
     {
@@ -250,6 +347,15 @@ class ProjectExportImportController extends AbstractController
                     if ($media->metadata) {
                         $this->em->persist($media->metadata);
                     }
+                }
+                // Safety net: ensure system EndUser fields exist (idempotent, skips if already present)
+                $this->endUserSchemaSeeder->seed($project);
+
+                foreach ($this->importer->getStructureHandler()->getImportedEndUserFields() as $endUserField) {
+                    $this->em->persist($endUserField);
+                }
+                foreach ($this->importer->getEndUserHandler()->getImportedUsers() as $endUser) {
+                    $this->em->persist($endUser);
                 }
 
                 $this->em->flush();

@@ -5,6 +5,7 @@ namespace App\Service\ExportImport;
 use App\Dto\ExportOptions;
 use App\Entity\Project;
 use App\Service\ExportImport\Export\ContentExportHandler;
+use App\Service\ExportImport\Export\EndUserExportHandler;
 use App\Service\ExportImport\Export\MediaExportHandler;
 use App\Service\ExportImport\Export\SettingsExportHandler;
 use App\Service\ExportImport\Export\StructureExportHandler;
@@ -19,6 +20,7 @@ class ProjectExporter
         private ContentExportHandler $contentHandler,
         private MediaExportHandler $mediaHandler,
         private SettingsExportHandler $settingsHandler,
+        private EndUserExportHandler $endUserHandler,
         private string $projectDir,
     ) {
         $this->handlers = [
@@ -26,6 +28,7 @@ class ProjectExporter
             $contentHandler::getOptionKey()   => $contentHandler,
             $mediaHandler::getOptionKey()     => $mediaHandler,
             $settingsHandler::getOptionKey()  => $settingsHandler,
+            $endUserHandler::getOptionKey()   => $endUserHandler,
         ];
     }
 

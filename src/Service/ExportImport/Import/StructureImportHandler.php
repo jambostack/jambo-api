@@ -5,26 +5,40 @@ namespace App\Service\ExportImport\Import;
 use App\Dto\ConflictItem;
 use App\Dto\ImportOptions;
 use App\Entity\Collection;
+use App\Entity\EndUserField;
 use App\Entity\Field;
 use App\Entity\Project;
+use App\Repository\EndUserFieldRepository;
 use App\Service\ExportImport\ImportHandlerInterface;
 
 class StructureImportHandler implements ImportHandlerInterface
 {
+    /** @var EndUserField[] */
+    private array $importedEndUserFields = [];
+
+    public function __construct(private EndUserFieldRepository $endUserFieldRepository) {}
+
     public static function getOptionKey(): string
     {
         return 'structure';
     }
 
+    /** @return EndUserField[] */
+    public function getImportedEndUserFields(): array
+    {
+        return $this->importedEndUserFields;
+    }
+
     public function import(Project $project, string $extractedDir, ImportOptions $options, array &$uuidMap): void
     {
+        $this->importedEndUserFields = [];
         $path = $extractedDir . '/structure.json';
         if (!file_exists($path)) {
             return;
         }
 
         $data = json_decode(file_get_contents($path), true);
-        if (!isset($data['collections'])) {
+        if (empty($data['collections']) && empty($data['end_user_fields'])) {
             return;
         }
 
@@ -33,7 +47,7 @@ class StructureImportHandler implements ImportHandlerInterface
             $existingSlugs[$c->slug] = $c;
         }
 
-        foreach ($data['collections'] as $colData) {
+        foreach ($data['collections'] ?? [] as $colData) {
             if ($options->strategy === 'skip' && isset($existingSlugs[$colData['slug']])) {
                 continue;
             }
@@ -64,6 +78,40 @@ class StructureImportHandler implements ImportHandlerInterface
                 $collection->fields->add($field);
             }
         }
+
+        if (!empty($data['end_user_fields'])) {
+            $existingFieldSlugs = [];
+            foreach ($this->endUserFieldRepository->findByProject($project) as $f) {
+                if (!$f->isSystem) {
+                    $existingFieldSlugs[$f->slug] = $f;
+                }
+            }
+
+            foreach ($data['end_user_fields'] as $i => $fieldData) {
+                $slugExists = isset($existingFieldSlugs[$fieldData['slug']]);
+
+                // EndUserFields are identified by slug (no UUID) — new_uuids behaves like skip
+                if ($slugExists && $options->strategy !== 'overwrite') {
+                    continue;
+                }
+
+                if ($slugExists) {
+                    $field = $existingFieldSlugs[$fieldData['slug']];
+                } else {
+                    $field = new EndUserField();
+                    $field->project = $project;
+                    $field->slug = $fieldData['slug'];
+                    $field->isSystem = false;
+                    $this->importedEndUserFields[] = $field;
+                }
+
+                $field->name = $fieldData['name'];
+                $field->type = $fieldData['type'];
+                $field->options = $fieldData['options'] ?? null;
+                $field->order = $fieldData['order'] ?? $i;
+                $field->isRequired = $fieldData['is_required'] ?? false;
+            }
+        }
     }
 
     public function previewConflicts(Project $project, string $extractedDir): array
@@ -89,6 +137,23 @@ class StructureImportHandler implements ImportHandlerInterface
                     $colData['slug'],
                     '',
                     $existing->uuid?->toString() ?? $colData['slug'],
+                );
+            }
+        }
+
+        $existingFieldSlugs = [];
+        foreach ($this->endUserFieldRepository->findByProject($project) as $f) {
+            if (!$f->isSystem) {
+                $existingFieldSlugs[$f->slug] = true;
+            }
+        }
+        foreach ($data['end_user_fields'] ?? [] as $fieldData) {
+            if (isset($existingFieldSlugs[$fieldData['slug']])) {
+                $conflicts[] = ConflictItem::create(
+                    'end_user_field',
+                    $fieldData['slug'],
+                    '',
+                    $fieldData['slug'],
                 );
             }
         }
