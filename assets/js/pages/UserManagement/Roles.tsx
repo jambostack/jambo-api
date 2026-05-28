@@ -40,18 +40,14 @@ interface ProjectPermission {
 }
 
 export default function Roles({ permissionGroups: initialPermissionGroups }: RolesPageProps) {
+    const groups = initialPermissionGroups?.groups || [];
+    const projects = initialPermissionGroups?.projects || [];
     const t = useTranslation();
-    const can = usePage().props.userCan as UserCan;
+    const can = (usePage().props.userCan || {}) as UserCan;
 
     const breadcrumbs: BreadcrumbItem[] = [
-        {
-            title: t('users.breadcrumb'),
-            href: '/user-management/users',
-        },
-        {
-            title: t('roles.breadcrumb'),
-            href: '/user-management/roles',
-        },
+        { title: t('users.breadcrumb'), href: '/users' },
+        { title: t('roles.breadcrumb'), href: '/users/roles' },
     ];
 
     const [openModal, setOpenModal] = useState(false);
@@ -66,7 +62,7 @@ export default function Roles({ permissionGroups: initialPermissionGroups }: Rol
     const [bulkDeleteErrors, setBulkDeleteErrors] = useState<Record<string, string>>({});
     const dataTableRef = useRef<DataTableRef>(null);
 
-    const routePrefix = '/user-management/api/roles';
+    const routePrefix = '/api/roles';
 
     const [formData, setFormData] = useState({
         id: 0,
@@ -129,7 +125,7 @@ export default function Roles({ permissionGroups: initialPermissionGroups }: Rol
     };
 
     const editItem = (item: Role) => {
-        if (!can.update_roles) return;
+        if (!can.manage_roles) return;
 
         setFormData({
             id: item.id,
@@ -234,13 +230,13 @@ export default function Roles({ permissionGroups: initialPermissionGroups }: Rol
             const newPermissions = [...prev.permissions];
 
             if (checked) {
-                initialPermissionGroups.projects.forEach((permission: ProjectPermission) => {
+                projects.forEach((permission: ProjectPermission) => {
                     if (!newPermissions.includes(permission.permission)) {
                         newPermissions.push(permission.permission);
                     }
                 });
             } else {
-                initialPermissionGroups.projects.forEach((permission: ProjectPermission) => {
+                projects.forEach((permission: ProjectPermission) => {
                     const index = newPermissions.indexOf(permission.permission);
                     if (index > -1) {
                         newPermissions.splice(index, 1);
@@ -308,14 +304,14 @@ export default function Roles({ permissionGroups: initialPermissionGroups }: Rol
             label: t('roles.delete_selected'),
             onClick: confirmBulkDelete,
             variant: 'destructive' as const,
-            show: can.delete_roles && selectedItems.length > 0,
+            show: can.manage_roles && selectedItems.length > 0,
         },
         {
             label: t('roles.create'),
             onClick: openNewModal,
             variant: 'default' as const,
             icon: <Plus className="h-4 w-4" />,
-            show: can.create_roles,
+            show: can.manage_roles,
         },
     ];
 
@@ -331,7 +327,7 @@ export default function Roles({ permissionGroups: initialPermissionGroups }: Rol
                         searchPlaceholder={t('roles.search')}
                         searchRoute={routePrefix}
                         actions={tableActionButtons.filter(button => button.show)}
-                        selectable={can.delete_roles}
+                        selectable={can.manage_roles}
                         onSelectionChange={setSelectedItems}
                         selectedItems={selectedItems}
                         pageName="roles-table"
@@ -350,7 +346,7 @@ export default function Roles({ permissionGroups: initialPermissionGroups }: Rol
                     <DialogHeader>
                         <DialogTitle className="flex justify-between items-center">
                             <span>{editing ? t('roles.dialog_edit_title') : t('roles.dialog_create_title')}</span>
-                            {editing && can.delete_roles && (
+                            {editing && can.manage_roles && (
                                 <Button variant="destructive" size="sm" onClick={confirmDelete}>
                                     {t('common.delete')}
                                 </Button>
@@ -377,7 +373,7 @@ export default function Roles({ permissionGroups: initialPermissionGroups }: Rol
 
                         <div className="space-y-4">
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
-                                {initialPermissionGroups.groups.map((group: PermissionGroup) => {
+                                {groups.map((group: PermissionGroup) => {
                                     const Icon = {
                                         'Users': Users,
                                         'Shield': Shield,
@@ -439,7 +435,7 @@ export default function Roles({ permissionGroups: initialPermissionGroups }: Rol
                                         <span className="font-medium">{t('roles.projects_group')}</span>
                                     </div>
                                     <Checkbox
-                                        checked={initialPermissionGroups.projects.every((perm: ProjectPermission) =>
+                                        checked={projects.every((perm: ProjectPermission) =>
                                             formData.permissions.includes(perm.permission)
                                         )}
                                         onCheckedChange={(checked) =>
@@ -448,7 +444,7 @@ export default function Roles({ permissionGroups: initialPermissionGroups }: Rol
                                     />
                                 </div>
                                 <div className="space-y-2 pl-6">
-                                    {initialPermissionGroups.projects.map((permission: ProjectPermission) => (
+                                    {projects.map((permission: ProjectPermission) => (
                                         <div key={permission.permission} className="flex items-center space-x-2">
                                             <Checkbox
                                                 id={permission.permission}
