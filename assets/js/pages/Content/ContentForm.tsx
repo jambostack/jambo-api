@@ -16,6 +16,8 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Select from "@/components/ui/select/Select";
+import AiToolbar from '@/components/AiToolbar';
+import VersionHistory from '@/components/VersionHistory';
 
 interface Props {
     project: Project;
@@ -519,6 +521,24 @@ export default function ContentForm({ project, collection, contentEntry, formDat
                                     </div>
                                 </CardContent>
                             </Card>
+
+                            <AiToolbar
+                                projectUuid={project.uuid}
+                                collectionSlug={collection.slug}
+                                formData={formData}
+                                onContentGenerated={(data) => setFormData(prev => ({ ...prev, ...data }))}
+                                locales={availableLocales}
+                                defaultLocale={locale}
+                            />
+
+                            {isEditMode && contentEntry && (
+                                <VersionHistory
+                                    projectUuid={project.uuid}
+                                    collectionSlug={collection.slug}
+                                    entryUuid={contentEntry.uuid}
+                                    onRestored={() => window.location.reload()}
+                                />
+                            )}
 
                             {isEditMode && contentEntry && (
                                 <Card className="py-2">
