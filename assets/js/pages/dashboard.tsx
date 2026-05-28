@@ -51,7 +51,7 @@ export default function Dashboard({ projects }: Props) {
         },
     ];
 
-    const filteredProjects = projects.filter(
+    const filteredProjects = (projects || []).filter(
         (project) =>
             project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (project.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false),
@@ -67,7 +67,7 @@ export default function Dashboard({ projects }: Props) {
                     <div>
                         <h1 className="text-xl font-bold tracking-tight">{t('dashboard.title')}</h1>
                         <p className="text-sm text-muted-foreground mt-0.5">
-                            {t('dashboard.project_count', { count: String(projects.length) })}
+                            {t('dashboard.project_count', { count: String((projects || []).length) })}
                         </p>
                     </div>
                     {can.create_project && (
@@ -176,7 +176,7 @@ export default function Dashboard({ projects }: Props) {
             <ImportModal
                 open={isImportModalOpen}
                 onOpenChange={setIsImportModalOpen}
-                projects={projects.map((p) => ({ uuid: p.uuid, name: p.name }))}
+                projects={(projects || []).map((p) => ({ uuid: p.uuid, name: p.name }))}
             />
         </AppLayout>
     );
