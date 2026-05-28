@@ -17,7 +17,7 @@
         <server name="KERNEL_CLASS" value="App\Kernel" />
         <server name="SHELL_VERBOSITY" value="-1" />
 
-        <env name="DATABASE_URL" value="mysql://root:@127.0.0.1:3306/jamboapicms?serverVersion=8.0&amp;charset=utf8mb4"/>
+        <env name="DATABASE_URL" value="mysql://root:root@127.0.0.1:3306/jamboapicms?serverVersion=8.0&amp;charset=utf8mb4"/>
         <env name="MAILER_DSN" value="null://null"/>
         <env name="MEILISEARCH_HOST" value=""/>
         <env name="MEILISEARCH_KEY" value=""/>

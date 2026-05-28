@@ -18,15 +18,15 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: jamboapicms
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1"
-          --health-interval=10s
-          --health-timeout=10s
-          --health-retries=5
+          --health-cmd "mysqladmin ping -h localhost -u root -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v4
@@ -47,14 +47,14 @@ jobs:
         run: |
           echo "Waiting for MySQL..."
           for i in $(seq 1 30); do
-            if mysqladmin ping -h 127.0.0.1 --silent 2>/dev/null; then
-              echo "MySQL ready"
+            if mysqladmin ping -h 127.0.0.1 -u root -proot --silent 2>/dev/null; then
+              echo "MySQL ready (attempt $i)"
               break
             fi
             echo "Attempt $i/30..."
             sleep 2
           done
-          mysql -h 127.0.0.1 -e "SHOW DATABASES;"
+          mysql -h 127.0.0.1 -u root -proot -e "SHOW DATABASES;"
 
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --no-scripts
