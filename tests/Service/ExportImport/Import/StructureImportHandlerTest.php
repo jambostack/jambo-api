@@ -4,12 +4,21 @@ namespace App\Tests\Service\ExportImport\Import;
 
 use App\Dto\ImportOptions;
 use App\Entity\Project;
+use App\Repository\EndUserFieldRepository;
 use App\Service\ExportImport\Import\StructureImportHandler;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\Uuid;
 
 class StructureImportHandlerTest extends TestCase
 {
+    private function createHandler(): StructureImportHandler
+    {
+        $repo = $this->createMock(EndUserFieldRepository::class);
+        $repo->method('findByProject')->willReturn([]);
+
+        return new StructureImportHandler($repo);
+    }
+
     public function testGetOptionKey(): void
     {
         $this->assertSame('structure', StructureImportHandler::getOptionKey());
@@ -17,7 +26,7 @@ class StructureImportHandlerTest extends TestCase
 
     public function testImportCreatesCollectionsAndFields(): void
     {
-        $handler = new StructureImportHandler();
+        $handler = $this->createHandler();
 
         $project = new Project();
         $project->name = 'Target Project';
@@ -73,7 +82,7 @@ class StructureImportHandlerTest extends TestCase
 
     public function testPreviewConflictsDetectsSlugCollision(): void
     {
-        $handler = new StructureImportHandler();
+        $handler = $this->createHandler();
 
         $project = new Project();
         $project->uuid = Uuid::v4();

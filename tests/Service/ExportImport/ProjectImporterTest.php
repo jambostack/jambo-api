@@ -4,7 +4,10 @@ namespace App\Tests\Service\ExportImport;
 
 use App\Dto\ImportOptions;
 use App\Entity\Project;
+use App\Repository\EndUserFieldRepository;
+use App\Repository\EndUserRepository;
 use App\Service\ExportImport\Import\ContentImportHandler;
+use App\Service\ExportImport\Import\EndUserImportHandler;
 use App\Service\ExportImport\Import\MediaImportHandler;
 use App\Service\ExportImport\Import\SettingsImportHandler;
 use App\Service\ExportImport\Import\StructureImportHandler;
@@ -18,10 +21,11 @@ class ProjectImporterTest extends TestCase
     {
         $projectDir = realpath(__DIR__ . '/../../../');
         $importer = new ProjectImporter(
-            new StructureImportHandler(),
+            new StructureImportHandler($this->createMock(EndUserFieldRepository::class)),
             new ContentImportHandler(),
             new MediaImportHandler($projectDir),
             new SettingsImportHandler(),
+            new EndUserImportHandler($this->createMock(EndUserRepository::class)),
             $projectDir,
         );
 
@@ -57,10 +61,11 @@ class ProjectImporterTest extends TestCase
     {
         $projectDir = realpath(__DIR__ . '/../../../');
         $importer = new ProjectImporter(
-            new StructureImportHandler(),
+            new StructureImportHandler($this->createMock(EndUserFieldRepository::class)),
             new ContentImportHandler(),
             new MediaImportHandler($projectDir),
             new SettingsImportHandler(),
+            new EndUserImportHandler($this->createMock(EndUserRepository::class)),
             $projectDir,
         );
 
@@ -87,10 +92,11 @@ class ProjectImporterTest extends TestCase
     {
         $projectDir = realpath(__DIR__ . '/../../../');
         $importer = new ProjectImporter(
-            new StructureImportHandler(),
+            new StructureImportHandler($this->createMock(EndUserFieldRepository::class)),
             new ContentImportHandler(),
             new MediaImportHandler($projectDir),
             new SettingsImportHandler(),
+            new EndUserImportHandler($this->createMock(EndUserRepository::class)),
             $projectDir,
         );
 

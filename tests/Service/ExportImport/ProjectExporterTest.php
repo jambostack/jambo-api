@@ -4,7 +4,10 @@ namespace App\Tests\Service\ExportImport;
 
 use App\Dto\ExportOptions;
 use App\Entity\Project;
+use App\Repository\EndUserFieldRepository;
+use App\Repository\EndUserRepository;
 use App\Service\ExportImport\Export\ContentExportHandler;
+use App\Service\ExportImport\Export\EndUserExportHandler;
 use App\Service\ExportImport\Export\MediaExportHandler;
 use App\Service\ExportImport\Export\SettingsExportHandler;
 use App\Service\ExportImport\Export\StructureExportHandler;
@@ -23,10 +26,11 @@ class ProjectExporterTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
 
         $exporter = new ProjectExporter(
-            new StructureExportHandler(),
+            new StructureExportHandler($this->createMock(EndUserFieldRepository::class)),
             new ContentExportHandler(),
             new MediaExportHandler($em, $projectDir),
             new SettingsExportHandler(),
+            new EndUserExportHandler($this->createMock(EndUserRepository::class)),
             $projectDir,
         );
 
@@ -71,10 +75,11 @@ class ProjectExporterTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
 
         $exporter = new ProjectExporter(
-            new StructureExportHandler(),
+            new StructureExportHandler($this->createMock(EndUserFieldRepository::class)),
             new ContentExportHandler(),
             new MediaExportHandler($em, $projectDir),
             new SettingsExportHandler(),
+            new EndUserExportHandler($this->createMock(EndUserRepository::class)),
             $projectDir,
         );
 
