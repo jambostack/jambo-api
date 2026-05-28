@@ -6,7 +6,8 @@ import { ArrowLeft, Pencil, Ban, CheckCircle, Trash2 } from 'lucide-react';
 import type { Project, BreadcrumbItem, UserCan, EndUser } from '@/types';
 
 import AppLayout from '@/layouts/app-layout';
-import ProjectSettingsLayout from '../layout';
+import ProjectsLayout from '@/pages/Projects/layout';
+import ProjectSidebar from '@/pages/Projects/ProjectSidebar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -27,7 +28,6 @@ export default function EndUsersShow({ project, endUser }: Props) {
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: project.name, href: route('projects.show', project.id) },
-        { title: t('projects.settings.title'), href: route('projects.settings.project', project.id) },
         { title: t('end_users.heading'), href: route('projects.settings.end-users', project.id) },
         { title: endUser.email, href: '#' },
     ];
@@ -75,8 +75,9 @@ export default function EndUsersShow({ project, endUser }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`${endUser.email} — ${t('end_users.heading')}`} />
-            <ProjectSettingsLayout project={project}>
-                <div className="space-y-6">
+            <ProjectsLayout>
+                <ProjectSidebar project={project} />
+                <div className="flex-1 min-w-0 space-y-6">
                     <div className="flex items-center gap-2">
                         <Button variant="ghost" size="sm" asChild>
                             <Link href={route('projects.settings.end-users', project.id)}>
@@ -170,7 +171,7 @@ export default function EndUsersShow({ project, endUser }: Props) {
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
-            </ProjectSettingsLayout>
+            </ProjectsLayout>
         </AppLayout>
     );
 }

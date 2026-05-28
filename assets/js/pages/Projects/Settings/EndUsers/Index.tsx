@@ -1,12 +1,13 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Search, Plus, MoreHorizontal, Eye, Pencil, Ban, CheckCircle, Trash2 } from 'lucide-react';
+import { Search, Plus, MoreHorizontal, Eye, Pencil, Ban, CheckCircle, Trash2, Settings2 } from 'lucide-react';
 
 import type { Project, BreadcrumbItem, UserCan, EndUser } from '@/types';
 
 import AppLayout from '@/layouts/app-layout';
-import ProjectSettingsLayout from '../layout';
+import ProjectsLayout from '@/pages/Projects/layout';
+import ProjectSidebar from '@/pages/Projects/ProjectSidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -41,7 +42,6 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: project.name, href: route('projects.show', project.id) },
-        { title: t('projects.settings.title'), href: route('projects.settings.project', project.id) },
         { title: t('end_users.heading'), href: route('projects.settings.end-users', project.id) },
     ];
 
@@ -111,18 +111,26 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`${t('end_users.heading')} — ${project.name}`} />
-            <ProjectSettingsLayout project={project}>
-                <div className="space-y-6">
+            <ProjectsLayout>
+                <ProjectSidebar project={project} />
+                <div className="flex-1 min-w-0 space-y-6">
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-lg font-semibold">{t('end_users.heading')}</h2>
                             <p className="text-sm text-muted-foreground">{t('end_users.heading_desc')}</p>
                         </div>
-                        <Button asChild size="sm">
-                            <Link href={route('projects.settings.end-users.create', project.id)}>
-                                <Plus className="mr-1 h-4 w-4" /> {t('end_users.create')}
-                            </Link>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button asChild size="sm" variant="outline">
+                                <Link href={route('projects.settings.end-users.schema', project.id)}>
+                                    <Settings2 className="mr-1 h-4 w-4" /> {t('end_users.schema')}
+                                </Link>
+                            </Button>
+                            <Button asChild size="sm">
+                                <Link href={route('projects.settings.end-users.create', project.id)}>
+                                    <Plus className="mr-1 h-4 w-4" /> {t('end_users.create')}
+                                </Link>
+                            </Button>
+                        </div>
                     </div>
 
                     {/* Filters */}
@@ -282,7 +290,7 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
-            </ProjectSettingsLayout>
+            </ProjectsLayout>
         </AppLayout>
     );
 }
