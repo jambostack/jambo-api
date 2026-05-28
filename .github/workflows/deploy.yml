@@ -78,9 +78,11 @@ jobs:
 
       - name: Configure test environment
         run: |
-          echo 'DATABASE_URL="mysql://root:root@127.0.0.1:3306/jamboapicms?serverVersion=8.0&charset=utf8mb4"' > .env.test
-          echo 'APP_ENV=test' >> .env.test
-          echo 'MAILER_DSN=null://null' >> .env.test
+          cat > .env.test << 'ENVEOF'
+          DATABASE_URL="mysql://root:root@127.0.0.1:3306/jamboapicms?serverVersion=8.0&charset=utf8mb4"
+          APP_ENV=test
+          MAILER_DSN=null://null
+          ENVEOF
 
       - name: Run database migrations
         run: php bin/console doctrine:migrations:migrate --no-interaction --env=test
