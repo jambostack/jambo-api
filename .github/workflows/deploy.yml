@@ -11,7 +11,6 @@ env:
   NODE_VERSION: '22'
 
 jobs:
-  # ===== Tests =====
   tests:
     name: Tests & Lint
     runs-on: ubuntu-latest
@@ -20,10 +19,14 @@ jobs:
         image: mysql:8.0
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: yes
-          MYSQL_DATABASE: jamboapicms_test
+          MYSQL_DATABASE: jamboapicms
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s
+          --health-timeout=10s
+          --health-retries=5
 
     steps:
       - uses: actions/checkout@v4
@@ -32,14 +35,21 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
-          extensions: mbstring, intl, pdo_mysql, gd
+          extensions: mbstring, intl, pdo_mysql, gd, zip
           tools: composer:v2
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+
+      - name: Verify MySQL connection
+        run: |
+          echo "Waiting for MySQL..."
+          for i in $(seq 1 30); do
+            mysqladmin ping -h 127.0.0.1 --silent && echo "MySQL ready" && break
+            sleep 2
+          done
 
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist
@@ -52,13 +62,9 @@ jobs:
 
       - name: Run database migrations
         run: php bin/console doctrine:migrations:migrate --no-interaction --env=test
-        env:
-          DATABASE_URL: mysql://root:@127.0.0.1:3306/jamboapicms_test?serverVersion=8.0
 
       - name: Run tests
         run: php vendor/bin/phpunit --no-coverage
-        env:
-          DATABASE_URL: mysql://root:@127.0.0.1:3306/jamboapicms_test?serverVersion=8.0
 
   # ===== Build Docker Image =====
   build:
