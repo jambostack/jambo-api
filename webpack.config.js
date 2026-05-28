@@ -9,6 +9,8 @@ if (!Encore.isRuntimeEnvironmentConfigured()) {
 Encore
     .addAliases({
         '@': require('path').resolve(__dirname, 'assets/js'),
+        // $ = exact match only, subpath imports like swagger-ui-react/swagger-ui.css still resolve normally
+        'swagger-ui-react$': require('path').resolve(__dirname, 'node_modules/swagger-ui-react/index.cjs'),
     })
 
     // directory where compiled assets will be stored
@@ -85,4 +87,19 @@ Encore
     //.autoProvidejQuery()
 ;
 
-module.exports = Encore.getWebpackConfig();
+const webpack = require('webpack');
+const config  = Encore.getWebpackConfig();
+
+// Polyfill Node.js built-ins needed by swagger-ui transitive deps
+config.resolve.fallback = {
+    ...config.resolve.fallback,
+    stream: require.resolve('stream-browserify'),
+    buffer: require.resolve('buffer/'),
+};
+
+// Inject Buffer global required by swagger-ui
+config.plugins.push(
+    new webpack.ProvidePlugin({ Buffer: ['buffer', 'Buffer'] })
+);
+
+module.exports = config;

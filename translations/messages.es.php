@@ -391,6 +391,10 @@ return [
     'fields.media.select_multi'      => 'Seleccionar archivos',
     'fields.media.change_single'     => 'Cambiar el archivo',
     'fields.media.change_multi'      => 'Cambiar los archivos',
+    'fields.media.empty_hint'        => 'Explorar la biblioteca multimedia del proyecto',
+    'fields.media.selected_label'    => 'Selección',
+    'fields.media.add_more'          => 'Añadir archivos',
+    'fields.media.remove'            => 'Eliminar',
 
     // Assets
     'assets.breadcrumb'              => 'Biblioteca de medios',
@@ -585,6 +589,7 @@ return [
     'projects.settings.nav_api_access'    => 'Acceso API',
     'projects.settings.nav_webhooks'      => 'Webhooks',
     'projects.settings.nav_end_users'     => 'Usuarios finales',
+    'projects.settings.nav_api_docs'      => 'Documentación API',
     'projects.settings.project'           => 'Proyecto',
     'projects.settings.project_desc'      => 'Actualizar la información básica del proyecto',
     'projects.settings.project_name'      => 'Nombre del proyecto',
@@ -642,6 +647,9 @@ return [
     'projects.settings.api.token_deleted'      => 'Token eliminado',
     'projects.settings.api.failed_save'        => 'Error al guardar el token',
     'projects.settings.api.failed'             => 'Error',
+    'projects.settings.api.docs_title'         => 'Documentación API',
+    'projects.settings.api.docs_desc'          => 'Spec OpenAPI 3.0 generada dinámicamente — colecciones, campos y esquemas reales de este proyecto.',
+    'projects.settings.api.open_swagger'       => 'Abrir en Swagger UI',
 
     // Projects Settings - Webhooks
     'projects.settings.webhooks.title'         => 'Configuración de webhooks',
@@ -767,6 +775,8 @@ return [
     'projects.export.content'              => 'Contenido (entradas, valores)',
     'projects.export.media'                => 'Medios (archivos)',
     'projects.export.settings'             => 'Configuración (locales, miembros, tokens, webhooks)',
+    'projects.export.end_users'            => 'Usuarios finales (cuentas, campos personalizados)',
+    'projects.export.end_users_warning'    => 'Contiene datos sensibles (hashes de contraseñas). Proteja este archivo.',
     'projects.export.button'               => 'Exportar',
     'projects.export.success'              => 'Proyecto exportado con éxito',
     'projects.export.error'                => 'Error al exportar',
@@ -796,6 +806,7 @@ return [
     'editor.placeholder'                   => 'Empieza a escribir...',
     'common.exporting'                     => 'Exportando...',
     'common.importing'                     => 'Importando...',
+    'common.browse'                        => 'Explorar',
 
     // End Users
     'end_users.heading'              => 'Usuarios finales',
@@ -854,6 +865,12 @@ return [
     'end_users.total'                => '{count} usuarios en total',
     'end_users.prev'                 => 'Anterior',
     'end_users.next'                 => 'Siguiente',
+    'end_users.schema'               => 'Esquema',
+    'end_users.schema_desc'          => 'Agrega campos personalizados a tus usuarios finales. Los campos del sistema (email, password, name, status) están protegidos.',
+    'end_users.view_users'           => 'Ver usuarios',
+    'fields.system'                  => 'Sistema',
+    'fields.card_title'              => 'Campos',
+    'fields.card_desc'               => 'Agregue, edite y reordene campos para estructurar los datos de su colección.',
 
     // App Settings
     'app_settings.breadcrumb'      => 'Ajustes de la app',

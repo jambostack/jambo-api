@@ -58,6 +58,7 @@ class FrontendRouteManifestService
         'projects.settings.localization'        => 'projects_settings_localization',
         'projects.settings.user-access'         => 'projects_settings_user_access',
         'projects.settings.api-access'          => 'projects_settings_api_access',
+        'projects.settings.api-docs'            => 'projects_settings_api_docs',
         'projects.settings.webhooks'            => 'projects_settings_webhooks',
         'projects.settings.webhook-logs'        => 'projects_settings_webhook_logs',
 
@@ -95,6 +96,7 @@ class FrontendRouteManifestService
 
         // End Users — pages
         'projects.settings.end-users'           => 'projects_settings_end_users',
+        'projects.settings.end-users.schema'   => 'projects_settings_end_users_schema',
         'projects.settings.end-users.create'    => 'projects_settings_end_users_create',
         'projects.settings.end-users.show'      => 'projects_settings_end_users_show',
         'projects.settings.end-users.edit'      => 'projects_settings_end_users_edit',

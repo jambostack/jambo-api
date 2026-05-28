@@ -20,6 +20,7 @@ return [
     'editor.placeholder'      => 'Commencez à écrire...',
     'common.exporting'        => 'Export en cours...',
     'common.importing'        => 'Import en cours...',
+    'common.browse'           => 'Parcourir',
 
     // Navigation
     'nav.settings'            => 'Paramètres',
@@ -395,6 +396,10 @@ return [
     'fields.media.select_multi'      => 'Sélectionner des fichiers',
     'fields.media.change_single'     => 'Changer le fichier',
     'fields.media.change_multi'      => 'Changer les fichiers',
+    'fields.media.empty_hint'        => 'Parcourir la médiathèque du projet',
+    'fields.media.selected_label'    => 'Sélection',
+    'fields.media.add_more'          => 'Ajouter des fichiers',
+    'fields.media.remove'            => 'Retirer',
 
     // Assets
     'assets.breadcrumb'              => 'Médiathèque',
@@ -589,6 +594,7 @@ return [
     'projects.settings.nav_api_access'    => 'Accès API',
     'projects.settings.nav_webhooks'      => 'Webhooks',
     'projects.settings.nav_end_users'     => 'Utilisateurs finaux',
+    'projects.settings.nav_api_docs'      => 'Documentation API',
     'projects.settings.project'           => 'Projet',
     'projects.settings.project_desc'      => 'Mettre à jour les informations de base du projet',
     'projects.settings.project_name'      => 'Nom du projet',
@@ -646,6 +652,9 @@ return [
     'projects.settings.api.token_deleted'      => 'Jeton supprimé',
     'projects.settings.api.failed_save'        => 'Échec de l\'enregistrement du jeton',
     'projects.settings.api.failed'             => 'Échec',
+    'projects.settings.api.docs_title'         => 'Documentation API',
+    'projects.settings.api.docs_desc'          => 'Spec OpenAPI 3.0 générée dynamiquement — collections, champs et schémas réels de ce projet.',
+    'projects.settings.api.open_swagger'       => 'Ouvrir dans Swagger UI',
 
     // Projects Settings - Webhooks
     'projects.settings.webhooks.title'         => 'Paramètres des webhooks',
@@ -771,6 +780,8 @@ return [
     'projects.export.content' => 'Contenu (entrées, valeurs)',
     'projects.export.media' => 'Médias (fichiers)',
     'projects.export.settings' => 'Paramètres (locales, membres, tokens, webhooks)',
+    'projects.export.end_users' => 'Utilisateurs finaux (comptes, champs custom)',
+    'projects.export.end_users_warning' => 'Contient des données sensibles (hashes de mots de passe). Protégez ce fichier.',
     'projects.export.button' => 'Exporter',
     'projects.export.success' => 'Projet exporté avec succès',
     'projects.export.error' => 'Erreur lors de l\'export',
@@ -854,6 +865,12 @@ return [
     'end_users.total'               => '{count} utilisateurs au total',
     'end_users.prev'                => 'Précédent',
     'end_users.next'                => 'Suivant',
+    'end_users.schema'              => 'Schéma',
+    'end_users.schema_desc'         => 'Ajoutez des champs personnalisés à vos utilisateurs finaux. Les champs système (email, password, name, status) sont protégés.',
+    'end_users.view_users'          => 'Voir les utilisateurs',
+    'fields.system'                 => 'Système',
+    'fields.card_title'             => 'Champs',
+    'fields.card_desc'              => 'Ajoutez, modifiez et réorganisez les champs pour structurer les données de votre collection.',
 
     // App Settings
     'app_settings.breadcrumb'      => 'Paramètres de l\'app',

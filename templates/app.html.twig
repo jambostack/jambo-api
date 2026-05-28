@@ -1,5 +1,9 @@
 {% extends 'base.html.twig' %}
 
+{% block favicon %}
+    <link rel="icon" href="{{ page.props.appSettings.faviconUrl|default('/favicon.ico') }}">
+{% endblock %}
+
 {% block body %}
     <div id="app"></div>
     <script type="application/json" data-page="app">{{ page|json_encode(constant('JSON_HEX_TAG'))|raw }}</script>

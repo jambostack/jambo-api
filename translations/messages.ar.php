@@ -391,6 +391,10 @@ return [
     'fields.media.select_multi'      => 'اختيار ملفات',
     'fields.media.change_single'     => 'تغيير الملف',
     'fields.media.change_multi'      => 'تغيير الملفات',
+    'fields.media.empty_hint'        => 'تصفح مكتبة وسائط المشروع',
+    'fields.media.selected_label'    => 'المحدد',
+    'fields.media.add_more'          => 'إضافة ملفات',
+    'fields.media.remove'            => 'إزالة',
 
     // Assets
     'assets.breadcrumb'              => 'مكتبة الوسائط',
@@ -585,6 +589,7 @@ return [
     'projects.settings.nav_api_access'    => 'وصول API',
     'projects.settings.nav_webhooks'      => 'Webhooks',
     'projects.settings.nav_end_users'     => 'المستخدمون النهائيون',
+    'projects.settings.nav_api_docs'      => 'توثيق API',
     'projects.settings.project'           => 'المشروع',
     'projects.settings.project_desc'      => 'تحديث المعلومات الأساسية للمشروع',
     'projects.settings.project_name'      => 'اسم المشروع',
@@ -642,6 +647,9 @@ return [
     'projects.settings.api.token_deleted'      => 'تم حذف الرمز',
     'projects.settings.api.failed_save'        => 'فشل حفظ الرمز',
     'projects.settings.api.failed'             => 'فشل',
+    'projects.settings.api.docs_title'         => 'توثيق API',
+    'projects.settings.api.docs_desc'          => 'مواصفة OpenAPI 3.0 مُولَّدة ديناميكيًا — المجموعات والحقول والمخططات الفعلية لهذا المشروع.',
+    'projects.settings.api.open_swagger'       => 'فتح في Swagger UI',
 
     // Projects Settings - Webhooks
     'projects.settings.webhooks.title'         => 'إعدادات Webhooks',
@@ -767,6 +775,8 @@ return [
     'projects.export.content'              => 'المحتوى (المدخلات، القيم)',
     'projects.export.media'                => 'الوسائط (الملفات)',
     'projects.export.settings'             => 'الإعدادات (اللغات، الأعضاء، الرموز، الـWebhooks)',
+    'projects.export.end_users'            => 'المستخدمون النهائيون (الحسابات، الحقول المخصصة)',
+    'projects.export.end_users_warning'    => 'يحتوي على بيانات حساسة (تجزئات كلمات المرور). احمِ هذا الملف.',
     'projects.export.button'               => 'تصدير',
     'projects.export.success'              => 'تم تصدير المشروع بنجاح',
     'projects.export.error'                => 'خطأ في التصدير',
@@ -796,6 +806,7 @@ return [
     'editor.placeholder'                   => 'ابدأ الكتابة...',
     'common.exporting'                     => 'جار التصدير...',
     'common.importing'                     => 'جار الاستيراد...',
+    'common.browse'                        => 'تصفح',
 
     // End Users
     'end_users.heading'              => 'المستخدمون النهائيون',
@@ -854,6 +865,12 @@ return [
     'end_users.total'                => '{count} مستخدمون في المجموع',
     'end_users.prev'                 => 'السابق',
     'end_users.next'                 => 'التالي',
+    'end_users.schema'               => 'المخطط',
+    'end_users.schema_desc'          => 'أضف حقولاً مخصصة للمستخدمين النهائيين. الحقول النظامية (email, password, name, status) محمية.',
+    'end_users.view_users'           => 'عرض المستخدمين',
+    'fields.system'                  => 'نظام',
+    'fields.card_title'              => 'الحقول',
+    'fields.card_desc'               => 'أضف الحقول وعدّلها وأعد ترتيبها لهيكلة بيانات مجموعتك.',
 
     // App Settings
     'app_settings.breadcrumb'      => 'إعدادات التطبيق',

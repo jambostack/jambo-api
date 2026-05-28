@@ -20,6 +20,7 @@ return [
     'editor.placeholder'      => 'Start writing...',
     'common.exporting'        => 'Exporting...',
     'common.importing'        => 'Importing...',
+    'common.browse'           => 'Browse',
 
     // Navigation
     'nav.settings'            => 'Settings',
@@ -305,6 +306,7 @@ return [
     'projects.settings.nav_api_access'    => 'API Access',
     'projects.settings.nav_webhooks'      => 'Webhooks',
     'projects.settings.nav_end_users'     => 'End Users',
+    'projects.settings.nav_api_docs'      => 'API Documentation',
     'projects.settings.project'           => 'Project',
     'projects.settings.project_desc'      => 'Update the basic information of the project',
     'projects.settings.project_name'      => 'Project Name',
@@ -362,6 +364,9 @@ return [
     'projects.settings.api.token_deleted'      => 'Token deleted',
     'projects.settings.api.failed_save'        => 'Failed to save token',
     'projects.settings.api.failed'             => 'Failed',
+    'projects.settings.api.docs_title'         => 'API Documentation',
+    'projects.settings.api.docs_desc'          => 'Dynamically generated OpenAPI 3.0 spec — actual collections, fields, and schemas for this project.',
+    'projects.settings.api.open_swagger'       => 'Open in Swagger UI',
 
     // Projects Settings - Webhooks
     'projects.settings.webhooks.title'         => 'Webhooks settings',
@@ -616,6 +621,10 @@ return [
     'fields.media.select_multi'      => 'Select files',
     'fields.media.change_single'     => 'Change a file',
     'fields.media.change_multi'      => 'Change files',
+    'fields.media.empty_hint'        => 'Browse the project media library',
+    'fields.media.selected_label'    => 'Selection',
+    'fields.media.add_more'          => 'Add files',
+    'fields.media.remove'            => 'Remove',
 
     // Assets
     'assets.breadcrumb'              => 'Asset Library',
@@ -771,6 +780,8 @@ return [
     'projects.export.content' => 'Content (entries, values)',
     'projects.export.media' => 'Media (files)',
     'projects.export.settings' => 'Settings (locales, members, tokens, webhooks)',
+    'projects.export.end_users' => 'End users (accounts, custom fields)',
+    'projects.export.end_users_warning' => 'Contains sensitive data (password hashes). Keep this file secure.',
     'projects.export.button' => 'Export',
     'projects.export.success' => 'Project exported successfully',
     'projects.export.error' => 'Export error',
@@ -854,6 +865,12 @@ return [
     'end_users.total'              => '{count} users total',
     'end_users.prev'               => 'Previous',
     'end_users.next'               => 'Next',
+    'end_users.schema'             => 'Schema',
+    'end_users.schema_desc'        => 'Add custom fields to your end users. System fields (email, password, name, status) are protected.',
+    'end_users.view_users'         => 'View users',
+    'fields.system'                => 'System',
+    'fields.card_title'            => 'Fields',
+    'fields.card_desc'             => 'Add, edit, and reorder fields to structure your collection\'s data.',
 
     // App Settings
     'app_settings.breadcrumb'      => 'App Settings',
