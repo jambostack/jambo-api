@@ -35,7 +35,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
-          extensions: mbstring, intl, pdo_mysql, gd, zip
+          extensions: mbstring, intl, pdo_mysql, gd, zip, curl, dom, xml
           tools: composer:v2
 
       - name: Setup Node
@@ -47,24 +47,40 @@ jobs:
         run: |
           echo "Waiting for MySQL..."
           for i in $(seq 1 30); do
-            mysqladmin ping -h 127.0.0.1 --silent && echo "MySQL ready" && break
+            if mysqladmin ping -h 127.0.0.1 --silent 2>/dev/null; then
+              echo "MySQL ready"
+              break
+            fi
+            echo "Attempt $i/30..."
             sleep 2
           done
+          mysql -h 127.0.0.1 -e "SHOW DATABASES;"
 
       - name: Install PHP dependencies
-        run: composer install --no-interaction --prefer-dist
+        run: composer install --no-interaction --prefer-dist --no-scripts
+        env:
+          APP_ENV: test
+
+      - name: Run post-install scripts
+        run: composer run-script post-install-cmd
+        env:
+          APP_ENV: test
 
       - name: Install JS dependencies
         run: npm ci
+        env:
+          APP_ENV: test
 
       - name: Build assets
         run: npm run build
+        env:
+          APP_ENV: test
 
       - name: Run database migrations
         run: php bin/console doctrine:migrations:migrate --no-interaction --env=test
 
       - name: Run tests
-        run: php vendor/bin/phpunit --no-coverage
+        run: php vendor/bin/phpunit --no-coverage --env=test
 
   # ===== Build Docker Image =====
   build:
