@@ -22,7 +22,10 @@ class VersioningService
      */
     public function createVersion(ContentEntry $entry, ?string $label = null): ContentVersion
     {
-        return $this->createSnapshot($entry, $this->formatter->formatEntry($entry), $label);
+        $version = $this->createSnapshot($entry, $this->formatter->formatEntry($entry), $label);
+        $this->em->flush();
+
+        return $version;
     }
 
     /**
@@ -37,7 +40,7 @@ class VersioningService
         $version->versionNumber = $this->versionRepo->getNextVersionNumber($entry);
 
         $this->em->persist($version);
-        $this->em->flush();
+        // Pas de flush ici : appelé depuis onFlush (AutoVersionSubscriber), le flush principal s'en charge
 
         return $version;
     }

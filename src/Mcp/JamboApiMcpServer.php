@@ -261,7 +261,7 @@ class JamboApiMcpServer extends McpServer
                 if (isset($args['status'])) $entry->status = $args['status'];
 
                 foreach ($args['data'] as $fieldSlug => $value) {
-                    $field = $this->findField($entry->collection, $fieldSlug);
+                    $field = $this->fieldHelper->findField($entry->collection, $fieldSlug);
                     if (!$field) continue;
                     $cfv = $entry->fieldValues->findFirst(
                         fn(int $k, ContentFieldValue $v) => $v->field?->slug === $fieldSlug
