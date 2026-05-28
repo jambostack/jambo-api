@@ -38,7 +38,7 @@ function ProjectInitials({ name }: { name: string }) {
 
 export default function Dashboard({ projects }: Props) {
     const t = useTranslation();
-    const can = usePage().props.userCan as UserCan;
+    const can = (usePage().props.userCan || {}) as UserCan;
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
