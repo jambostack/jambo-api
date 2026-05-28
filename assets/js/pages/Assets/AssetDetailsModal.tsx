@@ -418,6 +418,35 @@ export default function AssetDetailsModal({
                                     )}
 
                                 </div>
+                                {isImage && (
+                                    <div className="bg-muted/50 rounded-lg p-3 mt-2">
+                                        <Label className="text-xs font-semibold mb-2 block">Transformations</Label>
+                                        <div className="space-y-1.5">
+                                            {[
+                                                { label: 'Thumbnail (200×200 WebP)', params: 'w=200&h=200&fit=crop&fmt=webp&q=80' },
+                                                { label: 'Medium (800×600)', params: 'w=800&h=600&fit=scale-down' },
+                                                { label: 'WebP optimisé', params: 'fmt=webp&q=80' },
+                                                { label: 'AVIF optimisé', params: 'fmt=avif&q=70' },
+                                            ].map(t => {
+                                                const url = `/cdn/media/${asset.uuid}?${t.params}`;
+                                                return (
+                                                    <div key={t.params} className="flex items-center justify-between text-xs">
+                                                        <span className="text-muted-foreground truncate flex-1 mr-2">{t.label}</span>
+                                                        <button
+                                                            className="text-primary hover:underline shrink-0"
+                                                            onClick={() => { navigator.clipboard.writeText(url); toast.success('URL copiée'); }}
+                                                        >
+                                                            Copier
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mt-2">
+                                            Utilisez <code className="text-xs bg-muted px-1 rounded">/cdn/media/{'{{uuid}}'}?w=800&amp;h=600&amp;fit=crop&amp;fmt=webp</code>
+                                        </p>
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-2 gap-2 mt-2">
                                     <div>
                                         <Label className="text-xs text-muted-foreground">{t('assets.modal_uploaded')}</Label>

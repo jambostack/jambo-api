@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Layout, Image, Type, List, Code2, Download, Copy, Check, Monitor, Columns, FileCode } from 'lucide-react';
+import { Layout, Image, Type, List, Code2, Download, Copy, Check, Monitor, Columns, FileCode, Trash2 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 import type { Project, Collection } from '@/types/index.d';
 
@@ -166,4 +166,3 @@ export default function ${name}() {
     </div>
   );
 }
-import { Trash2 } from 'lucide-react';
