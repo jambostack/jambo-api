@@ -58,6 +58,10 @@ services:
         arguments:
             $projectDir: '%kernel.project_dir%'
 
+    App\Mcp\JamboApiMcpServer:
+        calls:
+            - setAuditService: ['@App\Service\AuditService']
+
     App\Service\SearchService:
         arguments:
             $meilisearchHost: '%env(MEILISEARCH_HOST)%'
