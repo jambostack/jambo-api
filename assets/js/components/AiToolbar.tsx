@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Wand2, Languages, Eye, FileText, Globe, Loader2 } from 'lucide-react';
+import { Wand2, Languages, FileText, Globe, Loader2 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 
 interface Props {
@@ -36,28 +36,17 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
     } catch (e: any) {
       toast.error(e?.response?.data?.error || t('common.error'));
       return null;
-    } finally {
-      setLoading(null);
-    }
+    } finally { setLoading(null); }
   }
 
   async function handleGenerate() {
     const result = await callAi('generate', { brief, collection: collectionSlug, locale: defaultLocale });
-    if (result && !result.error) {
-      onContentGenerated(result);
-      setShowGenerate(false);
-      setBrief('');
-      toast.success(t('studio.api.schema_applied'));
-    }
+    if (result && !result.error) { onContentGenerated(result); setShowGenerate(false); setBrief(''); toast.success(t('studio.api.schema_applied')); }
   }
 
   async function handleTranslate() {
     const result = await callAi('translate', { content: formData, locale: targetLocale });
-    if (result?.translated && !result.translated.error) {
-      onContentGenerated(result.translated);
-      setShowTranslate(false);
-      toast.success(t('studio.api.schema_applied'));
-    }
+    if (result?.translated && !result.translated.error) { onContentGenerated(result.translated); setShowTranslate(false); toast.success(t('studio.api.schema_applied')); }
   }
 
   async function handleSeo() {
@@ -69,18 +58,15 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
       if (result.slug) seoData.slug = result.slug;
       if (result.keywords) seoData.keywords = result.keywords;
       onContentGenerated(seoData);
-      toast.success('SEO généré');
+      toast.success(t('studio.ai.seo_success'));
     }
   }
 
   async function handleSummarize() {
     const textContent = Object.values(formData).filter(v => typeof v === 'string' && v.length > 50).join('\n\n');
-    if (!textContent) { toast.error('Aucun contenu texte à résumer'); return; }
+    if (!textContent) { toast.error(t('studio.ai.no_text')); return; }
     const result = await callAi('summarize', { text: textContent, maxWords: 80 });
-    if (result?.summary) {
-      onContentGenerated({ summary: result.summary });
-      toast.success('Résumé généré');
-    }
+    if (result?.summary) { onContentGenerated({ summary: result.summary }); toast.success(t('studio.ai.summary_success')); }
   }
 
   const isLoading = loading !== null;
@@ -88,49 +74,47 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
   return (
     <>
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Wand2 className="w-4 h-4 text-purple-500" />AI Assistant</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Wand2 className="w-4 h-4 text-purple-500" />{t('studio.ai.title')}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           <Button variant="outline" size="sm" className="w-full justify-start" disabled={isLoading} onClick={() => setShowGenerate(true)}>
-            <Wand2 className="w-3 h-3 mr-2" />{loading === 'generate' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}Générer du contenu
+            <Wand2 className="w-3 h-3 mr-2" />{loading === 'generate' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}{t('studio.ai.generate_btn')}
           </Button>
           <Button variant="outline" size="sm" className="w-full justify-start" disabled={isLoading} onClick={() => setShowTranslate(true)}>
-            <Languages className="w-3 h-3 mr-2" />{loading === 'translate' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}Traduire
+            <Languages className="w-3 h-3 mr-2" />{loading === 'translate' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}{t('studio.ai.translate_btn')}
           </Button>
           <Button variant="outline" size="sm" className="w-full justify-start" disabled={isLoading} onClick={handleSeo}>
-            <Globe className="w-3 h-3 mr-2" />{loading === 'seo' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}Générer SEO
+            <Globe className="w-3 h-3 mr-2" />{loading === 'seo' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}{t('studio.ai.seo_btn')}
           </Button>
           <Button variant="outline" size="sm" className="w-full justify-start" disabled={isLoading} onClick={handleSummarize}>
-            <FileText className="w-3 h-3 mr-2" />{loading === 'summarize' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}Résumer le contenu
+            <FileText className="w-3 h-3 mr-2" />{loading === 'summarize' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}{t('studio.ai.summarize_btn')}
           </Button>
         </CardContent>
       </Card>
 
-      {/* Dialog: Generate */}
       <Dialog open={showGenerate} onOpenChange={setShowGenerate}>
         <DialogContent>
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Wand2 className="w-4 h-4" />Générer du contenu</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Wand2 className="w-4 h-4" />{t('studio.ai.generate_title')}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Décrivez le contenu à générer</Label><Textarea value={brief} onChange={e => setBrief(e.target.value)} placeholder="Ex: Un article de blog sur les tendances tech 2026, ton professionnel, 500 mots..." rows={5} /></div>
-            <p className="text-xs text-muted-foreground">Collection: <Badge variant="secondary">{collectionSlug}</Badge> · Locale: <Badge variant="secondary">{defaultLocale}</Badge></p>
+            <div><Label>{t('studio.ai.generate_desc')}</Label><Textarea value={brief} onChange={e => setBrief(e.target.value)} placeholder={t('studio.ai.generate_ph')} rows={5} /></div>
+            <p className="text-xs text-muted-foreground">{t('studio.ai.collection_label')} <Badge variant="secondary">{collectionSlug}</Badge> · {t('studio.ai.locale_label')} <Badge variant="secondary">{defaultLocale}</Badge></p>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowGenerate(false)}>Annuler</Button><Button onClick={handleGenerate} disabled={!brief || isLoading}>{loading === 'generate' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}Générer</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setShowGenerate(false)}>{t('common.cancel')}</Button><Button onClick={handleGenerate} disabled={!brief || isLoading}>{loading === 'generate' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}{t('studio.ai.generate_action')}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: Translate */}
       <Dialog open={showTranslate} onOpenChange={setShowTranslate}>
         <DialogContent>
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Languages className="w-4 h-4" />Traduire le contenu</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Languages className="w-4 h-4" />{t('studio.ai.translate_title')}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Langue cible</Label>
+            <div><Label>{t('studio.ai.target_lang')}</Label>
               <Select value={targetLocale} onValueChange={setTargetLocale}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{(locales.length > 0 ? locales : ['en', 'fr', 'es', 'ar']).filter(l => l !== defaultLocale).map(l => (<SelectItem key={l} value={l}>{l.toUpperCase()}</SelectItem>))}</SelectContent>
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground">Le contenu actuel sera traduit dans la langue sélectionnée.</p>
+            <p className="text-xs text-muted-foreground">{t('studio.ai.translate_hint')}</p>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowTranslate(false)}>Annuler</Button><Button onClick={handleTranslate} disabled={isLoading}>{loading === 'translate' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}Traduire</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setShowTranslate(false)}>{t('common.cancel')}</Button><Button onClick={handleTranslate} disabled={isLoading}>{loading === 'translate' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}{t('studio.ai.translate_action')}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>
