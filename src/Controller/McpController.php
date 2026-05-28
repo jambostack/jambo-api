@@ -9,6 +9,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 class McpController extends AbstractController
@@ -16,6 +17,7 @@ class McpController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private JamboApiMcpServer $mcpServer,
+        private RateLimiterFactory $mcpLimiter,
     ) {}
 
     /**
@@ -26,6 +28,12 @@ class McpController extends AbstractController
     #[Route('/mcp', name: 'mcp_endpoint', methods: ['POST'])]
     public function handle(Request $request): Response
     {
+        // Rate limiting : 60 requêtes par minute par IP
+        $limiter = $this->mcpLimiter->create($request->getClientIp());
+        if (false === $limiter->consume(1)->isAccepted()) {
+            return new JsonResponse(['error' => 'Trop de requêtes MCP. Réessayez plus tard.'], 429);
+        }
+
         $body = $request->getContent();
 
         // Extraire le token d'authentification du header
@@ -56,6 +64,7 @@ class McpController extends AbstractController
         $context = [
             'project_uuid' => $uuid,
             'project_id' => $project->id,
+            '_project' => $project,
             'user' => $this->getUser(),
         ];
 
@@ -95,10 +104,11 @@ class McpController extends AbstractController
         // Si un token API est fourni, trouver le projet associé
         if ($token) {
             $apiToken = $this->em->getRepository(\App\Entity\ApiToken::class)
-                ->findOneByToken($token);
+                ->findByPlainToken($token);
             if ($apiToken && !$apiToken->isExpired()) {
                 $context['project_uuid'] = $apiToken->project?->uuid?->toRfc4122();
                 $context['project_id'] = $apiToken->project?->id;
+                $context['_project'] = $apiToken->project;
                 $context['token_abilities'] = $apiToken->abilities;
                 $context['authenticated'] = true;
             }

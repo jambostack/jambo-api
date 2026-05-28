@@ -123,12 +123,24 @@ class SearchService
 
         try {
             $indexName = $this->indexName($project);
-            $this->client->deleteIndex($indexName);
-            $this->client->createIndex($indexName, ['primaryKey' => 'uuid']);
-            $index = $this->client->index($indexName);
-            $index->addDocuments($documents);
-            $index->updateFilterableAttributes(['_collection', 'status', 'locale']);
-            $index->updateSortableAttributes(['created_at', 'updated_at']);
+            $tmpIndexName = $indexName . '_tmp_' . time();
+
+            // Créer un index temporaire, y ajouter les documents, puis échanger
+            $this->client->createIndex($tmpIndexName, ['primaryKey' => 'uuid']);
+            $tmpIndex = $this->client->index($tmpIndexName);
+            $tmpIndex->addDocuments($documents);
+            $tmpIndex->updateFilterableAttributes(['_collection', 'status', 'locale']);
+            $tmpIndex->updateSortableAttributes(['created_at', 'updated_at']);
+
+            // Échange atomique des index
+            $this->client->swapIndexes([[$indexName, $tmpIndexName]]);
+
+            // Nettoyage : supprimer l'ancien index (maintenant sous le nom temporaire)
+            try {
+                $this->client->deleteIndex($tmpIndexName);
+            } catch (\Throwable) {
+                // L'index temporaire sera nettoyé par le prochain rebuild
+            }
 
             return count($documents);
         } catch (\Throwable $e) {

@@ -58,7 +58,12 @@ services:
         arguments:
             $projectDir: '%kernel.project_dir%'
 
+    App\Controller\McpController:
+        arguments:
+            $mcpLimiter: '@limiter.mcp_limiter'
+
     App\Mcp\JamboApiMcpServer:
+        lazy: true
         calls:
             - setAuditService: ['@App\Service\AuditService']
 

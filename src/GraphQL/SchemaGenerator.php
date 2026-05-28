@@ -8,6 +8,7 @@ use App\Entity\Project;
 use App\Repository\CollectionRepository;
 use App\Repository\ContentEntryRepository;
 use App\Service\EavDataFormatterService;
+use App\Service\EavFieldHelperService;
 use Doctrine\ORM\EntityManagerInterface;
 use GraphQL\Type\Definition\InputObjectType;
 use GraphQL\Type\Definition\ObjectType;
@@ -17,11 +18,13 @@ class SchemaGenerator
 {
     private array $collectionTypes = [];
     private array $collectionInputTypes = [];
+    private array $schemaCache = [];
 
     public function __construct(
         private EntityManagerInterface $em,
         private ContentEntryRepository $entryRepo,
         private EavDataFormatterService $formatter,
+        private EavFieldHelperService $fieldHelper,
     ) {}
 
     /**
@@ -29,6 +32,12 @@ class SchemaGenerator
      */
     public function buildSchema(Project $project): \GraphQL\Type\Schema
     {
+        $cacheKey = $project->uuid->toRfc4122();
+
+        if (isset($this->schemaCache[$cacheKey])) {
+            return $this->schemaCache[$cacheKey];
+        }
+
         $this->collectionTypes = [];
         $this->collectionInputTypes = [];
 
@@ -47,10 +56,22 @@ class SchemaGenerator
             ? new ObjectType(['name' => 'Mutation', 'fields' => $mutationFields])
             : null;
 
-        return new \GraphQL\Type\Schema([
+        $schema = new \GraphQL\Type\Schema([
             'query' => $queryType,
             'mutation' => $mutationType,
         ]);
+
+        $this->schemaCache[$cacheKey] = $schema;
+
+        return $schema;
+    }
+
+    /**
+     * Invalide le cache de schéma pour un projet (à appeler après modification de collection/champ).
+     */
+    public function invalidateCache(Project $project): void
+    {
+        unset($this->schemaCache[$project->uuid->toRfc4122()]);
     }
 
     private function buildCollectionType(Collection $collection): ObjectType
@@ -124,9 +145,24 @@ class SchemaGenerator
             'resolve' => fn() => 'pong',
         ];
 
+        $usedNames = [];
+
         foreach ($collections as $collection) {
             $type = $this->collectionTypes[$this->typeName($collection)];
-            $snake = $this->fieldName($collection);
+            $baseName = $this->fieldName($collection);
+
+            // Éviter les collisions de noms (ex: blog_post et blogpost → même camelCase)
+            $snake = $baseName;
+            if (isset($usedNames[$snake])) {
+                $snake = $baseName . '_' . str_replace('-', '_', $collection->slug);
+            }
+            $usedNames[$snake] = true;
+
+            $listName = $snake . 'List';
+            if (isset($usedNames[$listName])) {
+                $listName = $snake . '_' . str_replace('-', '_', $collection->slug) . 'List';
+            }
+            $usedNames[$listName] = true;
 
             $fields[$snake] = [
                 'type' => $type,
@@ -136,7 +172,7 @@ class SchemaGenerator
                 'resolve' => fn($root, array $args) => $this->resolveEntry($collection, $args['uuid']),
             ];
 
-            $fields[$snake . 'List'] = [
+            $fields[$listName] = [
                 'type' => Type::listOf($type),
                 'args' => [
                     'locale' => ['type' => Type::string()],
@@ -253,7 +289,7 @@ class SchemaGenerator
             $cfv->field = $field;
             $cfv->fieldType = $field->type;
             $cfv->contentEntry = $entry;
-            $this->setFieldValue($cfv, $field->type, $value);
+            $this->fieldHelper->setFieldValue($cfv, $field->type, $value);
             $entry->fieldValues->add($cfv);
         }
 
@@ -277,20 +313,20 @@ class SchemaGenerator
         unset($input['locale'], $input['status']);
 
         foreach ($input as $fieldSlug => $value) {
-            $field = $this->findField($collection, $fieldSlug);
+            $field = $this->fieldHelper->findField($collection, $fieldSlug);
             if (!$field) continue;
 
             $cfv = $entry->fieldValues->findFirst(
                 fn(int $key, \App\Entity\ContentFieldValue $v) => $v->field?->slug === $fieldSlug
             );
             if ($cfv) {
-                $this->setFieldValue($cfv, $field->type, $value);
+                $this->fieldHelper->setFieldValue($cfv, $field->type, $value);
             } else {
                 $cfv = new \App\Entity\ContentFieldValue();
                 $cfv->field = $field;
                 $cfv->fieldType = $field->type;
                 $cfv->contentEntry = $entry;
-                $this->setFieldValue($cfv, $field->type, $value);
+                $this->fieldHelper->setFieldValue($cfv, $field->type, $value);
                 $entry->fieldValues->add($cfv);
             }
         }
@@ -314,26 +350,6 @@ class SchemaGenerator
         $this->em->flush();
 
         return true;
-    }
-
-    private function setFieldValue(\App\Entity\ContentFieldValue $cfv, string $type, mixed $value): void
-    {
-        match ($type) {
-            'number', 'decimal' => $cfv->numberValue = $value !== null ? (string) $value : null,
-            'boolean', 'checkbox' => $cfv->booleanValue = $value,
-            'date' => $cfv->dateValue = $value ? new \DateTime($value) : null,
-            'datetime' => $cfv->datetimeValue = $value ? new \DateTime($value) : null,
-            'json', 'array', 'repeater', 'enumeration', 'media', 'relation'
-                => $cfv->jsonValue = is_string($value) ? json_decode($value, true) : $value,
-            default => $cfv->textValue = $value !== null ? (string) $value : null,
-        };
-    }
-
-    private function findField(Collection $collection, string $slug): ?Field
-    {
-        return $collection->fields->findFirst(
-            fn(int $key, Field $f) => $f->slug === $slug && !$f->isDeleted()
-        );
     }
 
     private function typeName(Collection $collection): string
