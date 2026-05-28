@@ -18,16 +18,16 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 WORKDIR /app
 
-# Composer
-COPY composer.json composer.lock symfony.lock ./
+# Copier tout le code source d'abord (nécessaire pour le build assets)
+COPY . .
+
+# Composer (vendor/ exclu via .dockerignore)
 RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
-# NPM
-COPY package.json package-lock.json webpack.config.js ./
+# NPM build (node_modules/ exclu via .dockerignore)
 RUN npm ci && npm run build
 
-# App
-COPY . .
+# Warmup Symfony
 RUN php bin/console cache:warmup --env=prod
 
 EXPOSE 80

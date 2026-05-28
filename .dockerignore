@@ -1,0 +1,23 @@
+# Git
+.git/
+.gitignore
+
+# Dependencies (réinstallées dans l'image)
+node_modules/
+vendor/
+
+# Cache & logs
+var/cache/
+var/log/
+.phpunit.cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Docs
+docs/
+
+# Env
+.env.local
+.env.*.local

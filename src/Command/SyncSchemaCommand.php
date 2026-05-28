@@ -55,16 +55,47 @@ class SyncSchemaCommand extends Command
         $targetCollections = $this->getTargetCollections($target);
 
         $added = 0;
+        $syncedFields = 0;
         $skipped = 0;
 
         foreach ($sourceCollections as $srcCol) {
             if (isset($targetCollections[$srcCol->slug])) {
-                $io->text("  ⏭️  {$srcCol->slug} (déjà présent)");
+                // Collection existante : sync des champs manquants
+                $targetCol = $targetCollections[$srcCol->slug];
+                $targetFieldSlugs = $this->getFieldSlugs($targetCol);
+                $newFields = 0;
+
+                foreach ($srcCol->fields as $srcField) {
+                    if ($srcField->isDeleted()) continue;
+                    if (isset($targetFieldSlugs[$srcField->slug])) continue;
+
+                    $io->text("  ➕ {$srcCol->slug}.{$srcField->slug} → nouveau champ");
+
+                    if (!$dryRun) {
+                        $newField = new Field();
+                        $newField->name = $srcField->name;
+                        $newField->slug = $srcField->slug;
+                        $newField->type = $srcField->type;
+                        $newField->options = $srcField->options;
+                        $newField->isRequired = $srcField->isRequired;
+                        $newField->order = $srcField->order;
+                        $newField->collection = $targetCol;
+                        $this->em->persist($newField);
+                        $newFields++;
+                    }
+                }
+
+                if ($newFields > 0) {
+                    $syncedFields += $newFields;
+                    $io->text("  ✅ {$srcCol->slug}: $newFields champ(s) ajouté(s)");
+                } else {
+                    $io->text("  ⏭️  {$srcCol->slug} (déjà à jour)");
+                }
                 $skipped++;
                 continue;
             }
 
-            $io->text("  ✅ {$srcCol->slug} → création");
+            $io->text("  🆕 {$srcCol->slug} → nouvelle collection");
 
             if (!$dryRun) {
                 $newCol = new Collection();
@@ -97,9 +128,22 @@ class SyncSchemaCommand extends Command
         }
 
         $mode = $dryRun ? ' (dry-run)' : '';
-        $io->success("Sync terminé$mode — $added collections créées, $skipped ignorées");
+        $io->success("Sync terminé$mode — $added collections créées, $syncedFields champs ajoutés, $skipped collections à jour");
 
         return Command::SUCCESS;
+    }
+
+    /** @return array<string, true> */
+    private function getFieldSlugs(Collection $collection): array
+    {
+        $slugs = [];
+        foreach ($collection->fields as $f) {
+            if (!$f->isDeleted()) {
+                $slugs[$f->slug] = true;
+            }
+        }
+
+        return $slugs;
     }
 
     /** @return array<string, Collection> */

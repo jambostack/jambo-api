@@ -9,6 +9,7 @@ use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
@@ -26,8 +27,8 @@ class DeployCommand extends Command
     {
         $this
             ->addArgument('project_uuid', InputArgument::REQUIRED, 'UUID du projet à exporter')
-            ->addOption('output', 'o', InputArgument::OPTIONAL, 'Répertoire de sortie', 'var/deploy')
-            ->addOption('include-media', null, null, 'Inclure les fichiers média');
+            ->addOption('output', 'o', InputOption::VALUE_REQUIRED, 'Répertoire de sortie', 'var/deploy')
+            ->addOption('include-media', null, InputOption::VALUE_NONE, 'Inclure les fichiers média');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -62,12 +63,12 @@ class DeployCommand extends Command
         $io->section('Export en cours...');
         $this->exporter->export($project, $options, $zipPath);
 
-        $size = filesize($zipPath);
+        $size = file_exists($zipPath) ? filesize($zipPath) : 0;
         $io->success(sprintf(
             "Projet '%s' exporté avec succès.\nFichier: %s\nTaille: %s",
             $project->name,
             $zipPath,
-            $this->formatBytes($size)
+            $this->formatBytes((int) $size)
         ));
 
         return Command::SUCCESS;
