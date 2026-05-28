@@ -84,8 +84,17 @@ jobs:
           MAILER_DSN=null://null
           ENVEOF
 
+      - name: Debug database config
+        run: |
+          echo "=== ENV ==="
+          php -r "echo 'DATABASE_URL=' . (\$_ENV['DATABASE_URL'] ?? \$_SERVER['DATABASE_URL'] ?? 'NOT SET') . PHP_EOL;"
+          echo "=== .env.test ==="
+          cat .env.test
+          echo "=== Doctrine config ==="
+          php bin/console debug:config doctrine --env=test 2>&1 | head -20
+
       - name: Run database migrations
-        run: php bin/console doctrine:migrations:migrate --no-interaction --env=test
+        run: php bin/console doctrine:migrations:migrate --no-interaction --env=test -vvv
 
       - name: Run tests
         run: php vendor/bin/phpunit --no-coverage
