@@ -78,9 +78,13 @@ jobs:
 
       - name: Run database migrations
         run: php bin/console doctrine:migrations:migrate --no-interaction --env=test
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/jamboapicms?serverVersion=8.0
 
       - name: Run tests
-        run: php vendor/bin/phpunit --no-coverage --env=test
+        run: php vendor/bin/phpunit --no-coverage
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/jamboapicms?serverVersion=8.0
 
   # ===== Build Docker Image =====
   build:
