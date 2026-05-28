@@ -18,6 +18,173 @@ nelmio_api_doc:
                     scheme: bearer
                     bearerFormat: JWT
                     description: JWT issued by /auth/login or /auth/register (15-minute access token)
+            schemas:
+                Error:
+                    type: object
+                    properties:
+                        error:
+                            type: string
+                            example: 'Resource not found.'
+
+                EndUser:
+                    type: object
+                    properties:
+                        uuid:
+                            type: string
+                            format: uuid
+                        email:
+                            type: string
+                            format: email
+                        name:
+                            type: string
+                            nullable: true
+                        status:
+                            type: string
+                            enum: [active, banned, pending]
+                        avatar_url:
+                            type: string
+                            nullable: true
+                        custom_fields:
+                            type: object
+                            nullable: true
+                        created_at:
+                            type: string
+                            format: date-time
+                        updated_at:
+                            type: string
+                            format: date-time
+
+                TokenPair:
+                    type: object
+                    properties:
+                        access_token:
+                            type: string
+                        refresh_token:
+                            type: string
+
+                ContentEntry:
+                    type: object
+                    properties:
+                        uuid:
+                            type: string
+                            format: uuid
+                        status:
+                            type: string
+                            enum: [draft, published]
+                        locale:
+                            type: string
+                            example: en
+                        created_at:
+                            type: string
+                            format: date-time
+                        updated_at:
+                            type: string
+                            format: date-time
+                        fields:
+                            type: object
+                            description: 'Dynamic field values keyed by field slug'
+                            additionalProperties: {}
+
+                PaginatedMeta:
+                    type: object
+                    properties:
+                        total:
+                            type: integer
+                        page:
+                            type: integer
+                        per_page:
+                            type: integer
+                        pages:
+                            type: integer
+
+                MediaFile:
+                    type: object
+                    properties:
+                        uuid:
+                            type: string
+                            format: uuid
+                        fileName:
+                            type: string
+                        originalName:
+                            type: string
+                        mimeType:
+                            type: string
+                            example: image/jpeg
+                        fileSize:
+                            type: integer
+                        url:
+                            type: string
+                        alt:
+                            type: string
+                            nullable: true
+                        caption:
+                            type: string
+                            nullable: true
+                        width:
+                            type: integer
+                            nullable: true
+                        height:
+                            type: integer
+                            nullable: true
+                        createdAt:
+                            type: string
+                            format: date-time
+
+                CollectionField:
+                    type: object
+                    properties:
+                        name:
+                            type: string
+                        slug:
+                            type: string
+                        type:
+                            type: string
+                            example: text
+                        isRequired:
+                            type: boolean
+                        options:
+                            type: object
+                            nullable: true
+
+                Collection:
+                    type: object
+                    properties:
+                        name:
+                            type: string
+                        slug:
+                            type: string
+                        description:
+                            type: string
+                            nullable: true
+                        isSingleton:
+                            type: boolean
+                        fields:
+                            type: array
+                            items:
+                                $ref: '#/components/schemas/CollectionField'
+
+                EndUserField:
+                    type: object
+                    properties:
+                        id:
+                            type: integer
+                        name:
+                            type: string
+                        slug:
+                            type: string
+                        type:
+                            type: string
+                            example: text
+                        options:
+                            type: object
+                            nullable: true
+                        order:
+                            type: integer
+                        required:
+                            type: boolean
+                        is_system:
+                            type: boolean
+
     areas:
         default:
             path_patterns:

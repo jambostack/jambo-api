@@ -46,6 +46,7 @@ export default function APIAccessSettings({ project, tokens: initialTokens }: Pr
     const [tokenToDelete, setTokenToDelete] = useState<number|null>(null);
 
     const endpointUrl = `${window.location.origin}/api`;
+    const openApiUrl  = `${window.location.origin}/api/${project.uuid}/openapi.json`;
 
     const copy = async (value: string) => {
         let success = false;
@@ -150,6 +151,18 @@ export default function APIAccessSettings({ project, tokens: initialTokens }: Pr
                         <div className="flex gap-2">
                             <Input readOnly value={endpointUrl} />
                             <Button variant="outline" onClick={() => copy(endpointUrl)}>
+                                <Copy className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                        <HeadingSmall title={t('projects.settings.api.docs_title')} description={t('projects.settings.api.docs_desc')} />
+                        <div className="flex gap-2">
+                            <Input readOnly value={openApiUrl} />
+                            <Button variant="outline" onClick={() => copy(openApiUrl)}>
                                 <Copy className="w-4 h-4" />
                             </Button>
                         </div>

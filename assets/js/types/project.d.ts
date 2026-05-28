@@ -73,9 +73,11 @@ export interface Field {
         };
         includeDraft?: boolean;
     };
-    created_at: string;
-    updated_at: string;
-} 
+    /** Champ verrouillé par le système (EndUser schema) — non éditable/supprimable */
+    is_system?: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
 
 export interface AssetMetadata {
     width?: number;
