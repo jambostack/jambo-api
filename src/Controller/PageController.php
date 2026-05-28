@@ -603,19 +603,28 @@ class PageController extends InertiaController
     #[Route('/users', name: 'users_index', priority: 10)]
     public function users(Request $request): Response
     {
-        return $this->inertia($request, 'UserManagement/Users', []);
+        $roles = $this->em->getRepository(\App\Entity\Role::class)->findAll();
+
+        return $this->inertia($request, 'UserManagement/Users', [
+            'userCan' => $this->buildUserCan(),
+            'roles'   => array_map(fn ($r) => ['id' => $r->id, 'name' => $r->name, 'label' => $r->label], $roles),
+        ]);
     }
 
     #[Route('/users/roles', name: 'users_roles', priority: 10)]
     public function roles(Request $request): Response
     {
-        return $this->inertia($request, 'UserManagement/Roles', []);
+        return $this->inertia($request, 'UserManagement/Roles', [
+            'userCan' => $this->buildUserCan(),
+        ]);
     }
 
     #[Route('/users/permissions', name: 'users_permissions', priority: 10)]
     public function permissions(Request $request): Response
     {
-        return $this->inertia($request, 'UserManagement/Permissions', []);
+        return $this->inertia($request, 'UserManagement/Permissions', [
+            'userCan' => $this->buildUserCan(),
+        ]);
     }
 
     // -------------------------------------------------------------------------

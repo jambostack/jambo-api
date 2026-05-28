@@ -70,7 +70,15 @@ class UserController extends AbstractController
         $user->email = $data['email'];
         $user->password = $this->hasher->hashPassword($user, $data['password']);
 
-        if (!empty($data['role'])) {
+        // Support both roles (array of IDs) and role (single name string)
+        if (!empty($data['roles']) && is_array($data['roles'])) {
+            foreach ($data['roles'] as $roleId) {
+                $role = $this->roleRepository->find((int) $roleId);
+                if ($role !== null) {
+                    $user->userRoles->add($role);
+                }
+            }
+        } elseif (!empty($data['role'])) {
             $role = $this->roleRepository->findByName($data['role']);
             if ($role !== null) {
                 $user->userRoles->add($role);
@@ -103,8 +111,14 @@ class UserController extends AbstractController
         if (!empty($data['password'])) {
             $user->password = $this->hasher->hashPassword($user, $data['password']);
         }
-        if (isset($data['roles'])) {
-            $user->roles = $data['roles'];
+        if (isset($data['roles']) && is_array($data['roles'])) {
+            $user->userRoles->clear();
+            foreach ($data['roles'] as $roleId) {
+                $role = $this->roleRepository->find((int) $roleId);
+                if ($role !== null) {
+                    $user->userRoles->add($role);
+                }
+            }
         }
 
         $this->em->flush();
@@ -133,14 +147,17 @@ class UserController extends AbstractController
 
     private function serialize(User $user): array
     {
+        $roles = $user->userRoles->map(fn ($r) => ['id' => $r->id, 'name' => $r->name, 'label' => $r->label])->toArray();
+
         return [
-            'id'        => $user->id,
-            'uuid'      => $user->uuid?->toString(),
-            'name'      => $user->name,
-            'email'     => $user->email,
-            'roles'     => $user->getRoles(),
-            'userRoles' => $user->userRoles->map(fn ($r) => ['id' => $r->id, 'name' => $r->name, 'label' => $r->label])->toArray(),
-            'createdAt' => $user->createdAt->format(\DateTimeInterface::ATOM),
+            'id'         => $user->id,
+            'uuid'       => $user->uuid?->toString(),
+            'name'       => $user->name,
+            'email'      => $user->email,
+            'roles'      => $roles,
+            'userRoles'  => $roles,
+            'created_at' => $user->createdAt->format(\DateTimeInterface::ATOM),
+            'updated_at' => $user->createdAt->format(\DateTimeInterface::ATOM),
         ];
     }
 }
