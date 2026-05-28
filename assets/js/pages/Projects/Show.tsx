@@ -1,20 +1,23 @@
 import { Head, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { Link } from '@inertiajs/react';
-import { Copy, Save, Layers, FileText, Image, Webhook, Download, Upload } from 'lucide-react';
+import {
+    Copy, Save, Layers, FileText, Image, Webhook,
+    Download, Upload, Check, HardDrive, Globe, Users, Settings, Key,
+    BookOpen, UserCog,
+} from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 import { type Project, type BreadcrumbItem, UserCan } from '@/types/index.d';
 
 import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import { HardDrive, Globe, Users, Settings, Key } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
@@ -26,9 +29,10 @@ import { useTranslation } from '@/lib/i18n';
 
 interface Props {
     project: Project;
+    allProjects: { uuid: string; name: string }[];
 }
 
-export default function Show({ project }: Props) {
+export default function Show({ project, allProjects }: Props) {
     const t = useTranslation();
     const can = usePage().props.userCan as UserCan;
 
@@ -45,7 +49,8 @@ export default function Show({ project }: Props) {
     const [exportModalOpen, setExportModalOpen] = useState(false);
     const [importModalOpen, setImportModalOpen] = useState(false);
 
-    const slugify = (str: string) => str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const slugify = (str: string) =>
+        str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
     const handleSaveTemplate = async () => {
         try {
@@ -82,14 +87,18 @@ export default function Show({ project }: Props) {
         }
     };
 
-    const diskLabel = project.disk === 'public' ? t('projects.show.local_storage_label') : project.disk.toUpperCase();
+    const diskLabel = project.disk === 'public'
+        ? t('projects.show.local_storage_label')
+        : project.disk.toUpperCase();
 
     const breadcrumbs: BreadcrumbItem[] = [
-        {
-            title: project.name,
-            href: '/project',
-        },
+        { title: project.name, href: '/project' },
     ];
+
+    const localesDisplay = (project.locales?.length
+        ? project.locales.join(', ')
+        : project.default_locale
+    ).toUpperCase();
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -100,196 +109,244 @@ export default function Show({ project }: Props) {
 
                 <Separator className="my-6 md:hidden" />
 
-                <div className="flex-1 max-w-full md:w-2xl lg:w-xl xl:w-3xl">
-                    <section className="space-y-6">
+                <div className="flex-1 min-w-0 space-y-6">
 
-
-                        <Card>
-                            <CardHeader className="space-y-2">
-                                <div className="flex items-start justify-between gap-4 flex-wrap">
-                                    <div>
-                                        <CardTitle className="text-2xl font-bold">{project.name}</CardTitle>
-                                        <CardDescription>
-                                            {project.description || t('projects.show.no_description')}
-                                        </CardDescription>
-                                    </div>
-                                    {/* Badges and top-right actions */}
-                                    <div className="flex flex-wrap gap-2 items-center">
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Badge variant="outline" className="flex items-center gap-1 cursor-default">
-                                                    <HardDrive className="h-3 w-3" /> {diskLabel}
-                                                </Badge>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                {project.disk === 'public'
-                                                    ? t('projects.show.local_storage')
-                                                    : t('projects.show.s3_storage')}
-                                            </TooltipContent>
-                                        </Tooltip>
-                                        <Badge variant="outline" className="flex items-center gap-1">
-                                            <Globe className="h-3 w-3" /> {project.default_locale.toUpperCase()}
+                    {/* ── Identity + Actions ──────────────────────── */}
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                            <h1 className="text-2xl font-bold tracking-tight truncate">
+                                {project.name}
+                            </h1>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                {project.description || t('projects.show.no_description')}
+                            </p>
+                            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Badge variant="outline" className="gap-1 cursor-default text-xs font-normal">
+                                            <HardDrive className="h-3 w-3" />
+                                            {diskLabel}
                                         </Badge>
-                                        {project.public_api && (
-                                            <Badge variant="secondary" className="flex items-center gap-1">
-                                                {t('projects.show.public_api')}
-                                            </Badge>
-                                        )}
-                                        {/* Actions */}
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="flex items-center gap-1"
-                                            onClick={() => setTemplateModalOpen(true)}
-                                        >
-                                            <Save className="h-4 w-4" />
-                                            <span className="hidden sm:inline">{t('projects.show.template_btn')}</span>
-                                        </Button>
-                                        {can.create_project && (
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="flex items-center gap-1"
-                                                onClick={() => setCloneModalOpen(true)}
-                                            >
-                                                <Copy className="h-4 w-4" />
-                                                <span className="hidden sm:inline">{t('projects.show.clone_btn')}</span>
-                                            </Button>
-                                        )}
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="flex items-center gap-1"
-                                            onClick={() => setExportModalOpen(true)}
-                                        >
-                                            <Download className="h-4 w-4" />
-                                            <span className="hidden sm:inline">{t('projects.export.button')}</span>
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="flex items-center gap-1"
-                                            onClick={() => setImportModalOpen(true)}
-                                        >
-                                            <Upload className="h-4 w-4" />
-                                            <span className="hidden sm:inline">{t('projects.import.button')}</span>
-                                        </Button>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="flex flex-wrap gap-3 justify-center mb-4">
-                                    {can.access_assets && (
-                                        <QuickAction icon={Image} label={t('projects.show.asset_library')} href={route('assets.index', project.id)} />
-                                    )}
-                                    {can.access_project_settings && (
-                                        <QuickAction icon={Settings} label={t('projects.show.general_settings')} href={route('projects.settings.project', project.id)} />
-                                    )}
-                                    {can.access_localization_settings && (
-                                        <QuickAction icon={Globe} label={t('projects.show.localization')} href={route('projects.settings.localization', project.id)} />
-                                    )}
-                                    {can.access_user_access_settings && (
-                                        <QuickAction icon={Users} label={t('projects.show.user_access')} href={route('projects.settings.user-access', project.id)} />
-                                    )}
-                                    {can.access_api_access_settings && (
-                                        <QuickAction icon={Key} label={t('projects.show.api_access')} href={route('projects.settings.api-access', project.id)} />
-                                    )}
-                                    {can.access_webhooks_settings && (
-                                        <QuickAction icon={Webhook} label={t('projects.show.webhooks')} href={route('projects.settings.webhooks', project.id)} />
-                                    )}
-                                </div>
-                                <div className='flex flex-wrap gap-3 justify-between'>
-                                    <div className="space-y-5">
-                                        <div>
-                                            <h3 className="text-sm font-medium">{t('projects.show.project_id')}</h3>
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-sm text-muted-foreground break-all">{project.uuid}</p>
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-6 w-6"
-                                                    onClick={() => copyToClipboard(project.uuid)}
-                                                >
-                                                    <Copy className="h-4 w-4" />
-                                                    <span className="sr-only">{t('projects.show.copy_uuid')}</span>
-                                                </Button>
-                                                {copied && <span className="text-xs text-green-500">{t('projects.show.copied')}</span>}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <h3 className="text-sm font-medium">{t('projects.show.storage')}</h3>
-                                            <p className="text-sm text-muted-foreground uppercase">{diskLabel}</p>
-                                        </div>
-                                        <div>
-                                            <h3 className="text-sm font-medium">{t('projects.show.default_locale')}</h3>
-                                            <p className="text-sm text-muted-foreground uppercase">
-                                                {project.default_locale}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <h3 className="text-sm font-medium">{t('projects.show.available_locales')}</h3>
-                                            <p className="text-sm text-muted-foreground uppercase">
-                                                {(project.locales?.length ? project.locales.join(', ') : project.default_locale).toUpperCase()}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <h3 className="text-sm font-medium">{t('projects.show.public_api')}</h3>
-                                            <p className="text-sm text-muted-foreground uppercase">
-                                                {project.public_api ? <Badge variant="default" className="flex items-center gap-1">
-                                                    {t('projects.show.enabled')}
-                                                </Badge> : <Badge variant="outline" className="flex items-center gap-1">
-                                                    {t('projects.show.disabled')}
-                                                </Badge>}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <h3 className="text-sm font-medium">{t('projects.show.created_at')}</h3>
-                                            <p className="text-sm text-muted-foreground">
-                                                {new Date(project.created_at).toLocaleString()}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <h3 className="text-sm font-medium">{t('projects.show.last_updated')}</h3>
-                                            <p className="text-sm text-muted-foreground">
-                                                {new Date(project.updated_at).toLocaleString()}
-                                            </p>
-                                        </div>
-                                    </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        {project.disk === 'public'
+                                            ? t('projects.show.local_storage')
+                                            : t('projects.show.s3_storage')}
+                                    </TooltipContent>
+                                </Tooltip>
+                                <Badge variant="outline" className="gap-1 text-xs font-normal">
+                                    <Globe className="h-3 w-3" />
+                                    {project.default_locale.toUpperCase()}
+                                </Badge>
+                                {project.public_api && (
+                                    <Badge variant="secondary" className="text-xs font-normal">
+                                        {t('projects.show.public_api')}
+                                    </Badge>
+                                )}
+                            </div>
+                        </div>
 
-                                    <div className='space-y-3'>
-                                        <div className='text-center border border-dashed rounded-md p-4'>
-                                            <StatsItem
-                                                icon={Layers}
-                                                label={t('projects.show.collections')}
-                                                value={project.collections_count ?? project.collections?.length ?? 0}
-                                            />
-                                        </div>
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-1.5 flex-wrap sm:justify-end shrink-0">
+                            <Button
+                                size="sm" variant="outline"
+                                className="h-8 gap-1.5 text-xs"
+                                onClick={() => setTemplateModalOpen(true)}
+                            >
+                                <Save className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">{t('projects.show.template_btn')}</span>
+                            </Button>
+                            {can.create_project && (
+                                <Button
+                                    size="sm" variant="outline"
+                                    className="h-8 gap-1.5 text-xs"
+                                    onClick={() => setCloneModalOpen(true)}
+                                >
+                                    <Copy className="h-3.5 w-3.5" />
+                                    <span className="hidden sm:inline">{t('projects.show.clone_btn')}</span>
+                                </Button>
+                            )}
+                            <Button
+                                size="sm" variant="outline"
+                                className="h-8 gap-1.5 text-xs"
+                                onClick={() => setExportModalOpen(true)}
+                            >
+                                <Download className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">{t('projects.export.button')}</span>
+                            </Button>
+                            <Button
+                                size="sm" variant="outline"
+                                className="h-8 gap-1.5 text-xs"
+                                onClick={() => setImportModalOpen(true)}
+                            >
+                                <Upload className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">{t('projects.import.button')}</span>
+                            </Button>
+                        </div>
+                    </div>
 
-                                        <div className='text-center border border-dashed rounded-md p-4'>
-                                            <StatsItem
-                                                icon={FileText}
-                                                label={t('projects.show.content_entries')}
-                                                value={project.content_count ?? 0}
-                                            />
-                                        </div>
+                    {/* ── Stats row ───────────────────────────────── */}
+                    <div className="grid grid-cols-3 gap-3">
+                        <StatCard
+                            icon={Layers}
+                            label={t('projects.show.collections')}
+                            value={project.collections_count ?? project.collections?.length ?? 0}
+                            colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400"
+                        />
+                        <StatCard
+                            icon={FileText}
+                            label={t('projects.show.content_entries')}
+                            value={project.content_count ?? 0}
+                            colorClass="bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400"
+                        />
+                        <StatCard
+                            icon={Image}
+                            label={t('projects.show.assets')}
+                            value={project.assets_count ?? 0}
+                            colorClass="bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400"
+                        />
+                    </div>
 
-                                        <div className='text-center border border-dashed rounded-md p-4'>
-                                            <StatsItem
-                                                icon={Image}
-                                                label={t('projects.show.assets')}
-                                                value={project.assets_count ?? 0}
-                                            />
-                                        </div>
-                                    </div>
+                    {/* ── Quick actions ────────────────────────────── */}
+                    {(can.access_assets || can.access_project_settings || can.access_localization_settings ||
+                        can.access_user_access_settings || can.access_api_access_settings ||
+                        can.access_webhooks_settings || can.access_end_users_settings) && (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                            {can.access_assets && (
+                                <QuickAction
+                                    icon={Image}
+                                    label={t('projects.show.asset_library')}
+                                    href={route('assets.index', project.id)}
+                                    colorClass="bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400 group-hover:bg-sky-200 dark:group-hover:bg-sky-900/60"
+                                />
+                            )}
+                            {can.access_project_settings && (
+                                <QuickAction
+                                    icon={Settings}
+                                    label={t('projects.show.general_settings')}
+                                    href={route('projects.settings.project', project.id)}
+                                    colorClass="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 group-hover:bg-slate-200 dark:group-hover:bg-slate-700"
+                                />
+                            )}
+                            {can.access_localization_settings && (
+                                <QuickAction
+                                    icon={Globe}
+                                    label={t('projects.show.localization')}
+                                    href={route('projects.settings.localization', project.id)}
+                                    colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400 group-hover:bg-emerald-200 dark:group-hover:bg-emerald-900/60"
+                                />
+                            )}
+                            {can.access_user_access_settings && (
+                                <QuickAction
+                                    icon={Users}
+                                    label={t('projects.show.user_access')}
+                                    href={route('projects.settings.user-access', project.id)}
+                                    colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400 group-hover:bg-violet-200 dark:group-hover:bg-violet-900/60"
+                                />
+                            )}
+                            {can.access_api_access_settings && (
+                                <QuickAction
+                                    icon={Key}
+                                    label={t('projects.show.api_access')}
+                                    href={route('projects.settings.api-access', project.id)}
+                                    colorClass="bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400 group-hover:bg-amber-200 dark:group-hover:bg-amber-900/60"
+                                />
+                            )}
+                            {can.access_api_access_settings && (
+                                <QuickAction
+                                    icon={BookOpen}
+                                    label={t('projects.settings.nav_api_docs')}
+                                    href={route('projects.settings.api-docs', project.id)}
+                                    colorClass="bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400 group-hover:bg-orange-200 dark:group-hover:bg-orange-900/60"
+                                />
+                            )}
+                            {can.access_webhooks_settings && (
+                                <QuickAction
+                                    icon={Webhook}
+                                    label={t('projects.show.webhooks')}
+                                    href={route('projects.settings.webhooks', project.id)}
+                                    colorClass="bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400 group-hover:bg-rose-200 dark:group-hover:bg-rose-900/60"
+                                />
+                            )}
+                            {can.access_end_users_settings && (
+                                <QuickAction
+                                    icon={UserCog}
+                                    label={t('end_users.heading')}
+                                    href={route('projects.settings.end-users', project.id)}
+                                    colorClass="bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-400 group-hover:bg-teal-200 dark:group-hover:bg-teal-900/60"
+                                />
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Metadata panel ───────────────────────────── */}
+                    <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5 p-5">
+                            {/* Project UUID */}
+                            <InfoItem label={t('projects.show.project_id')}>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                    <code className="font-mono text-[11px] text-muted-foreground break-all">
+                                        {project.uuid}
+                                    </code>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 shrink-0"
+                                        onClick={() => copyToClipboard(project.uuid)}
+                                    >
+                                        {copied
+                                            ? <Check className="h-3 w-3 text-emerald-500" />
+                                            : <Copy className="h-3 w-3" />
+                                        }
+                                        <span className="sr-only">{t('projects.show.copy_uuid')}</span>
+                                    </Button>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </section>
+                            </InfoItem>
+
+                            {/* Storage */}
+                            <InfoItem label={t('projects.show.storage')}>
+                                <span className="uppercase">{diskLabel}</span>
+                            </InfoItem>
+
+                            {/* Default locale */}
+                            <InfoItem label={t('projects.show.default_locale')}>
+                                <span className="uppercase">{project.default_locale}</span>
+                            </InfoItem>
+
+                            {/* Available locales */}
+                            <InfoItem label={t('projects.show.available_locales')}>
+                                <span className="uppercase">{localesDisplay}</span>
+                            </InfoItem>
+
+                            {/* Public API */}
+                            <InfoItem label={t('projects.show.public_api')}>
+                                {project.public_api ? (
+                                    <Badge variant="default" className="text-xs font-normal">
+                                        {t('projects.show.enabled')}
+                                    </Badge>
+                                ) : (
+                                    <Badge variant="outline" className="text-xs font-normal">
+                                        {t('projects.show.disabled')}
+                                    </Badge>
+                                )}
+                            </InfoItem>
+
+                            {/* Created at */}
+                            <InfoItem label={t('projects.show.created_at')}>
+                                <span>{new Date(project.created_at).toLocaleString()}</span>
+                            </InfoItem>
+
+                            {/* Last updated */}
+                            <InfoItem label={t('projects.show.last_updated')}>
+                                <span>{new Date(project.updated_at).toLocaleString()}</span>
+                            </InfoItem>
+                        </div>
+                    </div>
                 </div>
             </ProjectsLayout>
 
-            {/* Save Template Modal */}
+            {/* ── Save Template modal ──────────────────────────── */}
             <Dialog open={templateModalOpen} onOpenChange={setTemplateModalOpen}>
                 <DialogContent>
                     <DialogHeader>
@@ -313,7 +370,7 @@ export default function Show({ project }: Props) {
                 </DialogContent>
             </Dialog>
 
-            {/* Clone Project Modal */}
+            {/* ── Clone Project modal ──────────────────────────── */}
             <Dialog open={cloneModalOpen} onOpenChange={setCloneModalOpen}>
                 <DialogContent>
                     <DialogHeader>
@@ -347,10 +404,13 @@ export default function Show({ project }: Props) {
             <ImportModal
                 open={importModalOpen}
                 onOpenChange={setImportModalOpen}
+                projects={allProjects}
             />
         </AppLayout>
     );
 }
+
+// ── Hooks ─────────────────────────────────────────────────────────────
 
 function useCopyToast() {
     const [copied, setCopied] = useState(false);
@@ -368,18 +428,27 @@ function useCopyToast() {
     return { copied, copyToClipboard };
 }
 
-interface StatsItemProps {
+// ── Sub-components ────────────────────────────────────────────────────
+
+interface StatCardProps {
     icon: React.ComponentType<{ className?: string }>;
     label: string;
     value: number;
+    colorClass?: string;
 }
 
-function StatsItem({ icon: Icon, label, value }: StatsItemProps) {
+function StatCard({ icon: Icon, label, value, colorClass }: StatCardProps) {
     return (
-        <div className="space-y-2">
-            <Icon className="mx-auto h-6 w-6 text-muted-foreground" />
-            <p className="text-2xl font-semibold">{value}</p>
-            <p className="text-sm text-muted-foreground">{label}</p>
+        <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
+            <div className={cn('flex h-8 w-8 items-center justify-center rounded-lg', colorClass)}>
+                <Icon className="h-4 w-4" />
+            </div>
+            <div>
+                <p className="text-3xl font-bold tabular-nums tracking-tight">
+                    {value.toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+            </div>
         </div>
     );
 }
@@ -388,12 +457,35 @@ interface QuickActionProps {
     icon: React.ComponentType<{ className?: string }>;
     label: string;
     href: string;
+    colorClass?: string;
 }
 
-function QuickAction({ icon: Icon, label, href }: QuickActionProps) {
+function QuickAction({ icon: Icon, label, href, colorClass }: QuickActionProps) {
     return (
-        <Link href={href} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent">
-            <Icon className="h-4 w-4" /> {label}
+        <Link
+            href={href}
+            className="group flex flex-col items-center gap-2.5 rounded-xl border border-border/60 bg-card p-4 text-center transition-all duration-200 hover:border-border hover:shadow-sm hover:-translate-y-px"
+        >
+            <div className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-xl transition-colors',
+                colorClass
+            )}>
+                <Icon className="h-[18px] w-[18px]" />
+            </div>
+            <span className="text-xs font-medium leading-tight">{label}</span>
         </Link>
+    );
+}
+
+function InfoItem({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                {label}
+            </p>
+            <div className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                {children}
+            </div>
+        </div>
     );
 }

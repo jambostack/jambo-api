@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { GripVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { TextCursor, AlignLeft, Link, AtSign, Lock, Hash, ListOrdered, CheckSquare, Droplet, Calendar, Clock, Image, GitBranch, Code } from 'lucide-react';
+import { TextCursor, AlignLeft, Link, AtSign, Lock, Hash, ListOrdered, CheckSquare, Droplet, Calendar, Clock, Image, GitBranch, Code, ShieldCheck } from 'lucide-react';
 
 import fields from '@/lib/fields.json';
 
@@ -25,6 +25,10 @@ interface FieldListProps {
     projectUuid: string;
     collectionId: number;
     collectionSlug: string;
+    /** Surcharge le chemin d'API par défaut (pour EndUsers, etc.) */
+    apiBasePath?: string;
+    /** Clé de prop Inertia à recharger après save/delete (défaut: 'collection') */
+    reloadProp?: string;
     initialFields: Field[];
     onAddFieldClick: () => void;
     collections: Array<{
@@ -38,7 +42,7 @@ interface FieldListProps {
     };
 }
 
-export default function FieldList({ projectId, projectUuid, collectionId, collectionSlug, initialFields, onAddFieldClick, collections, can }: FieldListProps) {
+export default function FieldList({ projectId, projectUuid, collectionId, collectionSlug, apiBasePath, reloadProp = 'collection', initialFields, onAddFieldClick, collections, can }: FieldListProps) {
     const t = useTranslation();
     const [fieldsList, setFieldsList] = useState([...initialFields].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -63,8 +67,9 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
 
         // Update the order in the backend
         try {
+            const reorderBase = apiBasePath ?? `/api/projects/${projectUuid}/collections/${collectionSlug}/fields`;
             await axios.post(
-                `/api/projects/${projectUuid}/collections/${collectionSlug}/fields/reorder`,
+                `${reorderBase}/reorder`,
                 { fields: items.map((item, index) => ({ id: item.id, order: index })) }
             );
         } catch (error) {
@@ -86,16 +91,17 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
 
     const handleFieldSaved = () => {
         handleEditModalClose();
-        router.reload({ only: ['collection'] });
+        router.reload({ only: [reloadProp] });
     };
 
     const handleDeleteConfirm = async () => {
         if (!fieldToDelete) return;
         setDeleting(true);
         try {
-            await axios.delete(`/api/projects/${projectUuid}/collections/${collectionSlug}/fields/${fieldToDelete.slug}`);
+            const deleteBase = apiBasePath ?? `/api/projects/${projectUuid}/collections/${collectionSlug}/fields`;
+            await axios.delete(`${deleteBase}/${fieldToDelete.slug}`);
             setFieldToDelete(null);
-            router.reload({ only: ['collection'] });
+            router.reload({ only: [reloadProp] });
         } catch {
             setDeleting(false);
         }
@@ -104,10 +110,8 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
     return (
         <Card className="flex-1">
             <CardHeader>
-                <CardTitle>Fields</CardTitle>
-                <CardDescription>
-                    Add, edit, and reorder fields to structure your collection's data
-                </CardDescription>
+                <CardTitle>{t('fields.card_title')}</CardTitle>
+                <CardDescription>{t('fields.card_desc')}</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="space-y-4">
@@ -131,28 +135,35 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
                                 >
                                     {fieldsList.map((field, index) => {
                                         const fieldInfo = fields[field.type as keyof typeof fields];
+                                        const isSystem = field.is_system === true;
                                         return (
                                             <Draggable
                                                 key={field.id}
                                                 draggableId={field.id.toString()}
                                                 index={index}
+                                                isDragDisabled={isSystem}
                                             >
                                                 {(provided) => (
                                                     <div
                                                         ref={provided.innerRef}
                                                         {...provided.draggableProps}
-                                                        className="flex items-center justify-between p-4 border rounded-lg"
+                                                        className={cn(
+                                                            "flex items-center justify-between p-4 border rounded-lg",
+                                                            isSystem && "bg-muted/40 opacity-80"
+                                                        )}
                                                     >
                                                         <div className="flex items-center space-x-4">
-                                                            {can.update_field && (
+                                                            {can.update_field && !isSystem ? (
                                                                 <div
                                                                     {...provided.dragHandleProps}
                                                                     className="cursor-grab"
                                                                 >
                                                                     <GripVertical className="h-4 w-4 text-muted-foreground" />
                                                                 </div>
+                                                            ) : (
+                                                                <div className="w-4" />
                                                             )}
-                                                            <div className={cn('rounded-md p-2', fieldInfo.bg)}>
+                                                            <div className={cn('rounded-md p-2', fieldInfo?.bg ?? 'bg-gray-400')}>
                                                                 {React.createElement(
                                                                     {
                                                                         TextCursor,
@@ -169,19 +180,26 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
                                                                         PhotoVideo: Image,
                                                                         ExchangeAlt: GitBranch,
                                                                         Code
-                                                                    }[fieldInfo.icon] || TextCursor,
+                                                                    }[fieldInfo?.icon ?? ''] || TextCursor,
                                                                     { className: 'text-white' }
                                                                 )}
                                                             </div>
                                                             <div>
-                                                                <div className="font-medium">{field.label}</div>
+                                                                <div className="flex items-center gap-2 font-medium">
+                                                                    {isSystem ? field.label?.toLowerCase() : field.label}
+                                                                    {isSystem && (
+                                                                        <span className="inline-flex items-center gap-1 rounded-full border border-muted-foreground/30 px-2 py-0.5 text-[10px] text-muted-foreground">
+                                                                            <ShieldCheck className="h-3 w-3" /> {t('fields.system')}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                                 <div className="text-sm text-muted-foreground select-all">
                                                                     {field.name}
                                                                 </div>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center space-x-2">
-                                                            {can.update_field && (
+                                                            {can.update_field && !isSystem && (
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="icon"
@@ -190,7 +208,7 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
                                                                     <Pencil className="h-4 w-4" />
                                                                 </Button>
                                                             )}
-                                                            {can.delete_field && (
+                                                            {can.delete_field && !isSystem && (
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="icon"
@@ -222,6 +240,7 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
                     projectId={projectId}
                     projectUuid={projectUuid}
                     collectionSlug={collectionSlug}
+                    apiBasePath={apiBasePath}
                     onFieldSaved={handleFieldSaved}
                     collections={collections}
                     collectionFields={fieldsList}

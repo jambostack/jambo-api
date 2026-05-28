@@ -3,7 +3,7 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { type NavItem, SharedData, Project, UserCan } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, Settings, Webhook, Image, Users, Folder, Key, Globe, UserCog, Sliders } from 'lucide-react';
+import { LayoutGrid, Settings, Webhook, Image, Users, Folder, Key, Globe, UserCog, Sliders, BookOpen } from 'lucide-react';
 import AppLogo from './app-logo';
 import { Separator } from '@radix-ui/react-separator';
 import { useTranslation } from '@/lib/i18n';
@@ -64,6 +64,12 @@ export function AppSidebar() {
             title: t('projects.settings.nav_api_access'),
             href: route('projects.settings.api-access', currentProject.id),
             icon: Key,
+            permission: 'access_api_access_settings',
+        },
+        {
+            title: t('projects.settings.nav_api_docs'),
+            href: route('projects.settings.api-docs', currentProject.id),
+            icon: BookOpen,
             permission: 'access_api_access_settings',
         },
         {

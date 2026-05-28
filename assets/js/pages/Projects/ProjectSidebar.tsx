@@ -6,7 +6,7 @@ import { useTranslation } from '@/lib/i18n';
 import { Project, SharedData, Collection, UserCan } from '@/types/index.d';
 
 import { Button } from '@/components/ui/button';
-import { Plus, Settings, GripVertical, MoreVertical } from 'lucide-react';
+import { Plus, Settings, GripVertical, MoreVertical, Users, Lock } from 'lucide-react';
 import { SearchBar } from '@/components/ui/search-bar';
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from '@hello-pangea/dnd';
 import {
@@ -50,6 +50,8 @@ export default function ProjectSidebar({ project }: Props) {
 
         return false;
     };
+
+    const isEndUsersActive = page.component?.startsWith('Projects/Settings/EndUsers/');
 
     const filteredCollections = collections.filter(collection =>
         collection.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -200,6 +202,28 @@ export default function ProjectSidebar({ project }: Props) {
                         )}
                     </Droppable>
                 </DragDropContext>
+
+                {can.access_end_users_settings && (
+                    <div className="pt-2 border-t">
+                        <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                            <Link
+                                href={route('projects.settings.end-users', project.id)}
+                                className={`flex-1 flex items-center gap-2 p-2 text-sm rounded-md hover:bg-accent ${isEndUsersActive ? 'bg-accent text-accent-foreground' : ''}`}
+                            >
+                                <Users className="w-4 h-4 shrink-0 text-muted-foreground" />
+                                <span className="flex-1">{t('end_users.heading')}</span>
+                                <Lock className="w-3 h-3 text-muted-foreground/50" />
+                            </Link>
+                            <Link
+                                href={route('projects.settings.end-users.schema', project.id)}
+                                className={`p-2 text-sm rounded-md hover:bg-accent ${page.component === 'Projects/Settings/EndUsers/Schema' ? 'bg-accent text-accent-foreground' : ''}`}
+                                title={t('end_users.schema')}
+                            >
+                                <Settings className="w-4 h-4" />
+                            </Link>
+                        </div>
+                    </div>
+                )}
             </aside>
 
             <CreateCollectionModal

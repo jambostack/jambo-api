@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { NavItem, Project, UserCan } from '@/types/index.d';
-import { Settings as SettingsIcon, Globe, Users, Key, Share2, UserCog } from 'lucide-react';
+import { Settings as SettingsIcon, Globe, Users, Key, Share2, UserCog, FileText } from 'lucide-react';
 import { PropsWithChildren } from 'react';
 import { useTranslation } from '@/lib/i18n';
 
@@ -31,6 +31,7 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
         { title: t('projects.settings.nav_localization'), href: `${basePath}/localization`, icon: Globe, permission: 'access_localization_settings' },
         { title: t('projects.settings.nav_user_access'), href: `${basePath}/user-access`, icon: Users, permission: 'access_user_access_settings' },
         { title: t('projects.settings.nav_api_access'), href: `${basePath}/api-access`, icon: Key, permission: 'access_api_access_settings' },
+        { title: t('projects.settings.nav_api_docs'), href: `${basePath}/api-docs`, icon: FileText, permission: 'access_api_access_settings' },
         { title: t('projects.settings.nav_webhooks'), href: `${basePath}/webhooks`, icon: Share2, permission: 'access_webhooks_settings' },
         { title: t('projects.settings.nav_end_users'), href: `${basePath}/end-users`, icon: UserCog, permission: 'access_end_users_settings' },
     ];

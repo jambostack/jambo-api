@@ -35,7 +35,12 @@ class ProjectSettingsController extends AbstractController
         $data = $request->toArray();
 
         if (isset($data['locales'])) {
-            $project->locales = $data['locales'];
+            $newLocales = (array) $data['locales'];
+            // Always keep the current defaultLocale in the list to avoid inconsistent state.
+            if (!in_array($project->defaultLocale, $newLocales, true)) {
+                $newLocales[] = $project->defaultLocale;
+            }
+            $project->locales = array_values($newLocales);
         }
 
         if (isset($data['default_locale'])) {

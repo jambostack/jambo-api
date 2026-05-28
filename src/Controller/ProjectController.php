@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\EndUserField;
 use App\Entity\Project;
 use App\Entity\ProjectMember;
 use App\Enum\ProjectMemberStatus;
@@ -9,6 +10,7 @@ use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\RoleRepository;
 use App\Repository\UserRepository;
+use App\Service\EndUserSchemaSeeder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -24,6 +26,7 @@ class ProjectController extends AbstractController
         private EntityManagerInterface $em,
         private ProjectMemberRepository $memberRepo,
         private RoleRepository $roleRepository,
+        private EndUserSchemaSeeder $endUserSchemaSeeder,
     ) {}
 
     private ?ProjectMember $currentMember = null;
@@ -66,6 +69,8 @@ class ProjectController extends AbstractController
         $creator->status   = ProjectMemberStatus::Active;
         $creator->joinedAt = new \DateTimeImmutable();
         $this->em->persist($creator);
+
+        $this->endUserSchemaSeeder->seed($project);
 
         $this->em->flush();
 
@@ -207,6 +212,25 @@ class ProjectController extends AbstractController
         $cloner->status   = ProjectMemberStatus::Active;
         $cloner->joinedAt = new \DateTimeImmutable();
         $this->em->persist($cloner);
+
+        // Clone EndUser custom fields (not system ones)
+        $sourceEndUserFields = $this->em->getRepository(EndUserField::class)->findBy(['project' => $source]);
+        $this->endUserSchemaSeeder->seed($clone);
+        foreach ($sourceEndUserFields as $srcField) {
+            if ($srcField->isSystem) {
+                continue;
+            }
+            $newField            = new EndUserField();
+            $newField->project   = $clone;
+            $newField->name      = $srcField->name;
+            $newField->slug      = $srcField->slug;
+            $newField->type      = $srcField->type;
+            $newField->options   = $srcField->options;
+            $newField->order     = $srcField->order;
+            $newField->isRequired = $srcField->isRequired;
+            $newField->isSystem  = false;
+            $this->em->persist($newField);
+        }
 
         $this->em->flush();
 
@@ -387,6 +411,7 @@ class ProjectController extends AbstractController
 
         return $project;
     }
+
 
     private function serialize(Project $project): array
     {

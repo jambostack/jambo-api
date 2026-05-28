@@ -9,9 +9,11 @@ use App\Entity\Field;
 use App\Entity\Media;
 use App\Entity\Project;
 use App\Entity\ProjectMember;
+use App\Entity\EndUserField;
 use App\Repository\ApiTokenRepository;
 use App\Repository\CollectionRepository;
 use App\Repository\ContentEntryRepository;
+use App\Repository\EndUserFieldRepository;
 use App\Repository\EndUserRepository;
 use App\Repository\FieldRepository;
 use App\Repository\ProjectMemberRepository;
@@ -39,6 +41,7 @@ class PageController extends InertiaController
         private ContentEntryRepository $entryRepository,
         private ApiTokenRepository $apiTokenRepository,
         private EndUserRepository $endUserRepository,
+        private EndUserFieldRepository $endUserFieldRepository,
         private EntityManagerInterface $em,
         private EavDataFormatterService $formatter,
         private MediaSerializer $mediaSerializer,
@@ -78,9 +81,16 @@ class PageController extends InertiaController
         }
         $this->denyProjectAccess($project);
 
+        $user        = $this->getUser();
+        $allProjects = $this->projectRepository->findByMember($user);
+
         return $this->inertia($request, 'Projects/Show', [
-            'project' => $this->serializeProject($project, true),
-            'userCan' => $this->buildUserCan($project),
+            'project'     => $this->serializeProject($project, true),
+            'userCan'     => $this->buildUserCan($project),
+            'allProjects' => array_map(
+                fn ($p) => ['uuid' => $p->uuid?->toRfc4122(), 'name' => $p->name],
+                $allProjects
+            ),
         ]);
     }
 
@@ -118,7 +128,7 @@ class PageController extends InertiaController
         [$project, $collection] = $this->resolveProjectAndCollection($project, $collection);
 
         return $this->inertia($request, 'Collections/Show', [
-            'project'    => $this->serializeProject($project),
+            'project'    => $this->serializeProject($project, withCollections: true),
             'collection' => $this->serializeCollection($collection, withFields: true),
             'isEditMode' => false,
             'userCan'    => $this->buildUserCan($project),
@@ -136,7 +146,7 @@ class PageController extends InertiaController
         }
 
         return $this->inertia($request, 'Collections/Show', [
-            'project'      => $this->serializeProject($project),
+            'project'      => $this->serializeProject($project, withCollections: true),
             'collection'   => $this->serializeCollection($collection, withFields: true),
             'contentEntry' => $this->serializeEntry($entry),
             'formData'     => $this->formatter->formatEntry($entry),
@@ -151,7 +161,7 @@ class PageController extends InertiaController
         [$project, $collection] = $this->resolveProjectAndCollection($project, $collection);
 
         return $this->inertia($request, 'Content/ContentTrash', [
-            'project'    => $this->serializeProject($project),
+            'project'    => $this->serializeProject($project, withCollections: true),
             'collection' => $this->serializeCollection($collection, withFields: true),
             'userCan'    => $this->buildUserCan($project),
         ]);
@@ -194,7 +204,7 @@ class PageController extends InertiaController
         $to    = min($page * $perPage, $total);
 
         return $this->inertia($request, 'Assets/Index', [
-            'project' => $this->serializeProject($project),
+            'project' => $this->serializeProject($project, withCollections: true),
             'userCan' => $this->buildUserCan($project),
             'assets'  => [
                 'data'         => array_map(fn (Media $m) => $this->mediaSerializer->serialize($m), $media),
@@ -257,6 +267,26 @@ class PageController extends InertiaController
                 'abilities'  => $t->abilities,
                 'created_at' => $t->createdAt->format(\DateTimeInterface::ATOM),
             ], $tokens),
+        ]);
+    }
+
+    #[Route('/projects/{project}/settings/api-docs', name: 'projects_settings_api_docs', requirements: ['project' => '\d+'], priority: 10)]
+    public function settingsApiDocs(int $project, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        $userCan = $this->buildUserCan($project);
+        if (!($userCan['access_api_access_settings'] ?? false)) {
+            throw $this->createAccessDeniedException();
+        }
+
+        return $this->inertia($request, 'Projects/Settings/ApiDocs', [
+            'project' => $this->serializeProject($project, true),
+            'userCan' => $userCan,
         ]);
     }
 
@@ -329,6 +359,24 @@ class PageController extends InertiaController
         ]);
     }
 
+    #[Route('/projects/{project}/settings/end-users/schema', name: 'projects_settings_end_users_schema', requirements: ['project' => '\d+'], priority: 11)]
+    public function settingsEndUsersSchema(int $project, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        $fields = $this->endUserFieldRepository->findByProject($project);
+
+        return $this->inertia($request, 'Projects/Settings/EndUsers/Schema', [
+            'project'       => $this->serializeProject($project, true),
+            'userCan'       => $this->buildUserCan($project),
+            'endUserFields' => array_map(fn (EndUserField $f) => $this->serializeEndUserField($f), $fields),
+        ]);
+    }
+
     #[Route('/projects/{project}/settings/end-users/create', name: 'projects_settings_end_users_create', requirements: ['project' => '\d+'], priority: 10)]
     public function settingsEndUsersCreate(int $project, Request $request): Response
     {
@@ -338,9 +386,12 @@ class PageController extends InertiaController
         }
         $this->denyProjectAccess($project);
 
+        $fields = $this->endUserFieldRepository->findByProject($project);
+
         return $this->inertia($request, 'Projects/Settings/EndUsers/Create', [
-            'project' => $this->serializeProject($project, true),
-            'userCan' => $this->buildUserCan($project),
+            'project'       => $this->serializeProject($project, true),
+            'userCan'       => $this->buildUserCan($project),
+            'endUserFields' => array_map(fn (EndUserField $f) => $this->serializeEndUserField($f), $fields),
         ]);
     }
 
@@ -378,6 +429,10 @@ class PageController extends InertiaController
         $endUser->name = $name;
         $endUser->password = $this->hasher->hashPassword($endUser, $password);
         $endUser->status = $status;
+
+        if (!empty($data['custom_fields']) && is_array($data['custom_fields'])) {
+            $endUser->customFields = $data['custom_fields'];
+        }
 
         $this->em->persist($endUser);
         $this->em->flush();
@@ -420,10 +475,13 @@ class PageController extends InertiaController
             throw $this->createNotFoundException();
         }
 
+        $fields = $this->endUserFieldRepository->findByProject($project);
+
         return $this->inertia($request, 'Projects/Settings/EndUsers/Edit', [
-            'project'  => $this->serializeProject($project, true),
-            'userCan'  => $this->buildUserCan($project),
-            'endUser'  => $this->serializeEndUser($endUser),
+            'project'       => $this->serializeProject($project, true),
+            'userCan'       => $this->buildUserCan($project),
+            'endUser'       => $this->serializeEndUser($endUser),
+            'endUserFields' => array_map(fn (EndUserField $f) => $this->serializeEndUserField($f), $fields),
         ]);
     }
 
@@ -739,6 +797,24 @@ class PageController extends InertiaController
             'id'    => $user->id,
             'name'  => $user->name,
             'email' => $user->getUserIdentifier(),
+        ];
+    }
+
+    private function serializeEndUserField(EndUserField $field): array
+    {
+        return [
+            'id'           => $field->id,
+            'project_id'   => $field->project->id,
+            'project_uuid' => $field->project->uuid?->toString(),
+            'collection_id'=> 0,
+            'name'         => $field->name,
+            'label'        => $field->name,
+            'slug'         => $field->slug,
+            'type'         => $field->type,
+            'options'      => $field->options ?? [],
+            'order'        => $field->order,
+            'required'     => $field->isRequired,
+            'is_system'    => $field->isSystem,
         ];
     }
 

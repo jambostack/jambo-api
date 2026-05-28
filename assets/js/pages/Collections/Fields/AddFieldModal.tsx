@@ -18,6 +18,8 @@ interface AddFieldModalProps {
     projectId: number;
     projectUuid: string;
     collectionSlug: string;
+    /** Surcharge le chemin d'API par défaut */
+    apiBasePath?: string;
     onFieldCreated?: () => void;
     collections: Array<{
         id: number;
@@ -36,7 +38,7 @@ interface AddFieldModalProps {
     };
 }
 
-export default function AddFieldModal({ isOpen, onClose, collectionId, projectId, projectUuid, collectionSlug, onFieldCreated, collections, collectionFields, can }: AddFieldModalProps) {
+export default function AddFieldModal({ isOpen, onClose, collectionId, projectId, projectUuid, collectionSlug, apiBasePath, onFieldCreated, collections, collectionFields, can }: AddFieldModalProps) {
     const t = useTranslation();
     const [selectedFieldType, setSelectedFieldType] = useState<string | null>(null);
 
@@ -109,6 +111,7 @@ export default function AddFieldModal({ isOpen, onClose, collectionId, projectId
                     projectId={projectId}
                     projectUuid={projectUuid}
                     collectionSlug={collectionSlug}
+                    apiBasePath={apiBasePath}
                     onFieldSaved={onFieldCreated}
                     collections={collections}
                     collectionFields={collectionFields}

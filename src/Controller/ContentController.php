@@ -96,7 +96,8 @@ class ContentController extends AbstractController
         $user    = $this->getUser();
 
         $locale = $data['locale'] ?? $project->defaultLocale;
-        if (!in_array($locale, $project->locales, true)) {
+        $validLocales = array_unique(array_merge($project->locales ?? [], [$project->defaultLocale]));
+        if (!in_array($locale, $validLocales, true)) {
             return $this->json(['error' => sprintf('Locale "%s" is not enabled for this project.', $locale)], 422);
         }
 
@@ -143,7 +144,8 @@ class ContentController extends AbstractController
         $data = $request->toArray();
 
         if (isset($data['locale'])) {
-            if (!in_array($data['locale'], $entry->project->locales, true)) {
+            $validLocales = array_unique(array_merge($entry->project->locales ?? [], [$entry->project->defaultLocale]));
+            if (!in_array($data['locale'], $validLocales, true)) {
                 return $this->json(['error' => sprintf('Locale "%s" is not enabled for this project.', $data['locale'])], 422);
             }
             $entry->locale = $data['locale'];

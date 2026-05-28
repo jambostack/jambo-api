@@ -9,7 +9,7 @@ import type { Project, Collection, Field, UserCan } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import {  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ChevronDown, Clock, FileText, Calendar, User, Globe2, Copy, Key, AlertCircle, Trash2, X, CheckCircle2 } from "lucide-react";
+import { ChevronDown, Clock, FileText, Calendar, User, Globe2, Copy, Key, AlertCircle, Trash2, X, CheckCircle2, Save, Send } from "lucide-react";
 import { renderField } from './Fields';
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -282,8 +282,8 @@ export default function ContentForm({ project, collection, contentEntry, formDat
     return (
         <div>
             <div className="space-y-6">
-                <div className="flex justify-between space-x-4">
-                    <div className="space-y-4 w-3/4">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8 xl:grid-cols-[minmax(0,1fr)_340px]">
+                    <div className="min-w-0 space-y-4">
                         {is_singleton && (
                             <div className="mb-3">
                                 <h1 className="text-xl font-bold">{collection.name}
@@ -308,35 +308,37 @@ export default function ContentForm({ project, collection, contentEntry, formDat
                             </div>
                         ))}
                     </div>
-                    
-                    <div className="flex-1 w-1/4">
-                        <aside className="space-y-4 sticky top-4">
+
+                    <div>
+                        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
                             {!is_singleton && (
                                 <>
-                                <div className="flex flex-col space-y-3">
+                                {/* Primary save actions */}
+                                <div className="space-y-2.5 rounded-xl border border-border bg-card/60 p-3 shadow-sm">
                                     {isEditMode && contentEntry?.status === 'draft' && (
-                                        <div className="flex space-x-2">
-                                            <Button
-                                                onClick={() => handleSubmit('stay', 'draft')}
-                                                disabled={processing}
-                                                className="flex-grow"
-                                            >
-                                                {t('content.form.save_draft')}
-                                            </Button>
-                                        </div>
+                                        <Button
+                                            onClick={() => handleSubmit('stay', 'draft')}
+                                            disabled={processing}
+                                            className="h-10 w-full rounded-lg font-medium shadow-sm"
+                                        >
+                                            <Save className="me-2 h-4 w-4" />
+                                            {t('content.form.save_draft')}
+                                        </Button>
                                     )}
                                     {!isEditMode && (
-                                        <div className="flex space-x-2">
+                                        <div className="flex gap-1.5">
                                             <Button
                                                 onClick={() => handleSubmit('stay', 'draft')}
                                                 disabled={processing}
-                                                className="flex-grow"
+                                                variant="secondary"
+                                                className="h-10 flex-1 rounded-lg font-medium"
                                             >
+                                                <Save className="me-2 h-4 w-4" />
                                                 {t('content.form.save_draft')}
                                             </Button>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <Button variant="outline" size="icon" className="px-2">
+                                                    <Button variant="secondary" size="icon" className="h-10 w-10 shrink-0 rounded-lg">
                                                         <ChevronDown className="h-4 w-4" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
@@ -353,29 +355,29 @@ export default function ContentForm({ project, collection, contentEntry, formDat
                                     )}
 
                                     {isEditMode && can.publish_content && (
-                                        <div className="flex space-x-2">
-                                            <Button
-                                                onClick={() => handleSubmit('stay', 'published')}
-                                                disabled={processing}
-                                                className="flex-grow bg-green-600 hover:bg-green-700 text-white"
-                                            >
-                                                {t('content.form.save_publish')}
-                                            </Button>
-                                        </div>
+                                        <Button
+                                            onClick={() => handleSubmit('stay', 'published')}
+                                            disabled={processing}
+                                            className="h-10 w-full rounded-lg bg-emerald-600 font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
+                                        >
+                                            <Send className="me-2 h-4 w-4" />
+                                            {t('content.form.save_publish')}
+                                        </Button>
                                     )}
 
                                     {!isEditMode && can.publish_content && (
-                                        <div className="flex space-x-2">
+                                        <div className="flex gap-1.5">
                                             <Button
                                                 onClick={() => handleSubmit('stay', 'published')}
                                                 disabled={processing}
-                                                className="flex-grow bg-green-600 hover:bg-green-700 text-white"
+                                                className="h-10 flex-1 rounded-lg bg-emerald-600 font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
                                             >
+                                                <Send className="me-2 h-4 w-4" />
                                                 {t('content.form.save_publish')}
                                             </Button>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <Button variant="outline" size="icon" className="px-2">
+                                                    <Button size="icon" className="h-10 w-10 shrink-0 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
                                                         <ChevronDown className="h-4 w-4" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
@@ -393,113 +395,107 @@ export default function ContentForm({ project, collection, contentEntry, formDat
                                 </div>
 
                                 {isEditMode && contentEntry && (
-                                    <div className={`p-3 rounded-md flex items-center justify-between ${
-                                        contentEntry.status === 'published' 
-                                            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
-                                            : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
+                                    <div className={`relative flex items-center justify-between gap-2 overflow-hidden rounded-xl border p-3.5 ${
+                                        contentEntry.status === 'published'
+                                            ? 'border-emerald-200/70 bg-emerald-50/60 dark:border-emerald-900/50 dark:bg-emerald-950/30'
+                                            : 'border-amber-200/70 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/30'
                                     }`}>
-                                        <div className="flex items-center space-x-2">
-                                            {contentEntry.status === 'published' ? (
-                                                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                            ) : (
-                                                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                                            )}
-                                            <div>
-                                                <h3 className={`font-medium ${
+                                        <div className={`pointer-events-none absolute -end-5 -top-5 h-20 w-20 rounded-full blur-2xl ${
+                                            contentEntry.status === 'published' ? 'bg-emerald-400/20' : 'bg-amber-400/20'
+                                        }`} aria-hidden="true" />
+                                        <div className="relative flex items-center gap-2.5">
+                                            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                                                contentEntry.status === 'published'
+                                                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                                            }`}>
+                                                {contentEntry.status === 'published' ? (
+                                                    <CheckCircle2 className="h-[18px] w-[18px]" />
+                                                ) : (
+                                                    <AlertCircle className="h-[18px] w-[18px]" />
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3 className={`text-sm font-semibold leading-tight ${
                                                     contentEntry.status === 'published'
-                                                        ? 'text-green-700 dark:text-green-400'
+                                                        ? 'text-emerald-700 dark:text-emerald-400'
                                                         : 'text-amber-700 dark:text-amber-400'
                                                 }`}>
                                                     {contentEntry.status === 'published' ? t('content.form.published_badge') : t('content.form.draft_badge')}
                                                 </h3>
-                                                <p className="text-xs text-muted-foreground">
+                                                <p className="truncate text-xs text-muted-foreground">
                                                     {contentEntry.status === 'published'
                                                         ? t('content.form.published_on', { date: new Date(contentEntry.published_at).toLocaleDateString() })
                                                         : t('content.form.not_published')}
                                                 </p>
                                             </div>
                                         </div>
-                                        <Badge variant={contentEntry.status === 'published' ? 'default' : 'outline'} className={
-                                            contentEntry.status === 'published' 
-                                                ? 'bg-green-600 hover:bg-green-700' 
-                                                : 'text-amber-600 border-amber-300 dark:border-amber-600'
-                                        }>
-                                            {contentEntry.status === 'published' ? t('content.form.live') : t('content.form.draft_badge')}
-                                        </Badge>
                                     </div>
                                 )}
 
                                 {isEditMode && contentEntry && contentEntry.status === 'published' && can.unpublish_content && (
-                                    <Button 
+                                    <Button
                                         onClick={() => setShowUnpublishDialog(true)}
                                         disabled={processing}
                                         variant="outline"
-                                        className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                                        className="h-9 w-full rounded-lg border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700/60 dark:text-amber-400 dark:hover:bg-amber-950/40"
                                     >
-                                        <AlertCircle className="mr-2 h-4 w-4" />
+                                        <AlertCircle className="me-2 h-4 w-4" />
                                         {t('content.form.unpublish_btn')}
                                     </Button>
                                 )}
-                                
-                                {isEditMode && contentEntry && (can.create_content || can.move_content_to_trash || can.delete_content) && (
-                                    <>
-                                        <div className="flex space-x-2">
-                                            
-                                            {can.move_content_to_trash && (
-                                                <Button
-                                                    onClick={() => setShowTrashDialog(true)}
-                                                    variant="outline"
-                                                    className="flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                                >
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    {t('content.form.move_to_trash')}
-                                                </Button>
-                                            )}
-                                            {can.delete_content && (
-                                                <Button
-                                                    onClick={() => setShowDeleteDialog(true)}
-                                                    variant="outline"
-                                                    className="flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                                >
-                                                    <X className="mr-2 h-4 w-4" />
-                                                    {t('content.form.delete_btn')}
-                                                </Button>
-                                            )}
-                                        </div>
-                                        <div className="flex space-x-2">
-                                            {can.create_content && (
-                                                <Button
-                                                    onClick={() => setShowDuplicateDialog(true)}
-                                                    variant="outline"
-                                                    className="flex-1"
-                                                    disabled={processing}
-                                                >
-                                                    <Copy className="mr-2 h-4 w-4" />
-                                                    {t('content.form.duplicate_btn')}
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </>
-                                )}
-                                
-                                
-                                </>
-                            )} 
 
-                            {is_singleton && (
-                                <div className="flex space-x-2">
-                                    <Button
-                                        onClick={() => handleSubmit('stay', 'published')}
-                                        disabled={processing}
-                                        className="flex-grow bg-green-600 hover:bg-green-700 text-white"
-                                    >
-                                        {t('content.form.save_content')}
-                                    </Button>
-                                </div>
+                                {isEditMode && contentEntry && (can.create_content || can.move_content_to_trash || can.delete_content) && (
+                                    <div className="space-y-1.5 rounded-xl border border-border/60 bg-muted/30 p-1.5">
+                                        {can.create_content && (
+                                            <Button
+                                                onClick={() => setShowDuplicateDialog(true)}
+                                                variant="ghost"
+                                                disabled={processing}
+                                                className="h-9 w-full justify-start rounded-lg text-sm font-normal text-muted-foreground hover:text-foreground"
+                                            >
+                                                <Copy className="me-2 h-4 w-4" />
+                                                {t('content.form.duplicate_btn')}
+                                            </Button>
+                                        )}
+                                        {can.move_content_to_trash && (
+                                            <Button
+                                                onClick={() => setShowTrashDialog(true)}
+                                                variant="ghost"
+                                                className="h-9 w-full justify-start rounded-lg text-sm font-normal text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                                            >
+                                                <Trash2 className="me-2 h-4 w-4" />
+                                                {t('content.form.move_to_trash')}
+                                            </Button>
+                                        )}
+                                        {can.delete_content && (
+                                            <Button
+                                                onClick={() => setShowDeleteDialog(true)}
+                                                variant="ghost"
+                                                className="h-9 w-full justify-start rounded-lg text-sm font-normal text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                                            >
+                                                <X className="me-2 h-4 w-4" />
+                                                {t('content.form.delete_btn')}
+                                            </Button>
+                                        )}
+                                    </div>
+                                )}
+                                </>
                             )}
 
                             {is_singleton && (
-                                <div className="text-sm text-muted-foreground">
+                                <Button
+                                    onClick={() => handleSubmit('stay', 'published')}
+                                    disabled={processing}
+                                    className="h-10 w-full rounded-lg bg-emerald-600 font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
+                                >
+                                    <Send className="me-2 h-4 w-4" />
+                                    {t('content.form.save_content')}
+                                </Button>
+                            )}
+
+                            {is_singleton && (
+                                <div className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
                                     {t('content.form.singleton_desc')}
                                 </div>
                             )}

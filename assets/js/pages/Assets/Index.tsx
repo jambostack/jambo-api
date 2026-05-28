@@ -4,6 +4,7 @@ import { router } from '@inertiajs/react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { useTranslation } from '@/lib/i18n';
+import { cn } from '@/lib/utils';
 
 import { Project, BreadcrumbItem, Asset, UserCan } from '@/types';
 
@@ -15,13 +16,12 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Trash, Filter, Calendar, LayoutGrid, List, ArrowUpDown, X, Download, ChevronDown } from 'lucide-react';
+import { Plus, Trash, Calendar, LayoutGrid, List, ArrowUpDown, X, Download } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
+import { DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { SearchBar } from '@/components/ui/search-bar';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import ProjectSidebar from '../Projects/ProjectSidebar';
 import AssetDetailsModal from './AssetDetailsModal';
@@ -50,6 +50,14 @@ interface Props {
 
 const DEFAULT_SORT = 'newest';
 
+const TYPE_OPTIONS = [
+	{ value: 'all',      labelKey: 'assets.type_all'       },
+	{ value: 'image',    labelKey: 'assets.type_images'    },
+	{ value: 'video',    labelKey: 'assets.type_videos'    },
+	{ value: 'audio',    labelKey: 'assets.type_audio'     },
+	{ value: 'document', labelKey: 'assets.type_documents' },
+] as const;
+
 export default function Index({ project, assets, filters }: Props) {
 	const t = useTranslation();
 	const [showUploader, setShowUploader] = useState(false);
@@ -67,17 +75,14 @@ export default function Index({ project, assets, filters }: Props) {
 	const page = usePage<{ can?: Record<string, boolean> }>();
 	const can = page.props.userCan as UserCan;
 
-	// Set all state values after component is mounted
 	useEffect(() => {
 		if (filters) {
-			// Set values only if they exist in filters
 			if (typeof filters.search === 'string') setSearch(filters.search);
-			if (typeof filters.type === 'string') setAssetType(filters.type);
+			if (typeof filters.type === 'string') setAssetType(filters.type || 'all');
 			if (typeof filters.date_filter === 'string') setDateFilter(filters.date_filter);
 			if (typeof filters.sort === 'string') setSortOption(filters.sort);
 		}
 
-		// Load view mode from localStorage
 		try {
 			const savedViewMode = localStorage.getItem('assetViewMode');
 			if (savedViewMode === 'grid' || savedViewMode === 'list') {
@@ -86,11 +91,10 @@ export default function Index({ project, assets, filters }: Props) {
 		} catch (e) {
 			console.error('Error loading view mode from localStorage:', e);
 		}
-		
+
 		setAssets(assets);
 	}, [filters, assets]);
 
-	// Save view mode to localStorage when it changes
 	const handleViewModeChange = (value: string) => {
 		setViewMode(value);
 		localStorage.setItem('assetViewMode', value);
@@ -108,7 +112,6 @@ export default function Index({ project, assets, filters }: Props) {
 		if (updates.dateFilter !== undefined) setDateFilter(updates.dateFilter);
 		if (updates.sort !== undefined) setSortOption(updates.sort);
 
-		// Prepare query parameters
 		const queryParams = {
 			search: updates.search ?? search,
 			type: (updates.type ?? assetType) === 'all' ? '' : (updates.type ?? assetType),
@@ -117,10 +120,8 @@ export default function Index({ project, assets, filters }: Props) {
 			per_page: updates.perPage ?? filters.per_page,
 		};
 
-		// Clear selected assets when filters change
 		setSelectedAssets([]);
 
-		// Apply filters
 		router.get(route('assets.index', project.id), queryParams, {
 			preserveState: true,
 			replace: true,
@@ -129,7 +130,6 @@ export default function Index({ project, assets, filters }: Props) {
 
 	const handleSearchChange = (value: string) => {
 		setSearch(value);
-		// Submit search after a short delay
 		const timeoutId = setTimeout(() => {
 			applyFilters({ search: value });
 		}, 500);
@@ -149,7 +149,6 @@ export default function Index({ project, assets, filters }: Props) {
 	};
 
 	const handlePageChange = (page: number) => {
-		// Clear selected assets when changing pages
 		setSelectedAssets([]);
 
 		router.get(route('assets.index', project.id), {
@@ -228,6 +227,15 @@ export default function Index({ project, assets, filters }: Props) {
 		}
 	};
 
+	const handleViewAssetDetails = (asset: Asset) => {
+		setSelectedAssetForModal(asset);
+		setShowDetailsModal(true);
+	};
+
+	const handleClearSelection = () => {
+		setSelectedAssets([]);
+	};
+
 	const breadcrumbs: BreadcrumbItem[] = [
 		{
 			title: project.name,
@@ -239,8 +247,7 @@ export default function Index({ project, assets, filters }: Props) {
 		}
 	];
 
-	// Display formatted date filter for the button
-	const getDateFilterDisplay = () => {
+	const getDateFilterLabel = () => {
 		if (dateFilter === 'today') return t('assets.date_today');
 		if (dateFilter === 'week') return t('assets.date_week');
 		if (dateFilter === 'month') return t('assets.date_month');
@@ -248,406 +255,384 @@ export default function Index({ project, assets, filters }: Props) {
 		return t('assets.date_filter_btn');
 	};
 
-	const handleViewAssetDetails = (asset: Asset) => {
-		setSelectedAssetForModal(asset);
-		setShowDetailsModal(true);
-	};
-
-	const handleClearSelection = () => {
-		setSelectedAssets([]);
+	const getSortLabel = () => {
+		if (sortOption === 'newest') return t('assets.sort_newest');
+		if (sortOption === 'oldest') return t('assets.sort_oldest');
+		if (sortOption === 'name_asc') return t('assets.sort_name_asc');
+		if (sortOption === 'name_desc') return t('assets.sort_name_desc');
+		if (sortOption === 'size_asc') return t('assets.sort_size_asc');
+		if (sortOption === 'size_desc') return t('assets.sort_size_desc');
+		return t('assets.sort_by');
 	};
 
 	return (
 		<AppLayout breadcrumbs={breadcrumbs}>
 			<Head title={t('assets.title')} />
 
-			<div className="flex space-x-6 rtl:space-x-reverse">
+			<div className="flex gap-6 rtl:space-x-reverse">
 				<ProjectSidebar project={project} />
 
 				<Separator className="my-6 md:hidden" />
 
-				<div className="flex-1 w-full">
-					<section className="space-y-6">
-						<div>
-							<Tabs defaultValue="grid" value={viewMode} onValueChange={handleViewModeChange}>
-								<div className="flex justify-between items-center space-x-4 mb-2">
-									<h3 className="text-lg font-semibold">{t('assets.title')}</h3>
-									{can.upload_asset && (
-										<Button onClick={() => setShowUploader(true)}>
-											<Plus className="h-4 w-4 mr-2 rtl:ml-2 rtl:mr-0" />
-											{t('assets.upload_btn')}
-										</Button>
+				<div className="flex-1 min-w-0 space-y-5">
+
+					{/* ── Header ───────────────────────────────────── */}
+					<div className="flex items-center justify-between gap-4">
+						<div className="flex items-center gap-2.5">
+							<h2 className="text-xl font-semibold tracking-tight">{t('assets.title')}</h2>
+							{assetsState.total > 0 && (
+								<span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
+									{assetsState.total}
+								</span>
+							)}
+						</div>
+						{can.upload_asset && (
+							<Button onClick={() => setShowUploader(true)} size="sm" className="gap-2 shrink-0">
+								<Plus className="h-3.5 w-3.5" />
+								{t('assets.upload_btn')}
+							</Button>
+						)}
+					</div>
+
+					{/* ── Controls toolbar ─────────────────────────── */}
+					<div className="flex flex-wrap items-center gap-2">
+						{/* Select-all checkbox */}
+						{can.delete_asset && (
+							<div className="flex h-9 items-center rounded-lg border border-border/70 px-2.5">
+								<Checkbox
+									checked={selectedAssets.length > 0 && selectedAssets.length === assets.data.length}
+									onCheckedChange={handleSelectAll}
+									id="select-all"
+									className="h-4 w-4"
+								/>
+							</div>
+						)}
+
+						{/* Search */}
+						<div className="relative min-w-[180px] flex-1">
+							<SearchBar
+								value={search}
+								onChange={handleSearchChange}
+								placeholder={t('assets.search_ph')}
+								className="w-full"
+							/>
+						</div>
+
+						{/* Type filter pills */}
+						<div className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-1 flex-shrink-0">
+							{TYPE_OPTIONS.map((opt) => (
+								<button
+									key={opt.value}
+									type="button"
+									onClick={() => handleTypeChange(opt.value)}
+									className={cn(
+										'inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium transition-all whitespace-nowrap',
+										assetType === opt.value
+											? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
+											: 'text-muted-foreground hover:text-foreground hover:bg-background/50'
 									)}
-								</div>
+								>
+									{t(opt.labelKey)}
+								</button>
+							))}
+						</div>
 
-								<div className="flex items-center gap-4 mb-2">
-									{can.delete_asset && (
-										<div className="flex items-center space-x-2 border p-2 rounded-md">
-											<Checkbox
-												checked={selectedAssets.length > 0 && selectedAssets.length === assets.data.length}
-												onCheckedChange={handleSelectAll}
-												id="select-all"
-												className="h-5 w-5"
-											/>
-										</div>
-									)}
-									<div className="relative flex-1">
-										<SearchBar
-											value={search}
-											onChange={handleSearchChange}
-											placeholder={t('assets.search_ph')}
-											className="w-full"
-										/>
-									</div>
+						{/* Sort + Date grouped control */}
+						<div className="flex items-center divide-x divide-border/60 rounded-lg border border-border/70 overflow-hidden flex-shrink-0">
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="rounded-none h-9 gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground border-0 px-3"
+									>
+										<ArrowUpDown className="h-3 w-3" />
+										{getSortLabel()}
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent className="w-40">
+									<DropdownMenuLabel>{t('assets.sort_by')}</DropdownMenuLabel>
+									<DropdownMenuSeparator />
+									<DropdownMenuRadioGroup value={sortOption} onValueChange={handleSortChange}>
+										<DropdownMenuRadioItem value="newest">{t('assets.sort_newest')}</DropdownMenuRadioItem>
+										<DropdownMenuRadioItem value="oldest">{t('assets.sort_oldest')}</DropdownMenuRadioItem>
+										<DropdownMenuRadioItem value="name_asc">{t('assets.sort_name_asc')}</DropdownMenuRadioItem>
+										<DropdownMenuRadioItem value="name_desc">{t('assets.sort_name_desc')}</DropdownMenuRadioItem>
+										<DropdownMenuRadioItem value="size_asc">{t('assets.sort_size_asc')}</DropdownMenuRadioItem>
+										<DropdownMenuRadioItem value="size_desc">{t('assets.sort_size_desc')}</DropdownMenuRadioItem>
+									</DropdownMenuRadioGroup>
+								</DropdownMenuContent>
+							</DropdownMenu>
 
-									<Select value={assetType} onValueChange={handleTypeChange}>
-										<SelectTrigger className="w-[180px]">
-											<div className="flex items-center gap-2">
-												<Filter className="h-4 w-4" />
-												<SelectValue placeholder={t('assets.filter_type')} />
-											</div>
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="all">{t('assets.type_all')}</SelectItem>
-											<SelectItem value="image">{t('assets.type_images')}</SelectItem>
-											<SelectItem value="video">{t('assets.type_videos')}</SelectItem>
-											<SelectItem value="audio">{t('assets.type_audio')}</SelectItem>
-											<SelectItem value="document">{t('assets.type_documents')}</SelectItem>
-										</SelectContent>
-									</Select>
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="rounded-none h-9 gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground border-0 px-3"
+									>
+										<Calendar className="h-3 w-3" />
+										{getDateFilterLabel()}
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent className="w-40">
+									<DropdownMenuLabel>{t('assets.filter_date')}</DropdownMenuLabel>
+									<DropdownMenuSeparator />
+									<DropdownMenuRadioGroup value={dateFilter} onValueChange={handleDateFilterChange}>
+										<DropdownMenuRadioItem value="">{t('assets.date_all')}</DropdownMenuRadioItem>
+										<DropdownMenuRadioItem value="today">{t('assets.date_today')}</DropdownMenuRadioItem>
+										<DropdownMenuRadioItem value="week">{t('assets.date_week')}</DropdownMenuRadioItem>
+										<DropdownMenuRadioItem value="month">{t('assets.date_month')}</DropdownMenuRadioItem>
+										<DropdownMenuRadioItem value="quarter">{t('assets.date_quarter')}</DropdownMenuRadioItem>
+									</DropdownMenuRadioGroup>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						</div>
 
-									<DropdownMenu>
-										<DropdownMenuTrigger asChild>
-											<Button variant="outline" className="flex items-center gap-2">
-												<Calendar className="h-4 w-4" />
-												{getDateFilterDisplay()}
-											</Button>
-										</DropdownMenuTrigger>
-										<DropdownMenuContent className="w-40">
-											<DropdownMenuLabel>{t('assets.filter_date')}</DropdownMenuLabel>
-											<DropdownMenuSeparator />
-											<DropdownMenuRadioGroup value={dateFilter} onValueChange={handleDateFilterChange}>
-												<DropdownMenuRadioItem value="">{t('assets.date_all')}</DropdownMenuRadioItem>
-												<DropdownMenuRadioItem value="today">{t('assets.date_today')}</DropdownMenuRadioItem>
-												<DropdownMenuRadioItem value="week">{t('assets.date_week')}</DropdownMenuRadioItem>
-												<DropdownMenuRadioItem value="month">{t('assets.date_month')}</DropdownMenuRadioItem>
-												<DropdownMenuRadioItem value="quarter">{t('assets.date_quarter')}</DropdownMenuRadioItem>
-											</DropdownMenuRadioGroup>
-										</DropdownMenuContent>
-									</DropdownMenu>
+						{/* View toggle */}
+						<div className="flex items-center divide-x divide-border/60 rounded-lg border border-border/70 overflow-hidden flex-shrink-0">
+							<button
+								type="button"
+								onClick={() => handleViewModeChange('grid')}
+								aria-label="Grid View"
+								className={cn(
+									'flex h-9 w-9 items-center justify-center transition-colors',
+									viewMode === 'grid'
+										? 'bg-muted text-foreground'
+										: 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+								)}
+							>
+								<LayoutGrid className="h-3.5 w-3.5" />
+							</button>
+							<button
+								type="button"
+								onClick={() => handleViewModeChange('list')}
+								aria-label="List View"
+								className={cn(
+									'flex h-9 w-9 items-center justify-center transition-colors',
+									viewMode === 'list'
+										? 'bg-muted text-foreground'
+										: 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+								)}
+							>
+								<List className="h-3.5 w-3.5" />
+							</button>
+						</div>
+					</div>
 
-									<DropdownMenu>
-										<DropdownMenuTrigger asChild>
-											<Button variant="outline" className="flex items-center gap-2">
-												<ArrowUpDown className="h-4 w-4" />
-												{sortOption === 'newest' && t('assets.sort_newest')}
-												{sortOption === 'oldest' && t('assets.sort_oldest')}
-												{sortOption === 'name_asc' && t('assets.sort_name_asc')}
-												{sortOption === 'name_desc' && t('assets.sort_name_desc')}
-												{sortOption === 'size_asc' && t('assets.sort_size_asc')}
-												{sortOption === 'size_desc' && t('assets.sort_size_desc')}
-												{!sortOption && t('assets.sort_by')}
-											</Button>
-										</DropdownMenuTrigger>
-										<DropdownMenuContent className="w-40">
-											<DropdownMenuLabel>{t('assets.sort_by')}</DropdownMenuLabel>
-											<DropdownMenuSeparator />
-											<DropdownMenuRadioGroup value={sortOption} onValueChange={handleSortChange}>
-												<DropdownMenuRadioItem value="newest">{t('assets.sort_newest')}</DropdownMenuRadioItem>
-												<DropdownMenuRadioItem value="oldest">{t('assets.sort_oldest')}</DropdownMenuRadioItem>
-												<DropdownMenuRadioItem value="name_asc">{t('assets.sort_name_asc')}</DropdownMenuRadioItem>
-												<DropdownMenuRadioItem value="name_desc">{t('assets.sort_name_desc')}</DropdownMenuRadioItem>
-												<DropdownMenuRadioItem value="size_asc">{t('assets.sort_size_asc')}</DropdownMenuRadioItem>
-												<DropdownMenuRadioItem value="size_desc">{t('assets.sort_size_desc')}</DropdownMenuRadioItem>
-											</DropdownMenuRadioGroup>
-										</DropdownMenuContent>
-									</DropdownMenu>
-
-									<div className="flex items-center space-x-4">
-										<TabsList>
-											<TabsTrigger value="grid" aria-label="Grid View">
-												<LayoutGrid className="h-4 w-4" />
-											</TabsTrigger>
-											<TabsTrigger value="list" aria-label="List View">
-												<List className="h-4 w-4" />
-											</TabsTrigger>
-										</TabsList>
-
-									</div>
-
-									{selectedAssets.length > 0 && (
-										<div className="flex items-center space-x-2">
-											<span className="text-sm font-medium">
-												{t('assets.selected', { count: String(selectedAssets.length) })}
-											</span>
-											<TooltipProvider>
-												<Tooltip>
-													<TooltipTrigger asChild>
-														<Button
-															variant="ghost"
-															size="icon"
-															onClick={handleClearSelection}
-														>
-															<X className="h-4 w-4" />
-														</Button>
-													</TooltipTrigger>
-													<TooltipContent>{t('assets.clear_selection')}</TooltipContent>
-												</Tooltip>
-											</TooltipProvider>
-											<DropdownMenu>
-												<DropdownMenuTrigger asChild>
-													<Button variant="outline" size="sm">
-														{t('assets.bulk_actions')}
-														<ChevronDown className="h-4 w-4 ml-1 rtl:mr-1 rtl:ml-0" />
-													</Button>
-												</DropdownMenuTrigger>
-												<DropdownMenuContent align="end">
-													<DropdownMenuLabel>
-														{t('assets.asset_selected', { count: String(selectedAssets.length) })}
-													</DropdownMenuLabel>
-													<DropdownMenuSeparator />
-													<DropdownMenuItem onClick={handleBulkDownload}>
-														<Download className="h-4 w-4 mr-2 rtl:ml-2 rtl:mr-0" />
-														{t('assets.download_selected')}
-													</DropdownMenuItem>
-													{can.delete_asset && (
-														<>
-															<DropdownMenuSeparator />
-															<DropdownMenuItem
-																className="text-destructive focus:text-destructive"
-																onClick={() => setShowBulkDeleteDialog(true)}
-															>
-																<Trash className="h-4 w-4 mr-2 rtl:ml-2 rtl:mr-0" />
-																{t('assets.delete_selected')}
-															</DropdownMenuItem>
-														</>
-													)}
-												</DropdownMenuContent>
-											</DropdownMenu>
-										</div>
-									)}
-								</div>
-
-								<TabsContent value="grid">
-									{assetsState.data.length > 0 ? (
-										<AssetGrid
-											assets={assetsState.data}
-											selectedAssets={selectedAssets}
-											onAssetSelect={handleAssetSelect}
-											project={project}
-											onDelete={handleDeleteAsset}
-										/>
-									) : (
-										<div className="text-center py-12 text-muted-foreground">
-											{t('assets.no_assets')}
-										</div>
-									)}
-								</TabsContent>
-
-								<TabsContent value="list">
-									{assetsState.data.length > 0 ? (
-										<AssetTable
-											assets={assetsState.data}
-											selectedAssets={selectedAssets}
-											onAssetSelect={handleAssetSelect}
-											onViewDetails={handleViewAssetDetails}
-											onDelete={handleDeleteAsset}
-										/>
-									) : (
-										<div className="text-center py-12 text-muted-foreground">
-											{t('assets.no_assets')}
-										</div>
-									)}
-								</TabsContent>
-							</Tabs>
-
-							{/* Pagination section */}
-							<div className="flex justify-between mt-4">
-								<div className="pb-1 w-1/2">
-									{assetsState && assetsState.last_page > 1 && (
-										<Pagination className="justify-start">
-											<PaginationContent>
-												<PaginationItem>
-													<PaginationPrevious
-														href="#"
-														onClick={(e) => {
-															e.preventDefault();
-															handlePageChange(assetsState.current_page - 1);
-														}}
-														aria-disabled={assetsState.current_page === 1}
-														className={assetsState.current_page === 1 ? "pointer-events-none opacity-50" : ""}
-													/>
-												</PaginationItem>
-
-												{/* First page */}
-												<PaginationItem>
-													<PaginationLink
-														href="#"
-														onClick={(e) => {
-															e.preventDefault();
-															handlePageChange(1);
-														}}
-														isActive={assetsState.current_page === 1}
-													>
-														1
-													</PaginationLink>
-												</PaginationItem>
-
-												{/* If there are many pages, show ellipsis after first page */}
-												{assetsState.current_page > 3 && (
-													<PaginationItem>
-														<PaginationEllipsis />
-													</PaginationItem>
-												)}
-
-												{/* Page before current if not first page or adjacent to first */}
-												{assetsState.current_page > 2 && (
-													<PaginationItem>
-														<PaginationLink
-															href="#"
-															onClick={(e) => {
-																e.preventDefault();
-																handlePageChange(assetsState.current_page - 1);
-															}}
-														>
-															{assetsState.current_page - 1}
-														</PaginationLink>
-													</PaginationItem>
-												)}
-
-												{/* Current page if not first or last */}
-												{assetsState.current_page !== 1 && assetsState.current_page !== assetsState.last_page && (
-													<PaginationItem>
-														<PaginationLink
-															href="#"
-															onClick={(e) => {
-																e.preventDefault();
-																handlePageChange(assetsState.current_page);
-															}}
-															isActive
-														>
-															{assetsState.current_page}
-														</PaginationLink>
-													</PaginationItem>
-												)}
-
-												{/* Page after current if not last page or adjacent to last */}
-												{assetsState.current_page < assetsState.last_page - 1 && (
-													<PaginationItem>
-														<PaginationLink
-															href="#"
-															onClick={(e) => {
-																e.preventDefault();
-																handlePageChange(assetsState.current_page + 1);
-															}}
-														>
-															{assetsState.current_page + 1}
-														</PaginationLink>
-													</PaginationItem>
-												)}
-
-												{/* If there are many pages, show ellipsis before last page */}
-												{assetsState.current_page < assetsState.last_page - 2 && (
-													<PaginationItem>
-														<PaginationEllipsis />
-													</PaginationItem>
-												)}
-
-												{/* Last page if not the same as first page */}
-												{assetsState.last_page > 1 && (
-													<PaginationItem>
-														<PaginationLink
-															href="#"
-															onClick={(e) => {
-																e.preventDefault();
-																handlePageChange(assetsState.last_page);
-															}}
-															isActive={assetsState.current_page === assetsState.last_page}
-														>
-															{assetsState.last_page}
-														</PaginationLink>
-													</PaginationItem>
-												)}
-
-												<PaginationItem>
-													<PaginationNext
-														href="#"
-														onClick={(e) => {
-															e.preventDefault();
-															handlePageChange(assetsState.current_page + 1);
-														}}
-														aria-disabled={assetsState.current_page === assetsState.last_page}
-														className={assetsState.current_page === assetsState.last_page ? "pointer-events-none opacity-50" : ""}
-													/>
-												</PaginationItem>
-											</PaginationContent>
-										</Pagination>
-									)}
-								</div>
-								{assetsState.total > 0 && (
-									<div className="flex justify-end items-center mb-4 px-2 w-1/2">
-										<div className="text-sm text-muted-foreground mr-4 rtl:ml-4 rtl:mr-0">
-											{t('assets.showing', {
-												from: String(assetsState.from),
-												to: String(assetsState.to),
-												total: String(assetsState.total),
-											})}
-										</div>
-
-										<div className="flex items-center">
-											<span className="text-sm text-muted-foreground mr-2 rtl:ml-2 rtl:mr-0">{t('assets.per_page')}</span>
-											<Select
-												value={(filters.per_page || "10").toString()}
-												onValueChange={(value) => {
-													// Clear selected assets when changing page size
-													setSelectedAssets([]);
-
-													router.get(route('assets.index', project.id), {
-														search,
-														type: assetType === 'all' ? '' : assetType,
-														date_filter: dateFilter,
-														sort: sortOption,
-														per_page: value,
-													}, {
-														preserveState: true,
-														replace: true,
-													});
-												}}
-											>
-												<SelectTrigger className="w-[80px] h-8">
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													<SelectItem value="10">10</SelectItem>
-													<SelectItem value="25">25</SelectItem>
-													<SelectItem value="50">50</SelectItem>
-													<SelectItem value="100">100</SelectItem>
-												</SelectContent>
-											</Select>
-										</div>
-									</div>
+					{/* ── Selection action bar ─────────────────────── */}
+					{selectedAssets.length > 0 && (
+						<div className="flex items-center justify-between gap-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5">
+							<div className="flex items-center gap-3">
+								<span className="text-sm font-medium">
+									{t('assets.selected', { count: String(selectedAssets.length) })}
+								</span>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
+									onClick={handleClearSelection}
+								>
+									<X className="h-3 w-3" />
+									{t('assets.clear_selection')}
+								</Button>
+							</div>
+							<div className="flex items-center gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									className="h-7 gap-1.5 text-xs"
+									onClick={handleBulkDownload}
+								>
+									<Download className="h-3.5 w-3.5" />
+									{t('assets.download_selected')}
+								</Button>
+								{can.delete_asset && (
+									<Button
+										variant="outline"
+										size="sm"
+										className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive border-destructive/30 hover:bg-destructive/5"
+										onClick={() => setShowBulkDeleteDialog(true)}
+									>
+										<Trash className="h-3.5 w-3.5" />
+										{t('assets.delete_selected')}
+									</Button>
 								)}
 							</div>
-
 						</div>
-					</section>
+					)}
+
+					{/* ── Content ──────────────────────────────────── */}
+					{viewMode === 'grid' ? (
+						assetsState.data.length > 0 ? (
+							<AssetGrid
+								assets={assetsState.data}
+								selectedAssets={selectedAssets}
+								onAssetSelect={handleAssetSelect}
+								project={project}
+								onDelete={handleDeleteAsset}
+							/>
+						) : (
+							<div className="flex flex-col items-center justify-center py-24 text-center">
+								<div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+									<LayoutGrid className="h-8 w-8 text-muted-foreground/30" />
+								</div>
+								<p className="text-sm font-medium text-muted-foreground">{t('assets.no_assets')}</p>
+								{can.upload_asset && (
+									<Button size="sm" variant="outline" className="mt-4 gap-2" onClick={() => setShowUploader(true)}>
+										<Plus className="h-3.5 w-3.5" />
+										{t('assets.upload_btn')}
+									</Button>
+								)}
+							</div>
+						)
+					) : (
+						assetsState.data.length > 0 ? (
+							<AssetTable
+								assets={assetsState.data}
+								selectedAssets={selectedAssets}
+								onAssetSelect={handleAssetSelect}
+								onViewDetails={handleViewAssetDetails}
+								onDelete={handleDeleteAsset}
+							/>
+						) : (
+							<div className="flex flex-col items-center justify-center py-24 text-center">
+								<div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+									<List className="h-8 w-8 text-muted-foreground/30" />
+								</div>
+								<p className="text-sm font-medium text-muted-foreground">{t('assets.no_assets')}</p>
+							</div>
+						)
+					)}
+
+					{/* ── Pagination ───────────────────────────────── */}
+					{(assetsState.last_page > 1 || assetsState.total > 0) && (
+						<div className="flex items-center justify-between gap-4 pt-2">
+							{assetsState.last_page > 1 && (
+								<Pagination className="justify-start">
+									<PaginationContent>
+										<PaginationItem>
+											<PaginationPrevious
+												href="#"
+												onClick={(e) => { e.preventDefault(); handlePageChange(assetsState.current_page - 1); }}
+												aria-disabled={assetsState.current_page === 1}
+												className={assetsState.current_page === 1 ? 'pointer-events-none opacity-50' : ''}
+											/>
+										</PaginationItem>
+
+										<PaginationItem>
+											<PaginationLink href="#" onClick={(e) => { e.preventDefault(); handlePageChange(1); }} isActive={assetsState.current_page === 1}>
+												1
+											</PaginationLink>
+										</PaginationItem>
+
+										{assetsState.current_page > 3 && (
+											<PaginationItem><PaginationEllipsis /></PaginationItem>
+										)}
+
+										{assetsState.current_page > 2 && (
+											<PaginationItem>
+												<PaginationLink href="#" onClick={(e) => { e.preventDefault(); handlePageChange(assetsState.current_page - 1); }}>
+													{assetsState.current_page - 1}
+												</PaginationLink>
+											</PaginationItem>
+										)}
+
+										{assetsState.current_page !== 1 && assetsState.current_page !== assetsState.last_page && (
+											<PaginationItem>
+												<PaginationLink href="#" onClick={(e) => { e.preventDefault(); handlePageChange(assetsState.current_page); }} isActive>
+													{assetsState.current_page}
+												</PaginationLink>
+											</PaginationItem>
+										)}
+
+										{assetsState.current_page < assetsState.last_page - 1 && (
+											<PaginationItem>
+												<PaginationLink href="#" onClick={(e) => { e.preventDefault(); handlePageChange(assetsState.current_page + 1); }}>
+													{assetsState.current_page + 1}
+												</PaginationLink>
+											</PaginationItem>
+										)}
+
+										{assetsState.current_page < assetsState.last_page - 2 && (
+											<PaginationItem><PaginationEllipsis /></PaginationItem>
+										)}
+
+										{assetsState.last_page > 1 && (
+											<PaginationItem>
+												<PaginationLink href="#" onClick={(e) => { e.preventDefault(); handlePageChange(assetsState.last_page); }} isActive={assetsState.current_page === assetsState.last_page}>
+													{assetsState.last_page}
+												</PaginationLink>
+											</PaginationItem>
+										)}
+
+										<PaginationItem>
+											<PaginationNext
+												href="#"
+												onClick={(e) => { e.preventDefault(); handlePageChange(assetsState.current_page + 1); }}
+												aria-disabled={assetsState.current_page === assetsState.last_page}
+												className={assetsState.current_page === assetsState.last_page ? 'pointer-events-none opacity-50' : ''}
+											/>
+										</PaginationItem>
+									</PaginationContent>
+								</Pagination>
+							)}
+
+							{assetsState.total > 0 && (
+								<div className="flex items-center gap-3 ms-auto text-sm text-muted-foreground">
+									<span>
+										{t('assets.showing', {
+											from: String(assetsState.from),
+											to: String(assetsState.to),
+											total: String(assetsState.total),
+										})}
+									</span>
+									<div className="flex items-center gap-2">
+										<span className="text-xs">{t('assets.per_page')}</span>
+										<Select
+											value={(filters.per_page || '10').toString()}
+											onValueChange={(value) => {
+												setSelectedAssets([]);
+												router.get(route('assets.index', project.id), {
+													search,
+													type: assetType === 'all' ? '' : assetType,
+													date_filter: dateFilter,
+													sort: sortOption,
+													per_page: value,
+												}, { preserveState: true, replace: true });
+											}}
+										>
+											<SelectTrigger className="h-7 w-[72px] text-xs">
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="10">10</SelectItem>
+												<SelectItem value="25">25</SelectItem>
+												<SelectItem value="50">50</SelectItem>
+												<SelectItem value="100">100</SelectItem>
+											</SelectContent>
+										</Select>
+									</div>
+								</div>
+							)}
+						</div>
+					)}
+
 				</div>
 			</div>
 
+			{/* ── Uploader dialog ──────────────────────────────── */}
 			<AssetUploader
 				isOpen={showUploader}
 				onClose={() => setShowUploader(false)}
 				projectId={project.id}
 				projectUuid={project.uuid}
 				onUploadComplete={() => {
-					applyFilters({
-						search: search,
-						type: assetType,
-						dateFilter: dateFilter,
-					});
+					applyFilters({ search, type: assetType, dateFilter });
 				}}
 			/>
 
+			{/* ── Bulk delete confirmation ─────────────────────── */}
 			<AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
@@ -665,6 +650,7 @@ export default function Index({ project, assets, filters }: Props) {
 				</AlertDialogContent>
 			</AlertDialog>
 
+			{/* ── Single asset delete confirmation ─────────────── */}
 			<AlertDialog open={!!assetToDelete} onOpenChange={(open) => !open && setAssetToDelete(null)}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
@@ -682,6 +668,7 @@ export default function Index({ project, assets, filters }: Props) {
 				</AlertDialogContent>
 			</AlertDialog>
 
+			{/* ── Asset details modal (list view) ──────────────── */}
 			{selectedAssetForModal && (
 				<AssetDetailsModal
 					isOpen={showDetailsModal}
@@ -692,4 +679,4 @@ export default function Index({ project, assets, filters }: Props) {
 			)}
 		</AppLayout>
 	);
-} 
+}

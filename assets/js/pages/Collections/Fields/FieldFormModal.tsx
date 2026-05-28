@@ -28,6 +28,8 @@ export interface FieldFormModalProps {
     projectId: number;
     projectUuid: string;
     collectionSlug: string;
+    /** Surcharge le chemin d'API par défaut (pour EndUsers, etc.) */
+    apiBasePath?: string;
     onFieldSaved?: () => void;
     collections: Array<{
         id: number;
@@ -120,7 +122,7 @@ type Fields = {
     [key: string]: FieldInfo;
 }
 
-export default function FieldFormModal({ isOpen, onClose, fieldType, collectionId, projectId, projectUuid, collectionSlug, onFieldSaved, collections, collectionFields, editField, can }: FieldFormModalProps) {
+export default function FieldFormModal({ isOpen, onClose, fieldType, collectionId, projectId, projectUuid, collectionSlug, apiBasePath, onFieldSaved, collections, collectionFields, editField, can }: FieldFormModalProps) {
     const t = useTranslation();
     const [processing, setProcessing] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -243,7 +245,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
         setProcessing(true);
         setErrors({});
 
-        const base = `/api/projects/${projectUuid}/collections/${collectionSlug}/fields`;
+        const base = apiBasePath ?? `/api/projects/${projectUuid}/collections/${collectionSlug}/fields`;
 
         try {
             if (editField) {
@@ -306,7 +308,8 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
         if (!editField) return;
         setProcessing(true);
         try {
-            await axios.delete(`/api/projects/${projectUuid}/collections/${collectionSlug}/fields/${editField.slug}`);
+            const base = apiBasePath ?? `/api/projects/${projectUuid}/collections/${collectionSlug}/fields`;
+            await axios.delete(`${base}/${editField.slug}`);
             toast.success(t('fields.delete_success'));
             reset();
             onClose();
