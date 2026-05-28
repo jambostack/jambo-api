@@ -7,7 +7,6 @@ use App\Entity\ContentFieldValue;
 use App\Entity\ContentVersion;
 use App\Repository\ContentVersionRepository;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Component\Uid\Uuid;
 
 class VersioningService
 {
@@ -15,6 +14,7 @@ class VersioningService
         private EntityManagerInterface $em,
         private ContentVersionRepository $versionRepo,
         private EavDataFormatterService $formatter,
+        private EavFieldHelperService $fieldHelper,
     ) {}
 
     /**
@@ -58,7 +58,7 @@ class VersioningService
                 continue;
             }
 
-            $field = $this->findFieldBySlug($entry, $key);
+            $field = $this->fieldHelper->findField($entry->collection, $key);
             if (!$field) {
                 continue;
             }
@@ -67,7 +67,7 @@ class VersioningService
             $cfv->field = $field;
             $cfv->fieldType = $field->type;
             $cfv->contentEntry = $entry;
-            $this->setFieldValue($cfv, $field->type, $value);
+            $this->fieldHelper->setFieldValue($cfv, $field->type, $value);
             $entry->fieldValues->add($cfv);
         }
 
@@ -112,25 +112,5 @@ class VersioningService
             'version2' => $v2,
             'changes' => $changes,
         ];
-    }
-
-    private function findFieldBySlug(ContentEntry $entry, string $slug): ?\App\Entity\Field
-    {
-        return $entry->collection?->fields->findFirst(
-            fn(int $key, \App\Entity\Field $f) => $f->slug === $slug && !$f->isDeleted()
-        );
-    }
-
-    private function setFieldValue(ContentFieldValue $cfv, string $type, mixed $value): void
-    {
-        match ($type) {
-            'number', 'decimal' => $cfv->numberValue = $value !== null ? (string) $value : null,
-            'boolean', 'checkbox' => $cfv->booleanValue = $value,
-            'date' => $cfv->dateValue = $value ? new \DateTime($value) : null,
-            'datetime' => $cfv->datetimeValue = $value ? new \DateTime($value) : null,
-            'json', 'array', 'repeater', 'enumeration', 'media', 'relation'
-                => $cfv->jsonValue = is_string($value) ? json_decode($value, true) : $value,
-            default => $cfv->textValue = $value !== null ? (string) $value : null,
-        };
     }
 }

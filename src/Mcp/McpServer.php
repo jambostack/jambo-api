@@ -153,10 +153,7 @@ class McpServer
         // Audit logging
         if ($this->auditEnabled && $this->audit) {
             try {
-                $project = null;
-                if (!empty($context['project_uuid'])) {
-                    // Le projet peut être résolu par le service appelant
-                }
+                $project = $context['_project'] ?? null;
                 $user = $context['user'] ?? null;
                 $this->audit->log(
                     toolName: $toolName,

@@ -17,7 +17,9 @@ class ImageTransformService
     public function __construct(
         private string $projectDir,
     ) {
-        $this->manager = ImageManager::gd();
+        $this->manager = extension_loaded('imagick')
+            ? ImageManager::imagick()
+            : ImageManager::gd();
         $this->cacheDir = $projectDir . '/public/uploads/media/cache';
         $this->fs = new Filesystem();
     }
@@ -43,13 +45,6 @@ class ImageTransformService
 
         $image = $this->manager->read($sourcePath);
 
-        if ($params['w'] || $params['h']) {
-            $image->resize(
-                width: $params['w'] ?: null,
-                height: $params['h'] ?: null,
-            );
-        }
-
         if ($params['fit'] === 'crop' && $params['w'] && $params['h']) {
             $image->cover($params['w'], $params['h']);
         } elseif ($params['fit'] === 'contain' && $params['w'] && $params['h']) {
@@ -58,10 +53,22 @@ class ImageTransformService
             $image->pad($params['w'], $params['h'], $params['bg'] ?? '#ffffff');
         } elseif ($params['fit'] === 'scale-down' && ($params['w'] || $params['h'])) {
             $image->scaleDown(width: $params['w'] ?: null, height: $params['h'] ?: null);
+        } elseif ($params['w'] || $params['h']) {
+            $image->resize(
+                width: $params['w'] ?: null,
+                height: $params['h'] ?: null,
+            );
         }
 
+        $ext = pathinfo($cachePath, PATHINFO_EXTENSION);
+
         if ($params['q'] !== null) {
-            $image->encodeByExtension(pathinfo($cachePath, PATHINFO_EXTENSION), quality: $params['q']);
+            $image->encodeByExtension($ext, quality: $params['q']);
+        }
+
+        // GD driver fallback: AVIF → WebP
+        if ($ext === 'avif' && !extension_loaded('imagick')) {
+            $cachePath = preg_replace('/\.avif$/', '.webp', $cachePath);
         }
 
         $image->save($cachePath);

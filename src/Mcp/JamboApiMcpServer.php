@@ -13,6 +13,7 @@ use App\Repository\CollectionRepository;
 use App\Repository\ContentEntryRepository;
 use App\Service\AiContentService;
 use App\Service\EavDataFormatterService;
+use App\Service\EavFieldHelperService;
 use App\Service\ImageTransformService;
 use App\Service\SearchService;
 use App\Service\VersioningService;
@@ -24,6 +25,8 @@ class JamboApiMcpServer extends McpServer
     private EntityManagerInterface $em;
     private EavDataFormatterService $formatter;
 
+    private EavFieldHelperService $fieldHelper;
+
     public function __construct(
         EntityManagerInterface $entityManager,
         EavDataFormatterService $formatterService,
@@ -31,11 +34,13 @@ class JamboApiMcpServer extends McpServer
         AiContentService $aiService,
         VersioningService $versioningService,
         ImageTransformService $imageService,
+        EavFieldHelperService $fieldHelperService,
     ) {
         parent::__construct('JamboApi CMS', '2.0.0');
 
         $this->em = $entityManager;
         $this->formatter = $formatterService;
+        $this->fieldHelper = $fieldHelperService;
 
         $this->registerExplorationTools();
         $this->registerContentTools();
@@ -225,7 +230,7 @@ class JamboApiMcpServer extends McpServer
                 $entry->status = 'draft';
 
                 foreach ($args['data'] as $fieldSlug => $value) {
-                    $field = $this->findField($collection, $fieldSlug);
+                    $field = $this->fieldHelper->findField($collection, $fieldSlug);
                     if (!$field) continue;
                     $cfv = $this->createFieldValue($field, $value);
                     $cfv->contentEntry = $entry;
@@ -262,7 +267,7 @@ class JamboApiMcpServer extends McpServer
                         fn(int $k, ContentFieldValue $v) => $v->field?->slug === $fieldSlug
                     );
                     if ($cfv) {
-                        $this->setFieldValue($cfv, $field->type, $value);
+                        $this->fieldHelper->setFieldValue($cfv, $field->type, $value);
                     } else {
                         $cfv = $this->createFieldValue($field, $value);
                         $cfv->contentEntry = $entry;
@@ -821,34 +826,14 @@ class JamboApiMcpServer extends McpServer
         ]);
     }
 
-    private function findField(Collection $collection, string $slug): ?Field
-    {
-        return $collection->fields->findFirst(
-            fn(int $k, Field $f) => $f->slug === $slug && !$f->isDeleted()
-        );
-    }
-
     private function createFieldValue(Field $field, mixed $value): ContentFieldValue
     {
         $cfv = new ContentFieldValue();
         $cfv->field = $field;
         $cfv->fieldType = $field->type;
-        $this->setFieldValue($cfv, $field->type, $value);
+        $this->fieldHelper->setFieldValue($cfv, $field->type, $value);
 
         return $cfv;
-    }
-
-    private function setFieldValue(ContentFieldValue $cfv, string $type, mixed $value): void
-    {
-        match ($type) {
-            'number', 'decimal' => $cfv->numberValue = $value !== null ? (string) $value : null,
-            'boolean', 'checkbox' => $cfv->booleanValue = $value,
-            'date' => $cfv->dateValue = $value ? new \DateTime($value) : null,
-            'datetime' => $cfv->datetimeValue = $value ? new \DateTime($value) : null,
-            'json', 'array', 'repeater', 'enumeration', 'media', 'relation'
-                => $cfv->jsonValue = is_string($value) ? json_decode($value, true) : $value,
-            default => $cfv->textValue = $value !== null ? (string) $value : null,
-        };
     }
 
     private function slugify(string $text): string

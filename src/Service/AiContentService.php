@@ -29,7 +29,7 @@ class AiContentService
     }
 
     /**
-     * Ask any provider with automatic fallback.
+     * Ask any provider with automatic fallback and timeout.
      */
     public function ask(string $prompt, string $model = 'gpt-4o-mini', ?string $provider = null): string
     {
@@ -37,8 +37,24 @@ class AiContentService
             return $this->platforms[$provider]->ask($prompt, $model);
         }
 
-        // Auto-detect provider from model name
+        // Provider mapping by model prefix
+        $modelProvider = match (true) {
+            str_starts_with($model, 'gpt-') || str_starts_with($model, 'o1') || str_starts_with($model, 'o3') => 'openai',
+            str_starts_with($model, 'claude-') => 'anthropic',
+            default => 'anthropic', // fallback par défaut
+        };
+
+        if (isset($this->platforms[$modelProvider])) {
+            try {
+                return $this->platforms[$modelProvider]->ask($prompt, $model);
+            } catch (\Throwable) {
+                // Fallback: essayer les autres providers
+            }
+        }
+
+        // Fallback : essayer chaque provider restant
         foreach ($this->platforms as $name => $platform) {
+            if ($name === $modelProvider) continue; // déjà essayé
             try {
                 return $platform->ask($prompt, $model);
             } catch (\Throwable) {

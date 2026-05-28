@@ -22,8 +22,16 @@ class ImageTransformController extends AbstractController
     public function serve(string $uuid, Request $request): Response
     {
         $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $uuid]);
+
+        // Vérifier que le média existe, n'est pas supprimé, et est accessible
         if (!$media || $media->isDeleted()) {
             return new Response('Média introuvable', 404);
+        }
+
+        // Vérifier que le projet autorise l'accès public ou que l'utilisateur est authentifié
+        $project = $media->project;
+        if (!$project?->publicApi && !$this->getUser()) {
+            return new Response('Accès non autorisé', 403);
         }
 
         $filePath = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . $media->fileName;
