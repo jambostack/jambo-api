@@ -22,9 +22,17 @@ class VersioningService
      */
     public function createVersion(ContentEntry $entry, ?string $label = null): ContentVersion
     {
+        return $this->createSnapshot($entry, $this->formatter->formatEntry($entry), $label);
+    }
+
+    /**
+     * Create a snapshot from a pre-built data array (used by AutoVersionSubscriber for old state).
+     */
+    public function createSnapshot(ContentEntry $entry, array $snapshotData, ?string $label = null): ContentVersion
+    {
         $version = new ContentVersion();
         $version->contentEntry = $entry;
-        $version->snapshot = $this->formatter->formatEntry($entry);
+        $version->snapshot = $snapshotData;
         $version->label = $label;
         $version->versionNumber = $this->versionRepo->getNextVersionNumber($entry);
 

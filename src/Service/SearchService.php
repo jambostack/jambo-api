@@ -152,6 +152,6 @@ class SearchService
 
     private function indexName(Project $project): string
     {
-        return 'jamboapi_project_' . $project->uuid->toRfc4122();
+        return 'jambo_p_' . substr(md5($project->uuid->toRfc4122()), 0, 8);
     }
 }

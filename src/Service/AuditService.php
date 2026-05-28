@@ -8,6 +8,9 @@ use Doctrine\ORM\EntityManagerInterface;
 
 class AuditService
 {
+    /** @var AuditLog[] */
+    private array $pending = [];
+
     public function __construct(
         private EntityManagerInterface $em,
     ) {}
@@ -38,9 +41,25 @@ class AuditService
         $entry->durationMs = $durationMs;
 
         $this->em->persist($entry);
-        $this->em->flush();
+        $this->pending[] = $entry;
+
+        // Flush immédiat seulement si on accumule plus de 10 logs
+        if (count($this->pending) >= 10) {
+            $this->flush();
+        }
 
         return $entry;
+    }
+
+    /**
+     * Vide le buffer de logs en attente. À appeler en fin de requête (subscriber kernel.terminate).
+     */
+    public function flush(): void
+    {
+        if (!empty($this->pending)) {
+            $this->em->flush();
+            $this->pending = [];
+        }
     }
 
     /**

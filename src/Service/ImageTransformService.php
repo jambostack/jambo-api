@@ -10,6 +10,8 @@ class ImageTransformService
     private ImageManager $manager;
     private string $cacheDir;
     private Filesystem $fs;
+    /** @var array<string, bool> cache mémoire local pour éviter file_exists répétés */
+    private array $checkedPaths = [];
 
     private const ALLOWED_FITS = ['contain', 'cover', 'fill', 'crop', 'scale-down'];
     private const ALLOWED_FORMATS = ['webp', 'avif', 'png', 'jpg', 'jpeg', 'gif'];
@@ -33,7 +35,9 @@ class ImageTransformService
         $cacheKey = $this->cacheKey($sourcePath, $params);
         $cachePath = $this->cacheDir . '/' . $cacheKey;
 
-        if (file_exists($cachePath)) {
+        if (isset($this->checkedPaths[$cachePath]) || file_exists($cachePath)) {
+            $this->checkedPaths[$cachePath] = true;
+
             return $cachePath;
         }
 
@@ -95,8 +99,8 @@ class ImageTransformService
 
     private function normalizeParams(array $params): array
     {
-        $w = isset($params['w']) ? (int) $params['w'] : null;
-        $h = isset($params['h']) ? (int) $params['h'] : null;
+        $w = isset($params['w']) ? min(4000, max(1, (int) $params['w'])) : null;
+        $h = isset($params['h']) ? min(4000, max(1, (int) $params['h'])) : null;
         $fit = in_array($params['fit'] ?? '', self::ALLOWED_FITS) ? $params['fit'] : null;
         $fmt = in_array(strtolower($params['fmt'] ?? ''), self::ALLOWED_FORMATS) ? strtolower($params['fmt']) : null;
         $q = isset($params['q']) ? max(1, min(100, (int) $params['q'])) : null;
@@ -107,7 +111,7 @@ class ImageTransformService
 
     private function cacheKey(string $sourcePath, array $params): string
     {
-        $hash = md5($sourcePath . serialize($params));
+        $hash = md5($sourcePath . json_encode($params));
         $ext = $params['fmt'] ?? pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'jpg';
         $parts = array_filter([$params['w'], $params['h']]);
         $dims = !empty($parts) ? implode('x', $parts) . '_' : '';

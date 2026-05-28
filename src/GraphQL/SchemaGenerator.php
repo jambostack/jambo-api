@@ -190,13 +190,25 @@ class SchemaGenerator
     private function buildMutationFields(array $collections): array
     {
         $fields = [];
+        $usedNames = [];
 
         foreach ($collections as $collection) {
             $type = $this->collectionTypes[$this->typeName($collection)];
             $inputType = $this->buildCollectionInputType($collection);
-            $snake = $this->fieldName($collection);
+            $baseName = $this->fieldName($collection);
 
-            $fields['create' . ucfirst($snake)] = [
+            // Anti-collision pour les mutations
+            $snake = $baseName;
+            if (isset($usedNames[$snake])) {
+                $snake = $baseName . '_' . str_replace('-', '_', $collection->slug);
+            }
+            $usedNames[$snake] = true;
+
+            $createName = 'create' . ucfirst($snake);
+            $updateName = 'update' . ucfirst($snake);
+            $deleteName = 'delete' . ucfirst($snake);
+
+            $fields[$createName] = [
                 'type' => $type,
                 'args' => [
                     'input' => ['type' => Type::nonNull($inputType)],
@@ -204,7 +216,7 @@ class SchemaGenerator
                 'resolve' => fn($root, array $args) => $this->resolveCreate($collection, $args['input']),
             ];
 
-            $fields['update' . ucfirst($snake)] = [
+            $fields[$updateName] = [
                 'type' => $type,
                 'args' => [
                     'uuid' => ['type' => Type::nonNull(Type::string())],
@@ -213,7 +225,7 @@ class SchemaGenerator
                 'resolve' => fn($root, array $args) => $this->resolveUpdate($collection, $args['uuid'], $args['input']),
             ];
 
-            $fields['delete' . ucfirst($snake)] = [
+            $fields[$deleteName] = [
                 'type' => Type::boolean(),
                 'args' => [
                     'uuid' => ['type' => Type::nonNull(Type::string())],
@@ -282,8 +294,11 @@ class SchemaGenerator
         unset($input['locale'], $input['status']);
 
         foreach ($input as $fieldSlug => $value) {
-            $field = $this->findField($collection, $fieldSlug);
+            $field = $this->fieldHelper->findField($collection, $fieldSlug);
             if (!$field) continue;
+
+            $errors = $this->fieldHelper->validateValue($field->type, $value);
+            if (!empty($errors)) continue;
 
             $cfv = new \App\Entity\ContentFieldValue();
             $cfv->field = $field;
@@ -315,6 +330,9 @@ class SchemaGenerator
         foreach ($input as $fieldSlug => $value) {
             $field = $this->fieldHelper->findField($collection, $fieldSlug);
             if (!$field) continue;
+
+            $errors = $this->fieldHelper->validateValue($field->type, $value);
+            if (!empty($errors)) continue;
 
             $cfv = $entry->fieldValues->findFirst(
                 fn(int $key, \App\Entity\ContentFieldValue $v) => $v->field?->slug === $fieldSlug
