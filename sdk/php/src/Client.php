@@ -26,7 +26,7 @@ class Client
             'status' => $options['status'] ?? null,
             'limit'  => $options['limit'] ?? 50,
             'offset' => $options['offset'] ?? 0,
-        ]);
+        ], fn($v) => $v !== null);
 
         return $this->get("/api/collections/{$collection}", $params);
     }
@@ -64,7 +64,7 @@ class Client
             'collection'  => $options['collection'] ?? null,
             'locale'      => $options['locale'] ?? null,
             'limit'       => $options['limit'] ?? 20,
-        ]));
+        ], fn($v) => $v !== null));
     }
 
     /** @return array */
@@ -74,7 +74,7 @@ class Client
             'search' => $options['search'] ?? null,
             'limit'  => $options['limit'] ?? 50,
             'offset' => $options['offset'] ?? 0,
-        ]));
+        ], fn($v) => $v !== null));
     }
 
     public function mediaUrl(string $uuid, array $transforms = []): string
