@@ -23,6 +23,7 @@
         "symfony/ai-agent": "*",
         "symfony/ai-anthropic-platform": "^0.9.0",
         "symfony/ai-bundle": "^0.9.0",
+        "symfony/ai-deep-seek-platform": "^0.9.0",
         "symfony/ai-ollama-platform": "^0.9.0",
         "symfony/ai-open-ai-platform": "^0.9.0",
         "symfony/apache-pack": "*",

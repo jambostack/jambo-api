@@ -65,7 +65,7 @@ class AiController extends AbstractController
             return $this->json(['error' => 'Contenu requis'], 400);
         }
 
-        $translated = $this->ai->translateContent($content, $targetLocale);
+        $translated = $this->ai->translateContent($content, $targetLocale, $project);
 
         return $this->json(['original' => $content, 'translated' => $translated, 'locale' => $targetLocale]);
     }
@@ -86,7 +86,7 @@ class AiController extends AbstractController
             return $this->json(['error' => 'Texte requis'], 400);
         }
 
-        return $this->json(['summary' => $this->ai->summarize($text, $maxWords)]);
+        return $this->json(['summary' => $this->ai->summarize($text, $maxWords, $project)]);
     }
 
     #[Route('/api/projects/{uuid}/ai/seo', name: 'ai_seo', methods: ['POST'])]
@@ -104,7 +104,7 @@ class AiController extends AbstractController
             return $this->json(['error' => 'Contenu requis'], 400);
         }
 
-        return $this->json($this->ai->generateSeo($content));
+        return $this->json($this->ai->generateSeo($content, $project));
     }
 
     #[Route('/api/projects/{uuid}/ai/suggest-schema', name: 'ai_suggest_schema', methods: ['GET'])]

@@ -28,6 +28,14 @@
         <!-- ###+ symfony/ai-open-ai-platform ### -->
         <env name="OPENAI_API_KEY" value=""/>
         <!-- ###- symfony/ai-open-ai-platform ### -->
+
+        <!-- ###+ symfony/ai-generic-platform ### -->
+        <!-- GENERIC_BASE_URL=https://api.example.com/v1 -->
+        <!-- ###- symfony/ai-generic-platform ### -->
+
+        <!-- ###+ symfony/ai-deep-seek-platform ### -->
+        <env name="DEEPSEEK_API_KEY" value=""/>
+        <!-- ###- symfony/ai-deep-seek-platform ### -->
     </php>
 
     <testsuites>
