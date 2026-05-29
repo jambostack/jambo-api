@@ -44,6 +44,9 @@ class WorkbenchProject
     #[ORM\Column(length: 20)]
     public string $deployStatus = self::STATUS_DRAFT;
 
+    #[ORM\Column(nullable: true)]
+    public ?\DateTimeImmutable $publishedAt = null;
+
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(nullable: true)]
     public ?User $createdBy = null;

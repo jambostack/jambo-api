@@ -111,32 +111,6 @@ class AppSettingsController extends AbstractController
                 $settings->aiProviders = $current;
                 $changed = true;
             }
-
-            // Deploy integrations (OAuth credentials) — JSON body key "deployIntegrations"
-            if (array_key_exists('deployIntegrations', $data) && is_array($data['deployIntegrations'])) {
-                $currentDeploy = $settings->deployIntegrations ?? [];
-                $incomingDeploy = $data['deployIntegrations'];
-
-                foreach (['vercel', 'netlify', 'railway'] as $provider) {
-                    if (!array_key_exists($provider, $incomingDeploy)) {
-                        continue;
-                    }
-                    $p = $incomingDeploy[$provider];
-
-                    if (array_key_exists('client_id', $p)) {
-                        $val = trim((string) $p['client_id']);
-                        $currentDeploy[$provider]['client_id'] = $val !== '' ? $val : ($currentDeploy[$provider]['client_id'] ?? null);
-                    }
-                    // client_secret — empty string keeps the existing value (write-only field)
-                    if (array_key_exists('client_secret', $p)) {
-                        $val = trim((string) $p['client_secret']);
-                        $currentDeploy[$provider]['client_secret'] = $val !== '' ? $val : ($currentDeploy[$provider]['client_secret'] ?? null);
-                    }
-                }
-
-                $settings->deployIntegrations = $currentDeploy;
-                $changed = true;
-            }
         }
 
         if ($changed) {
@@ -202,22 +176,7 @@ class AppSettingsController extends AbstractController
                     'model'      => $providers['ollama']['model']     ?? 'llama3.2',
                 ],
             ],
-            'deployIntegrations' => $this->serializeDeploy($s),
         ];
     }
 
-    /** @return array<string, array{client_id: string, configured: bool}> */
-    private function serializeDeploy(\App\Entity\AppSettings $s): array
-    {
-        $deploy = $s->deployIntegrations ?? [];
-        $out = [];
-        foreach (['vercel', 'netlify', 'railway'] as $provider) {
-            $out[$provider] = [
-                'client_id'  => (string) ($deploy[$provider]['client_id'] ?? ''),
-                // client_secret is never sent back — only whether it is set
-                'configured' => !empty($deploy[$provider]['client_id']) && !empty($deploy[$provider]['client_secret']),
-            ];
-        }
-        return $out;
-    }
 }

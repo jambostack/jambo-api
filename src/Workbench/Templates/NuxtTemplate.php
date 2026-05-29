@@ -7,6 +7,7 @@ class NuxtTemplate extends BaseTemplate
     public function getId(): string { return 'nuxt'; }
     public function getLabel(): string { return 'Nuxt 3'; }
     public function getDevCommand(): string { return 'npm run dev'; }
+    public function getStaticOutputDir(): ?string { return '.output/public'; }
 
     public function getStarterFiles(string $jamboApiUrl, string $projectUuid, array $collections): array
     {

@@ -18,6 +18,7 @@ import type { BreadcrumbItem } from '@/types';
 interface WorkbenchProjectData {
     uuid: string; name: string; framework: string;
     files: Record<string, string>; deploy_status: string;
+    published_at: string | null;
 }
 
 interface Props {
@@ -57,6 +58,7 @@ export default function WorkbenchPage({ project, workbenchProjects, frameworks, 
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
+            <div className="dark">
             <Head title={`Workbench — ${project.name}`} />
 
             <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background">
@@ -117,7 +119,9 @@ export default function WorkbenchPage({ project, workbenchProjects, frameworks, 
                 onClose={() => setDeployOpen(false)}
                 projectUuid={project.uuid}
                 workbenchUuid={activeWorkbenchUuid}
+                publishedAt={workbenchProjects.find(w => w.uuid === activeWorkbenchUuid)?.published_at}
             />
+            </div>
         </AppLayout>
     );
 }

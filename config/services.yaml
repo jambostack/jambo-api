@@ -105,19 +105,6 @@ services:
                 - '@App\Workbench\Templates\AstroTemplate'
                 - '@App\Workbench\Templates\SvelteKitTemplate'
 
-    # Deploy providers — OAuth credentials read from AppSettings (Jambo settings UI, no env vars)
-    App\Service\Deploy\VercelDeployProvider: ~
-    App\Service\Deploy\NetlifyDeployProvider: ~
-    App\Service\Deploy\RailwayDeployProvider: ~
-
-    App\Service\Deploy\DeployService:
-        arguments:
-            $appSecret: '%kernel.secret%'
-            $providers:
-                - '@App\Service\Deploy\VercelDeployProvider'
-                - '@App\Service\Deploy\NetlifyDeployProvider'
-                - '@App\Service\Deploy\RailwayDeployProvider'
-
     App\Service\ZipExportService:
         arguments:
             $templates:
@@ -126,36 +113,6 @@ services:
                 - '@App\Workbench\Templates\AstroTemplate'
                 - '@App\Workbench\Templates\SvelteKitTemplate'
 
-    # ── Jambo Cloud (Phase 3) ────────────────────────────────────────────────
-    App\Service\Cloud\TraefikLabelBuilder:
+    App\Service\PublishedSiteStorage:
         arguments:
-            $baseDomain:   '%env(JAMBO_CLOUD_BASE_DOMAIN)%'
-            $certResolver: 'letsencrypt'
-
-    App\Service\Cloud\DockerContainerOrchestrator:
-        arguments:
-            $dockerApiBase: '%env(DOCKER_API_BASE)%'
-            $network:       'jambo_cloud'
-
-    App\Service\Cloud\ContainerOrchestratorInterface: '@App\Service\Cloud\DockerContainerOrchestrator'
-
-    App\Service\Cloud\SystemDnsResolver: ~
-    App\Service\Cloud\DnsResolverInterface: '@App\Service\Cloud\SystemDnsResolver'
-
-    App\Service\Cloud\HostedAppService:
-        arguments:
-            $templates:
-                - '@App\Workbench\Templates\NextjsTemplate'
-                - '@App\Workbench\Templates\NuxtTemplate'
-                - '@App\Workbench\Templates\AstroTemplate'
-                - '@App\Workbench\Templates\SvelteKitTemplate'
-            $jamboApiUrl: '%env(default::JAMBO_PUBLIC_URL)%'
-            $baseDomain:  '%env(JAMBO_CLOUD_BASE_DOMAIN)%'
-
-    App\Controller\CloudController:
-        arguments:
-            $cloudEnabled: '%env(bool:JAMBO_CLOUD_ENABLED)%'
-
-    App\Controller\CustomDomainController:
-        arguments:
-            $cloudEnabled: '%env(bool:JAMBO_CLOUD_ENABLED)%'
+            $baseDir: '%kernel.project_dir%/var/published_sites'
