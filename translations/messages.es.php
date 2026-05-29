@@ -1072,14 +1072,6 @@ return [
     'app_settings.tab_general'     => 'General',
     'app_settings.tab_branding'    => 'Apariencia',
     'app_settings.tab_ai'          => 'Proveedores IA',
-    'app_settings.tab_deploy'      => 'Deploy',
-    'app_settings.deploy.description'    => 'Configura las apps OAuth para permitir el despliegue con 1 clic desde el Workbench. Las credenciales se guardan en la base de datos — sin necesidad de variables de entorno.',
-    'app_settings.deploy.card_hint'      => 'Credenciales de la aplicación OAuth (Client ID + Secret)',
-    'app_settings.deploy.configured'     => 'Configurado',
-    'app_settings.deploy.not_configured' => 'No configurado',
-    'app_settings.deploy.client_id'      => 'Client ID',
-    'app_settings.deploy.client_secret'  => 'Client Secret',
-    'app_settings.deploy.edit'           => 'Editar',
 
     // Proveedores IA
     'app_settings.ai.description'      => 'Configura las claves API de tus proveedores de IA. Estos ajustes tienen prioridad sobre las variables de entorno.',
@@ -1146,21 +1138,4 @@ return [
     'workbench.deploy.disconnect'        => 'Desconectar',
     'workbench.deploy.error'             => 'Error de despliegue',
 
-    // Workbench Cloud
-    'workbench.cloud.title'           => 'Jambo Cloud',
-    'workbench.cloud.subtitle'        => 'Aloja tu app en la infraestructura Jambo — sin configuración',
-    'workbench.cloud.deploy'          => 'Desplegar en Jambo Cloud',
-    'workbench.cloud.redeploy'        => 'Redesplegar',
-    'workbench.cloud.deploying'       => 'Desplegando…',
-    'workbench.cloud.deployed'        => '¡App desplegada en Jambo Cloud!',
-    'workbench.cloud.error'           => 'Error de despliegue en la nube',
-    'workbench.cloud.custom_domains'  => 'Dominios personalizados',
-    'workbench.cloud.add_domain'      => 'Añadir',
-    'workbench.cloud.verified'        => 'Verificado',
-    'workbench.cloud.pending'         => 'Pendiente',
-    'workbench.cloud.dns_instructions'=> 'Añade este registro DNS TXT y luego pulsa Verificar:',
-    'workbench.cloud.copied'          => 'Copiado',
-    'workbench.cloud.footer'          => 'Contenedor Docker aislado + SSL automático vía Traefik',
-    'workbench.cloud.verify'          => 'Verificar',
-    'workbench.cloud.verify_failed'   => 'Verificación DNS fallida — comprueba el registro TXT',
 ];

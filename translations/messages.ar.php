@@ -1072,14 +1072,6 @@ return [
     'app_settings.tab_general'     => 'عام',
     'app_settings.tab_branding'    => 'المظهر',
     'app_settings.tab_ai'          => 'مزودي الذكاء الاصطناعي',
-    'app_settings.tab_deploy'      => 'النشر',
-    'app_settings.deploy.description'    => 'قم بتكوين تطبيقات OAuth لتمكين النشر بنقرة واحدة من ورشة العمل. تُخزَّن بيانات الاعتماد في قاعدة البيانات — لا حاجة لمتغيرات البيئة.',
-    'app_settings.deploy.card_hint'      => 'بيانات اعتماد تطبيق OAuth (معرّف العميل + السر)',
-    'app_settings.deploy.configured'     => 'مُكوَّن',
-    'app_settings.deploy.not_configured' => 'غير مُكوَّن',
-    'app_settings.deploy.client_id'      => 'معرّف العميل',
-    'app_settings.deploy.client_secret'  => 'سر العميل',
-    'app_settings.deploy.edit'           => 'تعديل',
 
     // مزودي الذكاء الاصطناعي
     'app_settings.ai.description'      => 'قم بتكوين مفاتيح API لمزودي الذكاء الاصطناعي. هذه الإعدادات لها أولوية على متغيرات البيئة.',
@@ -1146,21 +1138,4 @@ return [
     'workbench.deploy.disconnect'        => 'فصل الارتباط',
     'workbench.deploy.error'             => 'خطأ في النشر',
 
-    // Workbench Cloud
-    'workbench.cloud.title'           => 'Jambo Cloud',
-    'workbench.cloud.subtitle'        => 'استضف تطبيقك على بنية Jambo — بدون إعداد',
-    'workbench.cloud.deploy'          => 'النشر على Jambo Cloud',
-    'workbench.cloud.redeploy'        => 'إعادة النشر',
-    'workbench.cloud.deploying'       => 'جارٍ النشر…',
-    'workbench.cloud.deployed'        => 'تم نشر التطبيق على Jambo Cloud!',
-    'workbench.cloud.error'           => 'خطأ في النشر السحابي',
-    'workbench.cloud.custom_domains'  => 'النطاقات المخصصة',
-    'workbench.cloud.add_domain'      => 'إضافة',
-    'workbench.cloud.verified'        => 'مُتحقق',
-    'workbench.cloud.pending'         => 'قيد الانتظار',
-    'workbench.cloud.dns_instructions'=> 'أضف سجل DNS TXT هذا ثم اضغط تحقق:',
-    'workbench.cloud.copied'          => 'تم النسخ',
-    'workbench.cloud.footer'          => 'حاوية Docker معزولة + SSL تلقائي عبر Traefik',
-    'workbench.cloud.verify'          => 'تحقق',
-    'workbench.cloud.verify_failed'   => 'فشل التحقق من DNS — تحقق من سجل TXT',
 ];

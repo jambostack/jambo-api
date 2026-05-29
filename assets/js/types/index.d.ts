@@ -35,11 +35,6 @@ export interface AiProviderStatus {
     url?: string | null;
 }
 
-export interface DeployIntegrationStatus {
-    client_id: string;
-    configured: boolean;
-}
-
 export interface AppSettings {
     appName: string;
     logoUrl: string | null;
@@ -53,11 +48,6 @@ export interface AppSettings {
         anthropic: AiProviderStatus;
         deepseek:  AiProviderStatus;
         ollama:    AiProviderStatus;
-    };
-    deployIntegrations?: {
-        vercel:  DeployIntegrationStatus;
-        netlify: DeployIntegrationStatus;
-        railway: DeployIntegrationStatus;
     };
 }
 
