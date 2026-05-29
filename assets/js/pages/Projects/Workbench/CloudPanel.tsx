@@ -64,7 +64,7 @@ export default function CloudPanel({ projectUuid, workbenchUuid }: Props) {
         loadStatus();
     };
 
-    const copy = (text: string) => { navigator.clipboard.writeText(text); toast.success('Copié'); };
+    const copy = (text: string) => { navigator.clipboard.writeText(text); toast.success(t('workbench.cloud.copied')); };
 
     if (!hasFiles) {
         return (
