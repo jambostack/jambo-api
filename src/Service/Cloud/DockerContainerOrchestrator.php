@@ -97,17 +97,20 @@ class DockerContainerOrchestrator implements ContainerOrchestratorInterface
      */
     private function buildTarContext(array $files, string $dockerfile): string
     {
-        $tmp = tempnam(sys_get_temp_dir(), 'jambo_ctx_') . '.tar';
-        $phar = new \PharData($tmp);
+        $tmp = sys_get_temp_dir() . '/jambo_ctx_' . bin2hex(random_bytes(8)) . '.tar';
 
-        foreach ($files as $path => $content) {
-            $phar->addFromString($path, $content);
+        try {
+            $phar = new \PharData($tmp);
+            foreach ($files as $path => $content) {
+                $phar->addFromString($path, $content);
+            }
+            $phar->addFromString('Dockerfile', $dockerfile);
+
+            return (string) file_get_contents($tmp);
+        } finally {
+            if (is_file($tmp)) {
+                @unlink($tmp);
+            }
         }
-        $phar->addFromString('Dockerfile', $dockerfile);
-
-        $bytes = (string) file_get_contents($tmp);
-        unlink($tmp);
-
-        return $bytes;
     }
 }

@@ -1161,4 +1161,6 @@ return [
     'workbench.cloud.dns_instructions'=> 'أضف سجل DNS TXT هذا ثم اضغط تحقق:',
     'workbench.cloud.copied'          => 'تم النسخ',
     'workbench.cloud.footer'          => 'حاوية Docker معزولة + SSL تلقائي عبر Traefik',
+    'workbench.cloud.verify'          => 'تحقق',
+    'workbench.cloud.verify_failed'   => 'فشل التحقق من DNS — تحقق من سجل TXT',
 ];

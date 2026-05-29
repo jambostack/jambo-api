@@ -23,11 +23,16 @@ class CustomDomainController extends AbstractController
         private readonly HostedAppRepository $hostedAppRepository,
         private readonly CustomDomainRepository $customDomainRepository,
         private readonly CustomDomainService $customDomainService,
+        private readonly bool $cloudEnabled,
     ) {}
 
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/cloud/domains', name: 'cloud_domain_add', methods: ['POST'])]
     public function add(string $uuid, string $workbenchUuid, Request $request): JsonResponse
     {
+        if (!$this->cloudEnabled) {
+            return new JsonResponse(['error' => 'Jambo Cloud n\'est pas activé sur cette instance.'], 503);
+        }
+
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
@@ -49,6 +54,7 @@ class CustomDomainController extends AbstractController
         $cd = $this->customDomainService->addDomain($hosted, $domain);
 
         return new JsonResponse([
+            'uuid'          => $cd->uuid->toRfc4122(),
             'domain'        => $cd->domain,
             'record_name'   => $this->customDomainService->challengeRecordName($cd),
             'record_value'  => $this->customDomainService->challengeRecordValue($cd),
@@ -59,6 +65,10 @@ class CustomDomainController extends AbstractController
     #[Route('/api/projects/{uuid}/workbench/cloud/domains/{domainUuid}/verify', name: 'cloud_domain_verify', methods: ['POST'])]
     public function verify(string $uuid, string $domainUuid): JsonResponse
     {
+        if (!$this->cloudEnabled) {
+            return new JsonResponse(['error' => 'Jambo Cloud n\'est pas activé sur cette instance.'], 503);
+        }
+
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
@@ -79,6 +89,10 @@ class CustomDomainController extends AbstractController
     #[Route('/api/projects/{uuid}/workbench/cloud/domains/{domainUuid}', name: 'cloud_domain_delete', methods: ['DELETE'])]
     public function delete(string $uuid, string $domainUuid): JsonResponse
     {
+        if (!$this->cloudEnabled) {
+            return new JsonResponse(['error' => 'Jambo Cloud n\'est pas activé sur cette instance.'], 503);
+        }
+
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
