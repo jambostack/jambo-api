@@ -107,6 +107,7 @@ abstract class InertiaController extends AbstractController
         return $this->cache->get('app_settings_data', function (ItemInterface $item) {
             $item->expiresAfter(300); // 5 minutes
             $s = $this->appSettingsRepository->getOrCreate();
+            $p = $s->aiProviders ?? [];
 
             return [
                 'appName'      => $s->appName,
@@ -116,6 +117,12 @@ abstract class InertiaController extends AbstractController
                 'iconDarkUrl'  => $s->getIconDarkUrl(),
                 'iconLightUrl' => $s->getIconLightUrl(),
                 'faviconUrl'   => $s->getFaviconUrl(),
+                'aiProviders'  => [
+                    'openai'    => ['enabled' => (bool)($p['openai']['enabled']    ?? false), 'configured' => !empty($p['openai']['key']),    'model' => $p['openai']['model']    ?? 'gpt-4o'],
+                    'anthropic' => ['enabled' => (bool)($p['anthropic']['enabled'] ?? false), 'configured' => !empty($p['anthropic']['key']), 'model' => $p['anthropic']['model'] ?? 'claude-sonnet-4-6'],
+                    'deepseek'  => ['enabled' => (bool)($p['deepseek']['enabled']  ?? false), 'configured' => !empty($p['deepseek']['key']),  'model' => $p['deepseek']['model']  ?? 'deepseek-chat'],
+                    'ollama'    => ['enabled' => (bool)($p['ollama']['enabled']    ?? false), 'configured' => !empty($p['ollama']['url']),    'url'   => $p['ollama']['url']      ?? '', 'model' => $p['ollama']['model'] ?? 'llama3.2'],
+                ],
             ];
         });
     }

@@ -78,6 +78,67 @@ class AppSettingsController extends AbstractController
             $changed = true;
         }
 
+        // AI providers (JSON body with key "aiProviders")
+        if ($request->getContentTypeFormat() === 'json') {
+            $data = $request->toArray();
+            if (array_key_exists('aiProviders', $data) && is_array($data['aiProviders'])) {
+                $current  = $settings->aiProviders ?? [];
+                $incoming = $data['aiProviders'];
+
+                foreach (['openai', 'anthropic', 'deepseek', 'ollama'] as $provider) {
+                    if (!array_key_exists($provider, $incoming)) {
+                        continue;
+                    }
+                    $p = $incoming[$provider];
+
+                    // enabled state — always saved when present
+                    if (array_key_exists('enabled', $p)) {
+                        $current[$provider]['enabled'] = (bool) $p['enabled'];
+                    }
+                    // API key — empty string clears it
+                    if (array_key_exists('key', $p)) {
+                        $val = trim((string) $p['key']);
+                        $current[$provider]['key'] = $val !== '' ? $val : ($current[$provider]['key'] ?? null);
+                    }
+                    if (array_key_exists('model', $p)) {
+                        $current[$provider]['model'] = trim((string) $p['model']) ?: null;
+                    }
+                    if (array_key_exists('url', $p)) {
+                        $current[$provider]['url'] = trim((string) $p['url']) ?: null;
+                    }
+                }
+
+                $settings->aiProviders = $current;
+                $changed = true;
+            }
+
+            // Deploy integrations (OAuth credentials) — JSON body key "deployIntegrations"
+            if (array_key_exists('deployIntegrations', $data) && is_array($data['deployIntegrations'])) {
+                $currentDeploy = $settings->deployIntegrations ?? [];
+                $incomingDeploy = $data['deployIntegrations'];
+
+                foreach (['vercel', 'netlify', 'railway'] as $provider) {
+                    if (!array_key_exists($provider, $incomingDeploy)) {
+                        continue;
+                    }
+                    $p = $incomingDeploy[$provider];
+
+                    if (array_key_exists('client_id', $p)) {
+                        $val = trim((string) $p['client_id']);
+                        $currentDeploy[$provider]['client_id'] = $val !== '' ? $val : ($currentDeploy[$provider]['client_id'] ?? null);
+                    }
+                    // client_secret — empty string keeps the existing value (write-only field)
+                    if (array_key_exists('client_secret', $p)) {
+                        $val = trim((string) $p['client_secret']);
+                        $currentDeploy[$provider]['client_secret'] = $val !== '' ? $val : ($currentDeploy[$provider]['client_secret'] ?? null);
+                    }
+                }
+
+                $settings->deployIntegrations = $currentDeploy;
+                $changed = true;
+            }
+        }
+
         if ($changed) {
             $settings->updatedAt = new \DateTimeImmutable();
             $this->em->flush();
@@ -108,6 +169,8 @@ class AppSettingsController extends AbstractController
 
     private function serialize(\App\Entity\AppSettings $s): array
     {
+        $providers = $s->aiProviders ?? [];
+
         return [
             'appName'      => $s->appName,
             'logoUrl'      => $s->getLogoUrl(),
@@ -116,6 +179,45 @@ class AppSettingsController extends AbstractController
             'iconDarkUrl'  => $s->getIconDarkUrl(),
             'iconLightUrl' => $s->getIconLightUrl(),
             'faviconUrl'   => $s->getFaviconUrl(),
+            'aiProviders'  => [
+                'openai'    => [
+                    'enabled'    => (bool) ($providers['openai']['enabled']    ?? false),
+                    'configured' => !empty($providers['openai']['key']),
+                    'model'      => $providers['openai']['model']    ?? 'gpt-4o',
+                ],
+                'anthropic' => [
+                    'enabled'    => (bool) ($providers['anthropic']['enabled'] ?? false),
+                    'configured' => !empty($providers['anthropic']['key']),
+                    'model'      => $providers['anthropic']['model'] ?? 'claude-sonnet-4-6',
+                ],
+                'deepseek'  => [
+                    'enabled'    => (bool) ($providers['deepseek']['enabled']  ?? false),
+                    'configured' => !empty($providers['deepseek']['key']),
+                    'model'      => $providers['deepseek']['model']  ?? 'deepseek-chat',
+                ],
+                'ollama'    => [
+                    'enabled'    => (bool) ($providers['ollama']['enabled']    ?? false),
+                    'configured' => !empty($providers['ollama']['url']),
+                    'url'        => $providers['ollama']['url']       ?? '',
+                    'model'      => $providers['ollama']['model']     ?? 'llama3.2',
+                ],
+            ],
+            'deployIntegrations' => $this->serializeDeploy($s),
         ];
+    }
+
+    /** @return array<string, array{client_id: string, configured: bool}> */
+    private function serializeDeploy(\App\Entity\AppSettings $s): array
+    {
+        $deploy = $s->deployIntegrations ?? [];
+        $out = [];
+        foreach (['vercel', 'netlify', 'railway'] as $provider) {
+            $out[$provider] = [
+                'client_id'  => (string) ($deploy[$provider]['client_id'] ?? ''),
+                // client_secret is never sent back — only whether it is set
+                'configured' => !empty($deploy[$provider]['client_id']) && !empty($deploy[$provider]['client_secret']),
+            ];
+        }
+        return $out;
     }
 }

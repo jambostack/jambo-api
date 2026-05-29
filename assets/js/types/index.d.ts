@@ -25,6 +25,19 @@ export interface NavItem {
     href: string;
     icon?: LucideIcon | null;
     isActive?: boolean;
+    permission?: string;
+}
+
+export interface AiProviderStatus {
+    enabled: boolean;
+    configured: boolean;
+    model?: string | null;
+    url?: string | null;
+}
+
+export interface DeployIntegrationStatus {
+    client_id: string;
+    configured: boolean;
 }
 
 export interface AppSettings {
@@ -35,6 +48,17 @@ export interface AppSettings {
     iconDarkUrl: string | null;
     iconLightUrl: string | null;
     faviconUrl: string | null;
+    aiProviders?: {
+        openai:    AiProviderStatus;
+        anthropic: AiProviderStatus;
+        deepseek:  AiProviderStatus;
+        ollama:    AiProviderStatus;
+    };
+    deployIntegrations?: {
+        vercel:  DeployIntegrationStatus;
+        netlify: DeployIntegrationStatus;
+        railway: DeployIntegrationStatus;
+    };
 }
 
 export interface SharedData {
