@@ -7,6 +7,7 @@ class AstroTemplate extends BaseTemplate
     public function getId(): string { return 'astro'; }
     public function getLabel(): string { return 'Astro 4'; }
     public function getDevCommand(): string { return 'npm run dev -- --host 0.0.0.0'; }
+    public function getStaticOutputDir(): ?string { return 'dist'; }
 
     public function getStarterFiles(string $jamboApiUrl, string $projectUuid, array $collections): array
     {
