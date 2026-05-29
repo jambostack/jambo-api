@@ -16,6 +16,7 @@ use App\Repository\ContentEntryRepository;
 use App\Repository\EndUserFieldRepository;
 use App\Repository\EndUserRepository;
 use App\Repository\FieldRepository;
+use App\Repository\PermissionRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\EavDataFormatterService;
@@ -47,6 +48,7 @@ class PageController extends InertiaController
         private MediaSerializer $mediaSerializer,
         private ProjectMemberRepository $memberRepo,
         private UserPasswordHasherInterface $hasher,
+        private PermissionRepository $permissionRepository,
     ) {}
 
     /** Cached ProjectMember resolved by denyProjectAccess() for reuse in buildUserCan(). */
@@ -294,6 +296,34 @@ class PageController extends InertiaController
     public function settingsWebhooks(int $project, Request $request): Response
     {
         return $this->settingsPage($project, $request, 'Projects/Settings/Webhooks');
+    }
+
+    #[Route('/projects/{project}/settings/mcp-access', name: 'projects_settings_mcp_access', requirements: ['project' => '\d+'], priority: 10)]
+    public function settingsMcpAccess(int $project, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        $userCan = $this->buildUserCan($project);
+        if (!($userCan['access_api_access_settings'] ?? false)) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $tokens = $this->apiTokenRepository->findByProject($project);
+
+        return $this->inertia($request, 'Projects/Settings/McpAccess', [
+            'project' => $this->serializeProject($project, true),
+            'userCan' => $userCan,
+            'tokens'  => array_map(fn ($t) => [
+                'id'         => $t->id,
+                'name'       => $t->name,
+                'abilities'  => $t->abilities,
+                'created_at' => $t->createdAt->format(\DateTimeInterface::ATOM),
+            ], $tokens),
+        ]);
     }
 
     #[Route('/projects/{project}/settings/webhook-logs', name: 'projects_settings_webhook_logs', requirements: ['project' => '\d+'], priority: 10)]
@@ -600,7 +630,7 @@ class PageController extends InertiaController
     // User Management
     // -------------------------------------------------------------------------
 
-    #[Route('/users', name: 'users_index', priority: 10)]
+    #[Route('/user-management/users', name: 'users_index', priority: 10)]
     public function users(Request $request): Response
     {
         $roles = $this->em->getRepository(\App\Entity\Role::class)->findAll();
@@ -611,15 +641,16 @@ class PageController extends InertiaController
         ]);
     }
 
-    #[Route('/users/roles', name: 'users_roles', priority: 10)]
+    #[Route('/user-management/roles', name: 'users_roles', priority: 10)]
     public function roles(Request $request): Response
     {
         return $this->inertia($request, 'UserManagement/Roles', [
-            'userCan' => $this->buildUserCan(),
+            'userCan'          => $this->buildUserCan(),
+            'permissionGroups' => $this->buildPermissionGroups(),
         ]);
     }
 
-    #[Route('/users/permissions', name: 'users_permissions', priority: 10)]
+    #[Route('/user-management/permissions', name: 'users_permissions', priority: 10)]
     public function permissions(Request $request): Response
     {
         return $this->inertia($request, 'UserManagement/Permissions', [
@@ -786,15 +817,16 @@ class PageController extends InertiaController
     private function serializeEntry(ContentEntry $entry): array
     {
         return [
-            'id'         => $entry->id,
-            'uuid'       => $entry->uuid?->toRfc4122(),
-            'status'     => $entry->status,
-            'locale'     => $entry->locale,
-            'created_at' => $entry->createdAt?->format(\DateTimeInterface::ATOM),
-            'updated_at' => $entry->updatedAt?->format(\DateTimeInterface::ATOM),
-            'deleted_at' => $entry->deletedAt?->format(\DateTimeInterface::ATOM),
-            'creator'    => $entry->createdBy ? ['name' => $entry->createdBy->name ?? $entry->createdBy->email] : null,
-            'updater'    => $entry->updatedBy ? ['name' => $entry->updatedBy->name ?? $entry->updatedBy->email] : null,
+            'id'           => $entry->id,
+            'uuid'         => $entry->uuid?->toRfc4122(),
+            'status'       => $entry->status,
+            'locale'       => $entry->locale,
+            'created_at'   => $entry->createdAt?->format(\DateTimeInterface::ATOM),
+            'updated_at'   => $entry->updatedAt?->format(\DateTimeInterface::ATOM),
+            'deleted_at'   => $entry->deletedAt?->format(\DateTimeInterface::ATOM),
+            'published_at' => $entry->publishedAt?->format(\DateTimeInterface::ATOM),
+            'creator'      => $entry->createdBy ? ['name' => $entry->createdBy->name ?? $entry->createdBy->email] : null,
+            'updater'      => $entry->updatedBy ? ['name' => $entry->updatedBy->name ?? $entry->updatedBy->email] : null,
         ];
     }
 
@@ -839,6 +871,46 @@ class PageController extends InertiaController
             'created_at'    => $eu->createdAt->format(\DateTimeInterface::ATOM),
             'updated_at'    => $eu->updatedAt->format(\DateTimeInterface::ATOM),
             'token_version' => $eu->tokenVersion,
+        ];
+    }
+
+    private function buildPermissionGroups(): array
+    {
+        $permissions = $this->permissionRepository->findBy([], ['group' => 'ASC', 'name' => 'ASC']);
+
+        $projectLevelGroups = ['project', 'collection', 'content', 'assets', 'end_users', 'webhook', 'media'];
+        $groupIconMap = [
+            'user' => 'Users', 'users' => 'Users',
+            'admin' => 'Shield', 'role' => 'Shield', 'roles' => 'Shield',
+        ];
+
+        $groups = [];
+        $projects = [];
+
+        foreach ($permissions as $p) {
+            $group = $p->group;
+            if (in_array($group, $projectLevelGroups, true)) {
+                $projects[] = [
+                    'name'       => $p->label ?: $p->name,
+                    'permission' => $p->name,
+                    'icon'       => 'Key',
+                ];
+            } else {
+                if (!isset($groups[$group])) {
+                    $groups[$group] = [
+                        'group'       => $group,
+                        'label'       => ucfirst(str_replace('_', ' ', $group)),
+                        'icon'        => $groupIconMap[$group] ?? 'Key',
+                        'permissions' => [],
+                    ];
+                }
+                $groups[$group]['permissions'][] = $p->name;
+            }
+        }
+
+        return [
+            'groups'   => array_values($groups),
+            'projects' => $projects,
         ];
     }
 
@@ -889,6 +961,9 @@ class PageController extends InertiaController
             'delete_project'               => $canProject('project.manage'),
             'manage_users'                 => $canSystem('users.manage'),
             'manage_roles'                 => $canSystem('roles.manage'),
+            'create_permissions'           => $canSystem('users.manage'),
+            'update_permissions'           => $canSystem('users.manage'),
+            'delete_permissions'           => $canSystem('users.manage'),
             'access_app_settings'          => $isSuperAdmin,
         ];
     }

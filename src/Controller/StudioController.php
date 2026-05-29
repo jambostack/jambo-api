@@ -6,25 +6,32 @@ use App\Entity\Collection;
 use App\Entity\ContentFieldValue;
 use App\Entity\Field;
 use App\Entity\Project;
+use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
-class StudioController extends AbstractController
+#[IsGranted('IS_AUTHENTICATED_FULLY')]
+class StudioController extends InertiaController
 {
     public function __construct(
         private EntityManagerInterface $em,
+        private ProjectRepository $projectRepository,
     ) {}
 
     /**
-     * Render the Jambo Studio page.
+     * Render the Jambo Studio page via Inertia.
      */
-    #[Route('/projects/{id}/settings/studio', name: 'studio_page')]
-    public function index(Project $project): Response
+    #[Route('/projects/{project}/settings/studio', name: 'studio_page', requirements: ['project' => '\d+'], priority: 10)]
+    public function index(int $project, Request $request): Response
     {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
         $this->denyAccessUnlessGranted('project.view', $project);
 
         $collections = $this->em->getRepository(Collection::class)
@@ -35,31 +42,34 @@ class StudioController extends AbstractController
             foreach ($c->fields as $f) {
                 if ($f->isDeleted()) continue;
                 $fields[] = [
-                    'name' => $f->name,
-                    'slug' => $f->slug,
-                    'type' => $f->type,
+                    'name'       => $f->name,
+                    'slug'       => $f->slug,
+                    'type'       => $f->type,
                     'isRequired' => $f->isRequired,
-                    'options' => $f->options,
-                    'order' => $f->order,
+                    'options'    => $f->options,
+                    'order'      => $f->order,
                 ];
             }
 
             return [
-                'name' => $c->name,
-                'slug' => $c->slug,
+                'id'          => $c->id,
+                'uuid'        => $c->uuid?->toRfc4122(),
+                'name'        => $c->name,
+                'slug'        => $c->slug,
                 'description' => $c->description,
                 'isSingleton' => $c->isSingleton,
-                'fields' => $fields,
+                'fields'      => $fields,
             ];
         }, $collections);
 
-        return $this->render('studio/index.html.twig', [
-            'project' => [
-                'id' => $project->id,
+        return $this->inertia($request, 'Projects/Settings/Studio/layout', [
+            'project'     => [
+                'id'   => $project->id,
                 'uuid' => $project->uuid->toRfc4122(),
                 'name' => $project->name,
             ],
             'collections' => $collectionsData,
+            'userCan'     => [],
         ]);
     }
 
