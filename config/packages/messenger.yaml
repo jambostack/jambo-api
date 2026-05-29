@@ -24,4 +24,3 @@ framework:
 
             # Route your messages to the transports
             App\Message\SendWebhookMessage: async
-            App\Message\DeployHostedAppMessage: async
