@@ -112,3 +112,7 @@ services:
                 - '@App\Workbench\Templates\NuxtTemplate'
                 - '@App\Workbench\Templates\AstroTemplate'
                 - '@App\Workbench\Templates\SvelteKitTemplate'
+
+    App\Service\PublishedSiteStorage:
+        arguments:
+            $baseDir: '%kernel.project_dir%/var/published_sites'
