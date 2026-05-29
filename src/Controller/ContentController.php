@@ -30,6 +30,7 @@ class ContentController extends AbstractController
         private EavDataFormatterService $formatter,
         private EntityManagerInterface $em,
         private EventDispatcherInterface $dispatcher,
+        private \App\Service\VersioningService $versioning,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -156,6 +157,11 @@ class ContentController extends AbstractController
         $entry->updatedBy = $this->getUser();
 
         if (isset($data['fields'])) {
+            // Capture l'état courant comme version AVANT d'écraser les champs (EAV)
+            if ($entry->fieldValues->count() > 0) {
+                $this->versioning->createVersion($entry, 'Sauvegarde');
+            }
+
             $this->em->wrapInTransaction(function () use ($entry, $data): void {
                 foreach ($entry->fieldValues as $fv) {
                     $this->em->remove($fv);
@@ -297,21 +303,55 @@ class ContentController extends AbstractController
             $fv->fieldType    = $field->type;
 
             match ($field->type) {
-                'number', 'decimal'             => $fv->numberValue   = $value !== null ? (string) $value : null,
-                'boolean', 'checkbox'           => $fv->booleanValue  = $value !== null ? (bool) $value : null,
-                'date'                          => $fv->dateValue     = ($value && !str_contains((string) $value, '/')) ? new \DateTime($value) : null,
-                'datetime'                      => $fv->datetimeValue = $value ? new \DateTime($value) : null,
-                'time'                          => $fv->textValue     = $value !== null ? (string) $value : null,
-                'json', 'array', 'repeater',
-                'media', 'relation',
-                'enumeration'                   => $fv->jsonValue = is_array($value) ? $value : (
-                                                       $value !== null ? json_decode((string) $value, true) : null
-                                                   ),
-                default                         => $fv->textValue = $value !== null ? (string) $value : null,
+                'number', 'decimal'              => $fv->numberValue   = $value !== null ? (string) $value : null,
+                'boolean', 'checkbox'            => $fv->booleanValue  = $value !== null ? (bool) $value : null,
+                'date'                           => $fv->dateValue     = ($value && !str_contains((string) $value, '/')) ? new \DateTime($value) : null,
+                'datetime'                       => $fv->datetimeValue = $value ? new \DateTime($value) : null,
+                'time'                           => $fv->textValue     = $value !== null ? (string) $value : null,
+                'json', 'array', 'repeater'      => $fv->jsonValue     = $this->normalizeJsonObject($value),
+                'media', 'relation', 'enumeration' => $fv->jsonValue   = $this->normalizeArrayOfIds($value),
+                default                          => $fv->textValue     = $value !== null ? (string) $value : null,
             };
 
             $this->em->persist($fv);
         }
+    }
+
+    /**
+     * Pour les types stockés tels quels en JSON (json/array/repeater) :
+     * accepte un array tel quel, décode une string JSON, sinon null.
+     */
+    private function normalizeJsonObject(mixed $value): ?array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $decoded = json_decode((string) $value, true);
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * Pour les conteneurs d'identifiants (media/relation/enumeration) :
+     * accepte un array tel quel, décode une string JSON-array, sinon emballe
+     * un scalaire isolé (cas IA renvoyant un ID unique) dans un tableau.
+     */
+    private function normalizeArrayOfIds(mixed $value): ?array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $decoded = json_decode((string) $value, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+        // Scalaire (int, string) → tableau à un élément
+        return [$value];
     }
 
     private function resolveCollection(string $projectUuid, string $collectionSlug): Collection|JsonResponse

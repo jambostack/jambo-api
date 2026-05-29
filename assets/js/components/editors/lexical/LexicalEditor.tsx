@@ -12,7 +12,7 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 
 import {
-    $getRoot, $getSelection, $isRangeSelection, $createParagraphNode,
+    $getRoot, $getSelection, $isRangeSelection, $createParagraphNode, $isElementNode,
     FORMAT_TEXT_COMMAND, UNDO_COMMAND, REDO_COMMAND, EditorState,
 } from 'lexical';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
@@ -41,29 +41,49 @@ interface LexicalEditorProps {
     onChange?: (value: string) => void;
 }
 
-// Plugin: load initial HTML and export HTML on change
-function HtmlPlugin({ initialHtml, onChange }: { initialHtml: string; onChange?: (html: string) => void }) {
+// Plugin: synchronise external HTML value <-> editor, export HTML on change.
+// Réagit aux changements externes de `value` (chargement initial, remplissage IA,
+// restauration de version) tout en évitant les boucles avec ses propres émissions.
+function HtmlPlugin({ value, onChange }: { value: string; onChange?: (html: string) => void }) {
     const [editor] = useLexicalComposerContext();
-    const initialized = useRef(false);
+    const lastEmitted = useRef<string | null>(null);
 
     useEffect(() => {
-        if (initialized.current) return;
-        initialized.current = true;
-        if (!initialHtml?.trim()) return;
+        const incoming = value ?? '';
+        // Ne pas recharger si la valeur correspond à ce que l'éditeur vient d'émettre
+        if (incoming === lastEmitted.current) return;
 
         editor.update(() => {
-            const parser = new DOMParser();
-            const dom = parser.parseFromString(initialHtml, 'text/html');
-            const nodes = $generateNodesFromDOM(editor, dom);
             const root = $getRoot();
             root.clear();
-            nodes.forEach(node => root.append(node));
+
+            if (incoming.trim()) {
+                const dom = new DOMParser().parseFromString(incoming, 'text/html');
+                const nodes = $generateNodesFromDOM(editor, dom);
+                nodes.forEach((node) => {
+                    // Les nœuds non-blocs (texte brut) doivent être encapsulés dans un paragraphe
+                    if ($isElementNode(node)) {
+                        root.append(node);
+                    } else {
+                        const paragraph = $createParagraphNode();
+                        paragraph.append(node);
+                        root.append(paragraph);
+                    }
+                });
+            }
+
+            if (root.getChildrenSize() === 0) {
+                root.append($createParagraphNode());
+            }
         });
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+        lastEmitted.current = incoming;
+    }, [value, editor]);
 
     const handleChange = useCallback((state: EditorState) => {
         state.read(() => {
             const html = $generateHtmlFromNodes(editor, null);
+            lastEmitted.current = html;
             onChange?.(html);
         });
     }, [editor, onChange]);
@@ -293,7 +313,7 @@ export function LexicalEditor({ value = '', onChange }: LexicalEditorProps) {
                     <HistoryPlugin />
                     <ListPlugin />
                     <LinkPlugin />
-                    <HtmlPlugin initialHtml={value} onChange={onChange} />
+                    <HtmlPlugin value={value} onChange={onChange} />
                     <ImageInsertPlugin asset={pendingAsset} onDone={() => setPendingAsset(null)} />
                 </div>
             </LexicalComposer>
