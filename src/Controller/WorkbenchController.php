@@ -7,7 +7,6 @@ use App\Entity\WorkbenchProject;
 use App\Repository\AppSettingsRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\WorkbenchProjectRepository;
-use App\Service\Deploy\DeployService;
 use App\Service\JamboClientGenerator;
 use App\Service\WorkbenchStreamService;
 use App\Service\ZipExportService;
@@ -26,10 +25,7 @@ use Symfony\AI\Platform\PlatformInterface;
 #[IsGranted('IS_AUTHENTICATED_FULLY')]
 class WorkbenchController extends InertiaController
 {
-    /** Max length of a user prompt sent to the AI provider. */
     private const MAX_PROMPT_LENGTH = 4000;
-
-    /** Max serialized size of the generated files payload (2 MB). */
     private const MAX_FILES_BYTES = 2 * 1024 * 1024;
 
     /** @param BaseTemplate[] $templates */
@@ -46,7 +42,6 @@ class WorkbenchController extends InertiaController
         private readonly PlatformInterface $deepseekPlatform,
         private readonly array $templates,
         private readonly ZipExportService $zipExportService,
-        private readonly DeployService $deployService,
     ) {}
 
     #[Route('/projects/{project}/workbench', name: 'workbench_page', requirements: ['project' => '\d+'], priority: 10)]
@@ -76,14 +71,11 @@ class WorkbenchController extends InertiaController
 
         $apiUrl = $request->getSchemeAndHttpHost();
         $collectionsForClient = array_map(fn (Collection $c) => [
-            'name'   => $c->name,
-            'slug'   => $c->slug,
+            'name' => $c->name, 'slug' => $c->slug,
             'fields' => array_values(array_filter(
                 array_map(fn ($f) => $f->isDeleted() ? null : [
-                    'name'       => $f->name,
-                    'slug'       => $f->slug,
-                    'type'       => $f->type,
-                    'isRequired' => $f->isRequired,
+                    'name' => $f->name, 'slug' => $f->slug,
+                    'type' => $f->type, 'isRequired' => $f->isRequired,
                 ], $c->fields->toArray())
             )),
         ], $collections);
@@ -91,9 +83,7 @@ class WorkbenchController extends InertiaController
         $starterFilesByFramework = [];
         foreach ($this->templates as $template) {
             $starterFilesByFramework[$template->getId()] = $template->getStarterFiles(
-                $apiUrl,
-                $project->uuid->toRfc4122(),
-                $collectionsForClient,
+                $apiUrl, $project->uuid->toRfc4122(), $collectionsForClient,
             );
         }
 
@@ -103,11 +93,11 @@ class WorkbenchController extends InertiaController
                 'uuid' => $project->uuid->toRfc4122(),
                 'name' => $project->name,
             ],
-            'collections'             => $collectionsData,
-            'workbenchProjects'       => array_map(fn (WorkbenchProject $w) => $this->serializeWorkbench($w), $workbenchProjects),
-            'frameworks'              => array_map(fn ($t) => ['id' => $t->getId(), 'label' => $t->getLabel()], $this->templates),
-            'userCan'                 => [],
-            'starterFilesByFramework' => $starterFilesByFramework,
+            'collections'            => $collectionsData,
+            'workbenchProjects'      => array_map(fn (WorkbenchProject $w) => $this->serializeWorkbench($w), $workbenchProjects),
+            'frameworks'             => array_map(fn ($t) => ['id' => $t->getId(), 'label' => $t->getLabel()], $this->templates),
+            'userCan'                => [],
+            'starterFilesByFramework'=> $starterFilesByFramework,
         ]);
     }
 
@@ -122,9 +112,7 @@ class WorkbenchController extends InertiaController
         $userPrompt = trim((string) ($body['prompt'] ?? ''));
         $framework  = $body['framework'] ?? 'nextjs';
 
-        if ($userPrompt === '') {
-            return new JsonResponse(['error' => 'Prompt requis'], 422);
-        }
+        if ($userPrompt === '') return new JsonResponse(['error' => 'Prompt requis'], 422);
         if (mb_strlen($userPrompt) > self::MAX_PROMPT_LENGTH) {
             return new JsonResponse(['error' => sprintf('Prompt trop long (max %d caractères)', self::MAX_PROMPT_LENGTH)], 422);
         }
@@ -139,6 +127,8 @@ class WorkbenchController extends InertiaController
 
         $apiUrl = $request->getSchemeAndHttpHost();
         $streamService = $this->streamService;
+        $controller = new AbortController();
+        $abortRef = null;
 
         $response = new StreamedResponse(function () use ($streamService, $project, $userPrompt, $framework, $apiUrl, $platform, $model) {
             foreach ($streamService->stream($project, $userPrompt, $framework, $apiUrl, $platform, $model) as $chunk) {
@@ -210,7 +200,7 @@ class WorkbenchController extends InertiaController
             }
             $workbench->files = $body['files'];
         }
-        if (isset($body['name']))  $workbench->name  = (string) $body['name'];
+        if (isset($body['name'])) $workbench->name = (string) $body['name'];
         $workbench->touch();
         $this->em->flush();
 
@@ -226,16 +216,15 @@ class WorkbenchController extends InertiaController
 
         $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
         if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
-
         if (empty($workbench->files)) {
-            return new JsonResponse(['error' => "Aucun fichier à exporter. Génère ton app d'abord."], 422);
+            return new JsonResponse(['error' => 'Aucun fichier à exporter.'], 422);
         }
 
-        $zipContent = $this->zipExportService->export($workbench);
-        $filename   = $this->zipExportService->suggestedFilename($workbench);
+        $zipBytes = $this->zipExportService->export($workbench);
+        $filename = $this->zipExportService->suggestedFilename($workbench);
 
-        $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_export_');
-        file_put_contents($tmpFile, $zipContent);
+        $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_zip_') . '.zip';
+        file_put_contents($tmpFile, $zipBytes);
 
         $response = new BinaryFileResponse($tmpFile);
         $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, $filename);
@@ -245,52 +234,6 @@ class WorkbenchController extends InertiaController
         return $response;
     }
 
-    #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/deploy/{provider}', name: 'workbench_deploy', methods: ['POST'])]
-    public function deployApp(string $uuid, string $workbenchUuid, string $provider): JsonResponse
-    {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
-        $this->denyAccessUnlessGranted('project.manage', $project);
-
-        if (!in_array($provider, \App\Entity\DeployToken::PROVIDERS, true)) {
-            return new JsonResponse(['error' => 'Provider invalide'], 422);
-        }
-
-        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
-
-        /** @var \App\Entity\User $user */
-        $user   = $this->getUser();
-        $result = $this->deployService->deployWith($provider, $workbench, $user);
-
-        if (!$result->success) {
-            return new JsonResponse(['error' => $result->errorMessage], 422);
-        }
-
-        $workbench->deployStatus = WorkbenchProject::STATUS_DEPLOYED;
-        $this->em->flush();
-
-        return new JsonResponse(['deploy_url' => $result->deployUrl]);
-    }
-
-    #[Route('/api/projects/{uuid}/workbench/deploy-status', name: 'workbench_deploy_status', methods: ['GET'])]
-    public function deployStatus(string $uuid): JsonResponse
-    {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
-        $this->denyAccessUnlessGranted('project.view', $project);
-
-        /** @var \App\Entity\User $user */
-        $user = $this->getUser();
-        $providersStatus = $this->deployService->getProvidersStatus($user);
-
-        return new JsonResponse(['providers' => $providersStatus]);
-    }
-
-    /**
-     * Returns an error message if the serialized files payload exceeds the size cap, null otherwise.
-     * @param array<string, mixed> $files
-     */
     private function validateFilesSize(array $files): ?string
     {
         $bytes = strlen((string) json_encode($files));
@@ -303,13 +246,13 @@ class WorkbenchController extends InertiaController
     private function serializeWorkbench(WorkbenchProject $w): array
     {
         return [
-            'uuid'          => $w->uuid->toRfc4122(),
-            'name'          => $w->name,
-            'framework'     => $w->framework,
-            'files'         => $w->files,
-            'deploy_status' => $w->deployStatus,
-            'created_at'    => $w->createdAt->format(\DateTimeInterface::ATOM),
-            'updated_at'    => $w->updatedAt->format(\DateTimeInterface::ATOM),
+            'uuid'         => $w->uuid->toRfc4122(),
+            'name'         => $w->name,
+            'framework'    => $w->framework,
+            'files'        => $w->files,
+            'published_at' => $w->publishedAt?->format(\DateTimeInterface::ATOM),
+            'created_at'   => $w->createdAt->format(\DateTimeInterface::ATOM),
+            'updated_at'   => $w->updatedAt->format(\DateTimeInterface::ATOM),
         ];
     }
 

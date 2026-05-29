@@ -15,17 +15,6 @@ import { cn } from '@/lib/utils';
 
 type FileField = 'logo' | 'logo_dark' | 'logo_light' | 'icon_dark' | 'icon_light' | 'favicon';
 type ProviderName = 'openai' | 'anthropic' | 'deepseek' | 'ollama';
-type DeployName = 'vercel' | 'netlify' | 'railway';
-
-interface DeployState {
-    configured: boolean;
-    editing:    boolean;
-    clientId:     string;
-    clientSecret: string;
-    saving: boolean;
-    saved:  boolean;
-    error:  string | null;
-}
 
 interface ProviderState {
     enabled:    boolean;
@@ -48,19 +37,6 @@ function initProvider(status: AiProviderStatus | undefined, defaultModel: string
         key:   '',
         model: status?.model ?? defaultModel,
         url:   status?.url   ?? '',
-        saving: false,
-        saved:  false,
-        error:  null,
-    };
-}
-
-function initDeploy(status: { client_id: string; configured: boolean } | undefined): DeployState {
-    const configured = status?.configured ?? false;
-    return {
-        configured,
-        editing:      !configured,
-        clientId:     status?.client_id ?? '',
-        clientSecret: '',
         saving: false,
         saved:  false,
         error:  null,
@@ -106,14 +82,6 @@ export default function AppSettingsPage() {
         anthropic: initProvider(ai?.anthropic, 'claude-sonnet-4-6'),
         deepseek:  initProvider(ai?.deepseek,  'deepseek-chat'),
         ollama:    initProvider(ai?.ollama,    'llama3.2'),
-    });
-
-    // ── Intégrations Deploy (OAuth) ───────────────────────────────────────
-    const di = appSettings.deployIntegrations;
-    const [deploys, setDeploys] = useState<Record<DeployName, DeployState>>({
-        vercel:  initDeploy(di?.vercel),
-        netlify: initDeploy(di?.netlify),
-        railway: initDeploy(di?.railway),
     });
 
     // ─── Helpers ──────────────────────────────────────────────────────────
@@ -211,115 +179,6 @@ export default function AppSettingsPage() {
         } catch (e: unknown) {
             patchProvider(name, { saving: false, error: e instanceof Error ? e.message : t('common.error') });
         }
-    };
-
-    // ─── Deploy : helpers ─────────────────────────────────────────────────
-    const patchDeploy = (name: DeployName, patch: Partial<DeployState>) =>
-        setDeploys(prev => ({ ...prev, [name]: { ...prev[name], ...patch } }));
-
-    const handleDeploySave = async (name: DeployName) => {
-        const d = deploys[name];
-        patchDeploy(name, { saving: true, error: null, saved: false });
-        try {
-            const payload: Record<string, string> = {};
-            if (d.clientId.trim())     payload.client_id     = d.clientId.trim();
-            if (d.clientSecret.trim()) payload.client_secret = d.clientSecret.trim();
-
-            const data = await post(JSON.stringify({ deployIntegrations: { [name]: payload } }), true);
-            const updated = data.deployIntegrations?.[name];
-            patchDeploy(name, {
-                configured:   updated?.configured ?? d.configured,
-                clientId:     updated?.client_id  ?? d.clientId,
-                clientSecret: '',
-                editing: false,
-                saving:  false,
-                saved:   true,
-            });
-            setTimeout(() => patchDeploy(name, { saved: false }), 2000);
-        } catch (e: unknown) {
-            patchDeploy(name, { saving: false, error: e instanceof Error ? e.message : t('common.error') });
-        }
-    };
-
-    // ─── Composant carte intégration Deploy ───────────────────────────────
-    const DeployCard = ({ name, label }: { name: DeployName; label: string }) => {
-        const d = deploys[name];
-        return (
-            <div className={cn(
-                'rounded-lg border p-4 transition-colors',
-                d.configured ? 'border-primary/40 bg-primary/5' : 'border-border',
-            )}>
-                <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{label}</span>
-                        {d.configured ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                {t('app_settings.deploy.configured')}
-                            </span>
-                        ) : (
-                            <span className="inline-flex items-center gap-1 text-xs text-amber-500 font-medium">
-                                <Circle className="h-3.5 w-3.5" />
-                                {t('app_settings.deploy.not_configured')}
-                            </span>
-                        )}
-                    </div>
-                    {d.saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-                </div>
-                <p className="text-xs text-muted-foreground mb-4">{t('app_settings.deploy.card_hint')}</p>
-
-                {d.configured && !d.editing ? (
-                    <div className="flex items-center gap-2">
-                        <div className="flex-1 flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                            <span className="truncate">{d.clientId || '••••••••'}</span>
-                        </div>
-                        <Button size="sm" variant="outline" onClick={() => patchDeploy(name, { editing: true, clientSecret: '' })}>
-                            {t('app_settings.deploy.edit')}
-                        </Button>
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        <div className="space-y-1.5">
-                            <Label className="text-xs">{t('app_settings.deploy.client_id')}</Label>
-                            <Input
-                                placeholder="client_id"
-                                value={d.clientId}
-                                onChange={e => patchDeploy(name, { clientId: e.target.value })}
-                                autoComplete="off"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label className="text-xs">{t('app_settings.deploy.client_secret')}</Label>
-                            <Input
-                                type="password"
-                                placeholder={d.configured ? '••••••••' : 'client_secret'}
-                                value={d.clientSecret}
-                                onChange={e => patchDeploy(name, { clientSecret: e.target.value })}
-                                autoComplete="off"
-                            />
-                        </div>
-                        <div className="flex items-center gap-3 pt-1">
-                            <Button
-                                size="sm"
-                                onClick={() => handleDeploySave(name)}
-                                disabled={d.saving || (!d.clientId.trim() && !d.configured)}
-                            >
-                                {d.saving
-                                    ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />{t('common.loading')}</>
-                                    : d.saved ? t('common.saved') : t('common.save')}
-                            </Button>
-                            {d.configured && (
-                                <Button size="sm" variant="ghost" onClick={() => patchDeploy(name, { editing: false, clientSecret: '' })}>
-                                    {t('common.cancel')}
-                                </Button>
-                            )}
-                            {d.error && <p className="text-destructive text-xs">{d.error}</p>}
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
     };
 
     // ─── Composant carte provider ─────────────────────────────────────────
@@ -504,18 +363,9 @@ export default function AppSettingsPage() {
                         <TabsTrigger value="branding">{t('app_settings.tab_branding')}</TabsTrigger>
                         <TabsTrigger value="ai">
                             {t('app_settings.tab_ai')}
-                            {/* Badge : nb de providers actifs */}
                             {Object.values(providers).filter(p => p.enabled).length > 0 && (
                                 <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
                                     {Object.values(providers).filter(p => p.enabled).length}
-                                </span>
-                            )}
-                        </TabsTrigger>
-                        <TabsTrigger value="deploy">
-                            {t('app_settings.tab_deploy')}
-                            {Object.values(deploys).filter(d => d.configured).length > 0 && (
-                                <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                                    {Object.values(deploys).filter(d => d.configured).length}
                                 </span>
                             )}
                         </TabsTrigger>
@@ -580,14 +430,6 @@ export default function AppSettingsPage() {
                             keyPlaceholder=""
                             showUrl={true}
                         />
-                    </TabsContent>
-
-                    {/* ── Onglet Deploy (OAuth) ────────────────────────── */}
-                    <TabsContent value="deploy" className="space-y-4">
-                        <p className="text-sm text-muted-foreground pb-2">{t('app_settings.deploy.description')}</p>
-                        <DeployCard name="vercel"  label="Vercel" />
-                        <DeployCard name="netlify" label="Netlify" />
-                        <DeployCard name="railway" label="Railway" />
                     </TabsContent>
                 </Tabs>
             </div>

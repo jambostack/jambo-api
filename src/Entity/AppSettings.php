@@ -66,13 +66,6 @@ class AppSettings
     #[ORM\Column(type: 'json', nullable: true)]
     public ?array $aiProviders = null;
 
-    /**
-     * Deploy OAuth integrations: { "vercel": {"client_id":"...","client_secret":"..."}, ... }
-     * Configured via Jambo settings UI — no env vars needed.
-     */
-    #[ORM\Column(type: 'json', nullable: true)]
-    public ?array $deployIntegrations = null;
-
     public function getLogoUrl(): ?string
     {
         return $this->logoFileName ? '/uploads/app/' . $this->logoFileName : null;
