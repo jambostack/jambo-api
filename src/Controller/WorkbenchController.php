@@ -26,6 +26,12 @@ use Symfony\AI\Platform\PlatformInterface;
 #[IsGranted('IS_AUTHENTICATED_FULLY')]
 class WorkbenchController extends InertiaController
 {
+    /** Max length of a user prompt sent to the AI provider. */
+    private const MAX_PROMPT_LENGTH = 4000;
+
+    /** Max serialized size of the generated files payload (2 MB). */
+    private const MAX_FILES_BYTES = 2 * 1024 * 1024;
+
     /** @param BaseTemplate[] $templates */
     public function __construct(
         private readonly EntityManagerInterface $em,
@@ -119,6 +125,9 @@ class WorkbenchController extends InertiaController
         if ($userPrompt === '') {
             return new JsonResponse(['error' => 'Prompt requis'], 422);
         }
+        if (mb_strlen($userPrompt) > self::MAX_PROMPT_LENGTH) {
+            return new JsonResponse(['error' => sprintf('Prompt trop long (max %d caractères)', self::MAX_PROMPT_LENGTH)], 422);
+        }
         if (!in_array($framework, WorkbenchProject::FRAMEWORKS, true)) {
             return new JsonResponse(['error' => 'Framework invalide'], 422);
         }
@@ -165,11 +174,16 @@ class WorkbenchController extends InertiaController
         $name = trim((string) ($body['name'] ?? ''));
         if ($name === '') return new JsonResponse(['error' => 'name requis'], 422);
 
+        $files = is_array($body['files'] ?? null) ? $body['files'] : [];
+        if (($error = $this->validateFilesSize($files)) !== null) {
+            return new JsonResponse(['error' => $error], 422);
+        }
+
         $workbench = new WorkbenchProject();
         $workbench->project         = $project;
         $workbench->name            = $name;
         $workbench->framework       = in_array($body['framework'] ?? '', WorkbenchProject::FRAMEWORKS, true) ? $body['framework'] : 'nextjs';
-        $workbench->files           = is_array($body['files'] ?? null) ? $body['files'] : [];
+        $workbench->files           = $files;
         $workbench->generatedPrompt = isset($body['prompt']) ? (string) $body['prompt'] : null;
         $workbench->createdBy       = $this->getUser();
 
@@ -190,7 +204,12 @@ class WorkbenchController extends InertiaController
         if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
 
         $body = $request->toArray();
-        if (isset($body['files']) && is_array($body['files'])) $workbench->files = $body['files'];
+        if (isset($body['files']) && is_array($body['files'])) {
+            if (($error = $this->validateFilesSize($body['files'])) !== null) {
+                return new JsonResponse(['error' => $error], 422);
+            }
+            $workbench->files = $body['files'];
+        }
         if (isset($body['name']))  $workbench->name  = (string) $body['name'];
         $workbench->touch();
         $this->em->flush();
@@ -266,6 +285,19 @@ class WorkbenchController extends InertiaController
         $providersStatus = $this->deployService->getProvidersStatus($user);
 
         return new JsonResponse(['providers' => $providersStatus]);
+    }
+
+    /**
+     * Returns an error message if the serialized files payload exceeds the size cap, null otherwise.
+     * @param array<string, mixed> $files
+     */
+    private function validateFilesSize(array $files): ?string
+    {
+        $bytes = strlen((string) json_encode($files));
+        if ($bytes > self::MAX_FILES_BYTES) {
+            return sprintf('Fichiers trop volumineux (max %d Mo)', intdiv(self::MAX_FILES_BYTES, 1024 * 1024));
+        }
+        return null;
     }
 
     private function serializeWorkbench(WorkbenchProject $w): array

@@ -4,11 +4,11 @@ import {
     messagesStore, statusStore, addMessage, appendToLastAssistantMessage, upsertFile, frameworkStore,
 } from '@/stores/workbench';
 import { MessageParser, consumeSseStream } from '@/lib/messageParser';
-import { writeFile } from '@/lib/webcontainer';
+import { writeFile, isWebContainerSupported } from '@/lib/webcontainer';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Send, Loader2, FileCode2 } from 'lucide-react';
+import { Send, Loader2, FileCode2, Square } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 
 interface Props { projectUuid: string; frameworks: Array<{ id: string; label: string }>; }
@@ -20,11 +20,21 @@ export default function ChatPanel({ projectUuid }: Props) {
     const framework = useStore(frameworkStore);
     const [input, setInput] = useState('');
     const bottomRef = useRef<HTMLDivElement>(null);
+    const abortRef = useRef<AbortController | null>(null);
     const isGenerating = status === 'generating';
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    // Annule un stream en cours si le composant est démonté (navigation).
+    useEffect(() => {
+        return () => abortRef.current?.abort();
+    }, []);
+
+    const handleStop = () => {
+        abortRef.current?.abort();
+    };
 
     const handleSend = async () => {
         const prompt = input.trim();
@@ -40,7 +50,10 @@ export default function ChatPanel({ projectUuid }: Props) {
             onFileChunk: () => {},
             onFileClose: (path, content) => {
                 upsertFile(path, content);
-                writeFile(path, content).catch(console.warn);
+                // N'écrit dans le WebContainer que si l'environnement le supporte (Chromium).
+                if (isWebContainerSupported()) {
+                    writeFile(path, content).catch(console.warn);
+                }
             },
             onDone: () => {
                 const currentStatus = statusStore.get();
@@ -55,11 +68,15 @@ export default function ChatPanel({ projectUuid }: Props) {
             },
         });
 
+        const controller = new AbortController();
+        abortRef.current = controller;
+
         try {
             const response = await fetch(`/api/projects/${projectUuid}/workbench/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt, framework }),
+                signal: controller.signal,
             });
 
             if (!response.ok) {
@@ -70,9 +87,17 @@ export default function ChatPanel({ projectUuid }: Props) {
             addMessage({ role: 'assistant', content: '' });
             await consumeSseStream(response, parser);
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Erreur inconnue';
-            appendToLastAssistantMessage('\n\n❌ ' + msg);
-            statusStore.set('error');
+            // Annulation volontaire (navigation ou bouton stop) → pas une erreur.
+            if (err instanceof DOMException && err.name === 'AbortError') {
+                appendToLastAssistantMessage('\n\n⏹ Génération interrompue');
+                statusStore.set('idle');
+            } else {
+                const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+                appendToLastAssistantMessage('\n\n❌ ' + msg);
+                statusStore.set('error');
+            }
+        } finally {
+            abortRef.current = null;
         }
     };
 
@@ -111,9 +136,15 @@ export default function ChatPanel({ projectUuid }: Props) {
                         className="min-h-[60px] max-h-[120px] text-sm resize-none"
                         disabled={isGenerating}
                     />
-                    <Button size="icon" onClick={handleSend} disabled={isGenerating || !input.trim()} className="shrink-0 self-end">
-                        {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    </Button>
+                    {isGenerating ? (
+                        <Button size="icon" variant="destructive" onClick={handleStop} className="shrink-0 self-end" aria-label="Stop">
+                            <Square className="w-4 h-4" />
+                        </Button>
+                    ) : (
+                        <Button size="icon" onClick={handleSend} disabled={!input.trim()} className="shrink-0 self-end">
+                            <Send className="w-4 h-4" />
+                        </Button>
+                    )}
                 </div>
             </div>
         </div>
