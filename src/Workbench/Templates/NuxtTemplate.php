@@ -18,7 +18,17 @@ class NuxtTemplate extends BaseTemplate
                 'devDependencies' => ['nuxt' => '^3.9.0', '@nuxt/devtools' => 'latest'],
             ], JSON_PRETTY_PRINT),
 
-            'nuxt.config.ts' => "export default defineNuxtConfig({ devtools: { enabled: true } });\n",
+            'nuxt.config.ts' => <<<'NUXT'
+export default defineNuxtConfig({
+  devtools: { enabled: true },
+  runtimeConfig: {
+    public: {
+      jamboApiUrl: process.env.JAMBO_API_URL ?? '',
+      jamboProjectUuid: process.env.JAMBO_PROJECT_UUID ?? '',
+    }
+  }
+});
+NUXT,
 
             '.env' => "JAMBO_API_URL={$jamboApiUrl}\nJAMBO_PROJECT_UUID={$projectUuid}\n",
 

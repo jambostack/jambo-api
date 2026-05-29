@@ -42,7 +42,13 @@ export default function ChatPanel({ projectUuid }: Props) {
                 upsertFile(path, content);
                 writeFile(path, content).catch(console.warn);
             },
-            onDone: () => statusStore.set('wc-running'),
+            onDone: () => {
+                const currentStatus = statusStore.get();
+                // Only change status if WebContainer hasn't taken over
+                if (currentStatus === 'generating') {
+                    statusStore.set('idle');
+                }
+            },
             onError: (err) => {
                 appendToLastAssistantMessage(`\n\n❌ Erreur: ${err}`);
                 statusStore.set('error');
