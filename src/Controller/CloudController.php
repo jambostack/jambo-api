@@ -54,6 +54,10 @@ class CloudController extends AbstractController
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/cloud/status', name: 'cloud_status', methods: ['GET'])]
     public function status(string $uuid, string $workbenchUuid): JsonResponse
     {
+        if (!$this->cloudEnabled) {
+            return new JsonResponse(['error' => 'Jambo Cloud n\'est pas activé sur cette instance.'], 503);
+        }
+
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
@@ -72,6 +76,7 @@ class CloudController extends AbstractController
             'url'       => $this->hostedAppService->publicUrl($hosted),
             'subdomain' => $hosted->subdomain,
             'domains'   => array_map(fn ($d) => [
+                'uuid'      => $d->uuid->toRfc4122(),
                 'domain'    => $d->domain,
                 'verified'  => $d->verified,
                 'sslStatus' => $d->sslStatus,
@@ -82,6 +87,10 @@ class CloudController extends AbstractController
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/cloud/stop', name: 'cloud_stop', methods: ['POST'])]
     public function stop(string $uuid, string $workbenchUuid): JsonResponse
     {
+        if (!$this->cloudEnabled) {
+            return new JsonResponse(['error' => 'Jambo Cloud n\'est pas activé sur cette instance.'], 503);
+        }
+
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);

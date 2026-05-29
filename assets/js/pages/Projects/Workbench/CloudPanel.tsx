@@ -8,7 +8,7 @@ import { Cloud, Loader2, ExternalLink, CheckCircle2, AlertCircle, Globe, Copy } 
 import { useTranslation } from '@/lib/i18n';
 import { toast } from 'sonner';
 
-interface DomainStatus { domain: string; verified: boolean; sslStatus: string; }
+interface DomainStatus { uuid: string; domain: string; verified: boolean; sslStatus: string; }
 interface HostedStatus {
     app_uuid: string;
     status: string;
@@ -64,6 +64,17 @@ export default function CloudPanel({ projectUuid, workbenchUuid }: Props) {
         loadStatus();
     };
 
+    const handleVerify = async (domainUuid: string) => {
+        const res = await fetch(`/api/projects/${projectUuid}/workbench/cloud/domains/${domainUuid}/verify`, { method: 'POST' });
+        const d = await res.json() as { verified?: boolean; error?: string };
+        if (res.ok && d.verified) {
+            toast.success(t('workbench.cloud.verified'));
+            loadStatus();
+        } else {
+            toast.error(d.error ?? t('workbench.cloud.verify_failed'));
+        }
+    };
+
     const copy = (text: string) => { navigator.clipboard.writeText(text); toast.success(t('workbench.cloud.copied')); };
 
     if (!hasFiles) {
@@ -111,12 +122,19 @@ export default function CloudPanel({ projectUuid, workbenchUuid }: Props) {
                     </div>
 
                     {hosted.domains.map(d => (
-                        <div key={d.domain} className="flex items-center justify-between text-xs">
-                            <span className="font-mono">{d.domain}</span>
-                            <Badge variant={d.verified ? 'default' : 'secondary'} className="gap-1">
-                                {d.verified ? <CheckCircle2 className="w-3 h-3" /> : null}
-                                {d.verified ? t('workbench.cloud.verified') : t('workbench.cloud.pending')}
-                            </Badge>
+                        <div key={d.domain} className="flex items-center justify-between text-xs gap-2">
+                            <span className="font-mono truncate">{d.domain}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <Badge variant={d.verified ? 'default' : 'secondary'} className="gap-1">
+                                    {d.verified ? <CheckCircle2 className="w-3 h-3" /> : null}
+                                    {d.verified ? t('workbench.cloud.verified') : t('workbench.cloud.pending')}
+                                </Badge>
+                                {!d.verified && (
+                                    <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => handleVerify(d.uuid)}>
+                                        {t('workbench.cloud.verify')}
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     ))}
 

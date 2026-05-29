@@ -155,3 +155,7 @@ services:
     App\Controller\CloudController:
         arguments:
             $cloudEnabled: '%env(bool:JAMBO_CLOUD_ENABLED)%'
+
+    App\Controller\CustomDomainController:
+        arguments:
+            $cloudEnabled: '%env(bool:JAMBO_CLOUD_ENABLED)%'

@@ -1210,4 +1210,6 @@ return [
     'workbench.cloud.dns_instructions'=> 'Ajoute cet enregistrement DNS TXT puis clique sur Vérifier :',
     'workbench.cloud.copied'          => 'Copié',
     'workbench.cloud.footer'          => 'Container Docker isolé + SSL automatique via Traefik',
+    'workbench.cloud.verify'          => 'Vérifier',
+    'workbench.cloud.verify_failed'   => 'Vérification DNS échouée — vérifie l\'enregistrement TXT',
 ];

@@ -1184,4 +1184,6 @@ return [
     'workbench.cloud.dns_instructions'=> 'Add this DNS TXT record then click Verify:',
     'workbench.cloud.copied'          => 'Copied',
     'workbench.cloud.footer'          => 'Isolated Docker container + automatic SSL via Traefik',
+    'workbench.cloud.verify'          => 'Verify',
+    'workbench.cloud.verify_failed'   => 'DNS verification failed — check the TXT record',
 ];
