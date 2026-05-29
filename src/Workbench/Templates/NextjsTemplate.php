@@ -7,6 +7,7 @@ class NextjsTemplate extends BaseTemplate
     public function getId(): string { return 'nextjs'; }
     public function getLabel(): string { return 'Next.js 14'; }
     public function getDevCommand(): string { return 'npm run dev'; }
+    public function getStaticOutputDir(): ?string { return 'out'; }
 
     public function getStarterFiles(string $jamboApiUrl, string $projectUuid, array $collections): array
     {
