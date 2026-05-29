@@ -34,6 +34,9 @@ export default function WorkbenchPage({ project, workbenchProjects, frameworks, 
     const activeTab = useStore(activeTabStore);
     const files = useStore(filesStore);
     const [deployOpen, setDeployOpen] = useState(false);
+    const [activeWorkbenchUuid, setActiveWorkbenchUuid] = useState<string | undefined>(
+        workbenchProjects[0]?.uuid
+    );
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: project.name, href: route('projects.show', project.id) },
@@ -109,7 +112,12 @@ export default function WorkbenchPage({ project, workbenchProjects, frameworks, 
                 </div>
             </div>
 
-            <DeployDrawer open={deployOpen} onClose={() => setDeployOpen(false)} projectUuid={project.uuid} />
+            <DeployDrawer
+                open={deployOpen}
+                onClose={() => setDeployOpen(false)}
+                projectUuid={project.uuid}
+                workbenchUuid={activeWorkbenchUuid}
+            />
         </AppLayout>
     );
 }
