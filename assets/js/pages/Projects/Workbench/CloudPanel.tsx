@@ -37,6 +37,13 @@ export default function CloudPanel({ projectUuid, workbenchUuid }: Props) {
 
     useEffect(loadStatus, [projectUuid, workbenchUuid]);
 
+    // While the container is being built/started asynchronously, poll for status.
+    useEffect(() => {
+        if (hosted?.status !== 'provisioning') return;
+        const id = setInterval(loadStatus, 3000);
+        return () => clearInterval(id);
+    }, [hosted?.status, projectUuid, workbenchUuid]);
+
     const handleDeploy = async () => {
         if (!workbenchUuid) return;
         setDeploying(true);
@@ -44,7 +51,8 @@ export default function CloudPanel({ projectUuid, workbenchUuid }: Props) {
             const res = await fetch(`/api/projects/${projectUuid}/workbench/${workbenchUuid}/cloud/deploy`, { method: 'POST' });
             const d = await res.json() as { url?: string; error?: string; status?: string };
             if (!res.ok) { toast.error(d.error ?? t('workbench.cloud.error')); return; }
-            toast.success(t('workbench.cloud.deployed'));
+            // Deploy is queued (202): the build runs in the background; polling tracks it.
+            toast.success(t('workbench.cloud.deploying'));
             loadStatus();
         } catch { toast.error(t('workbench.cloud.error')); }
         finally { setDeploying(false); }

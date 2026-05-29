@@ -23,6 +23,15 @@ abstract class BaseTemplate
     /** Returns the Dockerfile content for production Docker build. */
     abstract public function getDockerfile(): string;
 
+    /**
+     * Internal port the container's server listens on (must match the Dockerfile's
+     * EXPOSE / runtime PORT). Used to build the Traefik routing label.
+     */
+    public function getInternalPort(): int
+    {
+        return 3000;
+    }
+
     /** Returns the npm build command. */
     public function getBuildCommand(): string
     {

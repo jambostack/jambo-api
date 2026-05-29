@@ -4,12 +4,14 @@ namespace App\Controller;
 
 use App\Entity\Project;
 use App\Entity\WorkbenchProject;
+use App\Message\DeployHostedAppMessage;
 use App\Repository\HostedAppRepository;
 use App\Repository\WorkbenchProjectRepository;
 use App\Service\Cloud\HostedAppService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
@@ -21,6 +23,7 @@ class CloudController extends AbstractController
         private readonly WorkbenchProjectRepository $workbenchRepository,
         private readonly HostedAppRepository $hostedAppRepository,
         private readonly HostedAppService $hostedAppService,
+        private readonly MessageBusInterface $bus,
         private readonly bool $cloudEnabled,
     ) {}
 
@@ -41,14 +44,18 @@ class CloudController extends AbstractController
             return new JsonResponse(['error' => 'Aucun fichier à déployer. Génère ton app d\'abord.'], 422);
         }
 
-        $hosted = $this->hostedAppService->deploy($workbench);
+        // Create/refresh the HostedApp in "provisioning" and run the actual
+        // build+container asynchronously so a slow Docker build never blocks
+        // (or times out) the HTTP request. The frontend polls cloud_status.
+        $hosted = $this->hostedAppService->prepare($workbench);
+        $this->bus->dispatch(new DeployHostedAppMessage($workbench->id));
 
         return new JsonResponse([
-            'status'  => $hosted->status,
-            'url'     => $this->hostedAppService->publicUrl($hosted),
-            'error'   => $hosted->lastError,
-            'app_uuid'=> $hosted->uuid->toRfc4122(),
-        ], $hosted->status === \App\Entity\HostedApp::STATUS_FAILED ? 502 : 200);
+            'status'   => $hosted->status,
+            'url'      => $this->hostedAppService->publicUrl($hosted),
+            'error'    => $hosted->lastError,
+            'app_uuid' => $hosted->uuid->toRfc4122(),
+        ], 202);
     }
 
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/cloud/status', name: 'cloud_status', methods: ['GET'])]
