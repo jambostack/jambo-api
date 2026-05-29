@@ -104,3 +104,24 @@ services:
                 - '@App\Workbench\Templates\NuxtTemplate'
                 - '@App\Workbench\Templates\AstroTemplate'
                 - '@App\Workbench\Templates\SvelteKitTemplate'
+
+    # Deploy providers — OAuth credentials read from AppSettings (Jambo settings UI, no env vars)
+    App\Service\Deploy\VercelDeployProvider: ~
+    App\Service\Deploy\NetlifyDeployProvider: ~
+    App\Service\Deploy\RailwayDeployProvider: ~
+
+    App\Service\Deploy\DeployService:
+        arguments:
+            $appSecret: '%kernel.secret%'
+            $providers:
+                - '@App\Service\Deploy\VercelDeployProvider'
+                - '@App\Service\Deploy\NetlifyDeployProvider'
+                - '@App\Service\Deploy\RailwayDeployProvider'
+
+    App\Service\ZipExportService:
+        arguments:
+            $templates:
+                - '@App\Workbench\Templates\NextjsTemplate'
+                - '@App\Workbench\Templates\NuxtTemplate'
+                - '@App\Workbench\Templates\AstroTemplate'
+                - '@App\Workbench\Templates\SvelteKitTemplate'

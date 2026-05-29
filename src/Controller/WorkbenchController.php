@@ -7,13 +7,17 @@ use App\Entity\WorkbenchProject;
 use App\Repository\AppSettingsRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\WorkbenchProjectRepository;
+use App\Service\Deploy\DeployService;
 use App\Service\JamboClientGenerator;
 use App\Service\WorkbenchStreamService;
+use App\Service\ZipExportService;
 use App\Workbench\Templates\BaseTemplate;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
@@ -35,6 +39,8 @@ class WorkbenchController extends InertiaController
         private readonly PlatformInterface $ollamaPlatform,
         private readonly PlatformInterface $deepseekPlatform,
         private readonly array $templates,
+        private readonly ZipExportService $zipExportService,
+        private readonly DeployService $deployService,
     ) {}
 
     #[Route('/projects/{project}/workbench', name: 'workbench_page', requirements: ['project' => '\d+'], priority: 10)]
@@ -190,6 +196,76 @@ class WorkbenchController extends InertiaController
         $this->em->flush();
 
         return new JsonResponse(['data' => $this->serializeWorkbench($workbench)]);
+    }
+
+    #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/export', name: 'workbench_export', methods: ['GET'])]
+    public function export(string $uuid, string $workbenchUuid): Response
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.view', $project);
+
+        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
+        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+
+        if (empty($workbench->files)) {
+            return new JsonResponse(['error' => "Aucun fichier à exporter. Génère ton app d'abord."], 422);
+        }
+
+        $zipContent = $this->zipExportService->export($workbench);
+        $filename   = $this->zipExportService->suggestedFilename($workbench);
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_export_');
+        file_put_contents($tmpFile, $zipContent);
+
+        $response = new BinaryFileResponse($tmpFile);
+        $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, $filename);
+        $response->headers->set('Content-Type', 'application/zip');
+        $response->deleteFileAfterSend(true);
+
+        return $response;
+    }
+
+    #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/deploy/{provider}', name: 'workbench_deploy', methods: ['POST'])]
+    public function deployApp(string $uuid, string $workbenchUuid, string $provider): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.manage', $project);
+
+        if (!in_array($provider, \App\Entity\DeployToken::PROVIDERS, true)) {
+            return new JsonResponse(['error' => 'Provider invalide'], 422);
+        }
+
+        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
+        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+
+        /** @var \App\Entity\User $user */
+        $user   = $this->getUser();
+        $result = $this->deployService->deployWith($provider, $workbench, $user);
+
+        if (!$result->success) {
+            return new JsonResponse(['error' => $result->errorMessage], 422);
+        }
+
+        $workbench->deployStatus = WorkbenchProject::STATUS_DEPLOYED;
+        $this->em->flush();
+
+        return new JsonResponse(['deploy_url' => $result->deployUrl]);
+    }
+
+    #[Route('/api/projects/{uuid}/workbench/deploy-status', name: 'workbench_deploy_status', methods: ['GET'])]
+    public function deployStatus(string $uuid): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.view', $project);
+
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $providersStatus = $this->deployService->getProvidersStatus($user);
+
+        return new JsonResponse(['providers' => $providersStatus]);
     }
 
     private function serializeWorkbench(WorkbenchProject $w): array
