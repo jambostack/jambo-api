@@ -77,3 +77,30 @@ services:
             $openaiPlatform: '@ai.traceable_platform.openai'
             $anthropicPlatform: '@ai.traceable_platform.anthropic'
             $ollamaPlatform: '@ai.traceable_platform.ollama'
+            $deepseekPlatform: '@ai.traceable_platform.deepseek'
+            $appSettingsRepository: '@App\Repository\AppSettingsRepository'
+
+    App\Workbench\Templates\NextjsTemplate: ~
+    App\Workbench\Templates\NuxtTemplate: ~
+    App\Workbench\Templates\AstroTemplate: ~
+    App\Workbench\Templates\SvelteKitTemplate: ~
+
+    App\Service\WorkbenchStreamService:
+        arguments:
+            $templates:
+                - '@App\Workbench\Templates\NextjsTemplate'
+                - '@App\Workbench\Templates\NuxtTemplate'
+                - '@App\Workbench\Templates\AstroTemplate'
+                - '@App\Workbench\Templates\SvelteKitTemplate'
+
+    App\Controller\WorkbenchController:
+        arguments:
+            $openaiPlatform: '@ai.traceable_platform.openai'
+            $anthropicPlatform: '@ai.traceable_platform.anthropic'
+            $ollamaPlatform: '@ai.traceable_platform.ollama'
+            $deepseekPlatform: '@ai.traceable_platform.deepseek'
+            $templates:
+                - '@App\Workbench\Templates\NextjsTemplate'
+                - '@App\Workbench\Templates\NuxtTemplate'
+                - '@App\Workbench\Templates\AstroTemplate'
+                - '@App\Workbench\Templates\SvelteKitTemplate'
