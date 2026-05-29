@@ -37,11 +37,40 @@ class SvelteKitTemplate extends BaseTemplate
 
     private function generateClient(array $collections): string
     {
-        $lines = ["import { env } from '\$env/dynamic/public';",
-                  "const BASE = env.PUBLIC_JAMBO_API_URL;",
-                  "const PROJECT = env.PUBLIC_JAMBO_PROJECT_UUID;", ''];
+        $lines = [];
+
+        // TypeScript interfaces
         foreach ($collections as $col) {
-            $lines[] = "export async function get" . ucfirst($col['slug'] ?? 'items') . "() {";
+            $typeName = ucfirst($col['slug'] ?? $col['name'] ?? 'Item');
+            $lines[] = "export interface {$typeName} {";
+            $lines[] = "  uuid: string;";
+            $lines[] = "  locale: string;";
+            $lines[] = "  status: 'draft' | 'published';";
+            foreach ($col['fields'] ?? [] as $field) {
+                $tsType = match($field['type']) {
+                    'number', 'decimal' => 'number',
+                    'boolean', 'checkbox' => 'boolean',
+                    'json', 'array', 'repeater' => 'Record<string, unknown>',
+                    'media', 'relation' => 'string | string[]',
+                    default => 'string',
+                };
+                $optional = ($field['isRequired'] ?? false) ? '' : '?';
+                $lines[] = "  {$field['slug']}{$optional}: {$tsType};";
+            }
+            $lines[] = "  created_at: string;";
+            $lines[] = "  updated_at: string;";
+            $lines[] = '}';
+            $lines[] = '';
+        }
+
+        // Async getters
+        $lines[] = "import { env } from '\$env/dynamic/public';";
+        $lines[] = "const BASE = env.PUBLIC_JAMBO_API_URL;";
+        $lines[] = "const PROJECT = env.PUBLIC_JAMBO_PROJECT_UUID;";
+        $lines[] = '';
+        foreach ($collections as $col) {
+            $typeName = ucfirst($col['slug'] ?? $col['name'] ?? 'Item');
+            $lines[] = "export async function get" . ucfirst($col['slug'] ?? 'items') . "(): Promise<{$typeName}[]> {";
             $lines[] = "  const r = await fetch(`\${BASE}/api/\${PROJECT}/collections/{$col['slug']}`);";
             $lines[] = "  return r.json();";
             $lines[] = '}';

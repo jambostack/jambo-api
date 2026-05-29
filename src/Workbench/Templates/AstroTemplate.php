@@ -38,10 +38,39 @@ ASTRO,
 
     private function generateClient(array $collections, string $apiUrl, string $uuid): string
     {
-        $lines = ["const BASE = import.meta.env.JAMBO_API_URL ?? '{$apiUrl}';",
-                  "const PROJECT = import.meta.env.JAMBO_PROJECT_UUID ?? '{$uuid}';", ''];
+        $lines = [];
+
+        // TypeScript interfaces
         foreach ($collections as $col) {
-            $lines[] = "export async function get" . ucfirst($col['slug'] ?? 'items') . "() {";
+            $typeName = ucfirst($col['slug'] ?? $col['name'] ?? 'Item');
+            $lines[] = "export interface {$typeName} {";
+            $lines[] = "  uuid: string;";
+            $lines[] = "  locale: string;";
+            $lines[] = "  status: 'draft' | 'published';";
+            foreach ($col['fields'] ?? [] as $field) {
+                $tsType = match($field['type']) {
+                    'number', 'decimal' => 'number',
+                    'boolean', 'checkbox' => 'boolean',
+                    'json', 'array', 'repeater' => 'Record<string, unknown>',
+                    'media', 'relation' => 'string | string[]',
+                    default => 'string',
+                };
+                $optional = ($field['isRequired'] ?? false) ? '' : '?';
+                $lines[] = "  {$field['slug']}{$optional}: {$tsType};";
+            }
+            $lines[] = "  created_at: string;";
+            $lines[] = "  updated_at: string;";
+            $lines[] = '}';
+            $lines[] = '';
+        }
+
+        // Async getters
+        $lines[] = "const BASE = import.meta.env.JAMBO_API_URL ?? '{$apiUrl}';";
+        $lines[] = "const PROJECT = import.meta.env.JAMBO_PROJECT_UUID ?? '{$uuid}';";
+        $lines[] = '';
+        foreach ($collections as $col) {
+            $typeName = ucfirst($col['slug'] ?? $col['name'] ?? 'Item');
+            $lines[] = "export async function get" . ucfirst($col['slug'] ?? 'items') . "(): Promise<{$typeName}[]> {";
             $lines[] = "  const r = await fetch(`\${BASE}/api/\${PROJECT}/collections/{$col['slug']}`);";
             $lines[] = "  return r.json();";
             $lines[] = '}';
