@@ -1,0 +1,52 @@
+<?php
+// src/Workbench/Templates/SvelteKitTemplate.php
+namespace App\Workbench\Templates;
+
+class SvelteKitTemplate extends BaseTemplate
+{
+    public function getId(): string { return 'sveltekit'; }
+    public function getLabel(): string { return 'SvelteKit'; }
+    public function getDevCommand(): string { return 'npm run dev -- --host 0.0.0.0'; }
+
+    public function getStarterFiles(string $jamboApiUrl, string $projectUuid, array $collections): array
+    {
+        return [
+            'package.json' => json_encode([
+                'name' => 'jambo-svelte-app',
+                'private' => true,
+                'scripts' => ['dev' => 'vite dev', 'build' => 'vite build', 'preview' => 'vite preview'],
+                'devDependencies' => [
+                    '@sveltejs/adapter-auto' => '^3.0.0',
+                    '@sveltejs/kit' => '^2.0.0',
+                    'svelte' => '^5.0.0-next.0',
+                    'vite' => '^5.0.0',
+                ],
+            ], JSON_PRETTY_PRINT),
+
+            'svelte.config.js' => "import adapter from '@sveltejs/adapter-auto';\nexport default { kit: { adapter: adapter() } };\n",
+
+            'vite.config.js' => "import { sveltekit } from '@sveltejs/kit/vite';\nimport { defineConfig } from 'vite';\nexport default defineConfig({ plugins: [sveltekit()] });\n",
+
+            '.env' => "PUBLIC_JAMBO_API_URL={$jamboApiUrl}\nPUBLIC_JAMBO_PROJECT_UUID={$projectUuid}\n",
+
+            'src/lib/jambo.ts' => $this->generateClient($collections),
+
+            'src/routes/+page.svelte' => "<h1>Welcome to your Jambo App</h1>\n<p>Start chatting with the AI to generate your pages.</p>\n",
+        ];
+    }
+
+    private function generateClient(array $collections): string
+    {
+        $lines = ["import { env } from '\$env/dynamic/public';",
+                  "const BASE = env.PUBLIC_JAMBO_API_URL;",
+                  "const PROJECT = env.PUBLIC_JAMBO_PROJECT_UUID;", ''];
+        foreach ($collections as $col) {
+            $lines[] = "export async function get" . ucfirst($col['slug'] ?? 'items') . "() {";
+            $lines[] = "  const r = await fetch(`\${BASE}/api/\${PROJECT}/collections/{$col['slug']}`);";
+            $lines[] = "  return r.json();";
+            $lines[] = '}';
+            $lines[] = '';
+        }
+        return implode("\n", $lines);
+    }
+}
