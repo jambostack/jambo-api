@@ -29,7 +29,12 @@ class ContentEntry
     #[ORM\Column(length: 50)]
     public string $status = 'draft' {
         get => $this->status;
-        set { $this->status = $value; }
+        set {
+            if ($value === 'published' && $this->status !== 'published' && $this->publishedAt === null) {
+                $this->publishedAt = new \DateTimeImmutable();
+            }
+            $this->status = $value;
+        }
     }
 
     #[ORM\ManyToOne(targetEntity: Project::class)]
@@ -65,6 +70,9 @@ class ContentEntry
 
     #[ORM\Column(nullable: true)]
     public ?\DateTimeImmutable $deletedAt = null;
+
+    #[ORM\Column(nullable: true)]
+    public ?\DateTimeImmutable $publishedAt = null;
 
     public function __construct()
     {
