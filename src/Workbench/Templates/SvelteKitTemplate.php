@@ -7,6 +7,7 @@ class SvelteKitTemplate extends BaseTemplate
     public function getId(): string { return 'sveltekit'; }
     public function getLabel(): string { return 'SvelteKit'; }
     public function getDevCommand(): string { return 'npm run dev -- --host 0.0.0.0'; }
+    public function getStaticOutputDir(): ?string { return 'build'; }
 
     public function getStarterFiles(string $jamboApiUrl, string $projectUuid, array $collections): array
     {

@@ -42,4 +42,13 @@ abstract class BaseTemplate
     {
         return 'npm install --legacy-peer-deps';
     }
+
+    /**
+     * Returns the static build output directory name (relative to project root).
+     * null = framework does not support static export; publishing will be refused.
+     */
+    public function getStaticOutputDir(): ?string
+    {
+        return null;
+    }
 }
