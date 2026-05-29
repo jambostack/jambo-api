@@ -1194,4 +1194,20 @@ return [
     'workbench.deploy.view_app'          => 'Voir l\'app',
     'workbench.deploy.disconnect'        => 'Déconnecter',
     'workbench.deploy.error'             => 'Erreur de déploiement',
+
+    // Workbench Cloud
+    'workbench.cloud.title'           => 'Jambo Cloud',
+    'workbench.cloud.subtitle'        => 'Héberge ton app sur l\'infrastructure Jambo — zéro config',
+    'workbench.cloud.deploy'          => 'Déployer sur Jambo Cloud',
+    'workbench.cloud.redeploy'        => 'Redéployer',
+    'workbench.cloud.deploying'       => 'Déploiement en cours…',
+    'workbench.cloud.deployed'        => 'App déployée sur Jambo Cloud !',
+    'workbench.cloud.error'           => 'Erreur de déploiement cloud',
+    'workbench.cloud.custom_domains'  => 'Domaines personnalisés',
+    'workbench.cloud.add_domain'      => 'Ajouter',
+    'workbench.cloud.verified'        => 'Vérifié',
+    'workbench.cloud.pending'         => 'En attente',
+    'workbench.cloud.dns_instructions'=> 'Ajoute cet enregistrement DNS TXT puis clique sur Vérifier :',
+    'workbench.cloud.copied'          => 'Copié',
+    'workbench.cloud.footer'          => 'Container Docker isolé + SSL automatique via Traefik',
 ];
