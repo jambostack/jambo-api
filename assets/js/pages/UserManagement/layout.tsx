@@ -13,13 +13,13 @@ export default function UserManagementLayout({ children, can }: UserManagementLa
   const t = useTranslation();
 
   const sidebarNavItems: NavItem[] = [
-    { title: t('users.management.nav_users'), href: '/users', icon: Users, permission: 'manage_users' as keyof UserCan },
-    { title: t('users.management.nav_roles'), href: '/users/roles', icon: Shield, permission: 'manage_roles' as keyof UserCan },
-    { title: t('users.management.nav_permissions'), href: '/users/permissions', icon: Key, permission: 'manage_users' as keyof UserCan },
+    { title: t('users.management.nav_users'), href: '/user-management/users', icon: Users, permission: 'manage_users' as keyof UserCan },
+    { title: t('users.management.nav_roles'), href: '/user-management/roles', icon: Shield, permission: 'manage_roles' as keyof UserCan },
+    { title: t('users.management.nav_permissions'), href: '/user-management/permissions', icon: Key, permission: 'manage_users' as keyof UserCan },
   ];
 
   if (typeof window === 'undefined') return null;
-  const currentPath = window.location.pathname;
+  const currentPath = window.location.pathname.replace(/\/$/, '');
 
   return (
     <div className="space-y-6">

@@ -26,18 +26,86 @@ class UserController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(Request $request): JsonResponse
     {
-        $search  = (string) $request->query->get('search', '');
-        $perPage = min(50, max(1, (int) $request->query->get('per_page', 20)));
+        $search    = (string) $request->query->get('search', '');
+        $page      = max(1, $request->query->getInt('page', 1));
+        $perPage   = min(100, max(1, $request->query->getInt('per_page', 20)));
+        $sortField = $request->query->get('sort', 'name');
+        $direction = strtoupper($request->query->get('direction', 'asc')) === 'DESC' ? 'DESC' : 'ASC';
+
+        $filterName  = (string) $request->query->get('filter_name', '');
+        $filterEmail = (string) $request->query->get('filter_email', '');
+
+        $allowedSorts = ['name' => 'u.name', 'email' => 'u.email', 'created_at' => 'u.createdAt'];
+        $orderBy = $allowedSorts[$sortField] ?? 'u.name';
+
+        $qb = $this->userRepository->createQueryBuilder('u')
+            ->leftJoin('u.userRoles', 'r')
+            ->addSelect('r');
 
         if ($search !== '') {
-            $users = $this->userRepository->findBySearch($search, $perPage);
-        } else {
-            $users = $this->userRepository->findBy([], ['name' => 'ASC'], $perPage);
+            $qb->andWhere('u.name LIKE :search OR u.email LIKE :search')
+               ->setParameter('search', '%' . $search . '%');
+        }
+        if ($filterName !== '') {
+            $qb->andWhere('u.name LIKE :fname')->setParameter('fname', '%' . $filterName . '%');
+        }
+        if ($filterEmail !== '') {
+            $qb->andWhere('u.email LIKE :femail')->setParameter('femail', '%' . $filterEmail . '%');
         }
 
+        $countQb = clone $qb;
+        $total = (int) $countQb->select('COUNT(DISTINCT u.id)')->getQuery()->getSingleScalarResult();
+
+        $users = $qb->select('u')->orderBy($orderBy, $direction)
+                    ->setFirstResult(($page - 1) * $perPage)
+                    ->setMaxResults($perPage)
+                    ->getQuery()->getResult();
+
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $from     = $total > 0 ? ($page - 1) * $perPage + 1 : 0;
+        $to       = min($page * $perPage, $total);
+
         return $this->json([
-            'data' => array_map(fn ($u) => $this->serialize($u), $users),
+            'data'         => array_map(fn ($u) => $this->serialize($u), $users),
+            'total'        => $total,
+            'current_page' => $page,
+            'last_page'    => $lastPage,
+            'per_page'     => $perPage,
+            'from'         => $from,
+            'to'           => $to,
         ]);
+    }
+
+    #[Route('/bulk-delete', name: 'bulk_delete', methods: ['POST'], priority: 10)]
+    #[IsGranted('users.manage')]
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $data     = $request->toArray();
+        $ids      = $data['ids'] ?? [];
+        $password = (string) ($data['password'] ?? '');
+
+        if (empty($ids) || !is_array($ids)) {
+            return $this->json(['errors' => ['ids' => ['No users selected.']]], 422);
+        }
+
+        /** @var \App\Entity\User $currentUser */
+        $currentUser = $this->getUser();
+        if (!$this->hasher->isPasswordValid($currentUser, $password)) {
+            return $this->json(['error' => 'Invalid password'], 403);
+        }
+
+        $deleted = 0;
+        foreach ($ids as $id) {
+            $user = $this->userRepository->find((int) $id);
+            if ($user === null || $user === $currentUser) {
+                continue;
+            }
+            $this->em->remove($user);
+            $deleted++;
+        }
+        $this->em->flush();
+
+        return $this->json(['message' => "$deleted user(s) deleted successfully."]);
     }
 
     #[Route('/{id}', name: 'show', methods: ['GET'])]
@@ -70,7 +138,6 @@ class UserController extends AbstractController
         $user->email = $data['email'];
         $user->password = $this->hasher->hashPassword($user, $data['password']);
 
-        // Support both roles (array of IDs) and role (single name string)
         if (!empty($data['roles']) && is_array($data['roles'])) {
             foreach ($data['roles'] as $roleId) {
                 $role = $this->roleRepository->find((int) $roleId);

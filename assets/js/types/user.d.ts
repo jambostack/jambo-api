@@ -13,6 +13,7 @@ export interface User {
 export interface Role {
     id: number;
     name: string;
+    label?: string;
     permissions?: Permission[];
     created_at: string;
     updated_at: string;
