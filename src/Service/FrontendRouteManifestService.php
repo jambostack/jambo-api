@@ -53,12 +53,16 @@ class FrontendRouteManifestService
         'assets.bulk-destroy'                   => 'api_media_bulk_destroy',
         'assets.crop'                           => 'api_media_crop',
 
+        // Project pages
+        'projects.workbench'                    => 'workbench_page',
+
         // Project settings — pages
         'projects.settings.project'             => 'projects_settings_project',
         'projects.settings.localization'        => 'projects_settings_localization',
         'projects.settings.user-access'         => 'projects_settings_user_access',
         'projects.settings.api-access'          => 'projects_settings_api_access',
         'projects.settings.api-docs'            => 'projects_settings_api_docs',
+        'projects.settings.mcp-access'          => 'projects_settings_mcp_access',
         'projects.settings.webhooks'            => 'projects_settings_webhooks',
         'projects.settings.webhook-logs'        => 'projects_settings_webhook_logs',
 
