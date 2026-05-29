@@ -205,6 +205,35 @@
     .safe-bottom {
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
+
+    /* ─── Entrée staggered (fade + slide up) ─────────────────── */
+    @keyframes jambo-rise {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .jambo-rise {
+        animation: jambo-rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    /* ─── Dégradé animé pour l'identité IA ───────────────────── */
+    @keyframes jambo-aurora {
+        0%, 100% { background-position: 0% 50%; }
+        50%      { background-position: 100% 50%; }
+    }
+    .jambo-aurora {
+        background-size: 200% 200%;
+        animation: jambo-aurora 6s ease infinite;
+    }
+
+    /* ─── Halo pulsant doux (puce de statut) ─────────────────── */
+    @keyframes jambo-pulse-ring {
+        0%   { box-shadow: 0 0 0 0 var(--jambo-ring, oklch(0.62 0.22 300 / 45%)); }
+        70%  { box-shadow: 0 0 0 6px transparent; }
+        100% { box-shadow: 0 0 0 0 transparent; }
+    }
+    .jambo-pulse-ring {
+        animation: jambo-pulse-ring 2.4s ease-out infinite;
+    }
 }
 
 /* ─── Lexical Rich Text Editor ───────────────────────────────────── */

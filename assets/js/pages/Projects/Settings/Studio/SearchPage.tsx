@@ -14,16 +14,17 @@ export default function SearchPage({ project, collections }: { project: Project;
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [filterCollection, setFilterCollection] = useState('');
-  const [filterLocale, setFilterLocale] = useState('');
+  const ALL = '__all__';
+  const [filterCollection, setFilterCollection] = useState(ALL);
+  const [filterLocale, setFilterLocale] = useState(ALL);
 
   async function handleSearch() {
     if (!query.trim()) return;
     setLoading(true);
     try {
       const params: Record<string, string> = { q: query, limit: '50' };
-      if (filterCollection) params.collection = filterCollection;
-      if (filterLocale) params.locale = filterLocale;
+      if (filterCollection !== ALL) params.collection = filterCollection;
+      if (filterLocale !== ALL) params.locale = filterLocale;
       const { data } = await axios.get(`/api/projects/${project.uuid}/search`, { params });
       setResults(data);
     } catch (e: any) { setResults({ error: e?.response?.data?.error || t('common.error') }); }
@@ -39,11 +40,11 @@ export default function SearchPage({ project, collections }: { project: Project;
         <div className="flex-1 min-w-[300px]"><Input placeholder={t('studio.search.placeholder')} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} /></div>
         <Select value={filterCollection} onValueChange={setFilterCollection}>
           <SelectTrigger className="w-44"><SelectValue placeholder={t('studio.search.all_collections')} /></SelectTrigger>
-          <SelectContent><SelectItem value="">{t('studio.search.all_collections')}</SelectItem>{collections.map(c => <SelectItem key={c.slug} value={c.slug}>{c.name}</SelectItem>)}</SelectContent>
+          <SelectContent><SelectItem value={ALL}>{t('studio.search.all_collections')}</SelectItem>{collections.map(c => <SelectItem key={c.slug} value={c.slug}>{c.name}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={filterLocale} onValueChange={setFilterLocale}>
           <SelectTrigger className="w-24"><SelectValue placeholder={t('studio.search.locale')} /></SelectTrigger>
-          <SelectContent><SelectItem value="">{t('studio.search.all')}</SelectItem>{locales.map((l: string) => <SelectItem key={l} value={l}>{l.toUpperCase()}</SelectItem>)}</SelectContent>
+          <SelectContent><SelectItem value={ALL}>{t('studio.search.all')}</SelectItem>{locales.map((l: string) => <SelectItem key={l} value={l}>{l.toUpperCase()}</SelectItem>)}</SelectContent>
         </Select>
         <Button onClick={handleSearch} disabled={loading || !query.trim()}>{loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}{t('common.search')}</Button>
       </div>

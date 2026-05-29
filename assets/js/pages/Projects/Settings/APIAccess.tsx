@@ -2,7 +2,7 @@ import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, Plus, Trash2, Pencil } from 'lucide-react';
+import { Copy, Plus, Trash2, Pencil, ExternalLink } from 'lucide-react';
 import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 
 import type { Project, BreadcrumbItem, UserCan } from '@/types';
@@ -16,6 +16,8 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { useTranslation } from '@/lib/i18n';
 
 interface Props {
@@ -133,99 +135,121 @@ export default function APIAccessSettings({ project, tokens: initialTokens }: Pr
             <Head title={t('projects.settings.api.title')} />
 
             <ProjectSettingsLayout project={project}>
-                <div className="space-y-6 max-w-2xl">
-                    <div>
-                        <HeadingSmall title={t('projects.settings.api.project_id')} />
-                        <div className="flex gap-2">
-                            <Input readOnly value={project.uuid} />
-                            <Button variant="outline" onClick={() => copy(project.uuid)}>
-                                <Copy className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </div>
-
-                    <Separator />
-
-                    <div>
-                        <HeadingSmall title={t('projects.settings.api.endpoint')} />
-                        <div className="flex gap-2">
-                            <Input readOnly value={endpointUrl} />
-                            <Button variant="outline" onClick={() => copy(endpointUrl)}>
-                                <Copy className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </div>
-
-                    <Separator />
-
-                    <div>
-                        <HeadingSmall title={t('projects.settings.api.docs_title')} description={t('projects.settings.api.docs_desc')} />
-                        <div className="flex gap-2">
-                            <Input readOnly value={openApiUrl} />
-                            <Button variant="outline" onClick={() => copy(openApiUrl)}>
-                                <Copy className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="flex items-center gap-4">
-                        <Label htmlFor="public_toggle">
-                            {publicApi ? t('projects.settings.api.disable_public') : t('projects.settings.api.enable_public')}
-                        </Label>
-                        <Switch id="public_toggle" checked={publicApi} onCheckedChange={togglePublic} />
-                    </div>
-
-                    <Separator />
-
-                    <div className="flex justify-between items-center">
-                        <HeadingSmall title={t('projects.settings.api.tokens')} />
-                        {can.access_api_access_settings && (
-                            <Button size="sm" onClick={() => { resetDialogState(); setShowTokenDialog(true); }}>
-                                <Plus className="w-4 h-4 mr-1" /> {t('projects.settings.api.create_token')}
-                            </Button>
-                        )}
-                    </div>
-
-                    <div className="border rounded-md mt-4 ">
-                        <table className="min-w-full text-sm">
-                            <thead className="bg-muted">
-                                <tr>
-                                    <th className="px-4 py-2 text-left">{t('projects.settings.api.col_name')}</th>
-                                    <th className="px-4 py-2 text-left">{t('projects.settings.api.col_abilities')}</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {tokens.map((tk) => (
-                                    <tr key={tk.id} className="border-t">
-                                        <td className="px-4 py-2">{tk.name}</td>
-                                        <td className="px-4 py-2">{tk.abilities.join(', ')}</td>
-                                        <td className="px-4 py-2 text-right">
-                                            {can.access_api_access_settings && (
-                                            <>
-                                                <Button variant="ghost" size="icon" onClick={() => { setEditingToken(tk); setNewTokenName(tk.name); setNewTokenAbilities(tk.abilities); setShowTokenDialog(true); }}>
-                                                    <Pencil className="w-4 h-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" onClick={() => setTokenToDelete(tk.id)}>
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            </>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {tokens.length === 0 && (
-                                    <tr>
-                                        <td className="px-4 py-6 text-muted-foreground" colSpan={3}>
-                                            {t('projects.settings.api.no_tokens')}
-                                        </td>
-                                    </tr>
+                <div className="max-w-2xl">
+                    <Tabs defaultValue="access">
+                        <TabsList className="mb-6">
+                            <TabsTrigger value="access">{t('projects.settings.api.tab_access')}</TabsTrigger>
+                            <TabsTrigger value="tokens">
+                                {t('projects.settings.api.tab_tokens')}
+                                {tokens.length > 0 && (
+                                    <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{tokens.length}</Badge>
                                 )}
-                                </tbody>
-                        </table>
-                    </div>
+                            </TabsTrigger>
+                            <TabsTrigger value="docs">{t('projects.settings.api.tab_docs')}</TabsTrigger>
+                        </TabsList>
+
+                        {/* ── Tab Accès ── */}
+                        <TabsContent value="access" className="space-y-6">
+                            <div>
+                                <HeadingSmall title={t('projects.settings.api.project_id')} />
+                                <div className="flex gap-2">
+                                    <Input readOnly value={project.uuid} />
+                                    <Button variant="outline" onClick={() => copy(project.uuid)}><Copy className="w-4 h-4" /></Button>
+                                </div>
+                            </div>
+
+                            <Separator />
+
+                            <div>
+                                <HeadingSmall title={t('projects.settings.api.endpoint')} />
+                                <div className="flex gap-2">
+                                    <Input readOnly value={endpointUrl} />
+                                    <Button variant="outline" onClick={() => copy(endpointUrl)}><Copy className="w-4 h-4" /></Button>
+                                </div>
+                            </div>
+
+                            <Separator />
+
+                            <div className="flex items-center justify-between rounded-lg border p-4">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="public_toggle" className="text-base cursor-pointer">
+                                        {t('projects.settings.api.public_api_label')}
+                                    </Label>
+                                    <p className="text-sm text-muted-foreground">
+                                        {publicApi ? t('projects.settings.api.disable_public') : t('projects.settings.api.enable_public')}
+                                    </p>
+                                </div>
+                                <Switch id="public_toggle" checked={publicApi} onCheckedChange={togglePublic} />
+                            </div>
+                        </TabsContent>
+
+                        {/* ── Tab Tokens ── */}
+                        <TabsContent value="tokens" className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <HeadingSmall title={t('projects.settings.api.tokens')} />
+                                {can.access_api_access_settings && (
+                                    <Button size="sm" onClick={() => { resetDialogState(); setShowTokenDialog(true); }}>
+                                        <Plus className="w-4 h-4 mr-1" /> {t('projects.settings.api.create_token')}
+                                    </Button>
+                                )}
+                            </div>
+
+                            <div className="border rounded-md">
+                                <table className="min-w-full text-sm">
+                                    <thead className="bg-muted">
+                                        <tr>
+                                            <th className="px-4 py-2 text-left">{t('projects.settings.api.col_name')}</th>
+                                            <th className="px-4 py-2 text-left">{t('projects.settings.api.col_abilities')}</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {tokens.map((tk) => (
+                                            <tr key={tk.id} className="border-t">
+                                                <td className="px-4 py-2">{tk.name}</td>
+                                                <td className="px-4 py-2">{tk.abilities.join(', ')}</td>
+                                                <td className="px-4 py-2 text-right">
+                                                    {can.access_api_access_settings && (
+                                                    <>
+                                                        <Button variant="ghost" size="icon" onClick={() => { setEditingToken(tk); setNewTokenName(tk.name); setNewTokenAbilities(tk.abilities); setShowTokenDialog(true); }}>
+                                                            <Pencil className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" onClick={() => setTokenToDelete(tk.id)}>
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {tokens.length === 0 && (
+                                            <tr>
+                                                <td className="px-4 py-6 text-muted-foreground" colSpan={3}>
+                                                    {t('projects.settings.api.no_tokens')}
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </TabsContent>
+
+                        {/* ── Tab Documentation ── */}
+                        <TabsContent value="docs" className="space-y-6">
+                            <div>
+                                <HeadingSmall title={t('projects.settings.api.docs_title')} description={t('projects.settings.api.docs_desc')} />
+                                <div className="flex gap-2">
+                                    <Input readOnly value={openApiUrl} />
+                                    <Button variant="outline" onClick={() => copy(openApiUrl)}><Copy className="w-4 h-4" /></Button>
+                                    <Button variant="outline" asChild>
+                                        <a href={route('projects.settings.api-docs', project.id)} target="_blank" rel="noreferrer">
+                                            <ExternalLink className="w-4 h-4" />
+                                        </a>
+                                    </Button>
+                                </div>
+                            </div>
+                        </TabsContent>
+                    </Tabs>
 
                     <Dialog open={showTokenDialog} onOpenChange={(open)=>{if(!open){setShowTokenDialog(false);resetDialogState();}}}>
                         <DialogContent>
@@ -297,5 +321,6 @@ export default function APIAccessSettings({ project, tokens: initialTokens }: Pr
                 </div>
             </ProjectSettingsLayout>
         </AppLayout>
+
     );
 }
