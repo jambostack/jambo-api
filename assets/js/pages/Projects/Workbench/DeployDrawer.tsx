@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, ExternalLink, Loader2, CheckCircle2, AlertCircle, Link2, Link2Off } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 import { toast } from 'sonner';
+import CloudPanel from './CloudPanel';
 
 interface ProviderStatus {
     label: string;
@@ -121,6 +122,7 @@ export default function DeployDrawer({ open, onClose, projectUuid, workbenchUuid
                     <TabsList className="w-full mb-4">
                         <TabsTrigger value="export" className="flex-1 text-xs">Export</TabsTrigger>
                         <TabsTrigger value="providers" className="flex-1 text-xs">1-clic</TabsTrigger>
+                        <TabsTrigger value="cloud" className="flex-1 text-xs">Jambo Cloud</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="export" className="space-y-4">
@@ -222,6 +224,10 @@ export default function DeployDrawer({ open, onClose, projectUuid, workbenchUuid
                         <p className="text-xs text-muted-foreground text-center">
                             Les tokens OAuth sont chiffrés AES-256-GCM côté serveur
                         </p>
+                    </TabsContent>
+
+                    <TabsContent value="cloud">
+                        <CloudPanel projectUuid={projectUuid} workbenchUuid={workbenchUuid} />
                     </TabsContent>
                 </Tabs>
             </SheetContent>
