@@ -1145,4 +1145,22 @@ return [
     'workbench.deploy.view_app'          => 'Ver app',
     'workbench.deploy.disconnect'        => 'Desconectar',
     'workbench.deploy.error'             => 'Error de despliegue',
+
+    // Workbench Cloud
+    'workbench.cloud.title'           => 'Jambo Cloud',
+    'workbench.cloud.subtitle'        => 'Aloja tu app en la infraestructura Jambo — sin configuración',
+    'workbench.cloud.deploy'          => 'Desplegar en Jambo Cloud',
+    'workbench.cloud.redeploy'        => 'Redesplegar',
+    'workbench.cloud.deploying'       => 'Desplegando…',
+    'workbench.cloud.deployed'        => '¡App desplegada en Jambo Cloud!',
+    'workbench.cloud.error'           => 'Error de despliegue en la nube',
+    'workbench.cloud.custom_domains'  => 'Dominios personalizados',
+    'workbench.cloud.add_domain'      => 'Añadir',
+    'workbench.cloud.verified'        => 'Verificado',
+    'workbench.cloud.pending'         => 'Pendiente',
+    'workbench.cloud.dns_instructions'=> 'Añade este registro DNS TXT y luego pulsa Verificar:',
+    'workbench.cloud.copied'          => 'Copiado',
+    'workbench.cloud.footer'          => 'Contenedor Docker aislado + SSL automático vía Traefik',
+    'workbench.cloud.verify'          => 'Verificar',
+    'workbench.cloud.verify_failed'   => 'Verificación DNS fallida — comprueba el registro TXT',
 ];
