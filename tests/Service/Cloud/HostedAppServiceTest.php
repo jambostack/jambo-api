@@ -50,6 +50,20 @@ class HostedAppServiceTest extends TestCase
         $this->assertMatchesRegularExpression('/^my-blog-[0-9a-f]{6}$/', $sub);
     }
 
+    public function testPrepareMarksProvisioningWithoutBuilding(): void
+    {
+        $orchestrator = $this->createMock(ContainerOrchestratorInterface::class);
+        $orchestrator->expects($this->never())->method('buildImage');
+        $orchestrator->expects($this->never())->method('runContainer');
+
+        $service = $this->makeService($orchestrator);
+        $hosted  = $service->prepare($this->makeWorkbench());
+
+        $this->assertSame(HostedApp::STATUS_PROVISIONING, $hosted->status);
+        $this->assertStringStartsWith('my-blog-', $hosted->subdomain);
+        $this->assertNull($hosted->containerId);
+    }
+
     private function makeService(ContainerOrchestratorInterface $orchestrator): HostedAppService
     {
         return new HostedAppService(

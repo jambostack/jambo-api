@@ -23,6 +23,25 @@ class HostedAppService
     ) {}
 
     /**
+     * Find-or-create the HostedApp for a workbench and mark it provisioning,
+     * WITHOUT building. Returned immediately to the controller so the actual
+     * build+run can run asynchronously (see deploy(), called by the worker).
+     */
+    public function prepare(WorkbenchProject $project): HostedApp
+    {
+        $hosted = $this->hostedAppRepository?->findByWorkbench($project) ?? new HostedApp();
+        if ($hosted->id === null) {
+            $hosted->workbenchProject = $project;
+            $hosted->subdomain        = $this->generateSubdomain($project);
+        }
+        $hosted->status    = HostedApp::STATUS_PROVISIONING;
+        $hosted->lastError = null;
+        $this->persist($hosted);
+
+        return $hosted;
+    }
+
+    /**
      * Build the image, run the container, and persist a HostedApp.
      * Reuses the existing HostedApp for the workbench if present (redeploy).
      */
@@ -42,6 +61,9 @@ class HostedAppService
             if ($template === null) {
                 throw new \RuntimeException("Unknown framework: {$project->framework}");
             }
+
+            // The serving port depends on the framework (e.g. Astro/nginx = 80, Node = 3000).
+            $hosted->internalPort = $template->getInternalPort();
 
             $tag        = 'jambo/' . $hosted->subdomain . ':' . substr($project->uuid->toRfc4122(), 0, 8);
             $imageRef   = $this->orchestrator->buildImage($tag, $project->files, $template->getDockerfile());

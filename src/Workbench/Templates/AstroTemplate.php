@@ -95,4 +95,10 @@ EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 DOCKERFILE;
     }
+
+    /** Astro builds a static site served by nginx on port 80, not the Node default 3000. */
+    public function getInternalPort(): int
+    {
+        return 80;
+    }
 }
