@@ -22,14 +22,8 @@ export default function Permissions() {
     const can = usePage().props.userCan as UserCan;
 
     const breadcrumbs: BreadcrumbItem[] = [
-        {
-            title: t('users.breadcrumb'),
-            href: '/user-management/users',
-        },
-        {
-            title: t('permissions.breadcrumb'),
-            href: '/user-management/permissions',
-        },
+        { title: t('users.breadcrumb'), href: '/user-management/users' },
+        { title: t('permissions.breadcrumb'), href: '/user-management/permissions' },
     ];
 
     const [openModal, setOpenModal] = useState(false);
@@ -44,7 +38,7 @@ export default function Permissions() {
     const [bulkDeleteErrors, setBulkDeleteErrors] = useState<Record<string, string>>({});
     const dataTableRef = useRef<DataTableRef>(null);
 
-    const routePrefix = '/user-management/api/permissions';
+    const routePrefix = '/api/permissions';
 
     const [formData, setFormData] = useState({
         id: 0,
@@ -186,37 +180,24 @@ export default function Permissions() {
             header: t('permissions.col_name'),
             accessorKey: 'name',
             sortable: true,
-            filter: {
-                type: 'text' as const,
-                placeholder: t('permissions.filter_name')
-            } as ColumnFilter
+            filter: { type: 'text' as const, placeholder: t('permissions.filter_name') } as ColumnFilter,
         },
         {
-            header: t('permissions.col_created'),
-            accessorKey: 'created_at',
+            header: t('permissions.col_label'),
+            accessorKey: 'label',
             sortable: true,
-            filter: {
-                type: 'date' as const,
-                placeholder: t('permissions.filter_date')
-            } as ColumnFilter,
-            cell: (item: Permission) => (
-                <div className="text-sm text-muted-foreground">
-                    {new Date(item.created_at).toLocaleString()}
-                </div>
+            cell: (item: any) => (
+                <span className="text-sm text-muted-foreground">{item.label || '—'}</span>
             ),
         },
         {
-            header: t('permissions.col_updated'),
-            accessorKey: 'updated_at',
+            header: t('permissions.col_group'),
+            accessorKey: 'group',
             sortable: true,
-            filter: {
-                type: 'date' as const,
-                placeholder: t('permissions.filter_updated')
-            } as ColumnFilter,
-            cell: (item: Permission) => (
-                <div className="text-sm text-muted-foreground">
-                    {new Date(item.updated_at).toLocaleString()}
-                </div>
+            cell: (item: any) => (
+                <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium">
+                    {item.group}
+                </span>
             ),
         },
     ];

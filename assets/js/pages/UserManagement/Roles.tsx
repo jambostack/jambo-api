@@ -46,8 +46,8 @@ export default function Roles({ permissionGroups: initialPermissionGroups }: Rol
     const can = (usePage().props.userCan || {}) as UserCan;
 
     const breadcrumbs: BreadcrumbItem[] = [
-        { title: t('users.breadcrumb'), href: '/users' },
-        { title: t('roles.breadcrumb'), href: '/users/roles' },
+        { title: t('users.breadcrumb'), href: '/user-management/users' },
+        { title: t('roles.breadcrumb'), href: '/user-management/roles' },
     ];
 
     const [openModal, setOpenModal] = useState(false);

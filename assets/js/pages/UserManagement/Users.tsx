@@ -22,7 +22,10 @@ interface UsersPageProps { roles: Role[]; }
 export default function Users({ roles }: UsersPageProps) {
   const can = (usePage().props.userCan || {}) as UserCan;
   const t = useTranslation();
-  const breadcrumbs: BreadcrumbItem[] = [{ title: t('users.breadcrumb'), href: '/users' }, { title: t('users.title'), href: '/users' }];
+  const breadcrumbs: BreadcrumbItem[] = [
+    { title: t('users.breadcrumb'), href: '/user-management/users' },
+    { title: t('users.title'), href: '/user-management/users' },
+  ];
 
   const [openModal, setOpenModal] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -81,10 +84,33 @@ export default function Users({ roles }: UsersPageProps) {
   };
 
   const tableColumns = [
-    { header: t('users.col_name'), accessorKey: 'name', sortable: true },
-    { header: t('users.col_email'), accessorKey: 'email', sortable: true },
-    { header: t('users.col_roles'), accessorKey: 'roles', cell: (item: any) => (<div className="flex flex-wrap gap-1">{(item.roles || []).map((r: any) => (<Badge key={r.id} variant="secondary" className="text-xs">{r.label || r.name}</Badge>))}</div>) },
-    { header: t('users.col_created'), accessorKey: 'created_at', sortable: true, cell: (item: any) => (<span className="text-sm text-muted-foreground tabular-nums">{item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}</span>) },
+    {
+      header: t('users.col_name'), accessorKey: 'name', sortable: true,
+      filter: { type: 'text' as const, placeholder: t('users.filter_name') },
+    },
+    {
+      header: t('users.col_email'), accessorKey: 'email', sortable: true,
+      filter: { type: 'text' as const, placeholder: t('users.filter_email') },
+    },
+    {
+      header: t('users.col_roles'), accessorKey: 'roles',
+      cell: (item: any) => (
+        <div className="flex flex-wrap gap-1">
+          {(item.roles || []).map((r: any) => (
+            <Badge key={r.id} variant="secondary" className="text-xs">{r.label || r.name}</Badge>
+          ))}
+        </div>
+      ),
+    },
+    {
+      header: t('users.col_created'), accessorKey: 'created_at', sortable: true,
+      filter: { type: 'date' as const, placeholder: t('users.filter_date') },
+      cell: (item: any) => (
+        <span className="text-sm text-muted-foreground tabular-nums">
+          {item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}
+        </span>
+      ),
+    },
   ];
 
   return (

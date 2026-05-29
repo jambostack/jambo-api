@@ -18,8 +18,10 @@ class ProjectVoter extends Voter
 
     protected function supports(string $attribute, mixed $subject): bool
     {
-        return in_array($attribute, [self::VIEW, self::MANAGE])
-            && $subject instanceof Project;
+        // Toute permission de projet (project.*, content.*, collection.*, assets.*)
+        // est résolue par ce voter dès lors que le sujet est un Project.
+        return $subject instanceof Project
+            && str_contains($attribute, '.');
     }
 
     protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
@@ -37,11 +39,16 @@ class ProjectVoter extends Voter
         }
 
         $member = $this->memberRepo->findActiveByUserAndProject($user, $project);
+        if ($member === null) {
+            return false;
+        }
 
-        return match ($attribute) {
-            self::VIEW   => $member !== null,
-            self::MANAGE => $member !== null && $member->role?->hasPermission('project.manage') === true,
-            default      => false,
-        };
+        // project.view ne nécessite que l'appartenance au projet ;
+        // toute autre permission est vérifiée sur le rôle du membre.
+        if ($attribute === self::VIEW) {
+            return true;
+        }
+
+        return $member->role?->hasPermission($attribute) === true;
     }
 }
