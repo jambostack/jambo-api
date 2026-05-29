@@ -78,4 +78,23 @@ class SvelteKitTemplate extends BaseTemplate
         }
         return implode("\n", $lines);
     }
+
+    public function getDockerfile(): string
+    {
+        return <<<'DOCKERFILE'
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --legacy-peer-deps
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/build ./
+EXPOSE 3000
+CMD ["node", "index.js"]
+DOCKERFILE;
+    }
 }

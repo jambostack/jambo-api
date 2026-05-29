@@ -20,6 +20,15 @@ abstract class BaseTemplate
 
     abstract public function getDevCommand(): string;
 
+    /** Returns the Dockerfile content for production Docker build. */
+    abstract public function getDockerfile(): string;
+
+    /** Returns the npm build command. */
+    public function getBuildCommand(): string
+    {
+        return 'npm run build';
+    }
+
     public function getInstallCommand(): string
     {
         return 'npm install --legacy-peer-deps';
