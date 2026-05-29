@@ -19,7 +19,7 @@ class WorkbenchStreamService
      * Builds the system prompt enriched with the project schema and framework context.
      * Public so it can be unit-tested without a real AI provider.
      */
-    public function buildSystemPrompt(Project $project, string $framework): string
+    public function buildSystemPrompt(Project $project, string $framework, string $jamboApiUrl = ''): string
     {
         $template = $this->findTemplate($framework);
         $frameworkLabel = $template?->getLabel() ?? $framework;
@@ -50,7 +50,7 @@ You are an expert {$frameworkLabel} developer. Your job is to generate productio
 ## Rules
 1. Every file you generate MUST be wrapped in <jamboFile path="relative/path/to/file"> ... </jamboFile> tags.
 2. Import data using the functions in lib/jambo.ts (already present in the project).
-3. Use the JAMBO_API_URL environment variable — never hardcode URLs.
+3. The JAMBO_API_URL is already set to '{$jamboApiUrl}' in the project's .env file. Use the env var in code, never hardcode it.
 4. Write TypeScript. Use async/await. No class components.
 5. Make the UI clean, modern, and responsive using Tailwind CSS classes.
 6. When you create a page, also update the navigation in the layout file.
@@ -77,7 +77,7 @@ PROMPT;
         PlatformInterface $platform,
         string $model,
     ): \Generator {
-        $systemPrompt = $this->buildSystemPrompt($project, $framework);
+        $systemPrompt = $this->buildSystemPrompt($project, $framework, $jamboApiUrl);
 
         $messages = new MessageBag(
             Message::forSystem($systemPrompt),

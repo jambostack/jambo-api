@@ -62,16 +62,40 @@ class WorkbenchController extends InertiaController
 
         $workbenchProjects = $this->workbenchRepository->findByProject($project);
 
+        $apiUrl = $request->getSchemeAndHttpHost();
+        $collectionsForClient = array_map(fn (Collection $c) => [
+            'name'   => $c->name,
+            'slug'   => $c->slug,
+            'fields' => array_values(array_filter(
+                array_map(fn ($f) => $f->isDeleted() ? null : [
+                    'name'       => $f->name,
+                    'slug'       => $f->slug,
+                    'type'       => $f->type,
+                    'isRequired' => $f->isRequired,
+                ], $c->fields->toArray())
+            )),
+        ], $collections);
+
+        $starterFilesByFramework = [];
+        foreach ($this->templates as $template) {
+            $starterFilesByFramework[$template->getId()] = $template->getStarterFiles(
+                $apiUrl,
+                $project->uuid->toRfc4122(),
+                $collectionsForClient,
+            );
+        }
+
         return $this->inertia($request, 'Projects/Workbench/WorkbenchPage', [
             'project' => [
                 'id'   => $project->id,
                 'uuid' => $project->uuid->toRfc4122(),
                 'name' => $project->name,
             ],
-            'collections'       => $collectionsData,
-            'workbenchProjects' => array_map(fn (WorkbenchProject $w) => $this->serializeWorkbench($w), $workbenchProjects),
-            'frameworks'        => array_map(fn ($t) => ['id' => $t->getId(), 'label' => $t->getLabel()], $this->templates),
-            'userCan'           => [],
+            'collections'             => $collectionsData,
+            'workbenchProjects'       => array_map(fn (WorkbenchProject $w) => $this->serializeWorkbench($w), $workbenchProjects),
+            'frameworks'              => array_map(fn ($t) => ['id' => $t->getId(), 'label' => $t->getLabel()], $this->templates),
+            'userCan'                 => [],
+            'starterFilesByFramework' => $starterFilesByFramework,
         ]);
     }
 

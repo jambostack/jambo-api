@@ -26,9 +26,10 @@ interface Props {
     workbenchProjects: WorkbenchProjectData[];
     frameworks: Array<{ id: string; label: string }>;
     userCan: Record<string, boolean>;
+    starterFilesByFramework: Record<string, Record<string, string>>;
 }
 
-export default function WorkbenchPage({ project, workbenchProjects, frameworks }: Props) {
+export default function WorkbenchPage({ project, workbenchProjects, frameworks, starterFilesByFramework }: Props) {
     const framework = useStore(frameworkStore);
     const activeTab = useStore(activeTabStore);
     const files = useStore(filesStore);
@@ -92,7 +93,11 @@ export default function WorkbenchPage({ project, workbenchProjects, frameworks }
                         </TabsList>
 
                         <TabsContent value="preview" className="flex-1 m-0 overflow-hidden">
-                            <PreviewPanel starterFiles={{}} installCommand="npm install --legacy-peer-deps" devCommand={devCommandMap[framework] ?? 'npm run dev'} />
+                            <PreviewPanel
+                                    starterFiles={starterFilesByFramework[framework] ?? {}}
+                                    installCommand="npm install --legacy-peer-deps"
+                                    devCommand={devCommandMap[framework] ?? 'npm run dev'}
+                                />
                         </TabsContent>
                         <TabsContent value="files" className="flex-1 m-0 overflow-hidden">
                             <FileTreePanel />
