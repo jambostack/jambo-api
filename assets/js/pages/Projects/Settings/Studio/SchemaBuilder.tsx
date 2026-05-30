@@ -563,10 +563,10 @@ export default function SchemaBuilder({ project }: { project: Project }) {
             <div className="sb-sidebar-header"><h3>Collections · {collections.length}</h3></div>
             <div className="sb-sidebar-list" ref={collectionListRef}>
               {collections.map((col, idx) => (
-                <button key={col.key} onClick={() => setSelectedIdx(idx)} className={`sb-col-item${idx === selectedIdx ? ' sb-active' : ''}`}>
+                <div key={col.key} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setSelectedIdx(idx); }} onClick={() => setSelectedIdx(idx)} className={`sb-col-item${idx === selectedIdx ? ' sb-active' : ''}`}>
                   <div style={{ flex: 1, minWidth: 0 }}><div className="col-name">{col.name || untitled}</div><div className="col-meta">{col.fields.length} champs</div></div>
                   <button onClick={e => { e.stopPropagation(); removeCollection(idx); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px', opacity: .4 }}><Trash2 className="w-3 h-3" style={{ color: 'var(--studio-red)' }} /></button>
-                </button>
+                </div>
               ))}
               {collections.length === 0 && <p style={{ fontSize: '11px', color: 'var(--studio-text-muted)', textAlign: 'center', padding: '16px 6px' }}>Vide</p>}
             </div>
