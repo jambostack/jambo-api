@@ -88,6 +88,9 @@ class ProjectEmailController extends AbstractController
 
         $to = $settings->fromEmail;
         $replyTo = isset($body['replyTo']) ? trim((string) $body['replyTo']) : null;
+        if ($replyTo !== null && !filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
+            return new JsonResponse(['error' => 'replyTo invalide'], 422);
+        }
 
         // Honeypot : champ cache — si rempli, c'est un bot (ne pas envoyer mais retourner succes)
         if (!empty($body['website'] ?? '')) {
