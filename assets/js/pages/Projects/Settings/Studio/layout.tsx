@@ -3,11 +3,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import Heading from '@/components/heading';
+import { router } from '@inertiajs/react';
 import type { Project, Collection } from '@/types/index.d';
 import {
   Database, Download, Search, ScrollText, Braces,
-  ArrowRight, Box, Layers
+  ArrowRight, Box, Layers, ArrowLeft, X
 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 import SchemaBuilder from './SchemaBuilder';
@@ -16,6 +16,8 @@ import SearchPage from './SearchPage';
 import AuditLogsPage from './AuditLogsPage';
 
 interface StudioLayoutProps { project: Project; collections: Collection[]; }
+
+function goBack(projectId: number) { router.get(`/projects/${projectId}/settings`); }
 
 type Panel = 'schema' | 'export' | 'search' | 'audit' | 'graphql';
 
@@ -164,6 +166,18 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
           .studio-mobile-nav { display: none; }
         }
 
+        /* ── Header bar ── */
+        .studio-header {
+          display: flex; align-items: flex-start; justify-content: space-between;
+          gap: 16px; flex-wrap: wrap; padding-bottom: 8px;
+        }
+        .studio-header h2 {
+          font-family: var(--studio-serif);
+          font-size: clamp(18px, 3vw, 22px);
+          font-weight: 500; letter-spacing: -.01em;
+          color: var(--studio-text); margin: 0;
+        }
+
         /* Section header */
         .studio-root .section-header h2 {
           font-family: var(--studio-serif);
@@ -173,7 +187,34 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
         }
       `}</style>
 
-      <Heading title={t('studio.title')} description={t('studio.desc')} />
+      {/* ── Header with exit button ── */}
+      <div className="studio-header">
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+            <h2 style={{ fontFamily: 'var(--studio-serif)', fontSize: '20px', fontWeight: 500, color: 'var(--studio-text)', margin: 0 }}>
+              {t('studio.title')}
+            </h2>
+          </div>
+          <p style={{ fontSize: '12px', color: 'var(--studio-text-dim)', margin: 0 }}>{t('studio.desc')}</p>
+        </div>
+        <button
+          onClick={() => goBack(project.id)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '7px 14px', borderRadius: '8px', cursor: 'pointer',
+            fontSize: '12px', fontWeight: 600,
+            border: '1px solid var(--studio-border)',
+            background: 'var(--studio-surface)',
+            color: 'var(--studio-text-dim)',
+            transition: 'all .12s ease',
+            whiteSpace: 'nowrap', flexShrink: 0,
+          }}
+          onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--studio-border-active)'; e.currentTarget.style.color = 'var(--studio-accent)'; }}
+          onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--studio-border)'; e.currentTarget.style.color = 'var(--studio-text-dim)'; }}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />Retour
+        </button>
+      </div>
 
       {/* ── Mobile: horizontal scroll tabs ── */}
       <div className="studio-mobile-nav" style={{ marginTop: '16px' }}>
