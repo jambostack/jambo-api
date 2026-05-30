@@ -100,6 +100,13 @@ services:
                 - '@App\Workbench\Templates\SvelteKitTemplate'
                 - '@App\Workbench\Templates\NativeTemplate'
 
+    App\Controller\StudioController:
+        arguments:
+            $openaiPlatform: '@ai.traceable_platform.openai'
+            $anthropicPlatform: '@ai.traceable_platform.anthropic'
+            $ollamaPlatform: '@ai.traceable_platform.ollama'
+            $deepseekPlatform: '@ai.traceable_platform.deepseek'
+
     App\Controller\WorkbenchController:
         arguments:
             $openaiPlatform: '@ai.traceable_platform.openai'
