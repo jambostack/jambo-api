@@ -58,6 +58,26 @@ class PublishedSiteStorageTest extends TestCase
         $this->assertSame(['index.html', 'js/app.js'], $files);
     }
 
+    public function testReadFileWithZeroContent(): void
+    {
+        // Regression: "0" is falsy in PHP, must not be treated as null.
+        $this->storage->publish('proj-uuid', ['zero.js' => '0']);
+        $this->assertSame('0', $this->storage->readFile('proj-uuid', 'zero.js'));
+    }
+
+    public function testReadFileForUnpublishedProject(): void
+    {
+        // Répertoire projet inexistant — realpath() échoue, doit retourner null.
+        $this->assertNull($this->storage->readFile('never-published', 'index.html'));
+    }
+
+    public function testNestedTraversalPath(): void
+    {
+        // Traversal via sous-répertoire.
+        $this->storage->publish('proj-uuid', ['index.html' => 'ok']);
+        $this->assertNull($this->storage->readFile('proj-uuid', 'subdir/../../../etc/passwd'));
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

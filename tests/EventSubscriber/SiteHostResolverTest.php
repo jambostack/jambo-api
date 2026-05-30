@@ -98,4 +98,58 @@ class SiteHostResolverTest extends TestCase
         $this->assertTrue($event->hasResponse());
         $this->assertSame(404, $event->getResponse()->getStatusCode());
     }
+
+    public function testRootPathServesHtmlContentType(): void
+    {
+        $uuid     = '00000000-0000-4000-8000-000000000001';
+        $domain   = $this->makeDomain('monsite.com');
+        $resolver = $this->makeResolver($domain, [$uuid . ':index.html' => '<h1>Hi</h1>']);
+
+        $event = $this->makeEvent('monsite.com', '/');
+        $resolver->onRequest($event);
+
+        $this->assertTrue($event->hasResponse());
+        $this->assertStringContainsString('text/html', $event->getResponse()->headers->get('Content-Type') ?? '');
+    }
+
+    public function testSpaFallbackServesHtmlContentType(): void
+    {
+        $uuid     = '00000000-0000-4000-8000-000000000001';
+        $domain   = $this->makeDomain('monsite.com');
+        $resolver = $this->makeResolver($domain, [$uuid . ':index.html' => '<html>SPA</html>']);
+
+        $event = $this->makeEvent('monsite.com', '/deep/route');
+        $resolver->onRequest($event);
+
+        $this->assertTrue($event->hasResponse());
+        $this->assertStringContainsString('text/html', $event->getResponse()->headers->get('Content-Type') ?? '');
+    }
+
+    public function testSubdirectoryIndexResolution(): void
+    {
+        $uuid     = '00000000-0000-4000-8000-000000000001';
+        $domain   = $this->makeDomain('monsite.com');
+        $resolver = $this->makeResolver($domain, [$uuid . ':some/path/index.html' => '<h1>Sub</h1>']);
+
+        $event = $this->makeEvent('monsite.com', '/some/path/');
+        $resolver->onRequest($event);
+
+        $this->assertTrue($event->hasResponse());
+        $this->assertSame(200, $event->getResponse()->getStatusCode());
+        $this->assertStringContainsString('<h1>Sub</h1>', $event->getResponse()->getContent());
+    }
+
+    public function testSubRequestsAreSkipped(): void
+    {
+        $uuid     = '00000000-0000-4000-8000-000000000001';
+        $domain   = $this->makeDomain('monsite.com');
+        $resolver = $this->makeResolver($domain, [$uuid . ':index.html' => '<h1>Hi</h1>']);
+
+        $kernel  = $this->createMock(HttpKernelInterface::class);
+        $request = Request::create('https://monsite.com/');
+        $event   = new RequestEvent($kernel, $request, HttpKernelInterface::SUB_REQUEST);
+
+        $resolver->onRequest($event);
+        $this->assertFalse($event->hasResponse());
+    }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useStore } from '@nanostores/react';
 import { filesStore } from '@/stores/workbench';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,8 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
     const [newDomain, setNewDomain]     = useState('');
     const [publishing, setPublishing]   = useState(false);
     const [lastPublished, setLastPublished] = useState<string | null>(publishedAt ?? null);
+    const mountedRef = useRef(true);
+    useEffect(() => { return () => { mountedRef.current = false; }; }, []);
 
     const api = (path: string, opts?: RequestInit) =>
         fetch(`/api/projects/${projectUuid}/workbench/${workbenchUuid}${path}`, {
@@ -36,8 +38,24 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
 
     useEffect(() => {
         if (!workbenchUuid) return;
-        api('/env').then(r => r.json()).then((d: { data: EnvVar[] }) => setEnvVars(d.data ?? [])).catch(() => {});
-        api('/domains').then(r => r.json()).then((d: { data: Domain[] }) => setDomains(d.data ?? [])).catch(() => {});
+        const controller = new AbortController();
+        const signal = controller.signal;
+
+        const fetchJson = (path: string) =>
+            fetch(`/api/projects/${projectUuid}/workbench/${workbenchUuid}${path}`, {
+                headers: { 'Content-Type': 'application/json' },
+                signal,
+            }).then(r => r.json());
+
+        fetchJson('/env')
+            .then((d: { data: EnvVar[] }) => { if (!signal.aborted) setEnvVars(d.data ?? []); })
+            .catch((err: Error) => { if (err.name !== 'AbortError') console.error('Failed to load env vars:', err); });
+
+        fetchJson('/domains')
+            .then((d: { data: Domain[] }) => { if (!signal.aborted) setDomains(d.data ?? []); })
+            .catch((err: Error) => { if (err.name !== 'AbortError') console.error('Failed to load domains:', err); });
+
+        return () => controller.abort();
     }, [projectUuid, workbenchUuid]);
 
     const handleAddEnv = async () => {
@@ -45,12 +63,14 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
         const res = await api('/env', { method: 'POST', body: JSON.stringify({ key_name: newKey.trim(), value: newValue, is_secret: newSecret }) });
         const d = await res.json() as { data?: EnvVar; error?: string };
         if (!res.ok) { toast.error(d.error ?? t('workbench.sites.error')); return; }
+        if (!mountedRef.current) return;
         setEnvVars(prev => [...prev, d.data!]);
         setNewKey(''); setNewValue(''); setNewSecret(false);
     };
 
     const handleDeleteEnv = async (id: number) => {
         await api(`/env/${id}`, { method: 'DELETE' });
+        if (!mountedRef.current) return;
         setEnvVars(prev => prev.filter(v => v.id !== id));
     };
 
@@ -59,12 +79,14 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
         const res = await api('/domains', { method: 'POST', body: JSON.stringify({ domain: newDomain.trim() }) });
         const d = await res.json() as { data?: Domain; error?: string };
         if (!res.ok) { toast.error(d.error ?? t('workbench.sites.error')); return; }
+        if (!mountedRef.current) return;
         setDomains(prev => [...prev, d.data!]);
         setNewDomain('');
     };
 
     const handleDeleteDomain = async (uuid: string) => {
         await api(`/domains/${uuid}`, { method: 'DELETE' });
+        if (!mountedRef.current) return;
         setDomains(prev => prev.filter(d => d.uuid !== uuid));
     };
 
@@ -91,12 +113,13 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
             const data = await res.json() as { published_at?: string; error?: string };
             if (!res.ok) { toast.error(data.error ?? t('workbench.sites.publish_error')); return; }
 
+            if (!mountedRef.current) return;
             setLastPublished(data.published_at ?? null);
             toast.success(t('workbench.sites.published'));
         } catch {
             toast.error(t('workbench.sites.publish_error'));
         } finally {
-            setPublishing(false);
+            if (mountedRef.current) setPublishing(false);
         }
     };
 
@@ -121,7 +144,7 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
                 {lastPublished && (
                     <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
                         <CheckCircle2 className="w-3 h-3 text-primary" />
-                        {t('workbench.sites.last_published')} {new Date(lastPublished).toLocaleString()}
+                        {t('workbench.sites.last_published')} {new Date(lastPublished).toLocaleString(navigator.language)}
                     </p>
                 )}
             </div>
