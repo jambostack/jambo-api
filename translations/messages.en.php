@@ -1120,6 +1120,10 @@ return [
     'studio.graphql.copied'    => 'Copied!',
     'studio.graphql.example'   => 'Example query',
     'studio.graphql.hint'      => 'Use any GraphQL client (Altair, Insomnia, Postman) to explore the full schema. The schema is auto-generated from your collections.',
+    'studio.graphql.copied'    => 'Copied!',
+
+    'studio.delete_confirm.title'   => 'Delete collection',
+    'studio.delete_confirm.message' => 'Are you sure you want to delete {name}? This action is irreversible and will delete all associated fields.',
 
     // Workbench
     'workbench.title'              => 'Workbench',
@@ -1265,6 +1269,24 @@ return [
     'workbench.template_prompt_landing'       => 'Create a modern landing page with a hero section, feature sections, testimonials, and a contact form.',
     'workbench.template_prompt_crud'          => 'Create a complete CRUD interface with a table listing entries, a create/edit form, and delete buttons with confirmation.',
     'workbench.template_prompt_portfolio'     => 'Create a portfolio site with a project gallery, an "About" page, and a contact form.',
+
+    'workbench.autofix'                      => 'Auto-fix',
+    'workbench.build_errors'                 => 'build error(s)',
+    'workbench.fix_errors'                   => 'Fix',
+    'workbench.undo_file'                    => '↩ Undid file:',
+    'workbench.undo_hint'                    => 'Undo last change',
+    'workbench.file_apply'                   => 'Apply',
+    'workbench.file_reject'                  => 'Reject',
+    'workbench.snapshots_title'              => 'Snapshots',
+    'workbench.snapshots_restore'            => 'Restore',
+    'workbench.snapshots_empty'              => 'No snapshots',
+    'workbench.snapshots_created'            => 'Snapshot created',
+    'workbench.snapshots_restored'           => 'Snapshot restored',
+    'workbench.upload_title'                 => 'Upload image',
+    'workbench.upload_pending'               => 'Images still uploading...',
+    'workbench.upload_drop'                  => 'Drop an image or click',
+    'workbench.history_loading'              => 'Loading history...',
+    'workbench.cache_installing'             => 'Caching dependencies...',
 
 
     // Studio — Schema Builder

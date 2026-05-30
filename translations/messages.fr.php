@@ -1146,6 +1146,10 @@ return [
     'studio.graphql.copied'    => 'Copié !',
     'studio.graphql.example'   => 'Exemple de requête',
     'studio.graphql.hint'      => 'Utilisez n\'importe quel client GraphQL (Altair, Insomnia, Postman) pour explorer le schéma complet. Le schema est généré automatiquement depuis vos collections.',
+    'studio.graphql.copied'    => 'Copié !',
+
+    'studio.delete_confirm.title'   => 'Supprimer la collection',
+    'studio.delete_confirm.message' => 'Êtes-vous sûr de vouloir supprimer {name} ? Cette action est irréversible et supprimera tous les champs associés.',
 
     // Workbench
     'workbench.title'              => 'Workbench',
@@ -1291,6 +1295,24 @@ return [
     'workbench.template_prompt_landing'       => 'Crée une landing page moderne avec un hero section, des sections de fonctionnalités, des témoignages, et un formulaire de contact.',
     'workbench.template_prompt_crud'          => 'Crée une interface CRUD complète avec un tableau listant les entrées, un formulaire de création/édition, et des boutons de suppression avec confirmation.',
     'workbench.template_prompt_portfolio'     => 'Crée un site portfolio avec une galerie de projets, une page "À propos", et un formulaire de contact.',
+
+    'workbench.autofix'                      => 'Auto-fix',
+    'workbench.build_errors'                 => 'erreur(s) de build',
+    'workbench.fix_errors'                   => 'Corriger',
+    'workbench.undo_file'                    => '↩ Fichier annulé :',
+    'workbench.undo_hint'                    => 'Annuler la dernière modification',
+    'workbench.file_apply'                   => 'Appliquer',
+    'workbench.file_reject'                  => 'Rejeter',
+    'workbench.snapshots_title'              => 'Snapshots',
+    'workbench.snapshots_restore'            => 'Restaurer',
+    'workbench.snapshots_empty'              => 'Aucun snapshot',
+    'workbench.snapshots_created'            => 'Snapshot créé',
+    'workbench.snapshots_restored'           => 'Snapshot restauré',
+    'workbench.upload_title'                 => 'Uploader une image',
+    'workbench.upload_pending'               => 'Images en cours d\'upload...',
+    'workbench.upload_drop'                  => 'Glissez une image ou cliquez',
+    'workbench.history_loading'              => 'Chargement de l\'historique...',
+    'workbench.cache_installing'             => 'Mise en cache des dépendances...',
 
 
     // Studio — Schema Builder

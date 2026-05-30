@@ -1067,6 +1067,10 @@ return [
     'studio.graphql.copied'    => '¡Copiado!',
     'studio.graphql.example'   => 'Ejemplo de consulta',
     'studio.graphql.hint'      => 'Usa cualquier cliente GraphQL (Altair, Insomnia, Postman) para explorar el esquema completo. El esquema se genera automáticamente desde tus colecciones.',
+    'studio.graphql.copied'    => '¡Copiado!',
+
+    'studio.delete_confirm.title'   => 'Eliminar colección',
+    'studio.delete_confirm.message' => '¿Estás seguro de que quieres eliminar {name}? Esta acción es irreversible y eliminará todos los campos asociados.',
 
     // Tabs App Settings
     'app_settings.tab_general'     => 'General',
@@ -1242,6 +1246,24 @@ return [
     'workbench.template_prompt_landing'       => 'Crea una landing page moderna con una sección hero, secciones de características, testimonios, y un formulario de contacto.',
     'workbench.template_prompt_crud'          => 'Crea una interfaz CRUD completa con una tabla de entradas, un formulario de creación/edición, y botones de eliminación con confirmación.',
     'workbench.template_prompt_portfolio'     => 'Crea un sitio portfolio con una galería de proyectos, una página "Sobre mí", y un formulario de contacto.',
+
+    'workbench.autofix'                      => 'Auto-corrección',
+    'workbench.build_errors'                 => 'error(es) de build',
+    'workbench.fix_errors'                   => 'Corregir',
+    'workbench.undo_file'                    => '↩ Archivo deshecho:',
+    'workbench.undo_hint'                    => 'Deshacer último cambio',
+    'workbench.file_apply'                   => 'Aplicar',
+    'workbench.file_reject'                  => 'Rechazar',
+    'workbench.snapshots_title'              => 'Snapshots',
+    'workbench.snapshots_restore'            => 'Restaurar',
+    'workbench.snapshots_empty'              => 'Sin snapshots',
+    'workbench.snapshots_created'            => 'Snapshot creado',
+    'workbench.snapshots_restored'           => 'Snapshot restaurado',
+    'workbench.upload_title'                 => 'Subir imagen',
+    'workbench.upload_pending'               => 'Imágenes subiendo...',
+    'workbench.upload_drop'                  => 'Arrastra una imagen o haz clic',
+    'workbench.history_loading'              => 'Cargando historial...',
+    'workbench.cache_installing'             => 'Cacheando dependencias...',
 
 
     // Studio — Schema Builder

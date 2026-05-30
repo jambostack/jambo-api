@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
   Plus, Trash2, Eye, Save, Copy, Wand2, Loader2, ChevronRight, ChevronLeft,
   Type, AlignLeft, Hash, List, ToggleLeft, Calendar, Clock,
@@ -54,13 +55,26 @@ function SchemaChatPanel({
   currentCollections: SchemaCollection[];
   onApplySchema: (newCollections: SchemaCollection[]) => void;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: 'Décris les collections à créer ou modifier.', schema: undefined },
-  ]);
+  const storageKey = `studio_chat_${project.uuid}`;
+
+  const loadMessages = (): ChatMessage[] => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) { const parsed = JSON.parse(raw) as ChatMessage[]; if (parsed.length > 0) return parsed; }
+    } catch {}
+    return [{ role: 'assistant' as const, content: 'Décris les collections à créer ou modifier.', schema: undefined }];
+  };
+
+  const [messages, setMessages] = useState<ChatMessage[]>(loadMessages);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const scrollDown = () => setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
+
+  // Persiste les messages dans localStorage à chaque changement
+  useEffect(() => {
+    try { localStorage.setItem(storageKey, JSON.stringify(messages)); } catch {}
+  }, [messages, storageKey]);
 
   function buildContext(): string {
     if (currentCollections.length === 0) return '(aucune collection existante)';
@@ -326,6 +340,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [mobileTab, setMobileTab] = useState<MobileTab>('editor');
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number | null>(null);
 
   // ── EndUser fields ──
   const [endUserFields, setEndUserFields] = useState<EndUserFieldData[]>([]);
@@ -380,7 +395,15 @@ export default function SchemaBuilder({ project }: { project: Project }) {
     setTimeout(() => collectionListRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' }), 50);
   }, [collections.length]);
   function updateCollection(idx: number, d: Partial<SchemaCollection>) { setCollections(prev => prev.map((c, i) => i === idx ? { ...c, ...d, slug: d.name !== undefined ? slugify(d.name) : c.slug } : c)); }
-  function removeCollection(idx: number) { setCollections(prev => prev.filter((_, i) => i !== idx)); if (selectedIdx === idx) setSelectedIdx(null); else if (selectedIdx !== null && selectedIdx > idx) setSelectedIdx(selectedIdx - 1); }
+  function removeCollection(idx: number) { setConfirmDeleteIdx(idx); }
+  function confirmRemoveCollection() {
+    if (confirmDeleteIdx === null) return;
+    const idx = confirmDeleteIdx;
+    setCollections(prev => prev.filter((_, i) => i !== idx));
+    if (selectedIdx === idx) setSelectedIdx(null);
+    else if (selectedIdx !== null && selectedIdx > idx) setSelectedIdx(selectedIdx - 1);
+    setConfirmDeleteIdx(null);
+  }
   function addField() { if (selectedIdx === null) return; setCollections(prev => prev.map((c, i) => i === selectedIdx ? { ...c, fields: [...c.fields, { key: `fld_${Date.now()}`, name: '', slug: '', type: 'text', isRequired: false }] } : c)); }
   function updateField(colIdx: number, fKey: string, d: Partial<SchemaField>) { setCollections(prev => prev.map((c, i) => i === colIdx ? { ...c, fields: c.fields.map(f => f.key === fKey ? { ...f, ...d, slug: d.name !== undefined ? slugify(d.name) : f.slug } : f) } : c)); }
   function removeField(colIdx: number, fKey: string) { setCollections(prev => prev.map((c, i) => i === colIdx ? { ...c, fields: c.fields.filter(f => f.key !== fKey) } : c)); }
@@ -668,6 +691,26 @@ export default function SchemaBuilder({ project }: { project: Project }) {
         </div>
       </div>
       <style>{`@media (min-width: 1025px) { .sb-bottom-bar { display: none !important; } .sb-mobile-content { display: none !important; } }`}</style>
+
+      {/* ═══════════════ CONFIRM DELETE DIALOG ═══════════════ */}
+      <Dialog open={confirmDeleteIdx !== null} onOpenChange={() => setConfirmDeleteIdx(null)}>
+        <DialogContent style={{ background: 'var(--studio-surface)', border: '1px solid var(--studio-border)', borderRadius: '12px', color: 'var(--studio-text)', maxWidth: '380px' }}>
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: 'var(--studio-serif)', fontSize: '16px', color: 'var(--studio-text)' }}>
+              {t('studio.delete_confirm.title')}
+            </DialogTitle>
+            <DialogDescription style={{ fontSize: '12px', color: 'var(--studio-text-dim)' }}>
+              {confirmDeleteIdx !== null && collections[confirmDeleteIdx] && (
+                <>{t('studio.delete_confirm.message', { name: collections[confirmDeleteIdx].name || t('studio.schema.untitled') })}</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+            <Button variant="outline" size="sm" onClick={() => setConfirmDeleteIdx(null)} style={{ borderColor: 'var(--studio-border)', color: 'var(--studio-text-dim)' }}>{t('common.cancel')}</Button>
+            <Button size="sm" onClick={confirmRemoveCollection} style={{ background: 'var(--studio-red)', color: '#fff' }}>{t('common.delete')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

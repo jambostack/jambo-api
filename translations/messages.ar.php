@@ -1067,6 +1067,10 @@ return [
     'studio.graphql.copied'    => 'تم النسخ!',
     'studio.graphql.example'   => 'مثال على استعلام',
     'studio.graphql.hint'      => 'استخدم أي عميل GraphQL (Altair, Insomnia, Postman) لاستكشاف المخطط الكامل. يتم إنشاء المخطط تلقائياً من مجموعاتك.',
+    'studio.graphql.copied'    => 'تم النسخ!',
+
+    'studio.delete_confirm.title'   => 'حذف المجموعة',
+    'studio.delete_confirm.message' => 'هل أنت متأكد من حذف {name}؟ هذا الإجراء لا رجعة فيه وسيحذف جميع الحقول المرتبطة.',
 
     // علامات تبويب إعدادات التطبيق
     'app_settings.tab_general'     => 'عام',
@@ -1242,6 +1246,24 @@ return [
     'workbench.template_prompt_landing'       => 'أنشئ صفحة هبوط حديثة بقسم رئيسي، وأقسام ميزات، وشهادات، ونموذج اتصال.',
     'workbench.template_prompt_crud'          => 'أنشئ واجهة CRUD كاملة بجدول إدخالات، ونموذج إنشاء/تعديل، وأزرار حذف مع تأكيد.',
     'workbench.template_prompt_portfolio'     => 'أنشئ موقع معرض أعمال بمعرض مشاريع، وصفحة "من أنا"، ونموذج اتصال.',
+
+    'workbench.autofix'                      => 'تصحيح تلقائي',
+    'workbench.build_errors'                 => 'خطأ (أخطاء) بناء',
+    'workbench.fix_errors'                   => 'تصحيح',
+    'workbench.undo_file'                    => '↩ تم التراجع عن ملف:',
+    'workbench.undo_hint'                    => 'التراجع عن آخر تغيير',
+    'workbench.file_apply'                   => 'تطبيق',
+    'workbench.file_reject'                  => 'رفض',
+    'workbench.snapshots_title'              => 'لقطات',
+    'workbench.snapshots_restore'            => 'استعادة',
+    'workbench.snapshots_empty'              => 'لا توجد لقطات',
+    'workbench.snapshots_created'            => 'تم إنشاء اللقطة',
+    'workbench.snapshots_restored'           => 'تمت استعادة اللقطة',
+    'workbench.upload_title'                 => 'رفع صورة',
+    'workbench.upload_pending'               => 'جاري رفع الصور...',
+    'workbench.upload_drop'                  => 'اسحب صورة أو انقر',
+    'workbench.history_loading'              => 'جارٍ تحميل السجل...',
+    'workbench.cache_installing'             => 'جارٍ تخزين التبعيات مؤقتاً...',
 
 
     // Studio — Schema Builder
