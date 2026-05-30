@@ -8,6 +8,7 @@ use App\Entity\Field;
 use App\Entity\Project;
 use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,6 +21,7 @@ class StudioController extends InertiaController
     public function __construct(
         private EntityManagerInterface $em,
         private ProjectRepository $projectRepository,
+        private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
 
     /**
@@ -193,7 +195,11 @@ PROMPT;
 
             return $this->json(['error' => 'Échec du parsing JSON de la réponse IA'], 500);
         } catch (\Throwable $e) {
-            return $this->json(['error' => $e->getMessage()], 500);
+            $this->logger->error('AI schema generation failed', [
+                'exception' => $e,
+                'project'   => $uuid,
+            ]);
+            return $this->json(['error' => 'Échec de la génération IA. Réessayez.'], 500);
         }
     }
 
