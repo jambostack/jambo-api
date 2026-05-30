@@ -9,14 +9,13 @@ use App\Repository\AppSettingsRepository;
 use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
-use Symfony\AI\Platform\PlatformInterface;
-use Symfony\AI\Platform\Message\Message;
-use Symfony\AI\Platform\Message\MessageBag;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 #[IsGranted('IS_AUTHENTICATED_FULLY')]
 class StudioController extends InertiaController
@@ -25,10 +24,7 @@ class StudioController extends InertiaController
         private EntityManagerInterface $em,
         private ProjectRepository $projectRepository,
         private AppSettingsRepository $appSettingsRepository,
-        private PlatformInterface $openaiPlatform,
-        private PlatformInterface $anthropicPlatform,
-        private PlatformInterface $ollamaPlatform,
-        private PlatformInterface $deepseekPlatform,
+        private HttpClientInterface $httpClient,
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
 
@@ -161,21 +157,19 @@ You are a CMS schema designer. Given a user's description, generate a list of co
 - Maximum 5 collections. Maximum 10 fields per collection.
 PROMPT;
 
-        [$platform, $model] = $this->resolveAiPlatform();
+        [$provider, $apiKey, $model, $endpoint] = $this->resolveAiConfig();
 
-        if ($platform === null) {
+        if ($provider === null) {
             // Fallback: génération basée sur des règles (pas d'IA configurée)
             return $this->json($this->ruleBasedSchema($prompt));
         }
 
         try {
-            $messages = new MessageBag(
-                Message::forSystem($systemPrompt),
-                Message::ofUser($prompt),
-            );
-            $result = $platform->invoke($model ?? 'gpt-4o', $messages);
+            $content = $this->callAiApi($provider, $apiKey, $model, $endpoint, [
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user', 'content' => $prompt],
+            ]);
 
-            $content = $result->asText();
             // Extraire le JSON (le modèle peut wrapper dans ```json)
             if (preg_match('/\{[\s\S]*\}/', $content, $m)) {
                 $data = json_decode($m[0], true);
@@ -255,8 +249,8 @@ text, longtext, richtext, slug, email, password, number, decimal, boolean, date,
 $context
 PROMPT;
 
-        [$platform, $model] = $this->resolveAiPlatform();
-        if ($platform === null) {
+        [$provider, $apiKey, $model, $endpoint] = $this->resolveAiConfig();
+        if ($provider === null) {
             // Fallback: utiliser ruleBasedSchema pour générer, puis répondre textuellement
             $schema = $this->ruleBasedSchema($prompt);
             $names = array_map(fn ($c) => $c['name'], $schema['collections'] ?? []);
@@ -267,19 +261,15 @@ PROMPT;
         }
 
         try {
-            // Construire les messages pour le provider IA avec MessageBag
-            $msgs = [Message::forSystem($systemPrompt)];
+            // Construire les messages pour le provider IA
+            $msgs = [['role' => 'system', 'content' => $systemPrompt]];
             foreach ($history as $h) {
                 $role = ($h['role'] === 'assistant' || $h['role'] === 'user') ? $h['role'] : 'user';
-                $msgs[] = $role === 'assistant'
-                    ? Message::ofAssistant((string) $h['content'])
-                    : Message::ofUser((string) $h['content']);
+                $msgs[] = ['role' => $role, 'content' => (string) $h['content']];
             }
-            $msgs[] = Message::ofUser($prompt);
-            $bag = new MessageBag(...$msgs);
+            $msgs[] = ['role' => 'user', 'content' => $prompt];
 
-            $result = $platform->invoke($model ?? 'gpt-4o', $bag);
-            $content = $result->asText();
+            $content = $this->callAiApi($provider, $apiKey, $model, $endpoint, $msgs);
 
             // Extraire le JSON éventuel de la réponse
             $collections = null;
@@ -328,22 +318,85 @@ PROMPT;
         }
     }
 
-    /** Résout le provider IA configuré (premier activé). */
-    private function resolveAiPlatform(): array
+    /**
+     * Résout le premier provider IA activé depuis AppSettings (DB).
+     * Retourne [providerName, apiKey, model, endpoint] ou [null, null, null, null].
+     */
+    private function resolveAiConfig(): array
     {
         $config = $this->appSettingsRepository->getOrCreate()->aiProviders ?? [];
-        $candidates = [
-            'openai'    => [$this->openaiPlatform,    $config['openai']['model']    ?? 'gpt-4o'],
-            'anthropic' => [$this->anthropicPlatform, $config['anthropic']['model'] ?? 'claude-sonnet-4-6'],
-            'deepseek'  => [$this->deepseekPlatform,  $config['deepseek']['model']  ?? 'deepseek-chat'],
-            'ollama'    => [$this->ollamaPlatform,     $config['ollama']['model']    ?? 'llama3.2'],
+
+        $providers = [
+            'openai' => [
+                'key'      => $config['openai']['key'] ?? '',
+                'model'    => $config['openai']['model'] ?? 'gpt-4o',
+                'endpoint' => 'https://api.openai.com/v1/chat/completions',
+            ],
+            'anthropic' => [
+                'key'      => $config['anthropic']['key'] ?? '',
+                'model'    => $config['anthropic']['model'] ?? 'claude-sonnet-4-6',
+                'endpoint' => 'https://api.anthropic.com/v1/messages',
+            ],
+            'deepseek' => [
+                'key'      => $config['deepseek']['key'] ?? '',
+                'model'    => $config['deepseek']['model'] ?? 'deepseek-chat',
+                'endpoint' => 'https://api.deepseek.com/chat/completions',
+            ],
+            'ollama' => [
+                'key'      => '',
+                'model'    => $config['ollama']['model'] ?? 'llama3.2',
+                'endpoint' => ($config['ollama']['url'] ?? 'http://localhost:11434') . '/v1/chat/completions',
+            ],
         ];
-        foreach ($candidates as $name => [$platform, $model]) {
-            if (!empty($config[$name]['enabled'])) {
-                return [$platform, $model];
+
+        foreach ($providers as $name => $cfg) {
+            if (!empty($config[$name]['enabled']) && ($cfg['key'] !== '' || $name === 'ollama')) {
+                return [$name, $cfg['key'], $cfg['model'], $cfg['endpoint']];
             }
         }
-        return [null, null];
+
+        return [null, null, null, null];
+    }
+
+    /**
+     * Appelle l'API du provider IA avec les messages donnés.
+     * Utilise HttpClientInterface avec la clé API depuis AppSettings (DB).
+     */
+    private function callAiApi(string $provider, string $apiKey, string $model, string $endpoint, array $messages): string
+    {
+        $headers = ['Content-Type' => 'application/json'];
+
+        if ($provider === 'anthropic') {
+            $headers['x-api-key'] = $apiKey;
+            $headers['anthropic-version'] = '2023-06-01';
+            // Anthropic utilise un format différent
+            $systemMsg = '';
+            $bodyMessages = [];
+            foreach ($messages as $m) {
+                if ($m['role'] === 'system') { $systemMsg = $m['content']; continue; }
+                $bodyMessages[] = ['role' => $m['role'], 'content' => $m['content']];
+            }
+            $body = ['model' => $model, 'max_tokens' => 2048, 'messages' => $bodyMessages];
+            if ($systemMsg !== '') $body['system'] = $systemMsg;
+        } else {
+            $headers['Authorization'] = 'Bearer ' . $apiKey;
+            $body = ['model' => $model, 'messages' => $messages, 'temperature' => 0.7];
+        }
+
+        $response = $this->httpClient->request('POST', $endpoint, [
+            'headers' => $headers,
+            'json' => $body,
+            'timeout' => 60,
+        ]);
+
+        $data = $response->toArray();
+
+        // Extraire le contenu selon le format du provider
+        if ($provider === 'anthropic') {
+            return $data['content'][0]['text'] ?? '';
+        }
+        // OpenAI / DeepSeek / Ollama (format compatible OpenAI)
+        return $data['choices'][0]['message']['content'] ?? '';
     }
 
     /** Schema basé sur des règles (fallback sans IA). */
