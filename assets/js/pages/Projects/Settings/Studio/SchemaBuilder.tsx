@@ -423,6 +423,24 @@ export default function SchemaBuilder({ project }: { project: Project }) {
         .sb-root { display:flex; flex-direction:column; gap:12px; height:calc(100vh - 180px); min-height:0; }
         .sb-root * { box-sizing:border-box; }
 
+        /* Theme variables — inherit from app, fallback values for Studio */
+        .sb-root {
+          --studio-bg: var(--background, #0b0f0d);
+          --studio-surface: var(--card, #111714);
+          --studio-raised: var(--muted, #171d19);
+          --studio-border: var(--border, rgba(255,255,255,.06));
+          --studio-border-active: color-mix(in oklch, var(--primary, #2fcf8f) 25%, transparent);
+          --studio-text: var(--foreground, #dde4df);
+          --studio-text-dim: color-mix(in oklch, var(--foreground, #dde4df) 60%, transparent);
+          --studio-text-muted: color-mix(in oklch, var(--foreground, #dde4df) 40%, transparent);
+          --studio-accent: var(--primary, #2fcf8f);
+          --studio-accent-dim: color-mix(in oklch, var(--primary, #2fcf8f) 15%, transparent);
+          --studio-red: var(--destructive, #f87171);
+          --studio-amber: #f7b955;
+          --studio-mono: 'JetBrains Mono', ui-monospace, monospace;
+          --studio-serif: 'Newsreader', 'Cormorant Garamond', Georgia, serif;
+        }
+
         /* ── HEADER ── */
         .sb-bar { display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap; flex-shrink:0; }
         .sb-bar h2 { font-family:var(--studio-serif); font-size:18px; font-weight:500; margin:0; color:var(--studio-text); }
@@ -488,8 +506,8 @@ export default function SchemaBuilder({ project }: { project: Project }) {
         /* ── RESPONSIVE BREAKPOINTS ── */
         @media (max-width: 1024px) {
           .sb-root { height:calc(100dvh - 100px); gap:8px; }
+          .sb-grid-wrapper { display:none!important; }
           .sb-sidebar, .sb-right-panel { display:none!important; }
-          .sb-grid-wrapper { flex-direction:column; }
           .sb-bottom-bar { display:block; }
           .sb-mobile-content { display:block; }
           .sb-bar h2 { font-size:16px; }
@@ -506,6 +524,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
           .sb-actions > * { flex:1; }
         }
         @media (min-width: 1025px) {
+          .sb-grid-wrapper { display:flex; }
           .sb-mobile-content { display:none; }
           .sb-bottom-bar { display:none; }
         }
