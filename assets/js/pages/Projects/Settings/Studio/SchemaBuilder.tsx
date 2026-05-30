@@ -14,7 +14,8 @@ import {
   AtSign, Link, Lock, Palette, Image, GitBranch, Code2, FileText, X, Layers,
   MessageSquare, Send, Bot, User, Check,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
-  FolderOpen, Pencil, Sparkles
+  FolderOpen, Pencil, Sparkles,
+  Users, Lock, UserPlus, Shield
 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 import type { Project } from '@/types/index.d';
@@ -40,6 +41,7 @@ interface ServerCollection {
   fields: Array<{ name: string; slug: string; type: string; isRequired: boolean; options?: any; order?: number }>;
 }
 interface ChatMessage { role: 'user' | 'assistant' | 'system'; content: string; schema?: Array<{ name: string; slug: string; description: string; isSingleton: boolean; fields: Array<{ name: string; slug: string; type: string; isRequired: boolean }> }>; }
+interface EndUserFieldData { id: number; name: string; slug: string; type: string; required: boolean; order: number; is_system: boolean; }
 
 function slugify(s: string) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
 
@@ -208,6 +210,84 @@ function DesktopRightPanel({
   );
 }
 
+/* ══════════════════════════ END USER EDITOR ══════════════════════════ */
+function EndUserEditor({
+  fields, loading, onAdd, onUpdate, onDelete, newField, setNewField,
+}: {
+  fields: EndUserFieldData[]; loading: boolean;
+  onAdd: () => void; onUpdate: (slug: string, data: Record<string, any>) => void;
+  onDelete: (slug: string) => void;
+  newField: { name: string; type: string; isRequired: boolean };
+  setNewField: (f: { name: string; type: string; isRequired: boolean }) => void;
+}) {
+  const systemFields = fields.filter(f => f.is_system);
+  const customFields = fields.filter(f => !f.is_system);
+
+  if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:'40px' }}><Loader2 className="w-5 h-5 animate-spin" style={{ color:'var(--studio-accent)' }} /></div>;
+
+  return (
+    <div className="eue-root">
+      <style>{`
+        .eue-root { display:flex; flex-direction:column; gap:16px; overflow-y:auto; padding-bottom:16px; }
+        .eue-section-title { font-size:9px; font-family:var(--studio-mono); text-transform:uppercase; letter-spacing:.08em; color:var(--studio-text-muted); margin:0 0 6px; display:flex; align-items:center; gap:6px; }
+        .eue-section-title svg { width:12px; height:12px; }
+        .eue-field-row { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--studio-border); border-radius:7px; background:var(--studio-raised); margin-bottom:4px; }
+        .eue-field-row.locked { opacity:.6; background:var(--studio-surface); }
+        .eue-field-icon { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:11px; }
+        .eue-field-name { flex:1; font-size:12px; font-weight:600; color:var(--studio-text); }
+        .eue-field-type { font-family:var(--studio-mono); font-size:10px; color:var(--studio-text-muted); }
+        .eue-field-badge { font-size:9px; padding:2px 6px; border-radius:999px; font-weight:600; }
+        .eue-add-row { display:flex; gap:6px; align-items:center; margin-top:8px; }
+        .eue-add-row input, .eue-add-row select { height:30px; font-size:11px; border-radius:6px; padding:0 8px; background:var(--studio-bg); border:1px solid var(--studio-border); color:var(--studio-text); outline:none; }
+        .eue-add-row input:focus, .eue-add-row select:focus { border-color:var(--studio-border-active); }
+        .eue-add-row input { flex:1; min-width:0; }
+        .eue-add-row select { width:110px; flex-shrink:0; }
+      `}</style>
+
+      {/* System fields */}
+      <div>
+        <h4 className="eue-section-title"><Shield className="w-3 h-3" style={{color:'var(--studio-amber)'}} />Champs système (protégés)</h4>
+        {systemFields.map(f => (
+          <div key={f.slug} className="eue-field-row locked">
+            <div className="eue-field-icon" style={{ background:'rgba(247,185,85,.10)', color:'var(--studio-amber)' }}><Lock className="w-3 h-3" /></div>
+            <span className="eue-field-name">{f.name}</span>
+            <span className="eue-field-type">[{f.type}]</span>
+            <span className="eue-field-badge" style={{ background:'var(--studio-border)', color:'var(--studio-text-muted)' }}>système</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Custom fields */}
+      <div>
+        <h4 className="eue-section-title"><FolderOpen className="w-3 h-3" />Champs personnalisés · {customFields.length}</h4>
+        {customFields.map(f => (
+          <div key={f.slug} className="eue-field-row">
+            <div className="eue-field-icon" style={{ background:'rgba(47,207,143,.10)', color:'var(--studio-accent)' }}><Pencil className="w-3 h-3" /></div>
+            <span className="eue-field-name">{f.name}</span>
+            <span className="eue-field-type">[{f.type}]</span>
+            {f.required && <span className="eue-field-badge" style={{ background:'var(--studio-accent-dim)', color:'var(--studio-accent)' }}>requis</span>}
+            <button onClick={() => onDelete(f.slug)} style={{ background:'none',border:'none',cursor:'pointer',padding:'4px',opacity:.5 }}><Trash2 className="w-3.5 h-3.5" style={{color:'var(--studio-red)'}} /></button>
+          </div>
+        ))}
+        {customFields.length === 0 && <p style={{ fontSize:'11px', color:'var(--studio-text-muted)', padding:'8px 0' }}>Aucun champ personnalisé.</p>}
+
+        {/* Add field */}
+        <div className="eue-add-row">
+          <input placeholder="Nom du champ" value={newField.name} onChange={e => setNewField({...newField, name:e.target.value})} onKeyDown={e => e.key==='Enter' && onAdd()} />
+          <select value={newField.type} onChange={e => setNewField({...newField, type:e.target.value})}>
+            {FIELD_TYPES.map(ft => (<option key={ft.type} value={ft.type}>{ft.label}</option>))}
+          </select>
+          <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+            <Switch checked={newField.isRequired} onCheckedChange={v => setNewField({...newField, isRequired:v})} />
+            <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>Requis</span>
+          </div>
+          <Button size="sm" onClick={onAdd} disabled={!newField.name.trim()} style={{ height:'30px', fontSize:'10px', background:'var(--studio-accent)', color:'#000', whiteSpace:'nowrap' }}><Plus className="w-3 h-3 mr-1" />Ajouter</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════════════════ MAIN SCHEMA BUILDER ══════════════════════════ */
 export default function SchemaBuilder({ project }: { project: Project }) {
   const t = useTranslation();
@@ -220,8 +300,16 @@ export default function SchemaBuilder({ project }: { project: Project }) {
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [mobileTab, setMobileTab] = useState<MobileTab>('editor');
 
+  // ── EndUser fields ──
+  const [endUserFields, setEndUserFields] = useState<EndUserFieldData[]>([]);
+  const [endUserLoading, setEndUserLoading] = useState(false);
+  const [endUserNew, setEndUserNew] = useState({ name: '', type: 'text', isRequired: false });
+  const [endUserEditId, setEndUserEditId] = useState<number | null>(null);
+  const [endUserEditName, setEndUserEditName] = useState('');
+
   const collectionListRef = useRef<HTMLDivElement>(null);
-  const current = selectedIdx !== null ? collections[selectedIdx] : null;
+  const current = selectedIdx !== null && selectedIdx >= 0 ? collections[selectedIdx] : null;
+  const isEndUsers = selectedIdx === -1;
   const untitled = t('studio.schema.untitled');
   const sidebarW = sidebarOpen ? 170 : 0;
   const rightW = rightPanelOpen ? 280 : 0;
@@ -247,6 +335,19 @@ export default function SchemaBuilder({ project }: { project: Project }) {
     return () => { cancelled = true; };
   }, [project.uuid]);
 
+  /* ── Load EndUser fields ── */
+  const loadEndUserFields = useCallback(async () => {
+    setEndUserLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${project.uuid}/end-users/fields`);
+      if (!res.ok) throw new Error('Failed');
+      const d = await res.json() as { data: EndUserFieldData[] };
+      setEndUserFields(d.data ?? []);
+    } catch {} finally { setEndUserLoading(false); }
+  }, [project.uuid]);
+
+  useEffect(() => { loadEndUserFields(); }, [loadEndUserFields]);
+
   /* ── CRUD ── */
   const addCollection = useCallback(() => {
     setCollections(prev => [...prev, { key: `col_${Date.now()}`, name: '', slug: '', description: '', isSingleton: false, fields: [] }]);
@@ -260,6 +361,32 @@ export default function SchemaBuilder({ project }: { project: Project }) {
   function removeField(colIdx: number, fKey: string) { setCollections(prev => prev.map((c, i) => i === colIdx ? { ...c, fields: c.fields.filter(f => f.key !== fKey) } : c)); }
   function duplicateField(colIdx: number, fKey: string) { const col = collections[colIdx]; const f = col?.fields.find(x => x.key === fKey); if (!f) return; setCollections(prev => prev.map((c, i) => i === colIdx ? { ...c, fields: [...c.fields, { ...f, key: `fld_${Date.now()}`, name: `${f.name} (copy)`, slug: `${f.slug}_copy` }] } : c)); }
   function handleApplySchema(newCols: SchemaCollection[]) { setCollections(prev => [...prev, ...newCols]); if (selectedIdx === null && newCols.length > 0) setSelectedIdx(collections.length); }
+  /* ── EndUser field CRUD ── */
+  async function addEndUserField() {
+    if (!endUserNew.name.trim()) return;
+    try {
+      const res = await fetch(`/api/projects/${project.uuid}/end-users/fields`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: endUserNew.name, type: endUserNew.type, is_required: endUserNew.isRequired }),
+      });
+      if (res.ok) { await loadEndUserFields(); setEndUserNew({ name: '', type: 'text', isRequired: false }); }
+    } catch {}
+  }
+  async function updateEndUserField(slug: string, data: Record<string, any>) {
+    try {
+      await fetch(`/api/projects/${project.uuid}/end-users/fields/${slug}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      });
+      await loadEndUserFields();
+    } catch {}
+  }
+  async function deleteEndUserField(slug: string) {
+    try {
+      await fetch(`/api/projects/${project.uuid}/end-users/fields/${slug}`, { method: 'DELETE' });
+      await loadEndUserFields();
+    } catch {}
+  }
+
   async function handleSave() { setSaving(true); try { await router.post(`/api/projects/${project.uuid}/studio/schema`, { collections }, { onSuccess: () => setSaving(false), onError: () => setSaving(false) }); } catch { setSaving(false); } }
   function generatePreview() { if (!current) return; setPreview([`▸ ${current.name || untitled}`, `  slug: ${current.slug || '(auto)'}  ·  ${current.isSingleton ? 'singleton' : 'collection'}`, `  ${current.fields.length} champs:`, ...current.fields.map((f, i) => `  ${i + 1}. ${f.name || '?'} [${f.type}] ${f.isRequired ? '• requis' : ''}`)].join('\n')); }
   function selectNext() { if (selectedIdx !== null && selectedIdx < collections.length - 1) setSelectedIdx(selectedIdx + 1); }
@@ -389,13 +516,34 @@ export default function SchemaBuilder({ project }: { project: Project }) {
               ))}
               {collections.length === 0 && <p style={{ fontSize: '11px', color: 'var(--studio-text-muted)', textAlign: 'center', padding: '16px 6px' }}>Vide</p>}
             </div>
+
+            {/* ── EndUsers card (always visible) ── */}
+            <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--studio-border)' }}>
+              <button
+                onClick={() => setSelectedIdx(-1)}
+                className={`sb-col-item${isEndUsers ? ' sb-active' : ''}`}
+                style={{ width: '100%', textAlign: 'left', background: isEndUsers ? 'var(--studio-accent-dim)' : 'var(--studio-surface)', border: isEndUsers ? '1px solid var(--studio-border-active)' : '1px solid var(--studio-border)' }}
+              >
+                <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(87,157,219,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Users className="w-3.5 h-3.5" style={{ color: '#579ddb' }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="col-name">Utilisateurs</div>
+                  <div className="col-meta">{endUserFields.length} champs · auth JWT</div>
+                </div>
+              </button>
+            </div>
           </>)}
         </div>
 
-        {/* Desktop Editor (same as before, unchanged) */}
+        {/* Desktop Editor */}
         <div className="sb-editor desktop-editor">
           <style>{`@media(max-width:1024px){.desktop-editor{display:none!important}}`}</style>
-          {renderEditor(current, selectedIdx, collections, untitled, t, selectPrev, selectNext, addCollection, updateCollection, removeCollection, addField, updateField, removeField, duplicateField, generatePreview)}
+          {isEndUsers ? (
+            <EndUserEditor fields={endUserFields} loading={endUserLoading} onAdd={addEndUserField} onUpdate={updateEndUserField} onDelete={deleteEndUserField} newField={endUserNew} setNewField={setEndUserNew} />
+          ) : (
+            renderEditor(current, selectedIdx, collections, untitled, t, selectPrev, selectNext, addCollection, updateCollection, removeCollection, addField, updateField, removeField, duplicateField, generatePreview)
+          )}
         </div>
 
         <div className={`sb-right-panel${rightPanelOpen ? '' : ' collapsed'}`} style={{ width: rightW > 0 ? rightW + 'px' : undefined }}>
@@ -413,9 +561,14 @@ export default function SchemaBuilder({ project }: { project: Project }) {
             onSelect={(idx) => { setSelectedIdx(idx); setMobileTab('editor'); }}
             onDelete={removeCollection}
             onAdd={addCollection}
+            onSelectEndUsers={() => { setSelectedIdx(-1); setMobileTab('editor'); }}
+            isEndUsers={isEndUsers}
+            endUserFieldCount={endUserFields.length}
           />
         )}
-        {mobileTab === 'editor' && (
+        {mobileTab === 'editor' && (isEndUsers ? (
+          <EndUserEditor fields={endUserFields} loading={endUserLoading} onAdd={addEndUserField} onUpdate={updateEndUserField} onDelete={deleteEndUserField} newField={endUserNew} setNewField={setEndUserNew} />
+        ) : (
           <MobileEditorView
             current={current} selectedIdx={selectedIdx} total={collections.length}
             untitled={untitled} t={t}
@@ -425,7 +578,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
             addField={addField} updateField={updateField}
             removeField={removeField} duplicateField={duplicateField}
           />
-        )}
+        ))}
         {mobileTab === 'chat' && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
             <DesktopRightPanel
@@ -532,10 +685,12 @@ function renderEditor(
 /* ═══════════════ MOBILE COLLECTIONS VIEW ═══════════════ */
 function MobileCollectionsView({
   collections, selectedIdx, untitled,
-  onSelect, onDelete, onAdd,
+  onSelect, onDelete, onAdd, onSelectEndUsers, isEndUsers,
+  endUserFieldCount,
 }: {
   collections: SchemaCollection[]; selectedIdx: number | null; untitled: string;
   onSelect: (idx: number) => void; onDelete: (idx: number) => void; onAdd: () => void;
+  onSelectEndUsers: () => void; isEndUsers: boolean; endUserFieldCount: number;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingBottom: '16px' }}>
@@ -552,6 +707,16 @@ function MobileCollectionsView({
         </div>
       )}
       <div className="sb-mobile-col-list">
+        {/* ── EndUsers card (always first in mobile) ── */}
+        <div className={`sb-mobile-col-card${isEndUsers ? ' sb-active' : ''}`} onClick={onSelectEndUsers} style={{ borderColor: isEndUsers ? 'var(--studio-border-active)' : undefined }}>
+          <div className="col-icon" style={{ background: 'rgba(87,157,219,.15)', color: '#579ddb' }}><Users className="w-4 h-4" /></div>
+          <div className="col-info">
+            <div className="cname">Utilisateurs</div>
+            <div className="cmeta">{endUserFieldCount} champs · auth JWT</div>
+          </div>
+          <ChevronRight className="w-4 h-4" style={{ color: 'var(--studio-text-muted)' }} />
+        </div>
+
         {collections.map((col, idx) => (
           <div key={col.key} className={`sb-mobile-col-card${idx === selectedIdx ? ' sb-active' : ''}`} onClick={() => onSelect(idx)}>
             <div className="col-icon"><FolderOpen className="w-4 h-4" /></div>
