@@ -54,46 +54,57 @@ class SiteHostResolver implements EventSubscriberInterface
         $uuid = $siteDomain->workbenchProject->uuid->toRfc4122();
         $path = $event->getRequest()->getPathInfo();
 
-        $content = $this->resolveContent($uuid, $path);
+        [$content, $resolvedPath] = $this->resolveContent($uuid, $path);
 
         if ($content === null) {
             $event->setResponse(new Response('Not Found', 404));
             return;
         }
 
-        $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        // Le MIME est dérivé du fichier résolu (ex: index.html), pas du path de la requête.
+        // Sans cela, / et /some/route serviraient du application/octet-stream au lieu de text/html.
+        $ext  = strtolower(pathinfo($resolvedPath, PATHINFO_EXTENSION));
         $mime = self::MIME_TYPES[$ext] ?? 'application/octet-stream';
+        $isHtml = $ext === 'html';
 
         $response = new Response($content, 200, [
             'Content-Type'  => $mime,
-            'Cache-Control' => $ext === 'html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+            'Cache-Control' => $isHtml ? 'no-cache' : 'public, max-age=3600',
         ]);
 
         $event->setResponse($response);
     }
 
-    private function resolveContent(string $uuid, string $path): ?string
+    /**
+     * Résout le contenu à servir pour un path donné.
+     *
+     * @return array{0: ?string, 1: string} [content, resolvedFilePath]
+     *         resolvedFilePath est le chemin du fichier effectivement servi (pour dériver le MIME type).
+     */
+    private function resolveContent(string $uuid, string $path): array
     {
         // /  -> index.html
         if ($path === '/' || $path === '') {
-            return $this->storage->readFile($uuid, 'index.html');
+            $content = $this->storage->readFile($uuid, 'index.html');
+            return [$content, 'index.html'];
         }
 
         // Essayer le chemin tel quel
         $relative = ltrim($path, '/');
         $content  = $this->storage->readFile($uuid, $relative);
         if ($content !== null) {
-            return $content;
+            return [$content, $relative];
         }
 
         // /some/path/  ->  /some/path/index.html
         $withIndex = rtrim($relative, '/') . '/index.html';
         $content   = $this->storage->readFile($uuid, $withIndex);
         if ($content !== null) {
-            return $content;
+            return [$content, $withIndex];
         }
 
-        // Fallback SPA : index.html pour toute route non trouvee
-        return $this->storage->readFile($uuid, 'index.html');
+        // Fallback SPA : index.html pour toute route non trouvée
+        $content = $this->storage->readFile($uuid, 'index.html');
+        return [$content, 'index.html'];
     }
 }
