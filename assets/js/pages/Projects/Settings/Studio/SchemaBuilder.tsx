@@ -261,12 +261,28 @@ function EndUserEditor({
       <div>
         <h4 className="eue-section-title"><FolderOpen className="w-3 h-3" />Champs personnalisés · {customFields.length}</h4>
         {customFields.map(f => (
-          <div key={f.slug} className="eue-field-row">
+          <div key={f.slug} className="eue-field-row" style={{ flexWrap:'wrap', gap:'6px', alignItems:'center' }}>
             <div className="eue-field-icon" style={{ background:'rgba(47,207,143,.10)', color:'var(--studio-accent)' }}><Pencil className="w-3 h-3" /></div>
-            <span className="eue-field-name">{f.name}</span>
-            <span className="eue-field-type">[{f.type}]</span>
-            {f.required && <span className="eue-field-badge" style={{ background:'var(--studio-accent-dim)', color:'var(--studio-accent)' }}>requis</span>}
-            <button onClick={() => onDelete(f.slug)} style={{ background:'none',border:'none',cursor:'pointer',padding:'4px',opacity:.5 }}><Trash2 className="w-3.5 h-3.5" style={{color:'var(--studio-red)'}} /></button>
+            <input
+              value={f.name}
+              onChange={e => onUpdate(f.slug, { name: e.target.value })}
+              style={{ flex:1, minWidth:'100px', height:'28px', fontSize:'11px', background:'var(--studio-bg)', border:'1px solid var(--studio-border)', borderRadius:'5px', color:'var(--studio-text)', padding:'0 6px', outline:'none' }}
+              placeholder="Nom"
+            />
+            <select
+              value={f.type}
+              onChange={e => onUpdate(f.slug, { type: e.target.value })}
+              style={{ width:'100px', height:'28px', fontSize:'10px', background:'var(--studio-bg)', border:'1px solid var(--studio-border)', borderRadius:'5px', color:'var(--studio-text)', outline:'none', flexShrink:0 }}
+            >
+              {FIELD_TYPES.map(ft => (<option key={ft.type} value={ft.type}>{ft.label}</option>))}
+            </select>
+            <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
+              <Switch checked={f.required} onCheckedChange={v => onUpdate(f.slug, { is_required: v })} />
+              <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>Requis</span>
+            </div>
+            <button onClick={() => onDelete(f.slug)} style={{ background:'none',border:'none',cursor:'pointer',padding:'4px',opacity:.5,flexShrink:0 }}>
+              <Trash2 className="w-3.5 h-3.5" style={{color:'var(--studio-red)'}} />
+            </button>
           </div>
         ))}
         {customFields.length === 0 && <p style={{ fontSize:'11px', color:'var(--studio-text-muted)', padding:'8px 0' }}>Aucun champ personnalisé.</p>}
@@ -304,8 +320,6 @@ export default function SchemaBuilder({ project }: { project: Project }) {
   const [endUserFields, setEndUserFields] = useState<EndUserFieldData[]>([]);
   const [endUserLoading, setEndUserLoading] = useState(false);
   const [endUserNew, setEndUserNew] = useState({ name: '', type: 'text', isRequired: false });
-  const [endUserEditId, setEndUserEditId] = useState<number | null>(null);
-  const [endUserEditName, setEndUserEditName] = useState('');
 
   const collectionListRef = useRef<HTMLDivElement>(null);
   const current = selectedIdx !== null && selectedIdx >= 0 ? collections[selectedIdx] : null;
@@ -388,7 +402,16 @@ export default function SchemaBuilder({ project }: { project: Project }) {
   }
 
   async function handleSave() { setSaving(true); try { await router.post(`/api/projects/${project.uuid}/studio/schema`, { collections }, { onSuccess: () => setSaving(false), onError: () => setSaving(false) }); } catch { setSaving(false); } }
-  function generatePreview() { if (!current) return; setPreview([`▸ ${current.name || untitled}`, `  slug: ${current.slug || '(auto)'}  ·  ${current.isSingleton ? 'singleton' : 'collection'}`, `  ${current.fields.length} champs:`, ...current.fields.map((f, i) => `  ${i + 1}. ${f.name || '?'} [${f.type}] ${f.isRequired ? '• requis' : ''}`)].join('\n')); }
+  function generatePreview() {
+    if (isEndUsers) {
+      const lines = [`▸ Utilisateurs`, `  champs personnalisés : ${endUserFields.filter(f => !f.is_system).length}`, `  champs système : ${endUserFields.filter(f => f.is_system).length}`];
+      endUserFields.forEach((f, i) => { lines.push(`  ${i + 1}. ${f.name} [${f.type}] ${f.required ? '• requis' : '• optionnel'} ${f.is_system ? '🔒' : ''}`); });
+      setPreview(lines.join('\n'));
+      return;
+    }
+    if (!current) return;
+    setPreview([`▸ ${current.name || untitled}`, `  slug: ${current.slug || '(auto)'}  ·  ${current.isSingleton ? 'singleton' : 'collection'}`, `  ${current.fields.length} champs:`, ...current.fields.map((f, i) => `  ${i + 1}. ${f.name || '?'} [${f.type}] ${f.isRequired ? '• requis' : ''}`)].join('\n'));
+  }
   function selectNext() { if (selectedIdx !== null && selectedIdx < collections.length - 1) setSelectedIdx(selectedIdx + 1); }
   function selectPrev() { if (selectedIdx !== null && selectedIdx > 0) setSelectedIdx(selectedIdx - 1); }
 
