@@ -17,9 +17,21 @@ interface Props {
 export default function DeployDrawer({ open, onClose, projectUuid, workbenchUuid, publishedAt }: Props) {
     const t = useTranslation();
 
-    const handleExport = () => {
+    const handleExport = async () => {
         if (!workbenchUuid) { toast.error(t('workbench.deploy.no_files')); return; }
-        window.location.href = `/api/projects/${projectUuid}/workbench/${workbenchUuid}/export`;
+        try {
+            const res = await fetch(`/api/projects/${projectUuid}/workbench/${workbenchUuid}/export`);
+            if (!res.ok) throw new Error('Export failed');
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = res.headers.get('Content-Disposition')?.match(/filename="?([^"]+)"?/)?.[1] ?? 'export.zip';
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            toast.error(t('workbench.sites.publish_error'));
+        }
     };
 
     return (
