@@ -1195,4 +1195,28 @@ return [
     'workbench.errors.domain_not_found'   => 'Domain not found',
     'workbench.errors.files_too_large'    => 'Files too large (max %max% MB)',
 
+    // Email/SMTP
+    'workbench.mailer.title'       => 'SMTP Configuration',
+    'workbench.mailer.host'        => 'SMTP Host',
+    'workbench.mailer.port'        => 'Port',
+    'workbench.mailer.username'    => 'Username',
+    'workbench.mailer.password'    => 'Password',
+    'workbench.mailer.encryption'  => 'Encryption',
+    'workbench.mailer.from_email'  => 'From Email',
+    'workbench.mailer.from_name'   => 'From Name',
+    'workbench.mailer.enabled'     => 'Enabled',
+    'workbench.mailer.test'        => 'Test Configuration',
+    'workbench.mailer.test_sent'   => 'Test email sent!',
+    'workbench.mailer.test_error'  => 'Test email failed',
+
+    // Captcha
+    'workbench.captcha.placeholder' => 'Enter the code',
+    'workbench.captcha.invalid'     => 'Invalid captcha code',
+
+    // Email errors
+    'workbench.errors.mailer_not_configured' => 'Mailer not configured for this project',
+    'workbench.errors.captcha_invalid'       => 'Captcha expired or invalid',
+    'workbench.errors.captcha_required'      => 'Captcha required',
+    'workbench.errors.too_many_requests'     => 'Too many requests. Please try again later.',
+
 ];

@@ -1172,4 +1172,28 @@ return [
     'workbench.errors.domain_not_found'   => 'النطاق غير موجود',
     'workbench.errors.files_too_large'    => 'الملفات كبيرة جداً (الحد الأقصى %max% ميغابايت)',
 
+    // Email/SMTP
+    'workbench.mailer.title'       => 'إعدادات SMTP',
+    'workbench.mailer.host'        => 'خادم SMTP',
+    'workbench.mailer.port'        => 'المنفذ',
+    'workbench.mailer.username'    => 'اسم المستخدم',
+    'workbench.mailer.password'    => 'كلمة المرور',
+    'workbench.mailer.encryption'  => 'التشفير',
+    'workbench.mailer.from_email'  => 'البريد المرسل',
+    'workbench.mailer.from_name'   => 'اسم المرسل',
+    'workbench.mailer.enabled'     => 'مفعل',
+    'workbench.mailer.test'        => 'اختبار الإعدادات',
+    'workbench.mailer.test_sent'   => 'تم إرسال البريد التجريبي!',
+    'workbench.mailer.test_error'  => 'فشل الإرسال',
+
+    // Captcha
+    'workbench.captcha.placeholder' => 'أدخل الرمز',
+    'workbench.captcha.invalid'     => 'رمز التحقق غير صالح',
+
+    // أخطاء
+    'workbench.errors.mailer_not_configured' => 'البريد غير مهيأ لهذا المشروع',
+    'workbench.errors.captcha_invalid'       => 'رمز التحقق منتهي الصلاحية',
+    'workbench.errors.captcha_required'      => 'رمز التحقق مطلوب',
+    'workbench.errors.too_many_requests'     => 'طلبات كثيرة. حاول لاحقاً.',
+
 ];

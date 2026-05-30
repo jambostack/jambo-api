@@ -126,3 +126,8 @@ services:
     App\EventSubscriber\SiteHostResolver:
         arguments:
             $reservedHostnames: '%jambo.reserved_hostnames%'
+
+    # ── Email / SMTP ───────────────────────────────────────────────────────────
+    App\Service\ProjectMailerService:
+        arguments:
+            $appSecret: '%kernel.secret%'
