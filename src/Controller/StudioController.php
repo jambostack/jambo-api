@@ -153,25 +153,7 @@ You are a CMS schema designer. Given a user's description, generate a list of co
 - Maximum 5 collections. Maximum 10 fields per collection.
 PROMPT;
 
-        // Utilise le même provider AI que le Workbench
-        $settings = $this->em->getRepository(\App\Entity\AppSettings::class)->getOrCreate();
-        $config = $settings->aiProviders ?? [];
-
-        $platform = null;
-        $model = null;
-        foreach (['openai', 'anthropic', 'deepseek', 'ollama'] as $provider) {
-            if (!empty($config[$provider]['enabled'])) {
-                $platform = match ($provider) {
-                    'openai' => new \Symfony\AI\Platform\OpenAI\OpenAIPlatform($config[$provider]['key'] ?? ''),
-                    'anthropic' => new \Symfony\AI\Platform\Anthropic\AnthropicPlatform($config[$provider]['key'] ?? ''),
-                    'deepseek' => new \Symfony\AI\Platform\DeepSeek\DeepSeekPlatform($config[$provider]['key'] ?? ''),
-                    'ollama' => new \Symfony\AI\Platform\Ollama\OllamaPlatform($config[$provider]['url'] ?? ''),
-                    default => null,
-                };
-                $model = $config[$provider]['model'] ?? null;
-                break;
-            }
-        }
+        [$platform, $model] = $this->resolveAiPlatform();
 
         if ($platform === null) {
             // Fallback: génération basée sur des règles (pas d'IA configurée)
@@ -201,6 +183,140 @@ PROMPT;
             ]);
             return $this->json(['error' => 'Échec de la génération IA. Réessayez.'], 500);
         }
+    }
+
+    /**
+     * Chat IA conversationnel pour générer/modifier le schéma de collections.
+     * Reçoit l'historique de conversation + le contexte des collections existantes.
+     */
+    #[Route('/api/projects/{uuid}/studio/ai-chat', name: 'studio_ai_chat', methods: ['POST'])]
+    public function aiChat(string $uuid, Request $request): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.manage', $project);
+
+        $body = json_decode($request->getContent(), true);
+        $prompt  = trim((string) ($body['prompt'] ?? ''));
+        $context = trim((string) ($body['context'] ?? ''));
+        $history = is_array($body['history'] ?? null) ? $body['history'] : [];
+
+        if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
+
+        $systemPrompt = <<<PROMPT
+You are a CMS schema architect. You help users design their content model by creating and modifying collections.
+
+## Rules
+- Always respond in French (the user speaks French).
+- First, acknowledge what the user asked. Then if applicable, propose a schema.
+- When proposing a schema, include it as a valid JSON object in your response, wrapped in a ```json code block.
+- The JSON must use this exact structure:
+```json
+{
+  "collections": [
+    {
+      "name": "Blog Posts",
+      "slug": "blog_posts",
+      "description": "Blog articles",
+      "isSingleton": false,
+      "fields": [
+        { "name": "Title", "slug": "title", "type": "text", "isRequired": true },
+        { "name": "Content", "slug": "content", "type": "richtext", "isRequired": true }
+      ]
+    }
+  ]
+}
+```
+
+## Field types available
+text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
+
+## Guidelines
+- Use "slug" type for URL-friendly identifiers (mark them required).
+- Use "media" for images/photos/files.
+- Use "richtext" for rich content (HTML/WYSIWYG).
+- Use "date" for dates, "datetime" for timestamps.
+- Collection names: plural for collections, singular for singletons (isSingleton: true).
+- If the user asks to modify an existing collection, reference it by name.
+- If the user asks to add fields, include the modified collection with the new fields.
+- Generate 3-5 fields per collection minimum.
+- Maximum 5 collections per response. Maximum 10 fields per collection.
+
+## Current project context
+$context
+PROMPT;
+
+        [$platform, $model] = $this->resolveAiPlatform();
+        if ($platform === null) {
+            // Fallback: utiliser ruleBasedSchema pour générer, puis répondre textuellement
+            $schema = $this->ruleBasedSchema($prompt);
+            $names = array_map(fn ($c) => $c['name'], $schema['collections'] ?? []);
+            $reply = $names === []
+                ? "Je n'ai pas pu générer de schéma pour cette demande. Peux-tu être plus précis ?"
+                : "Voici un schéma de base pour : " . implode(', ', $names) . ". Tu peux l'appliquer et le modifier manuellement.";
+            return $this->json(['reply' => $reply, 'collections' => $schema['collections'] ?? []]);
+        }
+
+        try {
+            // Construire les messages pour le provider IA
+            $messages = [['role' => 'system', 'content' => $systemPrompt]];
+            foreach ($history as $h) {
+                $role = ($h['role'] === 'assistant' || $h['role'] === 'user') ? $h['role'] : 'user';
+                $messages[] = ['role' => $role, 'content' => (string) $h['content']];
+            }
+            $messages[] = ['role' => 'user', 'content' => $prompt];
+
+            $result = $platform->chat($model ?? 'gpt-4o', $messages);
+            $content = $result->getContent();
+
+            // Extraire le JSON éventuel de la réponse
+            $collections = null;
+            if (preg_match('/```json\s*([\s\S]*?)\s*```/', $content, $m)) {
+                $data = json_decode($m[1], true);
+                if ($data && isset($data['collections'])) {
+                    $collections = $data['collections'];
+                }
+            } elseif (preg_match('/\{[\s\S]*"collections"[\s\S]*\}/', $content, $m)) {
+                // Fallback: JSON inline sans code block
+                $data = json_decode($m[0], true);
+                if ($data && isset($data['collections'])) {
+                    $collections = $data['collections'];
+                }
+            }
+
+            // Nettoyer la réponse du bloc JSON pour l'affichage
+            $reply = trim(preg_replace('/```json[\s\S]*?```/', '', $content));
+
+            return $this->json([
+                'reply'       => $reply !== '' ? $reply : 'Schéma généré. Applique-le ci-dessous.',
+                'collections' => $collections,
+            ]);
+        } catch (\Throwable $e) {
+            $this->logger->error('AI chat failed', ['exception' => $e, 'project' => $uuid]);
+            return $this->json(['reply' => 'Désolé, une erreur est survenue. Réessaie.', 'error' => 'AI chat failed'], 500);
+        }
+    }
+
+    /** Résout le provider IA configuré (premier activé). */
+    private function resolveAiPlatform(): array
+    {
+        $settings = $this->em->getRepository(\App\Entity\AppSettings::class)->getOrCreate();
+        $config = $settings->aiProviders ?? [];
+
+        foreach (['openai', 'anthropic', 'deepseek', 'ollama'] as $provider) {
+            if (!empty($config[$provider]['enabled'])) {
+                $platform = match ($provider) {
+                    'openai'    => new \Symfony\AI\Platform\OpenAI\OpenAIPlatform($config[$provider]['key'] ?? ''),
+                    'anthropic' => new \Symfony\AI\Platform\Anthropic\AnthropicPlatform($config[$provider]['key'] ?? ''),
+                    'deepseek'  => new \Symfony\AI\Platform\DeepSeek\DeepSeekPlatform($config[$provider]['key'] ?? ''),
+                    'ollama'    => new \Symfony\AI\Platform\Ollama\OllamaPlatform($config[$provider]['url'] ?? ''),
+                    default     => null,
+                };
+                return [$platform, $config[$provider]['model'] ?? null];
+            }
+        }
+
+        return [null, null];
     }
 
     /** Schema basé sur des règles (fallback sans IA). */
