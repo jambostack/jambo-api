@@ -283,24 +283,43 @@ PROMPT;
 
             // Extraire le JSON éventuel de la réponse
             $collections = null;
-            if (preg_match('/```json\s*([\s\S]*?)\s*```/', $content, $m)) {
+            $reply = $content;
+
+            // Pattern 1: JSON dans un bloc de code ```json ... ```
+            if (preg_match('/```(?:json)?\s*(\{[\s\S]*?"collections"[\s\S]*?\})\s*```/', $content, $m)) {
                 $data = json_decode($m[1], true);
                 if ($data && isset($data['collections'])) {
                     $collections = $data['collections'];
                 }
-            } elseif (preg_match('/\{[\s\S]*"collections"[\s\S]*\}/', $content, $m)) {
-                // Fallback: JSON inline sans code block
+                // Nettoyer TOUT le bloc de code de la réponse
+                $reply = trim(preg_replace('/```(?:json)?\s*\{[\s\S]*?"collections"[\s\S]*?\}\s*```/', '', $content));
+            }
+            // Pattern 2: JSON inline (entre accolades, non-greedy)
+            elseif (preg_match('/\{[^{]*"collections"[^}]*\}/s', $content, $m)) {
+                // Essayer de parser avec une reconstruction progressive si le premier match est trop court
                 $data = json_decode($m[0], true);
                 if ($data && isset($data['collections'])) {
                     $collections = $data['collections'];
+                } else {
+                    // Tentative plus large: JSON multi-ligne
+                    if (preg_match('/\{(?:[^{}]|(?:\{[^{}]*\}))*"collections"(?:[^{}]|(?:\{[^{}]*\}))*\}/s', $content, $m2)) {
+                        $data = json_decode($m2[0], true);
+                        if ($data && isset($data['collections'])) {
+                            $collections = $data['collections'];
+                        }
+                    }
+                }
+                // Nettoyer le JSON inline de la réponse
+                if ($collections !== null && isset($m[0])) {
+                    $reply = trim(str_replace($m[0], '', $content));
                 }
             }
 
-            // Nettoyer la réponse du bloc JSON pour l'affichage
-            $reply = trim(preg_replace('/```json[\s\S]*?```/', '', $content));
+            // Nettoyer les fragments de markdown résiduels
+            $reply = trim(preg_replace('/```\s*$/', '', $reply));
 
             return $this->json([
-                'reply'       => $reply !== '' ? $reply : 'Schéma généré. Applique-le ci-dessous.',
+                'reply'       => $reply !== '' ? $reply : ($collections !== null ? 'Schéma généré. Applique-le ci-dessous.' : 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?'),
                 'collections' => $collections,
             ]);
         } catch (\Throwable $e) {

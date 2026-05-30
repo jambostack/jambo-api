@@ -126,6 +126,11 @@ function SchemaChatPanel({
         .scp-input-row input:focus { border-color:var(--studio-border-active); }
         .scp-input-row button { height:32px; width:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; background:var(--studio-accent); color:#000; flex-shrink:0; }
         .scp-input-row button:disabled { opacity:.4; cursor:not-allowed; }
+        .scp-quick-prompts { display:flex; gap:4px; padding:6px 8px; overflow-x:auto; flex-shrink:0; scrollbar-width:none; border-top:1px solid var(--studio-border); }
+        .scp-quick-prompts::-webkit-scrollbar { display:none; }
+        .scp-quick-pill { flex-shrink:0; padding:3px 8px; border-radius:999px; font-size:9.5px; cursor:pointer; border:1px solid var(--studio-border); background:var(--studio-surface); color:var(--studio-text-muted); transition:all .12s; white-space:nowrap; }
+        .scp-quick-pill:hover { border-color:var(--studio-border-active); color:var(--studio-text-dim); }
+        .scp-quick-pill:disabled { opacity:.3; cursor:not-allowed; }
       `}</style>
       <div className="scp-messages">
         {messages.map((m, i) => (
@@ -154,8 +159,11 @@ function SchemaChatPanel({
       <div className="scp-input-row">
         <input placeholder="Décris les collections..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key==='Enter'&&send()} disabled={busy} />
         <button onClick={send} disabled={busy || !input.trim()}>{busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}</button>
+        </div>
+        <div className="scp-quick-prompts">
+          {["Crée un blog avec articles, catégories et commentaires","Ajoute un champ auteur de type relation","Crée une page À propos en singleton avec image","Repense tout le schéma pour un site e-commerce","Ajoute un champ date de publication aux collections"].map((qp,i)=>(<button key={i} className="scp-quick-pill" onClick={()=>{setInput(qp)}} disabled={busy}>{qp}</button>))}
+        </div>
       </div>
-    </div>
   );
 }
 
