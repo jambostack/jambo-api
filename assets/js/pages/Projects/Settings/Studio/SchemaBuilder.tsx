@@ -204,8 +204,12 @@ function DesktopRightPanel({
         <button className={`drp-tab ${tab==='chat'?'active':''}`} onClick={()=>setTab('chat')}><MessageSquare />Chat</button>
         <button className={`drp-tab ${tab==='preview'?'active':''}`} onClick={()=>{onGeneratePreview();setTab('preview');}}><Eye />Preview</button>
       </div>
-      {tab === 'chat' && <SchemaChatPanel project={project} currentCollections={currentCollections} onApplySchema={onApplySchema} />}
-      {tab === 'preview' && <SchemaPreviewPanel current={current} preview={preview} />}
+      <div style={{ display: tab === 'chat' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
+        <SchemaChatPanel project={project} currentCollections={currentCollections} onApplySchema={onApplySchema} />
+      </div>
+      <div style={{ display: tab === 'preview' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
+        <SchemaPreviewPanel current={current} preview={preview} />
+      </div>
     </div>
   );
 }
@@ -597,7 +601,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
 
       {/* ═══════════════ MOBILE: tab-based content ═══════════════ */}
       <div className="sb-mobile-content">
-        {mobileTab === 'collections' && (
+        <div style={{ display: mobileTab === 'collections' ? 'block' : 'none' }}>
           <MobileCollectionsView
             collections={collections} selectedIdx={selectedIdx} untitled={untitled}
             onSelect={(idx) => { setSelectedIdx(idx); setMobileTab('editor'); }}
@@ -607,28 +611,28 @@ export default function SchemaBuilder({ project }: { project: Project }) {
             isEndUsers={isEndUsers}
             endUserFieldCount={endUserFields.length}
           />
-        )}
-        {mobileTab === 'editor' && (isEndUsers ? (
-          <EndUserEditor fields={endUserFields} loading={endUserLoading} onAdd={addEndUserField} onUpdate={updateEndUserField} onDelete={deleteEndUserField} newField={endUserNew} setNewField={setEndUserNew} />
-        ) : (
-          <MobileEditorView
-            current={current} selectedIdx={selectedIdx} total={collections.length}
-            untitled={untitled} t={t}
-            onPrev={selectPrev} onNext={selectNext}
-            onAddCollection={addCollection}
-            updateCollection={updateCollection}
-            addField={addField} updateField={updateField}
-            removeField={removeField} duplicateField={duplicateField}
-          />
-        ))}
-        {mobileTab === 'chat' && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-            <DesktopRightPanel
-              project={project} currentCollections={collections} onApplySchema={handleApplySchema}
-              current={current} onGeneratePreview={generatePreview} preview={preview}
+        </div>
+        <div style={{ display: mobileTab === 'editor' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          {isEndUsers ? (
+            <EndUserEditor fields={endUserFields} loading={endUserLoading} onAdd={addEndUserField} onUpdate={updateEndUserField} onDelete={deleteEndUserField} newField={endUserNew} setNewField={setEndUserNew} />
+          ) : (
+            <MobileEditorView
+              current={current} selectedIdx={selectedIdx} total={collections.length}
+              untitled={untitled} t={t}
+              onPrev={selectPrev} onNext={selectNext}
+              onAddCollection={addCollection}
+              updateCollection={updateCollection}
+              addField={addField} updateField={updateField}
+              removeField={removeField} duplicateField={duplicateField}
             />
-          </div>
-        )}
+          )}
+        </div>
+        <div style={{ display: mobileTab === 'chat' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <DesktopRightPanel
+            project={project} currentCollections={collections} onApplySchema={handleApplySchema}
+            current={current} onGeneratePreview={generatePreview} preview={preview}
+          />
+        </div>
       </div>
 
       {/* ═══════════════ MOBILE: bottom tab bar ═══════════════ */}
