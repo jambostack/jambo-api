@@ -89,6 +89,7 @@ services:
     App\Workbench\Templates\NuxtTemplate: ~
     App\Workbench\Templates\AstroTemplate: ~
     App\Workbench\Templates\SvelteKitTemplate: ~
+    App\Workbench\Templates\NativeTemplate: ~
 
     App\Service\WorkbenchStreamService:
         arguments:
@@ -97,6 +98,7 @@ services:
                 - '@App\Workbench\Templates\NuxtTemplate'
                 - '@App\Workbench\Templates\AstroTemplate'
                 - '@App\Workbench\Templates\SvelteKitTemplate'
+                - '@App\Workbench\Templates\NativeTemplate'
 
     App\Controller\WorkbenchController:
         arguments:
@@ -109,6 +111,7 @@ services:
                 - '@App\Workbench\Templates\NuxtTemplate'
                 - '@App\Workbench\Templates\AstroTemplate'
                 - '@App\Workbench\Templates\SvelteKitTemplate'
+                - '@App\Workbench\Templates\NativeTemplate'
 
     App\Service\ZipExportService:
         arguments:
@@ -117,15 +120,21 @@ services:
                 - '@App\Workbench\Templates\NuxtTemplate'
                 - '@App\Workbench\Templates\AstroTemplate'
                 - '@App\Workbench\Templates\SvelteKitTemplate'
+                - '@App\Workbench\Templates\NativeTemplate'
 
     App\Service\PublishedSiteStorage:
         arguments:
             $baseDir: '%kernel.project_dir%/var/published_sites'
 
     # Le SiteHostResolver ne doit jamais intercepter le domaine du CMS lui-même.
+    # Le NativeRenderer optionnel active le mode bi-mode (statique OU Twig SSR).
     App\EventSubscriber\SiteHostResolver:
         arguments:
             $reservedHostnames: '%jambo.reserved_hostnames%'
+            $nativeRenderer: '@App\Service\NativeRenderer'
+
+    # ── Jambo Native (Twig SSR) ────────────────────────────────────────────────
+    App\Service\NativeRenderer: ~
 
     # ── Email / SMTP ───────────────────────────────────────────────────────────
     App\Service\ProjectMailerService:
