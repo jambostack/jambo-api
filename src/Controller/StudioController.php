@@ -7,6 +7,7 @@ use App\Entity\Field;
 use App\Entity\Project;
 use App\Repository\AppSettingsRepository;
 use App\Repository\ProjectRepository;
+use App\Repository\StudioChatMessageRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -25,6 +26,7 @@ class StudioController extends InertiaController
         private ProjectRepository $projectRepository,
         private AppSettingsRepository $appSettingsRepository,
         private HttpClientInterface $httpClient,
+        private readonly StudioChatMessageRepository $chatMessageRepository,
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
 
@@ -206,6 +208,13 @@ PROMPT;
 
         if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
 
+        // Persister le message utilisateur en DB
+        $userMsg = new \App\Entity\StudioChatMessage();
+        $userMsg->project = $project;
+        $userMsg->role = 'user';
+        $userMsg->content = $prompt;
+        $this->em->persist($userMsg);
+
         $systemPrompt = <<<PROMPT
 You are a CMS schema architect. You help users design their content model by creating and modifying collections.
 
@@ -308,14 +317,64 @@ PROMPT;
             // Nettoyer les fragments de markdown résiduels
             $reply = trim(preg_replace('/```\s*$/', '', $reply));
 
+            $replyText = $reply !== '' ? $reply : ($collections !== null ? 'Schéma généré. Applique-le ci-dessous.' : 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?');
+
+            // Persister le message assistant en DB
+            $assistantMsg = new \App\Entity\StudioChatMessage();
+            $assistantMsg->project = $project;
+            $assistantMsg->role = 'assistant';
+            $assistantMsg->content = $replyText;
+            $assistantMsg->schema = $collections;
+            $this->em->persist($assistantMsg);
+            $this->em->flush();
+
             return $this->json([
-                'reply'       => $reply !== '' ? $reply : ($collections !== null ? 'Schéma généré. Applique-le ci-dessous.' : 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?'),
+                'reply'       => $replyText,
                 'collections' => $collections,
             ]);
         } catch (\Throwable $e) {
+            $this->em->flush(); // Sauvegarder le message utilisateur même en cas d'échec
             $this->logger->error('AI chat failed', ['exception' => $e, 'project' => $uuid]);
             return $this->json(['reply' => 'Désolé, une erreur est survenue. Réessaie.', 'error' => 'AI chat failed'], 500);
         }
+    }
+
+    /**
+     * Retourne l'historique des messages de chat pour le Studio.
+     */
+    #[Route('/api/projects/{uuid}/studio/chat-messages', name: 'studio_chat_messages_list', methods: ['GET'])]
+    public function listChatMessages(string $uuid): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.view', $project);
+
+        $messages = $this->chatMessageRepository->findByProject($project);
+
+        return $this->json([
+            'data' => array_map(fn (\App\Entity\StudioChatMessage $m) => [
+                'id'      => $m->id,
+                'role'    => $m->role,
+                'content' => $m->content,
+                'schema'  => $m->schema,
+                'created_at' => $m->createdAt->format(\DateTimeInterface::ATOM),
+            ], $messages),
+        ]);
+    }
+
+    /**
+     * Efface tout l'historique des messages de chat pour le Studio.
+     */
+    #[Route('/api/projects/{uuid}/studio/chat-messages', name: 'studio_chat_messages_clear', methods: ['DELETE'])]
+    public function clearChatMessages(string $uuid): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.manage', $project);
+
+        $this->chatMessageRepository->deleteByProject($project);
+
+        return $this->json(['success' => true]);
     }
 
     /**
