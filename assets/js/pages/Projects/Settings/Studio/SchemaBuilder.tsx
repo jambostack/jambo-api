@@ -1,5 +1,5 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { router } from '@inertiajs/react';
-import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,7 +15,7 @@ import {
   MessageSquare, Send, Bot, User, Check,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   FolderOpen, Pencil, Sparkles,
-  Users, Lock, UserPlus, Shield
+  Users, Lock, UserPlus, Shield, GripVertical, ChevronDown, Settings2
 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 import type { Project } from '@/types/index.d';
@@ -611,6 +611,108 @@ export default function SchemaBuilder({ project }: { project: Project }) {
   );
 }
 
+/* ═══════════════ FIELD OPTIONS EDITOR ═══════════════ */
+interface FieldOptions {
+  minLength?: number; maxLength?: number; pattern?: string; placeholder?: string;
+  min?: number; max?: number; step?: number; defaultValue?: string;
+  values?: string[];
+  mediaTypes?: ('image'|'video'|'document')[]; multiple?: boolean;
+  targetCollection?: string;
+  toolbar?: ('bold'|'italic'|'link'|'image'|'list'|'heading')[];
+  helpText?: string; hideInList?: boolean; readOnly?: boolean;
+}
+const FIELD_OPTION_DEFAULTS: Record<string, Partial<FieldOptions>> = {
+  text: { placeholder: '', minLength: undefined, maxLength: undefined, pattern: '' },
+  longtext: { placeholder: '', minLength: undefined, maxLength: undefined },
+  number: { min: undefined, max: undefined, step: undefined, defaultValue: '' },
+  enumeration: { values: [] },
+  media: { mediaTypes: ['image'], multiple: false },
+  relation: { targetCollection: '' },
+};
+function parseFieldOptions(field: SchemaField): FieldOptions {
+  try { return typeof field.options === 'object' && field.options ? field.options as FieldOptions : {}; } catch { return {}; }
+}
+function FieldOptionsEditor({ field, allCollections, onChange }: { field: SchemaField; allCollections: SchemaCollection[]; onChange: (opts: FieldOptions) => void; }) {
+  const opts = parseFieldOptions(field);
+  const defaults = FIELD_OPTION_DEFAULTS[field.type] ?? {};
+  const S = {
+    input: { height:'28px', fontSize:'10px', background:'var(--studio-bg)', borderColor:'var(--studio-border)', color:'var(--studio-text)', borderRadius:'5px', padding:'0 6px', outline:'none' } as React.CSSProperties,
+    label: { fontSize:'10px', color:'var(--studio-text-muted)', marginBottom:'3px', display:'block' as const },
+  };
+  if (field.type === 'enumeration') {
+    const values = opts.values ?? (defaults.values ?? []);
+    return (
+      <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)' }}>
+        <span style={S.label}>Valeurs de l'énumération</span>
+        <div style={{ display:'flex', flexDirection:'column', gap:'3px', marginBottom:'6px' }}>
+          {values.map((v: string, i: number) => (
+            <div key={i} style={{ display:'flex', gap:'4px', alignItems:'center' }}>
+              <input value={v} onChange={e => { const nv = [...values]; nv[i] = e.target.value; onChange({ ...opts, values: nv }); }} style={{ ...S.input, flex:1 }} placeholder={`Valeur ${i+1}`} />
+              <button onClick={() => onChange({ ...opts, values: values.filter((_, j) => j !== i) })} style={{ background:'none',border:'none',cursor:'pointer',padding:'2px' }}><Trash2 className="w-3 h-3" style={{ color:'var(--studio-red)' }} /></button>
+            </div>
+          ))}
+        </div>
+        <Button size="sm" variant="outline" onClick={() => onChange({ ...opts, values: [...values, ''] })} style={{ height:'22px', fontSize:'9px' }}><Plus className="w-2.5 h-2.5 mr-1" />Ajouter une valeur</Button>
+      </div>
+    );
+  }
+  if (field.type === 'number') {
+    return (
+      <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+        <div><span style={S.label}>Min</span><input type="number" value={opts.min ?? ''} onChange={e => onChange({ ...opts, min: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>Max</span><input type="number" value={opts.max ?? ''} onChange={e => onChange({ ...opts, max: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>Pas</span><input type="number" value={opts.step ?? ''} onChange={e => onChange({ ...opts, step: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>Défaut</span><input value={opts.defaultValue ?? ''} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+      </div>
+    );
+  }
+  if (field.type === 'text' || field.type === 'longtext') {
+    return (
+      <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+        <div style={{ gridColumn:'1/-1' }}><span style={S.label}>Placeholder</span><input value={opts.placeholder ?? ''} onChange={e => onChange({ ...opts, placeholder: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>Longueur min</span><input type="number" value={opts.minLength ?? ''} onChange={e => onChange({ ...opts, minLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>Longueur max</span><input type="number" value={opts.maxLength ?? ''} onChange={e => onChange({ ...opts, maxLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div style={{ gridColumn:'1/-1' }}><span style={S.label}>Pattern regex</span><input value={opts.pattern ?? ''} onChange={e => onChange({ ...opts, pattern: e.target.value })} style={{ ...S.input, width:'100%', fontFamily:'var(--studio-mono)' }} /></div>
+      </div>
+    );
+  }
+  if (field.type === 'media') {
+    const types = opts.mediaTypes ?? (defaults.mediaTypes ?? ['image']);
+    const toggleType = (t: 'image'|'video'|'document') => { const next = types.includes(t) ? types.filter(x => x !== t) : [...types, t]; onChange({ ...opts, mediaTypes: next.length > 0 ? next : ['image'] }); };
+    return (
+      <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)' }}>
+        <span style={S.label}>Types de médias acceptés</span>
+        <div style={{ display:'flex', gap:'6px', marginBottom:'8px' }}>
+          {(['image','video','document'] as const).map(t => (
+            <button key={t} onClick={() => toggleType(t)} style={{ padding:'4px 8px', borderRadius:'5px', fontSize:'10px', cursor:'pointer', border:'1px solid var(--studio-border)', background: types.includes(t) ? 'var(--studio-accent-dim)' : 'transparent', color: types.includes(t) ? 'var(--studio-accent)' : 'var(--studio-text-dim)' }}>
+              {t === 'image' ? '🖼️ Image' : t === 'video' ? '🎬 Vidéo' : '📄 Document'}
+            </button>
+          ))}
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.multiple ?? defaults.multiple ?? false} onCheckedChange={v => onChange({ ...opts, multiple: v })} /><span style={S.label}>Fichiers multiples</span></div>
+      </div>
+    );
+  }
+  if (field.type === 'relation') {
+    return (
+      <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)' }}>
+        <span style={S.label}>Collection liée</span>
+        <select value={opts.targetCollection ?? ''} onChange={e => onChange({ ...opts, targetCollection: e.target.value })} style={{ ...S.input, width:'100%', marginTop:'4px' }}>
+          <option value="">— Sélectionner —</option>
+          {allCollections.filter(c => c.slug).map(c => (<option key={c.key} value={c.slug}>{c.name || c.slug}</option>))}
+        </select>
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'flex', flexDirection:'column', gap:'6px' }}>
+      <div><span style={S.label}>Texte d'aide</span><input value={opts.helpText ?? ''} onChange={e => onChange({ ...opts, helpText: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.hideInList ?? false} onCheckedChange={v => onChange({ ...opts, hideInList: v })} /><span style={S.label}>Masquer dans les listes</span></div>
+      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.readOnly ?? false} onCheckedChange={v => onChange({ ...opts, readOnly: v })} /><span style={S.label}>Lecture seule</span></div>
+    </div>
+  );
+}
+
 /* ═══════════════ SHARED EDITOR RENDERER (desktop + mobile) ═══════════════ */
 function renderEditor(
   current: SchemaCollection | null, selectedIdx: number | null, collections: SchemaCollection[],
@@ -653,33 +755,149 @@ function renderEditor(
       <Button size="sm" onClick={addField} style={{ height: '26px', fontSize: '10px', background: 'var(--studio-accent)', color: '#000', padding: '0 8px' }}><Plus className="w-3 h-3 mr-1" />Ajouter</Button>
     </div>
     <div style={{ flex: 1, overflowY: 'auto', paddingRight: '2px', minHeight: 0 }}>
-      {current.fields.map((field, idx) => {
-        const Icon = ICON_MAP[field.type] || Type;
-        return (
-          <div key={field.key} className="sb-field-card">
-            <div className="sb-field-row" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-              <span style={{ fontFamily: 'var(--studio-mono)', fontSize: '9px', color: 'var(--studio-text-muted)', minWidth: '14px' }}>{idx + 1}</span>
-              <Input placeholder="Nom du champ" value={field.name} onChange={e => updateField(selectedIdx!, field.key, { name: e.target.value })} style={{ height: '28px', fontSize: '11px', flex: 1, minWidth: 0, background: 'var(--studio-bg)', borderColor: 'var(--studio-border)', color: 'var(--studio-text)' }} />
-              <Select value={field.type} onValueChange={v => updateField(selectedIdx!, field.key, { type: v })}>
-                <SelectTrigger style={{ width: '110px', height: '28px', fontSize: '10px', background: 'var(--studio-bg)', borderColor: 'var(--studio-border)', color: 'var(--studio-text)' }}><SelectValue /></SelectTrigger>
-                <SelectContent>{FIELD_TYPES.map(ft => (<SelectItem key={ft.type} value={ft.type}>{ft.label}</SelectItem>))}</SelectContent>
-              </Select>
-              <Button variant="ghost" size="icon" style={{ height: '22px', width: '22px' }} onClick={() => duplicateField(selectedIdx!, field.key)}><Copy className="w-3 h-3" /></Button>
-              <Button variant="ghost" size="icon" style={{ height: '22px', width: '22px' }} onClick={() => removeField(selectedIdx!, field.key)}><Trash2 className="w-3 h-3" style={{ color: 'var(--studio-red)' }} /></Button>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Switch checked={field.isRequired} onCheckedChange={v => updateField(selectedIdx!, field.key, { isRequired: v })} />
-                <span style={{ fontSize: '10px', color: 'var(--studio-text-muted)' }}>Requis</span>
-              </div>
-              <Badge variant="secondary" style={{ fontSize: '9px', background: 'var(--studio-accent-dim)', color: 'var(--studio-accent)', border: 'none', padding: '1px 6px' }}><Icon className="w-2.5 h-2.5 mr-1" />{FIELD_TYPES.find(ft => ft.type === field.type)?.label ?? field.type}</Badge>
-            </div>
-          </div>
-        );
-      })}
+      {current.fields.map((field, idx) => (
+        <FieldRow
+          key={field.key}
+          field={field}
+          index={idx}
+          total={current.fields.length}
+          selectedIdx={selectedIdx!}
+          collections={collections}
+          updateField={updateField}
+          removeField={removeField}
+          duplicateField={duplicateField}
+          moveField={(from, to) => {
+            const reordered = [...current.fields];
+            const [moved] = reordered.splice(from, 1);
+            reordered.splice(to, 0, moved);
+            updateCollection(selectedIdx!, { fields: reordered });
+          }}
+        />
+      ))}
       {current.fields.length === 0 && <p style={{ fontSize: '11px', color: 'var(--studio-text-muted)', textAlign: 'center', padding: '20px' }}>Aucun champ. Cliquez "Ajouter".</p>}
     </div>
   </>);
+}
+
+/* ═══════════════ FIELD ROW (expandable, draggable) ═══════════════ */
+function FieldRow({
+  field, index, total, selectedIdx, collections,
+  updateField, removeField, duplicateField, moveField,
+}: {
+  field: SchemaField; index: number; total: number; selectedIdx: number;
+  collections: SchemaCollection[];
+  updateField: (ci: number, fk: string, d: Partial<SchemaField>) => void;
+  removeField: (ci: number, fk: string) => void;
+  duplicateField: (ci: number, fk: string) => void;
+  moveField: (from: number, to: number) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+  const Icon = ICON_MAP[field.type] || Type;
+  const hasName = field.name.trim().length > 0;
+  const hasOptions = field.type === 'enumeration' || field.type === 'number' || field.type === 'text'
+    || field.type === 'longtext' || field.type === 'media' || field.type === 'relation';
+
+  function handleOptionsChange(opts: FieldOptions) {
+    updateField(selectedIdx, field.key, { options: opts as any });
+  }
+
+  return (
+    <div
+      draggable
+      onDragStart={e => e.dataTransfer.setData('text/plain', String(index))}
+      onDragOver={e => { e.preventDefault(); setDragOver(index); }}
+      onDragLeave={() => setDragOver(null)}
+      onDrop={e => {
+        e.preventDefault(); setDragOver(null);
+        const from = Number(e.dataTransfer.getData('text/plain'));
+        if (from !== index && !isNaN(from)) moveField(from, index);
+      }}
+      style={{
+        border: `1px solid ${dragOver === index ? 'var(--studio-accent)' : hasName ? 'var(--studio-border)' : 'var(--studio-red)'}`,
+        borderRadius: '7px', marginBottom: '4px', overflow: 'hidden',
+        transition: 'border-color .15s',
+      }}
+    >
+      {/* ── Main row ── */}
+      <div style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 10px', background:'var(--studio-raised)', cursor:'default' }}>
+        <div style={{ cursor:'grab', color:'var(--studio-text-muted)', padding:'0 2px' }} title="Glisser pour réordonner">
+          <GripVertical className="w-3.5 h-3.5" />
+        </div>
+        <span style={{ fontFamily:'var(--studio-mono)', fontSize:'9px', color:'var(--studio-text-muted)', minWidth:'14px', textAlign:'center' }}>{index + 1}</span>
+
+        <div style={{ flex:1, minWidth:0, position:'relative' }}>
+          <Input
+            placeholder="Nom du champ"
+            value={field.name}
+            onChange={e => updateField(selectedIdx, field.key, { name: e.target.value })}
+            style={{
+              height:'28px', fontSize:'11px', background:'var(--studio-bg)',
+              borderColor: hasName ? 'var(--studio-border)' : 'var(--studio-red)',
+              color:'var(--studio-text)', width:'100%',
+            }}
+          />
+          {!hasName && (
+            <span style={{ position:'absolute', right:'8px', top:'6px', fontSize:'9px', color:'var(--studio-red)' }}>Requis</span>
+          )}
+        </div>
+
+        <Select value={field.type} onValueChange={v => updateField(selectedIdx, field.key, { type: v })}>
+          <SelectTrigger style={{ width:'110px', height:'28px', fontSize:'10px', background:'var(--studio-bg)', borderColor:'var(--studio-border)', color:'var(--studio-text)' }}>
+            <Icon className="w-2.5 h-2.5 mr-1" /><SelectValue />
+          </SelectTrigger>
+          <SelectContent>{FIELD_TYPES.map(ft => (<SelectItem key={ft.type} value={ft.type}><span style={{display:'flex',alignItems:'center',gap:'6px'}}>{(ICON_MAP[ft.type] && React.createElement(ICON_MAP[ft.type], {className:'w-3 h-3'}))}{ft.label}</span></SelectItem>))}</SelectContent>
+        </Select>
+
+        <div style={{ display:'flex', alignItems:'center', gap:'3px' }}>
+          <Switch checked={field.isRequired} onCheckedChange={v => updateField(selectedIdx, field.key, { isRequired: v })} />
+          <span style={{ fontSize:'10px', color:'var(--studio-text-muted)', minWidth:'40px' }}>Requis</span>
+        </div>
+
+        <button onClick={() => setExpanded(!expanded)}
+          style={{ background:'none',border:'none',cursor:'pointer',padding:'2px',color:'var(--studio-text-muted)',transition:'transform .15s',transform:expanded?'rotate(180deg)':'none' }}>
+          <ChevronDown className="w-3.5 h-3.5" />
+        </button>
+
+        <Button variant="ghost" size="icon" style={{ height:'22px', width:'22px' }} onClick={() => duplicateField(selectedIdx, field.key)}>
+          <Copy className="w-3 h-3" />
+        </Button>
+        <Button variant="ghost" size="icon" style={{ height:'22px', width:'22px' }} onClick={() => removeField(selectedIdx, field.key)}>
+          <Trash2 className="w-3 h-3" style={{ color:'var(--studio-red)' }} />
+        </Button>
+      </div>
+
+      {/* ── Slug preview + options ── */}
+      {expanded && (
+        <div style={{ padding:'8px 10px 10px 38px', background:'var(--studio-surface)', borderTop:'1px solid var(--studio-border)' }}>
+          {/* Slug */}
+          <div style={{ marginBottom:'6px', display:'flex', alignItems:'center', gap:'6px' }}>
+            <span style={{ fontSize:'9px', color:'var(--studio-text-muted)', fontFamily:'var(--studio-mono)' }}>slug:</span>
+            <code style={{ fontSize:'10px', fontFamily:'var(--studio-mono)', color:'var(--studio-accent)', background:'var(--studio-raised)', padding:'2px 6px', borderRadius:'4px' }}>{field.slug || '(auto)'}</code>
+          </div>
+
+          {/* Type-specific options */}
+          {hasOptions && (
+            <FieldOptionsEditor field={field} allCollections={collections} onChange={handleOptionsChange} />
+          )}
+
+          {/* General options for all types */}
+          {!hasOptions && (
+            <div style={{ display:'flex', alignItems:'center', gap:'12px', marginTop:'6px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                <Switch checked={parseFieldOptions(field).hideInList ?? false} onCheckedChange={v => handleOptionsChange({ ...parseFieldOptions(field), hideInList: v })} />
+                <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>Masquer dans les listes</span>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                <Switch checked={parseFieldOptions(field).readOnly ?? false} onCheckedChange={v => handleOptionsChange({ ...parseFieldOptions(field), readOnly: v })} />
+                <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>Lecture seule</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ═══════════════ MOBILE COLLECTIONS VIEW ═══════════════ */
