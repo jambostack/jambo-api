@@ -453,10 +453,43 @@ class WorkbenchController extends InertiaController
         $sd = $this->siteDomainRepository->findOneBy(['uuid' => $domainUuid, 'workbenchProject' => $workbench]);
         if (!$sd) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.domain_not_found')], 404);
 
+        $wasPrimary = $sd->isPrimary;
         $this->em->remove($sd);
         $this->em->flush();
 
+        // Si le domaine supprimé était primaire, réassigner au premier domaine restant.
+        if ($wasPrimary) {
+            $remaining = $this->siteDomainRepository->findByWorkbench($workbench);
+            if ($remaining !== []) {
+                $remaining[0]->isPrimary = true;
+                $this->em->flush();
+            }
+        }
+
         return new JsonResponse(['deleted' => $domainUuid]);
+    }
+
+    /**
+     * Résout le projet par UUID et le WorkbenchProject associé, en vérifiant les droits.
+     *
+     * @param string $permission 'project.view' ou 'project.manage'
+     * @return array{0: Project, 1: WorkbenchProject}
+     * @throws \Symfony\Component\HttpKernel\Exception\BadRequestHttpException si introuvable
+     */
+    private function resolveWorkbench(string $projectUuid, string $workbenchUuid, string $permission): array
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            throw $this->createNotFoundException($this->translator->trans('workbench.errors.project_not_found'));
+        }
+        $this->denyAccessUnlessGranted($permission, $project);
+
+        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
+        if (!$workbench) {
+            throw $this->createNotFoundException($this->translator->trans('workbench.errors.not_found'));
+        }
+
+        return [$project, $workbench];
     }
 
     private function validateFilesSize(array $files): ?string
