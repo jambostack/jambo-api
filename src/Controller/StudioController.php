@@ -74,6 +74,211 @@ class StudioController extends InertiaController
     }
 
     /**
+     * Retourne les collections existantes pour le Schema Builder (format JSON).
+     */
+    #[Route('/api/projects/{uuid}/studio/collections', name: 'studio_collections_list', methods: ['GET'])]
+    public function listCollections(string $uuid): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.view', $project);
+
+        $collections = $this->em->getRepository(Collection::class)
+            ->findBy(['project' => $project, 'deletedAt' => null], ['order' => 'ASC']);
+
+        $data = array_map(function (Collection $c) {
+            $fields = [];
+            foreach ($c->fields as $f) {
+                if ($f->isDeleted()) continue;
+                $fields[] = [
+                    'name' => $f->name, 'slug' => $f->slug, 'type' => $f->type,
+                    'isRequired' => $f->isRequired, 'options' => $f->options, 'order' => $f->order,
+                ];
+            }
+            return [
+                'id' => $c->id, 'name' => $c->name, 'slug' => $c->slug,
+                'description' => $c->description, 'isSingleton' => $c->isSingleton,
+                'fields' => $fields,
+            ];
+        }, $collections);
+
+        return $this->json(['data' => $data]);
+    }
+
+    /**
+     * Génère un schéma de collection via IA à partir d'un prompt.
+     */
+    #[Route('/api/projects/{uuid}/studio/ai-schema', name: 'studio_ai_schema', methods: ['POST'])]
+    public function aiSchema(string $uuid, Request $request): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.manage', $project);
+
+        $body = json_decode($request->getContent(), true);
+        $prompt = trim((string) ($body['prompt'] ?? ''));
+        if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
+
+        $systemPrompt = <<<PROMPT
+You are a CMS schema designer. Given a user's description, generate a list of collections with their fields.
+
+- Return ONLY valid JSON (no markdown, no explanation).
+- Use this exact structure:
+{
+  "collections": [
+    {
+      "name": "Blog Posts",
+      "slug": "blog_posts",
+      "description": "Blog articles",
+      "isSingleton": false,
+      "fields": [
+        { "name": "Title", "slug": "title", "type": "text", "isRequired": true },
+        { "name": "Content", "slug": "content", "type": "richtext", "isRequired": true }
+      ]
+    }
+  ]
+}
+
+- Field types available: text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
+- Choose appropriate types based on the field name and context.
+- For slug fields, mark them as required and use type "slug".
+- For dates, use "date". For timestamps, use "datetime".
+- If the user mentions "images" or "photos", use "media".
+- Generate reasonable field names with proper slugs.
+- Make collection names descriptive (plural for collections, singular for singletons).
+- If the user describes a single page (about, contact), mark isSingleton: true.
+- Generate at least 3-5 fields per collection that make sense for the domain.
+- Maximum 5 collections. Maximum 10 fields per collection.
+PROMPT;
+
+        // Utilise le même provider AI que le Workbench
+        $settings = $this->em->getRepository(\App\Entity\AppSettings::class)->getOrCreate();
+        $config = $settings->aiProviders ?? [];
+
+        $platform = null;
+        $model = null;
+        foreach (['openai', 'anthropic', 'deepseek', 'ollama'] as $provider) {
+            if (!empty($config[$provider]['enabled'])) {
+                $platform = match ($provider) {
+                    'openai' => new \Symfony\AI\Platform\OpenAI\OpenAIPlatform($config[$provider]['key'] ?? ''),
+                    'anthropic' => new \Symfony\AI\Platform\Anthropic\AnthropicPlatform($config[$provider]['key'] ?? ''),
+                    'deepseek' => new \Symfony\AI\Platform\DeepSeek\DeepSeekPlatform($config[$provider]['key'] ?? ''),
+                    'ollama' => new \Symfony\AI\Platform\Ollama\OllamaPlatform($config[$provider]['url'] ?? ''),
+                    default => null,
+                };
+                $model = $config[$provider]['model'] ?? null;
+                break;
+            }
+        }
+
+        if ($platform === null) {
+            // Fallback: génération basée sur des règles (pas d'IA configurée)
+            return $this->json($this->ruleBasedSchema($prompt));
+        }
+
+        try {
+            $result = $platform->chat($model ?? 'gpt-4o', [
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user', 'content' => $prompt],
+            ]);
+
+            $content = $result->getContent();
+            // Extraire le JSON (le modèle peut wrapper dans ```json)
+            if (preg_match('/\{[\s\S]*\}/', $content, $m)) {
+                $data = json_decode($m[0], true);
+                if ($data && isset($data['collections'])) {
+                    return $this->json($data);
+                }
+            }
+
+            return $this->json(['error' => 'Échec du parsing JSON de la réponse IA'], 500);
+        } catch (\Throwable $e) {
+            return $this->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /** Schema basé sur des règles (fallback sans IA). */
+    private function ruleBasedSchema(string $prompt): array
+    {
+        $lower = mb_strtolower($prompt);
+        $collections = [];
+
+        // Blog detection
+        if (str_contains($lower, 'blog') || str_contains($lower, 'article')) {
+            $collections[] = [
+                'name' => 'Blog Posts', 'slug' => 'blog_posts', 'description' => 'Blog articles',
+                'isSingleton' => false,
+                'fields' => [
+                    ['name' => 'Title', 'slug' => 'title', 'type' => 'text', 'isRequired' => true],
+                    ['name' => 'Slug', 'slug' => 'slug', 'type' => 'slug', 'isRequired' => true],
+                    ['name' => 'Content', 'slug' => 'content', 'type' => 'richtext', 'isRequired' => true],
+                    ['name' => 'Featured Image', 'slug' => 'featured_image', 'type' => 'media', 'isRequired' => false],
+                    ['name' => 'Published Date', 'slug' => 'published_date', 'type' => 'date', 'isRequired' => false],
+                ],
+            ];
+            if (str_contains($lower, 'categor')) {
+                $collections[] = [
+                    'name' => 'Categories', 'slug' => 'categories', 'description' => 'Blog categories',
+                    'isSingleton' => false,
+                    'fields' => [
+                        ['name' => 'Name', 'slug' => 'name', 'type' => 'text', 'isRequired' => true],
+                        ['name' => 'Slug', 'slug' => 'slug', 'type' => 'slug', 'isRequired' => true],
+                        ['name' => 'Description', 'slug' => 'description', 'type' => 'longtext', 'isRequired' => false],
+                    ],
+                ];
+            }
+        }
+
+        // E-commerce detection
+        if (str_contains($lower, 'shop') || str_contains($lower, 'product') || str_contains($lower, 'ecommerce')) {
+            $collections[] = [
+                'name' => 'Products', 'slug' => 'products', 'description' => 'Product catalog',
+                'isSingleton' => false,
+                'fields' => [
+                    ['name' => 'Name', 'slug' => 'name', 'type' => 'text', 'isRequired' => true],
+                    ['name' => 'Slug', 'slug' => 'slug', 'type' => 'slug', 'isRequired' => true],
+                    ['name' => 'Description', 'slug' => 'description', 'type' => 'richtext', 'isRequired' => false],
+                    ['name' => 'Price', 'slug' => 'price', 'type' => 'number', 'isRequired' => true],
+                    ['name' => 'Image', 'slug' => 'image', 'type' => 'media', 'isRequired' => false],
+                    ['name' => 'SKU', 'slug' => 'sku', 'type' => 'text', 'isRequired' => false],
+                ],
+            ];
+        }
+
+        // Portfolio
+        if (str_contains($lower, 'portfolio') || str_contains($lower, 'project')) {
+            $collections[] = [
+                'name' => 'Projects', 'slug' => 'projects', 'description' => 'Portfolio projects',
+                'isSingleton' => false,
+                'fields' => [
+                    ['name' => 'Title', 'slug' => 'title', 'type' => 'text', 'isRequired' => true],
+                    ['name' => 'Slug', 'slug' => 'slug', 'type' => 'slug', 'isRequired' => true],
+                    ['name' => 'Description', 'slug' => 'description', 'type' => 'richtext', 'isRequired' => true],
+                    ['name' => 'Cover Image', 'slug' => 'cover_image', 'type' => 'media', 'isRequired' => false],
+                    ['name' => 'URL', 'slug' => 'url', 'type' => 'text', 'isRequired' => false],
+                    ['name' => 'Completed Date', 'slug' => 'completed_date', 'type' => 'date', 'isRequired' => false],
+                ],
+            ];
+        }
+
+        // Fallback: generic schema
+        if ($collections === []) {
+            $collections[] = [
+                'name' => 'Items', 'slug' => 'items', 'description' => $prompt,
+                'isSingleton' => false,
+                'fields' => [
+                    ['name' => 'Title', 'slug' => 'title', 'type' => 'text', 'isRequired' => true],
+                    ['name' => 'Slug', 'slug' => 'slug', 'type' => 'slug', 'isRequired' => true],
+                    ['name' => 'Content', 'slug' => 'content', 'type' => 'richtext', 'isRequired' => true],
+                    ['name' => 'Image', 'slug' => 'image', 'type' => 'media', 'isRequired' => false],
+                ],
+            ];
+        }
+
+        return ['collections' => $collections];
+    }
+
+    /**
      * Apply schema from the visual builder.
      */
     #[Route('/api/projects/{uuid}/studio/schema', name: 'studio_schema_apply', methods: ['POST'])]
