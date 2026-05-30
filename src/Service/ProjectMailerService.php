@@ -30,13 +30,11 @@ class ProjectMailerService
             throw new \RuntimeException('Mailer not configured or disabled for this project.');
         }
 
-        $password = $this->decrypt($settings->encryptedPassword);
-
         $this->bus->dispatch(new SendProjectEmailMessage(
             host: $settings->host,
             port: $settings->port,
             username: $settings->username,
-            password: $password,
+            encryptedPassword: $settings->encryptedPassword,
             encryption: $settings->encryption,
             fromEmail: $settings->fromEmail,
             fromName: $settings->fromName,
@@ -81,7 +79,7 @@ class ProjectMailerService
         $decoded = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL);
         $nonce = mb_substr($decoded, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES, '8bit');
         $cipher = mb_substr($decoded, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES, null, '8bit');
-        $key = hash('sha256', $this->appSecret, true);
+        $key = sodium_crypto_generichash($this->appSecret, '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
         return sodium_crypto_secretbox_open($cipher, $nonce, $key);
     }
 
@@ -91,7 +89,7 @@ class ProjectMailerService
     private function encrypt(string $plaintext): string
     {
         $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-        $key = hash('sha256', $this->appSecret, true);
+        $key = sodium_crypto_generichash($this->appSecret, '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
         $cipher = sodium_crypto_secretbox($plaintext, $nonce, $key);
 
         return sodium_bin2base64($nonce . $cipher, SODIUM_BASE64_VARIANT_ORIGINAL);

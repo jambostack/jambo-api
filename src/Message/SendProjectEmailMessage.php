@@ -8,7 +8,8 @@ class SendProjectEmailMessage
         public readonly string $host,
         public readonly int    $port,
         public readonly string $username,
-        public readonly string $password,
+        /** Chiffré (sodium secretbox) — le handler le déchiffre avec APP_SECRET. */
+        public readonly string $encryptedPassword,
         public readonly string $encryption,
         public readonly string $fromEmail,
         public readonly string $fromName,
