@@ -1221,4 +1221,28 @@ return [
     'workbench.errors.domain_not_found'   => 'Domaine introuvable',
     'workbench.errors.files_too_large'    => 'Fichiers trop volumineux (max %max% Mo)',
 
+    // Email/SMTP
+    'workbench.mailer.title'       => 'Configuration SMTP',
+    'workbench.mailer.host'        => 'Hôte SMTP',
+    'workbench.mailer.port'        => 'Port',
+    'workbench.mailer.username'    => 'Utilisateur',
+    'workbench.mailer.password'    => 'Mot de passe',
+    'workbench.mailer.encryption'  => 'Chiffrement',
+    'workbench.mailer.from_email'  => 'Email expéditeur',
+    'workbench.mailer.from_name'   => 'Nom expéditeur',
+    'workbench.mailer.enabled'     => 'Activé',
+    'workbench.mailer.test'        => 'Tester la configuration',
+    'workbench.mailer.test_sent'   => 'Email de test envoyé !',
+    'workbench.mailer.test_error'  => 'Échec de l\'envoi du test',
+
+    // Captcha
+    'workbench.captcha.placeholder' => 'Recopiez le code',
+    'workbench.captcha.invalid'     => 'Code captcha invalide',
+
+    // Erreurs email
+    'workbench.errors.mailer_not_configured' => 'Mailer non configuré pour ce projet',
+    'workbench.errors.captcha_invalid'       => 'Captcha expiré ou invalide',
+    'workbench.errors.captcha_required'      => 'Captcha requis',
+    'workbench.errors.too_many_requests'     => 'Trop de requêtes. Réessayez plus tard.',
+
 ];

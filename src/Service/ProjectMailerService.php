@@ -1,0 +1,92 @@
+<?php
+
+namespace App\Service;
+
+use App\Entity\Project;
+use App\Entity\ProjectMailerSettings;
+use App\Message\SendProjectEmailMessage;
+use App\Repository\ProjectMailerSettingsRepository;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
+
+class ProjectMailerService
+{
+    public function __construct(
+        private readonly EntityManagerInterface $em,
+        private readonly MessageBusInterface $bus,
+        private readonly ProjectMailerSettingsRepository $settingsRepository,
+        private readonly string $appSecret,
+    ) {}
+
+    /**
+     * Envoie un email via le SMTP configuré pour le projet, de manière asynchrone.
+     *
+     * @throws \RuntimeException si le mailer n'est pas configuré ou désactivé
+     */
+    public function send(Project $project, string $to, string $subject, string $body, ?string $replyTo = null): void
+    {
+        $settings = $this->getSettings($project);
+
+        $password = $this->decrypt($settings->encryptedPassword);
+
+        $this->bus->dispatch(new SendProjectEmailMessage(
+            host: $settings->host,
+            port: $settings->port,
+            username: $settings->username,
+            password: $password,
+            encryption: $settings->encryption,
+            fromEmail: $settings->fromEmail,
+            fromName: $settings->fromName,
+            to: $to,
+            subject: $subject,
+            body: $body,
+            replyTo: $replyTo,
+            projectId: $project->id,
+        ));
+    }
+
+    /**
+     * Chiffre le mot de passe SMTP avec XSalsa20-Poly1305 (secretbox).
+     */
+    public function encryptPassword(string $plaintext): string
+    {
+        return $this->encrypt($plaintext);
+    }
+
+    /**
+     * Déchiffre le mot de passe SMTP.
+     */
+    public function decryptPassword(string $encrypted): string
+    {
+        return $this->decrypt($encrypted);
+    }
+
+    public function getSettings(Project $project): ?ProjectMailerSettings
+    {
+        return $this->settingsRepository->findByProject($project);
+    }
+
+    /**
+     * Déchiffre une valeur chiffrée avec XSalsa20-Poly1305 (secretbox).
+     */
+    private function decrypt(string $encrypted): string
+    {
+        $decoded = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL);
+        $nonce = mb_substr($decoded, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES, '8bit');
+        $cipher = mb_substr($decoded, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES, null, '8bit');
+        $key = hash('sha256', $this->appSecret, true);
+        return sodium_crypto_secretbox_open($cipher, $nonce, $key);
+    }
+
+    /**
+     * Chiffre une valeur avec XSalsa20-Poly1305 (secretbox).
+     */
+    private function encrypt(string $plaintext): string
+    {
+        $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+        $key = hash('sha256', $this->appSecret, true);
+        $cipher = sodium_crypto_secretbox($plaintext, $nonce, $key);
+
+        return sodium_bin2base64($nonce . $cipher, SODIUM_BASE64_VARIANT_ORIGINAL);
+    }
+}

@@ -16,3 +16,11 @@ framework:
             policy: sliding_window
             limit: 60
             interval: '60 seconds'
+        captcha:
+            policy: sliding_window
+            limit: 10
+            interval: '60 seconds'
+        project_email:
+            policy: sliding_window
+            limit: 3
+            interval: '60 seconds'
