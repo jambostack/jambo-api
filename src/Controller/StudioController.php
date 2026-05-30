@@ -10,6 +10,8 @@ use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\AI\Platform\PlatformInterface;
+use Symfony\AI\Platform\Message\Message;
+use Symfony\AI\Platform\Message\MessageBag;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -167,12 +169,13 @@ PROMPT;
         }
 
         try {
-            $result = $platform->chat($model ?? 'gpt-4o', [
-                ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => $prompt],
-            ]);
+            $messages = new MessageBag(
+                Message::forSystem($systemPrompt),
+                Message::ofUser($prompt),
+            );
+            $result = $platform->invoke($model ?? 'gpt-4o', $messages);
 
-            $content = $result->getContent();
+            $content = $result->asText();
             // Extraire le JSON (le modèle peut wrapper dans ```json)
             if (preg_match('/\{[\s\S]*\}/', $content, $m)) {
                 $data = json_decode($m[0], true);
@@ -264,16 +267,19 @@ PROMPT;
         }
 
         try {
-            // Construire les messages pour le provider IA
-            $messages = [['role' => 'system', 'content' => $systemPrompt]];
+            // Construire les messages pour le provider IA avec MessageBag
+            $msgs = [Message::forSystem($systemPrompt)];
             foreach ($history as $h) {
                 $role = ($h['role'] === 'assistant' || $h['role'] === 'user') ? $h['role'] : 'user';
-                $messages[] = ['role' => $role, 'content' => (string) $h['content']];
+                $msgs[] = $role === 'assistant'
+                    ? Message::ofAssistant((string) $h['content'])
+                    : Message::ofUser((string) $h['content']);
             }
-            $messages[] = ['role' => 'user', 'content' => $prompt];
+            $msgs[] = Message::ofUser($prompt);
+            $bag = new MessageBag(...$msgs);
 
-            $result = $platform->chat($model ?? 'gpt-4o', $messages);
-            $content = $result->getContent();
+            $result = $platform->invoke($model ?? 'gpt-4o', $bag);
+            $content = $result->asText();
 
             // Extraire le JSON éventuel de la réponse
             $collections = null;
