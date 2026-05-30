@@ -11,6 +11,9 @@ use Twig\Loader\ArrayLoader;
 
 class NativeRenderer
 {
+    /** @var array<string, Environment> Cache des environnements Twig par UUID de workbench */
+    private array $environments = [];
+
     public function __construct(
         private readonly JamboNativeExtension $jamboExtension,
     ) {}
@@ -28,20 +31,7 @@ class NativeRenderer
         }
 
         $templateName = $this->resolveTemplate($workbench, $path);
-
-        // Charger TOUS les fichiers du projet dans l'ArrayLoader pour que
-        // {% extends 'templates/_layout.html.twig' %} et {% include %} fonctionnent.
-        $loader = new ArrayLoader($workbench->files);
-        $twig = new Environment($loader, [
-            'strict_variables' => true,
-            'autoescape'       => 'html',
-        ]);
-
-        // Activer le sandbox (mode strict : tout bloqué sauf la liste blanche)
-        $twig->addExtension(new SandboxExtension(new NativeTwigSecurityPolicy(), true));
-
-        // Ajouter l'extension custom Jambo
-        $twig->addExtension($this->jamboExtension);
+        $twig = $this->getEnvironment($workbench);
 
         // Construire le contexte accessible au template
         $context = [
@@ -52,13 +42,40 @@ class NativeRenderer
     }
 
     /**
+     * Recupere ou cree l'environnement Twig pour un workbench.
+     * L'environnement est cree une fois par UUID et reutilise pour les appels
+     * suivants, ce qui permet la mise en cache des templates compiles.
+     */
+    private function getEnvironment(WorkbenchProject $workbench): Environment
+    {
+        $key = $workbench->uuid->toRfc4122();
+        if (isset($this->environments[$key])) {
+            return $this->environments[$key];
+        }
+
+        $loader = new ArrayLoader($workbench->files);
+        $twig = new Environment($loader, [
+            'strict_variables' => true,
+            'autoescape'       => 'html',
+        ]);
+
+        // Activer le sandbox (mode strict : tout bloque sauf la liste blanche)
+        $twig->addExtension(new SandboxExtension(new NativeTwigSecurityPolicy(), true));
+
+        // Ajouter l'extension custom Jambo
+        $twig->addExtension($this->jamboExtension);
+
+        return $this->environments[$key] = $twig;
+    }
+
+    /**
      * Résout un path HTTP en nom de template Twig.
      *
      * Mapping :
      *   /              → templates/index.html.twig
      *   /blog          → templates/blog.html.twig (si existe)
-     *   /blog/article  → templates/post.html.twig  (si existe, pour toute collection)
-     *   /*             → templates/index.html.twig (fallback SPA)
+     *   /blog/article  → templates/blog.html.twig    (pour toute collection)
+     *   /*             → templates/index.html.twig    (fallback SPA)
      */
     private function resolveTemplate(WorkbenchProject $workbench, string $path): string
     {
@@ -74,10 +91,13 @@ class NativeRenderer
             return $candidate;
         }
 
-        // Ex: /blog/mon-article → templates/post.html.twig
+        // Ex: /blog/mon-article → templates/blog.html.twig
         $parts = explode('/', $clean);
-        if (count($parts) === 2 && isset($workbench->files['templates/post.html.twig'])) {
-            return 'templates/post.html.twig';
+        if (isset($parts[1])) {
+            $candidate = 'templates/' . $parts[0] . '.html.twig';
+            if (isset($workbench->files[$candidate])) {
+                return $candidate;
+            }
         }
 
         // Fallback SPA : index.html.twig

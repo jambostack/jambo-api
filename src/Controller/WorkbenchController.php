@@ -256,12 +256,9 @@ class WorkbenchController extends InertiaController
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/env', name: 'workbench_env_list', methods: ['GET'])]
     public function envList(string $uuid, string $workbenchUuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
-        $this->denyAccessUnlessGranted('project.view', $project);
-
-        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
+        $result = $this->resolveWorkbenchForApi($uuid, $workbenchUuid, 'project.view');
+        if ($result instanceof JsonResponse) return $result;
+        [$project, $workbench] = $result;
 
         $vars = $this->envVarRepository->findByWorkbench($workbench);
 
@@ -276,12 +273,9 @@ class WorkbenchController extends InertiaController
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/env', name: 'workbench_env_create', methods: ['POST'])]
     public function envCreate(string $uuid, string $workbenchUuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
-        $this->denyAccessUnlessGranted('project.manage', $project);
-
-        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
+        $result = $this->resolveWorkbenchForApi($uuid, $workbenchUuid, 'project.manage');
+        if ($result instanceof JsonResponse) return $result;
+        [$project, $workbench] = $result;
 
         $body    = $request->toArray();
         $keyName = strtoupper(trim((string) ($body['key_name'] ?? '')));
@@ -313,12 +307,9 @@ class WorkbenchController extends InertiaController
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/env/{envId}', name: 'workbench_env_delete', methods: ['DELETE'])]
     public function envDelete(string $uuid, string $workbenchUuid, int $envId): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
-        $this->denyAccessUnlessGranted('project.manage', $project);
-
-        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
+        $result = $this->resolveWorkbenchForApi($uuid, $workbenchUuid, 'project.manage');
+        if ($result instanceof JsonResponse) return $result;
+        [$project, $workbench] = $result;
 
         $var = $this->envVarRepository->find($envId);
         if ($var === null || $var->workbenchProject->id !== $workbench->id) {
@@ -336,12 +327,9 @@ class WorkbenchController extends InertiaController
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/publish', name: 'workbench_publish', methods: ['POST'])]
     public function publish(string $uuid, string $workbenchUuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
-        $this->denyAccessUnlessGranted('project.manage', $project);
-
-        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
+        $result = $this->resolveWorkbenchForApi($uuid, $workbenchUuid, 'project.manage');
+        if ($result instanceof JsonResponse) return $result;
+        [$project, $workbench] = $result;
 
         $body = $request->toArray();
         $files = $body['files'] ?? [];
@@ -376,9 +364,18 @@ class WorkbenchController extends InertiaController
             return new JsonResponse(['error' => $this->translator->trans('workbench.errors.payload_too_large')], 422);
         }
 
+        // Écrire les fichiers d'abord
         $this->publishedSiteStorage->publish($workbench->uuid->toRfc4122(), $files);
+
+        // Puis mettre à jour la DB
         $workbench->publishedAt = new \DateTimeImmutable();
-        $this->em->flush();
+        try {
+            $this->em->flush();
+        } catch (\Throwable $e) {
+            // Rollback: le prochain publish écrasera les fichiers.
+            // Logguer l'erreur pour debugging.
+            throw $e;
+        }
 
         // Retourner les variables non-secrètes pour référence (le build est déjà fait côté client).
         // Les secrets (isSecret=true) ne sont jamais renvoyés dans la réponse.
@@ -401,12 +398,9 @@ class WorkbenchController extends InertiaController
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/domains', name: 'workbench_domain_list', methods: ['GET'])]
     public function domainList(string $uuid, string $workbenchUuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
-        $this->denyAccessUnlessGranted('project.view', $project);
-
-        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
+        $result = $this->resolveWorkbenchForApi($uuid, $workbenchUuid, 'project.view');
+        if ($result instanceof JsonResponse) return $result;
+        [$project, $workbench] = $result;
 
         $domains = $this->siteDomainRepository->findByWorkbench($workbench);
 
@@ -420,12 +414,9 @@ class WorkbenchController extends InertiaController
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/domains', name: 'workbench_domain_add', methods: ['POST'])]
     public function domainAdd(string $uuid, string $workbenchUuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
-        $this->denyAccessUnlessGranted('project.manage', $project);
-
-        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
+        $result = $this->resolveWorkbenchForApi($uuid, $workbenchUuid, 'project.manage');
+        if ($result instanceof JsonResponse) return $result;
+        [$project, $workbench] = $result;
 
         $domain = strtolower(trim((string) ($request->toArray()['domain'] ?? '')));
         if ($domain === '' || strlen($domain) > 253 || !preg_match('/^(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/', $domain)) {
@@ -450,6 +441,20 @@ class WorkbenchController extends InertiaController
             return new JsonResponse(['error' => $this->translator->trans('workbench.errors.domain_duplicate')], 409);
         }
 
+        // Post-persist: si une autre requête concurrente a aussi mis isPrimary=true,
+        // ne garder que la plus ancienne (lowest createdAt)
+        if ($isPrimary) {
+            $allDomains = $this->siteDomainRepository->findByWorkbench($workbench);
+            $primaries = array_filter($allDomains, fn($d) => $d->isPrimary);
+            if (count($primaries) > 1) {
+                usort($primaries, fn($a, $b) => $a->createdAt <=> $b->createdAt);
+                for ($i = 1; $i < count($primaries); $i++) {
+                    $primaries[$i]->isPrimary = false;
+                }
+                $this->em->flush();
+            }
+        }
+
         return new JsonResponse(['data' => [
             'uuid'       => $sd->uuid->toRfc4122(),
             'domain'     => $sd->domain,
@@ -460,12 +465,9 @@ class WorkbenchController extends InertiaController
     #[Route('/api/projects/{uuid}/workbench/{workbenchUuid}/domains/{domainUuid}', name: 'workbench_domain_delete', methods: ['DELETE'])]
     public function domainDelete(string $uuid, string $workbenchUuid, string $domainUuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
-        $this->denyAccessUnlessGranted('project.manage', $project);
-
-        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
+        $result = $this->resolveWorkbenchForApi($uuid, $workbenchUuid, 'project.manage');
+        if ($result instanceof JsonResponse) return $result;
+        [$project, $workbench] = $result;
 
         $sd = $this->siteDomainRepository->findOneBy(['uuid' => $domainUuid, 'workbenchProject' => $workbench]);
         if (!$sd) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.domain_not_found')], 404);
@@ -484,6 +486,28 @@ class WorkbenchController extends InertiaController
         }
 
         return new JsonResponse(['deleted' => $domainUuid]);
+    }
+
+    /**
+     * Résout le projet par UUID et le WorkbenchProject associé, en vérifiant les droits.
+     * Retourne un JsonResponse en cas d'erreur, ou un tableau [Project, WorkbenchProject].
+     *
+     * @return array{0: Project, 1: WorkbenchProject}|JsonResponse
+     */
+    private function resolveWorkbenchForApi(string $projectUuid, string $workbenchUuid, string $permission): array|JsonResponse
+    {
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
+        }
+        $this->denyAccessUnlessGranted($permission, $project);
+
+        $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
+        if (!$workbench) {
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
+        }
+
+        return [$project, $workbench];
     }
 
     /**
