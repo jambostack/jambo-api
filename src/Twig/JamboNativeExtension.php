@@ -3,7 +3,6 @@
 namespace App\Twig;
 
 use App\Entity\ContentEntry;
-use App\Entity\Project;
 use App\Repository\CollectionRepository;
 use App\Repository\ContentEntryRepository;
 use App\Service\EavDataFormatterService;
@@ -21,9 +20,9 @@ class JamboNativeExtension extends AbstractExtension
     public function getFunctions(): array
     {
         return [
-            new TwigFunction('jambo_collection', [$this, 'getCollection']),
-            new TwigFunction('jambo_entry', [$this, 'getEntry']),
-            new TwigFunction('jambo_setting', [$this, 'getSetting']),
+            new TwigFunction('jambo_collection', [$this, 'getCollection'], ['needs_context' => true]),
+            new TwigFunction('jambo_entry', [$this, 'getEntry'], ['needs_context' => true]),
+            new TwigFunction('jambo_setting', [$this, 'getSetting'], ['needs_context' => true]),
             new TwigFunction('jambo_url', [$this, 'getUrl']),
             new TwigFunction('jambo_asset', [$this, 'getAsset']),
             new TwigFunction('jambo_locale', [$this, 'getLocale']),
@@ -35,8 +34,9 @@ class JamboNativeExtension extends AbstractExtension
      *
      * Usage: {% for post in jambo_collection('blog') %} {{ post.title }} {% endfor %}
      */
-    public function getCollection(Project $project, string $collectionSlug, int $limit = 20): array
+    public function getCollection(array $context, string $collectionSlug, int $limit = 20): array
     {
+        $project = $context['project'] ?? throw new \RuntimeException('Missing project in Twig context.');
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
             return [];
@@ -59,8 +59,9 @@ class JamboNativeExtension extends AbstractExtension
      *
      * Usage: {{ jambo_entry('blog', 'mon-article').title }}
      */
-    public function getEntry(Project $project, string $collectionSlug, string $entrySlug): ?array
+    public function getEntry(array $context, string $collectionSlug, string $entrySlug): ?array
     {
+        $project = $context['project'] ?? throw new \RuntimeException('Missing project in Twig context.');
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
             return null;
@@ -85,9 +86,9 @@ class JamboNativeExtension extends AbstractExtension
      * Retourne une variable de configuration globale.
      * Pour l'instant, stub -- retourne null.
      */
-    public function getSetting(Project $project, string $key): mixed
+    public function getSetting(array $context, string $key): mixed
     {
-        // FUTUR: acces a une table de settings par projet
+        // FUTUR: accès à une table de settings par projet
         return null;
     }
 

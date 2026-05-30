@@ -59,7 +59,7 @@ export default function WorkbenchPage({ project, workbenchProjects, frameworks, 
         if (!first) return;
         frameworkStore.set(first.framework);
         Object.entries(first.files).forEach(([path, content]) => upsertFile(path, content as string));
-    }, []);
+    }, [workbenchProjects]);
 
     const devCommandMap: Record<string, string> = {
         nextjs: 'npm run dev', nuxt: 'npm run dev',

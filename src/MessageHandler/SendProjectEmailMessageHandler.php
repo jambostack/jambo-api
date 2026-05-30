@@ -45,19 +45,24 @@ class SendProjectEmailMessageHandler
             $email->replyTo($message->replyTo);
         }
 
-        $error = null;
+        $log = new EmailLog($project, $message->to, $message->subject);
+
         try {
             // Transport dynamique : on crée un transport SMTP à la volée
             $transport = Transport::fromDsn($dsn);
             $mailer = new Mailer($transport);
             $mailer->send($email);
         } catch (\Throwable $e) {
-            $error = $e->getMessage();
+            // Logguer l'erreur pour audit
+            $log->error = $e->getMessage();
+            $this->em->persist($log);
+            $this->em->flush();
+
+            // Rethrow pour activer le retry Messenger (max_retries: 3)
+            throw $e;
         }
 
-        // Log d'audit
-        $log = new EmailLog($project, $message->to, $message->subject);
-        $log->error = $error;
+        // Succès : log sans erreur
         $this->em->persist($log);
         $this->em->flush();
     }

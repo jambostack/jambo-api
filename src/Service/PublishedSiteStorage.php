@@ -21,7 +21,11 @@ class PublishedSiteStorage
         // et les race conditions entre deux publish concurrents.
         $stageDir = $dir . '.staging_' . getmypid();
         $this->removeDir($stageDir);
-        mkdir($stageDir, 0755, true);
+
+        if (!@mkdir($stageDir, 0755, true) && !is_dir($stageDir)) {
+            throw new \RuntimeException(sprintf('Cannot create staging directory "%s".', $stageDir));
+        }
+
         $stageReal = realpath($stageDir);
 
         foreach ($files as $relativePath => $content) {
@@ -46,14 +50,25 @@ class PublishedSiteStorage
             file_put_contents($abs, $content, \LOCK_EX);
         }
 
-        // Remplacement atomique : swap l'ancien répertoire avec le nouveau.
+        // Remplacement atomique avec vérification et rollback.
         if (is_dir($dir)) {
             $oldDir = $dir . '.old_' . getmypid();
-            rename($dir, $oldDir);
-            rename($stageDir, $dir);
+
+            if (!@rename($dir, $oldDir)) {
+                throw new \RuntimeException(sprintf('Cannot move "%s" aside for atomic swap.', $dir));
+            }
+
+            if (!@rename($stageDir, $dir)) {
+                // Rollback : restaurer l'ancien répertoire.
+                @rename($oldDir, $dir);
+                throw new \RuntimeException(sprintf('Atomic swap failed — old content restored.'));
+            }
+
             $this->removeDir($oldDir);
         } else {
-            rename($stageDir, $dir);
+            if (!@rename($stageDir, $dir)) {
+                throw new \RuntimeException(sprintf('Cannot move staging to "%s".', $dir));
+            }
         }
     }
 

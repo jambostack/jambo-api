@@ -35,6 +35,12 @@ class WorkbenchController extends InertiaController
     private const MAX_PROMPT_LENGTH = 4000;
     private const MAX_FILES_BYTES = 2 * 1024 * 1024;
 
+    private const ALLOWED_EXTENSIONS = [
+        'html', 'css', 'js', 'mjs', 'json', 'svg', 'png', 'jpg', 'jpeg',
+        'webp', 'ico', 'woff', 'woff2', 'ttf', 'txt', 'xml', 'map',
+        'wasm', 'webmanifest',
+    ];
+
     /** @param BaseTemplate[] $templates */
     public function __construct(
         private readonly EntityManagerInterface $em,
@@ -353,8 +359,19 @@ class WorkbenchController extends InertiaController
             return new JsonResponse(['error' => $this->translator->trans('workbench.errors.no_static_publish')], 422);
         }
 
+        // Validation des extensions — pas de .php, .phtml, .htaccess etc.
+        foreach ($files as $path => $content) {
+            if (!is_string($content)) {
+                return new JsonResponse(['error' => 'Les valeurs des fichiers doivent être des chaînes.'], 422);
+            }
+            $ext = strtolower(pathinfo((string) $path, PATHINFO_EXTENSION));
+            if ($ext !== '' && !in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
+                return new JsonResponse(['error' => sprintf('Extension non autorisée : .%s', $ext)], 422);
+            }
+        }
+
         // Limite de taille : 25 Mo
-        $totalBytes = array_sum(array_map('strlen', $files));
+        $totalBytes = array_sum(array_map(fn ($v) => strlen((string) $v), $files));
         if ($totalBytes > 25 * 1024 * 1024) {
             return new JsonResponse(['error' => $this->translator->trans('workbench.errors.payload_too_large')], 422);
         }
