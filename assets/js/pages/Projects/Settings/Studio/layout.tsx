@@ -65,96 +65,150 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
         .studio-root .font-serif { font-family: var(--studio-serif); }
         .studio-root .font-mono { font-family: var(--studio-mono); }
 
-        .studio-root .nav-num {
-          font-family: var(--studio-mono);
-          font-size: 10px;
-          letter-spacing: .08em;
-          color: var(--studio-text-muted);
+        /* ── SIDEBAR ── */
+        .studio-sidebar {
+          display: flex; flex-direction: column; gap: 4px;
+          width: 100%;
         }
-        .studio-root .nav-item-active .nav-num { color: var(--studio-accent); }
-
-        .studio-root .nav-desc {
-          font-size: 12px;
-          color: var(--studio-text-dim);
-          line-height: 1.4;
+        .studio-sidebar .sb-nav-item {
+          display: flex; align-items: center; gap: 10px;
+          width: 100%; text-align: left; cursor: pointer;
+          padding: 10px 12px; border-radius: 8px;
+          background: transparent; border: 1px solid transparent;
+          transition: all .15s ease;
+          font-size: 13px; color: var(--studio-text-dim);
         }
-
-        .studio-root .stat-value {
-          font-family: var(--studio-mono);
-          font-size: 28px;
-          font-weight: 600;
-          color: var(--studio-accent);
-          line-height: 1;
-          letter-spacing: -.02em;
-        }
-        .studio-root .stat-label {
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: .08em;
-          color: var(--studio-text-muted);
-        }
-
-        .studio-root .section-header h2 {
-          font-family: var(--studio-serif);
-          font-size: 22px;
-          font-weight: 500;
-          letter-spacing: -.01em;
+        .studio-sidebar .sb-nav-item:hover { background: var(--studio-raised); color: var(--studio-text); }
+        .studio-sidebar .sb-nav-item.sb-active {
+          background: var(--studio-raised);
+          border-color: var(--studio-border-active);
           color: var(--studio-text);
         }
+        .studio-sidebar .sb-nav-item .nav-num {
+          font-family: var(--studio-mono); font-size: 10px;
+          letter-spacing: .08em; color: var(--studio-text-muted);
+          min-width: 18px; text-align: center;
+        }
+        .studio-sidebar .sb-nav-item.sb-active .nav-num { color: var(--studio-accent); }
+        .studio-sidebar .sb-nav-item svg { width: 14px; height: 14px; flex-shrink: 0; }
+        .studio-sidebar .sb-nav-item.sb-active svg { color: var(--studio-accent); }
 
-        @media (max-width: 768px) {
-          .studio-root .studio-grid { grid-template-columns: 1fr; }
+        /* Stats card */
+        .studio-stats {
+          display: flex; gap: 12px; margin-top: 8px;
+          padding: 12px; border-radius: 10px;
+          border: 1px solid var(--studio-border);
+          background: var(--studio-surface);
+        }
+        .studio-stats .stat-value {
+          font-family: var(--studio-mono); font-size: 22px;
+          font-weight: 600; color: var(--studio-accent);
+          line-height: 1; letter-spacing: -.02em;
+        }
+        .studio-stats .stat-label {
+          font-size: 9px; text-transform: uppercase;
+          letter-spacing: .08em; color: var(--studio-text-muted);
+        }
+
+        /* ── MAIN GRID ── */
+        .studio-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 24px;
+        }
+
+        /* ── RESPONSIVE BREAKPOINTS ── */
+        @media (min-width: 769px) {
+          .studio-grid {
+            grid-template-columns: 220px 1fr;
+            gap: 28px;
+          }
+          .studio-sidebar .sb-nav-item {
+            flex-direction: column; align-items: flex-start;
+            padding: 14px; gap: 6px;
+          }
+          .studio-sidebar .sb-nav-item .nav-num { font-size: 10px; }
+        }
+        @media (min-width: 1025px) {
+          .studio-grid {
+            grid-template-columns: 240px 1fr;
+            gap: 32px;
+          }
+        }
+
+        /* Mobile: horizontal scroll nav */
+        .studio-mobile-nav {
+          display: flex; gap: 6px; overflow-x: auto;
+          padding-bottom: 4px; -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .studio-mobile-nav::-webkit-scrollbar { display: none; }
+        .studio-mobile-nav .mob-tab {
+          flex-shrink: 0; display: flex; align-items: center; gap: 5px;
+          padding: 8px 14px; border-radius: 999px; font-size: 12px;
+          border: 1px solid var(--studio-border);
+          background: var(--studio-surface);
+          color: var(--studio-text-dim);
+          cursor: pointer; white-space: nowrap;
+          transition: all .15s ease;
+        }
+        .studio-mobile-nav .mob-tab.sb-active {
+          background: var(--studio-accent-dim);
+          border-color: var(--studio-border-active);
+          color: var(--studio-text);
+        }
+        .studio-mobile-nav .mob-tab svg { width: 13px; height: 13px; }
+        .studio-mobile-nav .mob-tab.sb-active svg { color: var(--studio-accent); }
+
+        @media (min-width: 769px) {
+          .studio-mobile-nav { display: none; }
+        }
+
+        /* Section header */
+        .studio-root .section-header h2 {
+          font-family: var(--studio-serif);
+          font-size: clamp(18px, 3vw, 22px);
+          font-weight: 500; letter-spacing: -.01em;
+          color: var(--studio-text);
         }
       `}</style>
 
       <Heading title={t('studio.title')} description={t('studio.desc')} />
 
-      <div className="studio-grid mt-8" style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '32px' }}>
-        {/* ── SIDEBAR ── */}
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {/* ── Mobile: horizontal scroll tabs ── */}
+      <div className="studio-mobile-nav" style={{ marginTop: '16px' }}>
+        {nav.map(item => {
+          const isActive = active === item.id;
+          const Icon = item.icon;
+          return (
+            <button key={item.id} onClick={() => setActive(item.id)} className={`mob-tab${isActive ? ' sb-active' : ''}`}>
+              <Icon />{item.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="studio-grid" style={{ marginTop: '20px' }}>
+        {/* ── SIDEBAR (tablet+) ── */}
+        <nav className="studio-sidebar" style={{ display: 'none' }}>
+          <style>{`@media(min-width:769px){.studio-sidebar{display:flex!important}}`}</style>
           {nav.map(item => {
             const isActive = active === item.id;
             const Icon = item.icon;
             return (
-              <button
-                key={item.id}
-                onClick={() => setActive(item.id)}
-                className={isActive ? 'nav-item-active' : ''}
-                style={{
-                  display: 'flex', alignItems: 'flex-start', gap: '12px',
-                  width: '100%', textAlign: 'left', cursor: 'pointer',
-                  padding: '14px', borderRadius: '8px',
-                  background: isActive ? 'var(--studio-raised)' : 'transparent',
-                  border: isActive ? '1px solid var(--studio-border-active)' : '1px solid transparent',
-                  transition: 'all .15s ease',
-                }}
-              >
-                <span className="nav-num" style={{ marginTop: '1px' }}>{item.num}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
-                    <Icon className="w-3.5 h-3.5" style={{ color: isActive ? 'var(--studio-accent)' : 'var(--studio-text-dim)' }} />
-                    <span style={{
-                      fontSize: '13px', fontWeight: 600,
-                      color: isActive ? 'var(--studio-text)' : 'var(--studio-text-dim)',
-                    }}>{item.label}</span>
-                  </div>
-                  <p className="nav-desc">{item.desc}</p>
-                </div>
+              <button key={item.id} onClick={() => setActive(item.id)}
+                className={`sb-nav-item${isActive ? ' sb-active' : ''}`}>
+                <span className="nav-num">{item.num}</span>
+                <Icon />
+                <span style={{ fontWeight: 600 }}>{item.label}</span>
               </button>
             );
           })}
 
-          {/* Stats card */}
-          <div style={{
-            marginTop: '16px', padding: '16px',
-            border: '1px solid var(--studio-border)', borderRadius: '10px',
-            background: 'var(--studio-surface)',
-          }}>
-            <div style={{ display: 'flex', gap: '16px' }}>
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <div className="stat-value">{collections.length}</div>
-                <div className="stat-label">{t('studio.schema.collections_title')}</div>
-              </div>
+          <div className="studio-stats">
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div className="stat-value">{collections.length}</div>
+              <div className="stat-label">Collections</div>
             </div>
           </div>
         </nav>
