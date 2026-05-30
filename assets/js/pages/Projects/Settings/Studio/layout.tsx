@@ -49,17 +49,17 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
     <div className="studio-root">
       <style>{`
         .studio-root {
-          --studio-bg: #0b0f0d;
-          --studio-surface: #111714;
-          --studio-raised: #171d19;
-          --studio-border: rgba(255,255,255,.06);
-          --studio-border-active: rgba(47,207,143,.25);
-          --studio-text: #dde4df;
-          --studio-text-dim: #85918b;
-          --studio-text-muted: #5c6762;
-          --studio-accent: #2fcf8f;
-          --studio-accent-dim: rgba(47,207,143,.10);
-          --studio-red: #f87171;
+          --studio-bg: var(--background);
+          --studio-surface: var(--card);
+          --studio-raised: var(--muted);
+          --studio-border: var(--border);
+          --studio-border-active: color-mix(in oklch, var(--primary) 25%, transparent);
+          --studio-text: var(--foreground);
+          --studio-text-dim: color-mix(in oklch, var(--foreground) 60%, transparent);
+          --studio-text-muted: color-mix(in oklch, var(--foreground) 40%, transparent);
+          --studio-accent: var(--primary);
+          --studio-accent-dim: color-mix(in oklch, var(--primary) 15%, transparent);
+          --studio-red: var(--destructive);
           --studio-amber: #f7b955;
           --studio-mono: 'JetBrains Mono', ui-monospace, monospace;
           --studio-serif: 'Newsreader', 'Cormorant Garamond', Georgia, serif;
@@ -73,12 +73,12 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
           width: 100%;
         }
         .studio-sidebar .sb-nav-item {
-          display: flex; align-items: center; gap: 10px;
-          width: 100%; text-align: left; cursor: pointer;
-          padding: 10px 12px; border-radius: 8px;
+          display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px;
+          width: 100%; text-align: center; cursor: pointer;
+          padding: 10px 4px; border-radius: 8px;
           background: transparent; border: 1px solid transparent;
           transition: all .15s ease;
-          font-size: 13px; color: var(--studio-text-dim);
+          font-size: 10px; color: var(--studio-text-dim);
         }
         .studio-sidebar .sb-nav-item:hover { background: var(--studio-raised); color: var(--studio-text); }
         .studio-sidebar .sb-nav-item.sb-active {
@@ -94,22 +94,28 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
         .studio-sidebar .sb-nav-item.sb-active .nav-num { color: var(--studio-accent); }
         .studio-sidebar .sb-nav-item svg { width: 14px; height: 14px; flex-shrink: 0; }
         .studio-sidebar .sb-nav-item.sb-active svg { color: var(--studio-accent); }
+        .studio-sidebar .sb-nav-item span.label-text { display: none; }
+        .studio-sidebar .sb-nav-item .nav-num { display: none; }
+        .studio-sidebar .studio-stats { display: none; }
+        .studio-sidebar .sb-nav-item {
+          padding: 8px 4px; gap: 0;
+        }
 
-        /* Stats card */
+        /* Stats card — compacté en 56px */
         .studio-stats {
-          display: flex; gap: 12px; margin-top: 8px;
-          padding: 12px; border-radius: 10px;
+          display: flex; flex-direction: column; gap: 2px; margin-top: 8px;
+          padding: 8px 4px; border-radius: 8px; text-align: center;
           border: 1px solid var(--studio-border);
           background: var(--studio-surface);
         }
         .studio-stats .stat-value {
-          font-family: var(--studio-mono); font-size: 22px;
+          font-family: var(--studio-mono); font-size: 15px;
           font-weight: 600; color: var(--studio-accent);
           line-height: 1; letter-spacing: -.02em;
         }
         .studio-stats .stat-label {
-          font-size: 9px; text-transform: uppercase;
-          letter-spacing: .08em; color: var(--studio-text-muted);
+          font-size: 7px; text-transform: uppercase;
+          letter-spacing: .06em; color: var(--studio-text-muted);
         }
 
         /* ── MAIN GRID ── */
@@ -122,19 +128,20 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
         /* ── RESPONSIVE BREAKPOINTS ── */
         @media (min-width: 769px) {
           .studio-grid {
-            grid-template-columns: 220px 1fr;
-            gap: 28px;
+            grid-template-columns: 44px 1fr;
+            gap: 16px;
           }
           .studio-sidebar .sb-nav-item {
-            flex-direction: column; align-items: flex-start;
-            padding: 14px; gap: 6px;
+            flex-direction: column; align-items: center; justify-content: center;
+            padding: 10px 4px; gap: 4px;
           }
-          .studio-sidebar .sb-nav-item .nav-num { font-size: 10px; }
+          .studio-sidebar .sb-nav-item span { display: none; }
+          .studio-sidebar .sb-nav-item .nav-num { font-size: 9px; }
         }
         @media (min-width: 1025px) {
           .studio-grid {
-            grid-template-columns: 240px 1fr;
-            gap: 32px;
+            grid-template-columns: 56px 1fr;
+            gap: 24px;
           }
         }
 
@@ -223,7 +230,7 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
           const Icon = item.icon;
           return (
             <button key={item.id} onClick={() => setActive(item.id)} className={`mob-tab${isActive ? ' sb-active' : ''}`}>
-              <Icon />{item.label}
+              <Icon /><span className="label-text">{item.label}</span>
             </button>
           );
         })}
@@ -241,7 +248,7 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
                 className={`sb-nav-item${isActive ? ' sb-active' : ''}`}>
                 <span className="nav-num">{item.num}</span>
                 <Icon />
-                <span style={{ fontWeight: 600 }}>{item.label}</span>
+                <span className="label-text" style={{ fontWeight: 600 }}>{item.label}</span>
               </button>
             );
           })}
