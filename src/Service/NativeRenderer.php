@@ -23,15 +23,17 @@ class NativeRenderer
      */
     public function render(WorkbenchProject $workbench, string $path): string
     {
+        if (empty($workbench->files)) {
+            throw new \RuntimeException('WorkbenchProject has no template files.');
+        }
+
         $templateName = $this->resolveTemplate($workbench, $path);
 
-        // Charger le template depuis les fichiers du WorkbenchProject
-        $templateSource = $this->findTemplate($workbench, $templateName);
-
-        // Créer un environnement Twig sandboxé
-        $loader = new ArrayLoader([$templateName => $templateSource]);
+        // Charger TOUS les fichiers du projet dans l'ArrayLoader pour que
+        // {% extends 'templates/_layout.html.twig' %} et {% include %} fonctionnent.
+        $loader = new ArrayLoader($workbench->files);
         $twig = new Environment($loader, [
-            'strict_variables' => false,
+            'strict_variables' => true,
             'autoescape'       => 'html',
         ]);
 
@@ -51,6 +53,12 @@ class NativeRenderer
 
     /**
      * Résout un path HTTP en nom de template Twig.
+     *
+     * Mapping :
+     *   /              → templates/index.html.twig
+     *   /blog          → templates/blog.html.twig (si existe)
+     *   /blog/article  → templates/post.html.twig  (si existe, pour toute collection)
+     *   /*             → templates/index.html.twig (fallback SPA)
      */
     private function resolveTemplate(WorkbenchProject $workbench, string $path): string
     {
@@ -60,44 +68,19 @@ class NativeRenderer
             return 'templates/index.html.twig';
         }
 
-        // Chercher un template qui correspond au path
         // Ex: /blog → templates/blog.html.twig
         $candidate = 'templates/' . $clean . '.html.twig';
         if (isset($workbench->files[$candidate])) {
             return $candidate;
         }
 
-        // Ex: /blog/mon-article → templates/post.html.twig (détecter la collection parente)
+        // Ex: /blog/mon-article → templates/post.html.twig
         $parts = explode('/', $clean);
-        if (count($parts) === 2) {
-            $parentSlug = $parts[0];
-            // Vérifier si un template post.html.twig existe
-            if (isset($workbench->files['templates/post.html.twig'])) {
-                return 'templates/post.html.twig';
-            }
+        if (count($parts) === 2 && isset($workbench->files['templates/post.html.twig'])) {
+            return 'templates/post.html.twig';
         }
 
-        // Fallback SPA Twig : index.html.twig
+        // Fallback SPA : index.html.twig
         return 'templates/index.html.twig';
-    }
-
-    /**
-     * Trouve le contenu d'un template dans les fichiers du WorkbenchProject.
-     */
-    private function findTemplate(WorkbenchProject $workbench, string $templateName): string
-    {
-        if (isset($workbench->files[$templateName])) {
-            return $workbench->files[$templateName];
-        }
-
-        // Fallback : chercher sans le préfixe templates/
-        $shortName = str_replace('templates/', '', $templateName);
-        foreach ($workbench->files as $path => $content) {
-            if (str_ends_with($path, $shortName)) {
-                return $content;
-            }
-        }
-
-        throw new \RuntimeException(sprintf('Template "%s" not found in WorkbenchProject files.', $templateName));
     }
 }

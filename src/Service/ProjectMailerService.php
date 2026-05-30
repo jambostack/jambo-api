@@ -26,6 +26,9 @@ class ProjectMailerService
     public function send(Project $project, string $to, string $subject, string $body, ?string $replyTo = null): void
     {
         $settings = $this->getSettings($project);
+        if ($settings === null || !$settings->enabled) {
+            throw new \RuntimeException('Mailer not configured or disabled for this project.');
+        }
 
         $password = $this->decrypt($settings->encryptedPassword);
 
@@ -71,6 +74,10 @@ class ProjectMailerService
      */
     private function decrypt(string $encrypted): string
     {
+        if ($encrypted === '') {
+            throw new \RuntimeException('SMTP password not configured.');
+        }
+
         $decoded = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL);
         $nonce = mb_substr($decoded, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES, '8bit');
         $cipher = mb_substr($decoded, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES, null, '8bit');
