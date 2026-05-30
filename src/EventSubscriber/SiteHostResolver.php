@@ -29,9 +29,14 @@ class SiteHostResolver implements EventSubscriberInterface
         'txt'  => 'text/plain',
     ];
 
+    /**
+     * @param string[] $reservedHostnames Hostnames that must never be intercepted
+     *                                    (typically the CMS's own domain).
+     */
     public function __construct(
         private readonly SiteDomainRepository $siteDomainRepository,
         private readonly PublishedSiteStorage $storage,
+        private readonly array $reservedHostnames = [],
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -46,6 +51,12 @@ class SiteHostResolver implements EventSubscriberInterface
         }
 
         $host = $event->getRequest()->getHost();
+
+        // Ne jamais intercepter les hostnames réservés (le domaine du CMS lui-même).
+        if (in_array($host, $this->reservedHostnames, true)) {
+            return;
+        }
+
         $siteDomain = $this->siteDomainRepository->findByDomain($host);
         if ($siteDomain === null) {
             return;
