@@ -55,26 +55,35 @@ function SchemaChatPanel({
   currentCollections: SchemaCollection[];
   onApplySchema: (newCollections: SchemaCollection[]) => void;
 }) {
-  const storageKey = `studio_chat_${project.uuid}`;
-
-  const loadMessages = (): ChatMessage[] => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) { const parsed = JSON.parse(raw) as ChatMessage[]; if (parsed.length > 0) return parsed; }
-    } catch {}
-    return [{ role: 'assistant' as const, content: 'Décris les collections à créer ou modifier.', schema: undefined }];
-  };
-
-  const [messages, setMessages] = useState<ChatMessage[]>(loadMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const scrollDown = () => setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
 
-  // Persiste les messages dans localStorage à chaque changement
+  // Charger l'historique depuis la DB au montage
   useEffect(() => {
-    try { localStorage.setItem(storageKey, JSON.stringify(messages)); } catch {}
-  }, [messages, storageKey]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${project.uuid}/studio/chat-messages`);
+        const data = await res.json() as { data?: Array<{ role: string; content: string; schema: any }> };
+        if (cancelled) return;
+        const loaded = (data.data ?? []).map(m => ({ role: m.role as ChatMessage['role'], content: m.content, schema: m.schema ?? undefined }));
+        if (loaded.length === 0) {
+          loaded.push({ role: 'assistant' as const, content: 'Décris les collections à créer ou modifier.', schema: undefined });
+        }
+        setMessages(loaded);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [project.uuid]);
+
+  // Effacer l'historique côté serveur
+  async function clearHistory() {
+    try { await fetch(`/api/projects/${project.uuid}/studio/chat-messages`, { method: 'DELETE' }); } catch {}
+    setMessages([{ role: 'assistant', content: 'Décris les collections à créer ou modifier.', schema: undefined }]);
+  }
 
   function buildContext(): string {
     if (currentCollections.length === 0) return '(aucune collection existante)';
@@ -171,8 +180,9 @@ function SchemaChatPanel({
       </div>
       <div className="scp-input-row">
         <input placeholder="Décris les collections..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key==='Enter'&&send()} disabled={busy} />
+        <button onClick={clearHistory} disabled={busy} title="Effacer l'historique" style={{ background: 'var(--studio-surface)', border: '1px solid var(--studio-border)', color: 'var(--studio-text-muted)' }}><Trash2 className="w-3.5 h-3.5" /></button>
         <button onClick={send} disabled={busy || !input.trim()}>{busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}</button>
-        </div>
+      </div>
         <div className="scp-quick-prompts">
           {["Crée un blog avec articles, catégories et commentaires","Ajoute un champ auteur de type relation","Crée une page À propos en singleton avec image","Repense tout le schéma pour un site e-commerce","Ajoute un champ date de publication aux collections"].map((qp,i)=>(<button key={i} className="scp-quick-pill" onClick={()=>{setInput(qp)}} disabled={busy}>{qp}</button>))}
         </div>
