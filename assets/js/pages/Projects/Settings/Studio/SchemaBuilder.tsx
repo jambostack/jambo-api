@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -413,7 +412,15 @@ export default function SchemaBuilder({ project }: { project: Project }) {
     } catch {}
   }
 
-  async function handleSave() { setSaving(true); try { await router.post(`/api/projects/${project.uuid}/studio/schema`, { collections }, { onSuccess: () => setSaving(false), onError: () => setSaving(false) }); } catch { setSaving(false); } }
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await fetch(`/api/projects/${project.uuid}/studio/schema`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ collections }),
+      });
+    } catch {} finally { setSaving(false); }
+  }
   function generatePreview() {
     if (isEndUsers) {
       const lines = [`▸ Utilisateurs`, `  champs personnalisés : ${endUserFields.filter(f => !f.is_system).length}`, `  champs système : ${endUserFields.filter(f => f.is_system).length}`];
