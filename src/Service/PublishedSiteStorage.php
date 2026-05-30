@@ -9,23 +9,51 @@ class PublishedSiteStorage
     ) {}
 
     /**
-     * Efface le repertoire du projet puis ecrit tous les fichiers.
+     * Efface le répertoire du projet puis écrit tous les fichiers de manière atomique.
      *
      * @param array<string,string> $files chemin relatif → contenu
      */
     public function publish(string $projectUuid, array $files): void
     {
         $dir = $this->projectDir($projectUuid);
-        $this->removeDir($dir);
-        mkdir($dir, 0755, true);
+
+        // Écriture dans un répertoire temporaire pour éviter la corruption en cas de crash
+        // et les race conditions entre deux publish concurrents.
+        $stageDir = $dir . '.staging_' . getmypid();
+        $this->removeDir($stageDir);
+        mkdir($stageDir, 0755, true);
+        $stageReal = realpath($stageDir);
 
         foreach ($files as $relativePath => $content) {
-            $abs = $dir . '/' . ltrim($relativePath, '/');
+            // Protection anti-traversal : refuser les chemins qui tentent de sortir du répertoire.
+            $clean = ltrim(str_replace('\\', '/', $relativePath), '/');
+            if ($clean === '' || str_contains($clean, '..')) {
+                continue;
+            }
+
+            $abs = $stageDir . '/' . $clean;
             $parent = dirname($abs);
             if (!is_dir($parent)) {
                 mkdir($parent, 0755, true);
             }
-            file_put_contents($abs, $content);
+
+            // Vérification post-résolution : le parent doit être sous le répertoire de staging.
+            $parentReal = realpath($parent);
+            if ($parentReal === false || (!str_starts_with($parentReal, $stageReal . \DIRECTORY_SEPARATOR) && $parentReal !== $stageReal)) {
+                continue;
+            }
+
+            file_put_contents($abs, $content, \LOCK_EX);
+        }
+
+        // Remplacement atomique : swap l'ancien répertoire avec le nouveau.
+        if (is_dir($dir)) {
+            $oldDir = $dir . '.old_' . getmypid();
+            rename($dir, $oldDir);
+            rename($stageDir, $dir);
+            $this->removeDir($oldDir);
+        } else {
+            rename($stageDir, $dir);
         }
     }
 
@@ -35,14 +63,19 @@ class PublishedSiteStorage
     public function readFile(string $projectUuid, string $relativePath): ?string
     {
         $dir = $this->projectDir($projectUuid);
+        $dirReal = realpath($dir);
+        if ($dirReal === false) {
+            return null; // répertoire projet inexistant
+        }
+
         $abs = realpath($dir . '/' . ltrim($relativePath, '/'));
 
         if ($abs === false) {
             return null;
         }
 
-        // Protection traversal : le chemin doit rester sous le repertoire projet.
-        if (!str_starts_with($abs, realpath($dir) . \DIRECTORY_SEPARATOR) && $abs !== realpath($dir)) {
+        // Protection traversal : le chemin doit rester sous le répertoire projet.
+        if (!str_starts_with($abs, $dirReal . \DIRECTORY_SEPARATOR) && $abs !== $dirReal) {
             return null;
         }
 
@@ -50,7 +83,8 @@ class PublishedSiteStorage
             return null;
         }
 
-        return file_get_contents($abs) ?: null;
+        $content = file_get_contents($abs);
+        return $content !== false ? $content : null;
     }
 
     /**
