@@ -115,18 +115,42 @@ class PublishedSiteStorage
         return rtrim($this->baseDir, '/\\') . '/' . $projectUuid;
     }
 
+    /**
+     * Supprime récursivement un répertoire et son contenu.
+     * Version itérative pour éviter le risque de stack overflow sur les arborescences profondes.
+     */
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {
             return;
         }
-        foreach (scandir($dir) as $f) {
-            if ($f === '.' || $f === '..') {
-                continue;
+
+        $toScan = [$dir];
+        $allDirs = [];
+
+        // Phase 1 : parcours en largeur pour collecter tous les répertoires.
+        while ($toScan !== []) {
+            $current = array_pop($toScan);
+            $allDirs[] = $current;
+            foreach (scandir($current) as $f) {
+                if ($f === '.' || $f === '..') continue;
+                $p = $current . '/' . $f;
+                if (is_dir($p) && !is_link($p)) $toScan[] = $p;
             }
-            $p = $dir . '/' . $f;
-            is_dir($p) ? $this->removeDir($p) : unlink($p);
         }
-        rmdir($dir);
+
+        // Phase 2 : suppression des fichiers dans chaque répertoire.
+        foreach ($allDirs as $d) {
+            foreach (scandir($d) as $f) {
+                if ($f === '.' || $f === '..') continue;
+                $p = $d . '/' . $f;
+                if (is_file($p) || is_link($p)) unlink($p);
+            }
+        }
+
+        // Phase 3 : suppression des répertoires vides, du plus profond au parent.
+        foreach (array_reverse($allDirs) as $d) {
+            if (is_dir($d)) rmdir($d);
+        }
     }
 }

@@ -478,7 +478,7 @@ class WorkbenchController extends InertiaController
      */
     private function resolveWorkbench(string $projectUuid, string $workbenchUuid, string $permission): array
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             throw $this->createNotFoundException($this->translator->trans('workbench.errors.project_not_found'));
         }

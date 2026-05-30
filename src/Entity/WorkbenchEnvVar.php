@@ -4,6 +4,7 @@ namespace App\Entity;
 
 use App\Repository\WorkbenchEnvVarRepository;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: WorkbenchEnvVarRepository::class)]
 #[ORM\Table(name: 'workbench_env_var')]
@@ -20,6 +21,8 @@ class WorkbenchEnvVar
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     public WorkbenchProject $workbenchProject;
 
+    #[Assert\NotBlank]
+    #[Assert\Regex('/^[A-Z_][A-Z0-9_]*$/')]
     #[ORM\Column(length: 120)]
     public string $keyName = '';
 
@@ -42,6 +45,7 @@ class WorkbenchEnvVar
         $this->updatedAt = new \DateTimeImmutable();
     }
 
+    #[ORM\PrePersist]
     #[ORM\PreUpdate]
     public function touch(): void
     {
