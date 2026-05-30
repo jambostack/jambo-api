@@ -3,12 +3,13 @@
 namespace App\Controller;
 
 use App\Entity\Collection;
-use App\Entity\ContentFieldValue;
 use App\Entity\Field;
 use App\Entity\Project;
+use App\Repository\AppSettingsRepository;
 use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\AI\Platform\PlatformInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,6 +22,11 @@ class StudioController extends InertiaController
     public function __construct(
         private EntityManagerInterface $em,
         private ProjectRepository $projectRepository,
+        private AppSettingsRepository $appSettingsRepository,
+        private PlatformInterface $openaiPlatform,
+        private PlatformInterface $anthropicPlatform,
+        private PlatformInterface $ollamaPlatform,
+        private PlatformInterface $deepseekPlatform,
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
 
@@ -300,22 +306,18 @@ PROMPT;
     /** Résout le provider IA configuré (premier activé). */
     private function resolveAiPlatform(): array
     {
-        $settings = $this->em->getRepository(\App\Entity\AppSettings::class)->getOrCreate();
-        $config = $settings->aiProviders ?? [];
-
-        foreach (['openai', 'anthropic', 'deepseek', 'ollama'] as $provider) {
-            if (!empty($config[$provider]['enabled'])) {
-                $platform = match ($provider) {
-                    'openai'    => new \Symfony\AI\Platform\OpenAI\OpenAIPlatform($config[$provider]['key'] ?? ''),
-                    'anthropic' => new \Symfony\AI\Platform\Anthropic\AnthropicPlatform($config[$provider]['key'] ?? ''),
-                    'deepseek'  => new \Symfony\AI\Platform\DeepSeek\DeepSeekPlatform($config[$provider]['key'] ?? ''),
-                    'ollama'    => new \Symfony\AI\Platform\Ollama\OllamaPlatform($config[$provider]['url'] ?? ''),
-                    default     => null,
-                };
-                return [$platform, $config[$provider]['model'] ?? null];
+        $config = $this->appSettingsRepository->getOrCreate()->aiProviders ?? [];
+        $candidates = [
+            'openai'    => [$this->openaiPlatform,    $config['openai']['model']    ?? 'gpt-4o'],
+            'anthropic' => [$this->anthropicPlatform, $config['anthropic']['model'] ?? 'claude-sonnet-4-6'],
+            'deepseek'  => [$this->deepseekPlatform,  $config['deepseek']['model']  ?? 'deepseek-chat'],
+            'ollama'    => [$this->ollamaPlatform,     $config['ollama']['model']    ?? 'llama3.2'],
+        ];
+        foreach ($candidates as $name => [$platform, $model]) {
+            if (!empty($config[$name]['enabled'])) {
+                return [$platform, $model];
             }
         }
-
         return [null, null];
     }
 
