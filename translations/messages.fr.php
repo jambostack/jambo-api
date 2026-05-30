@@ -970,9 +970,8 @@ return [
 
     // Jambo Studio — Schema Builder
     'studio.title'             => 'Jambo Studio',
-    'studio.desc'              => 'Construisez visuellement votre application : schéma, pages, code',
+    'studio.desc'              => 'Modélisez vos données et générez vos SDK, requêtes et audits',
     'studio.tab_schema'        => 'Schema Builder',
-    'studio.tab_pages'         => 'Page Builder',
     'studio.tab_export'        => 'Export & SDK',
 
     'studio.schema.title'             => 'Schema Builder',
@@ -1144,6 +1143,7 @@ return [
     'studio.graphql.desc'      => 'Requêtes GraphQL interactives sur le schéma de votre projet',
     'studio.graphql.endpoint'  => 'Endpoint GraphQL',
     'studio.graphql.copy'      => 'Copier',
+    'studio.graphql.copied'    => 'Copié !',
     'studio.graphql.example'   => 'Exemple de requête',
     'studio.graphql.hint'      => 'Utilisez n\'importe quel client GraphQL (Altair, Insomnia, Postman) pour explorer le schéma complet. Le schema est généré automatiquement depuis vos collections.',
 

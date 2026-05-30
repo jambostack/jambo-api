@@ -933,9 +933,8 @@ return [
 
     // Jambo Studio
     'studio.title'             => 'Jambo Studio',
-    'studio.desc'              => 'Construye visualmente tu aplicación: esquema, páginas, código',
+    'studio.desc'              => 'Modela tus datos y genera SDKs, consultas y auditorías',
     'studio.tab_schema'        => 'Schema Builder',
-    'studio.tab_pages'         => 'Page Builder',
     'studio.tab_export'        => 'Exportar & SDK',
     'studio.schema.title'             => 'Schema Builder',
     'studio.schema.desc'              => 'Construye tus colecciones visualmente',
@@ -1065,6 +1064,7 @@ return [
     'studio.graphql.desc'      => 'Consultas GraphQL interactivas sobre el esquema de tu proyecto',
     'studio.graphql.endpoint'  => 'Endpoint GraphQL',
     'studio.graphql.copy'      => 'Copiar',
+    'studio.graphql.copied'    => '¡Copiado!',
     'studio.graphql.example'   => 'Ejemplo de consulta',
     'studio.graphql.hint'      => 'Usa cualquier cliente GraphQL (Altair, Insomnia, Postman) para explorar el esquema completo. El esquema se genera automáticamente desde tus colecciones.',
 
