@@ -1,7 +1,8 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useState } from 'react';
 import { useTranslation } from '@/lib/i18n';
 import { toast } from 'sonner';
 import PublishPanel from './PublishPanel';
@@ -16,9 +17,11 @@ interface Props {
 
 export default function DeployDrawer({ open, onClose, projectUuid, workbenchUuid, publishedAt }: Props) {
     const t = useTranslation();
+    const [exporting, setExporting] = useState(false);
 
     const handleExport = async () => {
         if (!workbenchUuid) { toast.error(t('workbench.deploy.no_files')); return; }
+        setExporting(true);
         try {
             const res = await fetch(`/api/projects/${projectUuid}/workbench/${workbenchUuid}/export`);
             if (!res.ok) throw new Error('Export failed');
@@ -27,10 +30,14 @@ export default function DeployDrawer({ open, onClose, projectUuid, workbenchUuid
             const a = document.createElement('a');
             a.href = url;
             a.download = res.headers.get('Content-Disposition')?.match(/filename="?([^"]+)"?/)?.[1] ?? 'export.zip';
+            document.body.appendChild(a);
             a.click();
-            URL.revokeObjectURL(url);
+            // Différer la révocation pour éviter la race condition navigateur
+            setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 5000);
         } catch {
             toast.error(t('workbench.sites.publish_error'));
+        } finally {
+            setExporting(false);
         }
     };
 
@@ -58,9 +65,10 @@ export default function DeployDrawer({ open, onClose, projectUuid, workbenchUuid
 
                     <TabsContent value="export" className="p-5 space-y-3 mt-0">
                         <p className="text-sm text-muted-foreground">{t('workbench.deploy.export_desc')}</p>
-                        <Button variant="outline" className="w-full justify-start gap-2" onClick={handleExport} disabled={!workbenchUuid}>
-                            <Download className="w-4 h-4" />
-                            {t('workbench.deploy.download_zip')}
+                        <Button variant="outline" className="w-full justify-start gap-2" onClick={handleExport} disabled={!workbenchUuid || exporting}>
+                            {exporting
+                                ? <><Loader2 className="w-4 h-4 animate-spin" />{t('workbench.sites.uploading')}</>
+                                : <><Download className="w-4 h-4" />{t('workbench.deploy.download_zip')}</>}
                         </Button>
                     </TabsContent>
                 </Tabs>

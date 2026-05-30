@@ -69,9 +69,14 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
     };
 
     const handleDeleteEnv = async (id: number) => {
-        await api(`/env/${id}`, { method: 'DELETE' });
-        if (!mountedRef.current) return;
-        setEnvVars(prev => prev.filter(v => v.id !== id));
+        try {
+            const res = await api(`/env/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Delete failed');
+            if (!mountedRef.current) return;
+            setEnvVars(prev => prev.filter(v => v.id !== id));
+        } catch {
+            toast.error(t('workbench.sites.error'));
+        }
     };
 
     const handleAddDomain = async () => {
@@ -85,9 +90,14 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
     };
 
     const handleDeleteDomain = async (uuid: string) => {
-        await api(`/domains/${uuid}`, { method: 'DELETE' });
-        if (!mountedRef.current) return;
-        setDomains(prev => prev.filter(d => d.uuid !== uuid));
+        try {
+            const res = await api(`/domains/${uuid}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Delete failed');
+            if (!mountedRef.current) return;
+            setDomains(prev => prev.filter(d => d.uuid !== uuid));
+        } catch {
+            toast.error(t('workbench.sites.error'));
+        }
     };
 
     const handlePublish = async () => {

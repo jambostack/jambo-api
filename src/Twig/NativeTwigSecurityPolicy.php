@@ -83,7 +83,20 @@ class NativeTwigSecurityPolicy implements SecurityPolicyInterface
 
     public function checkMethodAllowed($obj, $method): void
     {
-        if ($obj instanceof Template || $obj instanceof Markup) {
+        if ($obj instanceof Markup) {
+            // Markup est une classe wrapper inerte — safe.
+            return;
+        }
+
+        if ($obj instanceof Template) {
+            // Template expose des méthodes dangereuses potentielles.
+            // Whitelist stricte au lieu du bypass complet.
+            $safe = ['getblockname', 'getparent', 'gettemplatename'];
+            if (!\in_array(strtolower($method), $safe, true)) {
+                throw new SecurityNotAllowedMethodError(\sprintf(
+                    'Calling "%s" method on a "%s" object is not allowed.', $method, $obj::class,
+                ), $obj::class, $method);
+            }
             return;
         }
 
@@ -98,7 +111,9 @@ class NativeTwigSecurityPolicy implements SecurityPolicyInterface
 
         if (!$allowed) {
             $class = $obj::class;
-            throw new SecurityNotAllowedMethodError(\sprintf('Calling "%s" method on a "%s" object is not allowed.', $method, $class), $class, $method);
+            throw new SecurityNotAllowedMethodError(\sprintf(
+                'Calling "%s" method on a "%s" object is not allowed.', $method, $class,
+            ), $class, $method);
         }
     }
 

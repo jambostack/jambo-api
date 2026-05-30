@@ -98,7 +98,7 @@ class AppSettingsController extends AbstractController
                     // API key — empty string clears it
                     if (array_key_exists('key', $p)) {
                         $val = trim((string) $p['key']);
-                        $current[$provider]['key'] = $val !== '' ? $val : ($current[$provider]['key'] ?? null);
+                        $current[$provider]['key'] = $val !== '' ? $val : null;
                     }
                     if (array_key_exists('model', $p)) {
                         $current[$provider]['model'] = trim((string) $p['model']) ?: null;

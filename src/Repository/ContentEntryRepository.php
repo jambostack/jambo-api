@@ -70,6 +70,28 @@ class ContentEntryRepository extends ServiceEntityRepository
             ->getResult();
     }
 
+    /**
+     * Trouve une entrée publiée par le slug stocké dans le champ EAV 'slug'.
+     */
+    public function findOneByCollectionAndSlug(Collection $collection, string $slug): ?ContentEntry
+    {
+        return $this->createQueryBuilder('e')
+            ->join('e.fieldValues', 'fv')
+            ->join('fv.field', 'f')
+            ->where('e.collection = :collection')
+            ->andWhere('e.deletedAt IS NULL')
+            ->andWhere('e.status = :status')
+            ->andWhere('f.slug = :fieldSlug')
+            ->andWhere('fv.textValue = :slugValue')
+            ->setParameter('collection', $collection)
+            ->setParameter('status', 'published')
+            ->setParameter('fieldSlug', 'slug')
+            ->setParameter('slugValue', $slug)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
     public function hasNonDeletedEntryForCollection(Collection $collection): bool
     {
         $count = (int) $this->createQueryBuilder('e')

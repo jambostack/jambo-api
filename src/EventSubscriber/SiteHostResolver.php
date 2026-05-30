@@ -69,7 +69,11 @@ class SiteHostResolver implements EventSubscriberInterface
         $path = $event->getRequest()->getPathInfo();
 
         // Mode Twig natif — rendu serveur via NativeRenderer (Twig Sandbox + EAV direct)
-        if ($workbench->framework === 'native' && $this->nativeRenderer !== null) {
+        if ($workbench->framework === 'native') {
+            if ($this->nativeRenderer === null) {
+                $event->setResponse(new Response('NativeRenderer not configured — cannot serve native templates.', 503));
+                return;
+            }
             try {
                 $html = $this->nativeRenderer->render($workbench, $path);
                 $event->setResponse(new Response($html, 200, [

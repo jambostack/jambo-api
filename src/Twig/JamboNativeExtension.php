@@ -67,19 +67,13 @@ class JamboNativeExtension extends AbstractExtension
             return null;
         }
 
-        // On recupere un lot suffisant d'entrees publiees pour trouver l'entree par slug EAV.
-        $entries = $this->entryRepository->findByCollectionPaginated(
-            $collection, 1, 100, null, 'published'
-        );
-
-        foreach ($entries as $entry) {
-            $formatted = $this->formatter->formatEntry($entry);
-            if (($formatted['slug'] ?? '') === $entrySlug) {
-                return $formatted;
-            }
+        // Requête SQL dédiée : jointure fieldValues pour trouver l'entrée par slug EAV.
+        $entry = $this->entryRepository->findOneByCollectionAndSlug($collection, $entrySlug);
+        if ($entry === null) {
+            return null;
         }
 
-        return null;
+        return $this->formatter->formatEntry($entry);
     }
 
     /**
