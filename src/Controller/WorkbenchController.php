@@ -17,6 +17,7 @@ use App\Service\PublishedSiteStorage;
 use App\Service\ZipExportService;
 use App\Workbench\Templates\BaseTemplate;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -26,6 +27,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\AI\Platform\PlatformInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[IsGranted('IS_AUTHENTICATED_FULLY')]
 class WorkbenchController extends InertiaController
@@ -50,6 +52,7 @@ class WorkbenchController extends InertiaController
         private readonly PublishedSiteStorage $publishedSiteStorage,
         private readonly WorkbenchEnvVarRepository $envVarRepository,
         private readonly SiteDomainRepository $siteDomainRepository,
+        private readonly TranslatorInterface $translator,
     ) {}
 
     #[Route('/projects/{project}/workbench', name: 'workbench_page', requirements: ['project' => '\d+'], priority: 10)]
@@ -113,24 +116,24 @@ class WorkbenchController extends InertiaController
     public function generate(string $uuid, Request $request): Response
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
 
         $body = $request->toArray();
         $userPrompt = trim((string) ($body['prompt'] ?? ''));
         $framework  = $body['framework'] ?? 'nextjs';
 
-        if ($userPrompt === '') return new JsonResponse(['error' => 'Prompt requis'], 422);
+        if ($userPrompt === '') return new JsonResponse(['error' => $this->translator->trans('workbench.errors.prompt_required')], 422);
         if (mb_strlen($userPrompt) > self::MAX_PROMPT_LENGTH) {
-            return new JsonResponse(['error' => sprintf('Prompt trop long (max %d caractères)', self::MAX_PROMPT_LENGTH)], 422);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.prompt_too_long', ['%max%' => self::MAX_PROMPT_LENGTH])], 422);
         }
         if (!in_array($framework, WorkbenchProject::FRAMEWORKS, true)) {
-            return new JsonResponse(['error' => 'Framework invalide'], 422);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.invalid_framework')], 422);
         }
 
         [$platform, $model] = $this->resolveProvider();
         if ($platform === null) {
-            return new JsonResponse(['error' => 'Aucun fournisseur IA activé. Configurez-en un dans Paramètres → Fournisseurs IA.'], 503);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.no_ai_provider')], 503);
         }
 
         $apiUrl = $request->getSchemeAndHttpHost();
@@ -165,12 +168,12 @@ class WorkbenchController extends InertiaController
     public function save(string $uuid, Request $request): JsonResponse
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = $request->toArray();
         $name = trim((string) ($body['name'] ?? ''));
-        if ($name === '') return new JsonResponse(['error' => 'name requis'], 422);
+        if ($name === '') return new JsonResponse(['error' => $this->translator->trans('workbench.errors.name_required')], 422);
 
         $files = is_array($body['files'] ?? null) ? $body['files'] : [];
         if (($error = $this->validateFilesSize($files)) !== null) {
@@ -195,11 +198,11 @@ class WorkbenchController extends InertiaController
     public function update(string $uuid, string $workbenchUuid, Request $request): JsonResponse
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
 
         $body = $request->toArray();
         if (isset($body['files']) && is_array($body['files'])) {
@@ -219,13 +222,13 @@ class WorkbenchController extends InertiaController
     public function export(string $uuid, string $workbenchUuid): Response
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
 
         $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
         if (empty($workbench->files)) {
-            return new JsonResponse(['error' => 'Aucun fichier à exporter.'], 422);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.no_files_export')], 422);
         }
 
         $zipBytes = $this->zipExportService->export($workbench);
@@ -248,11 +251,11 @@ class WorkbenchController extends InertiaController
     public function envList(string $uuid, string $workbenchUuid): JsonResponse
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
 
         $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
 
         $vars = $this->envVarRepository->findByWorkbench($workbench);
 
@@ -268,21 +271,21 @@ class WorkbenchController extends InertiaController
     public function envCreate(string $uuid, string $workbenchUuid, Request $request): JsonResponse
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
 
         $body    = $request->toArray();
         $keyName = strtoupper(trim((string) ($body['key_name'] ?? '')));
         $value   = (string) ($body['value'] ?? '');
 
         if ($keyName === '' || !preg_match('/^[A-Z_][A-Z0-9_]*$/', $keyName)) {
-            return new JsonResponse(['error' => 'key_name invalide (lettres majuscules, chiffres, underscore)'], 422);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.invalid_env_key')], 422);
         }
         if ($this->envVarRepository->findOneByKey($workbench, $keyName) !== null) {
-            return new JsonResponse(['error' => 'Cette clé existe déjà'], 409);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.env_key_duplicate')], 409);
         }
 
         $var = new WorkbenchEnvVar();
@@ -291,7 +294,12 @@ class WorkbenchController extends InertiaController
         $var->value     = $value;
         $var->isSecret  = (bool) ($body['is_secret'] ?? false);
         $this->em->persist($var);
-        $this->em->flush();
+
+        try {
+            $this->em->flush();
+        } catch (UniqueConstraintViolationException) {
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.env_key_duplicate')], 409);
+        }
 
         return new JsonResponse(['data' => ['id' => $var->id, 'key_name' => $var->keyName, 'is_secret' => $var->isSecret]], 201);
     }
@@ -300,15 +308,15 @@ class WorkbenchController extends InertiaController
     public function envDelete(string $uuid, string $workbenchUuid, int $envId): JsonResponse
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
 
         $var = $this->envVarRepository->find($envId);
         if ($var === null || $var->workbenchProject->id !== $workbench->id) {
-            return new JsonResponse(['error' => 'Variable introuvable'], 404);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.env_var_not_found')], 404);
         }
 
         $this->em->remove($var);
@@ -323,17 +331,17 @@ class WorkbenchController extends InertiaController
     public function publish(string $uuid, string $workbenchUuid, Request $request): JsonResponse
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
 
         $body = $request->toArray();
         $files = $body['files'] ?? [];
 
         if (!is_array($files) || count($files) === 0) {
-            return new JsonResponse(['error' => 'Aucun fichier reçu.'], 422);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.no_files_received')], 422);
         }
 
         // Vérification template statique
@@ -342,24 +350,27 @@ class WorkbenchController extends InertiaController
             if ($t->getId() === $workbench->framework) { $template = $t; break; }
         }
         if ($template === null || $template->getStaticOutputDir() === null) {
-            return new JsonResponse(['error' => 'Ce framework ne supporte pas la publication statique. Utilisez l\'export ZIP.'], 422);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.no_static_publish')], 422);
         }
 
         // Limite de taille : 25 Mo
         $totalBytes = array_sum(array_map('strlen', $files));
         if ($totalBytes > 25 * 1024 * 1024) {
-            return new JsonResponse(['error' => 'Payload trop volumineux (max 25 Mo).'], 422);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.payload_too_large')], 422);
         }
 
         $this->publishedSiteStorage->publish($workbench->uuid->toRfc4122(), $files);
         $workbench->publishedAt = new \DateTimeImmutable();
         $this->em->flush();
 
-        // Retourner aussi les env vars pour le build côté client
+        // Retourner les variables non-secrètes pour référence (le build est déjà fait côté client).
+        // Les secrets (isSecret=true) ne sont jamais renvoyés dans la réponse.
         $envVars = $this->envVarRepository->findByWorkbench($workbench);
         $env = [];
         foreach ($envVars as $v) {
-            $env[$v->keyName] = $v->value; // inclut les secrets — le build se fait côté navigateur
+            if (!$v->isSecret) {
+                $env[$v->keyName] = $v->value;
+            }
         }
 
         return new JsonResponse([
@@ -374,11 +385,11 @@ class WorkbenchController extends InertiaController
     public function domainList(string $uuid, string $workbenchUuid): JsonResponse
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
 
         $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
 
         $domains = $this->siteDomainRepository->findByWorkbench($workbench);
 
@@ -393,18 +404,18 @@ class WorkbenchController extends InertiaController
     public function domainAdd(string $uuid, string $workbenchUuid, Request $request): JsonResponse
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
 
         $domain = strtolower(trim((string) ($request->toArray()['domain'] ?? '')));
-        if ($domain === '' || !preg_match('/^(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/', $domain)) {
-            return new JsonResponse(['error' => 'Domaine invalide'], 422);
+        if ($domain === '' || strlen($domain) > 253 || !preg_match('/^(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/', $domain)) {
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.invalid_domain')], 422);
         }
         if ($this->siteDomainRepository->findByDomain($domain) !== null) {
-            return new JsonResponse(['error' => 'Domaine déjà utilisé'], 409);
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.domain_duplicate')], 409);
         }
 
         $existingDomains = $this->siteDomainRepository->findByWorkbench($workbench);
@@ -415,7 +426,12 @@ class WorkbenchController extends InertiaController
         $sd->domain           = $domain;
         $sd->isPrimary        = $isPrimary;
         $this->em->persist($sd);
-        $this->em->flush();
+
+        try {
+            $this->em->flush();
+        } catch (UniqueConstraintViolationException) {
+            return new JsonResponse(['error' => $this->translator->trans('workbench.errors.domain_duplicate')], 409);
+        }
 
         return new JsonResponse(['data' => [
             'uuid'       => $sd->uuid->toRfc4122(),
@@ -428,14 +444,14 @@ class WorkbenchController extends InertiaController
     public function domainDelete(string $uuid, string $workbenchUuid, string $domainUuid): JsonResponse
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
-        if (!$project) return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        if (!$project) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.project_not_found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $workbench = $this->workbenchRepository->findOneBy(['uuid' => $workbenchUuid, 'project' => $project]);
-        if (!$workbench) return new JsonResponse(['error' => 'WorkbenchProject introuvable'], 404);
+        if (!$workbench) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.not_found')], 404);
 
         $sd = $this->siteDomainRepository->findOneBy(['uuid' => $domainUuid, 'workbenchProject' => $workbench]);
-        if (!$sd) return new JsonResponse(['error' => 'Domaine introuvable'], 404);
+        if (!$sd) return new JsonResponse(['error' => $this->translator->trans('workbench.errors.domain_not_found')], 404);
 
         $this->em->remove($sd);
         $this->em->flush();
@@ -447,7 +463,7 @@ class WorkbenchController extends InertiaController
     {
         $bytes = strlen((string) json_encode($files));
         if ($bytes > self::MAX_FILES_BYTES) {
-            return sprintf('Fichiers trop volumineux (max %d Mo)', intdiv(self::MAX_FILES_BYTES, 1024 * 1024));
+            return $this->translator->trans('workbench.errors.files_too_large', ['%max%' => intdiv(self::MAX_FILES_BYTES, 1024 * 1024)]);
         }
         return null;
     }

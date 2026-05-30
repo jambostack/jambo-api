@@ -1144,4 +1144,32 @@ return [
     'workbench.sites.coming_soon'       => 'قريباً',
     'workbench.sites.no_static'         => 'هذا الإطار لا يدعم النشر الثابت. استخدم تصدير ZIP.',
 
+    // Workbench Deploy (تبويب التصدير)
+    'workbench.deploy.export_tab' => 'تصدير',
+
+    // أخطاء Jambo Sites
+    'workbench.sites.error'              => 'خطأ',
+    'workbench.sites.publish_error'      => 'خطأ في النشر',
+    'workbench.sites.domain_placeholder' => 'موقعي.com',
+
+    // رسائل خطأ API
+    'workbench.errors.project_not_found'  => 'المشروع غير موجود',
+    'workbench.errors.not_found'          => 'WorkbenchProject غير موجود',
+    'workbench.errors.prompt_required'    => 'الموجه مطلوب',
+    'workbench.errors.prompt_too_long'    => 'الموجه طويل جداً (الحد الأقصى %max% حرفاً)',
+    'workbench.errors.invalid_framework'  => 'إطار عمل غير صالح',
+    'workbench.errors.no_ai_provider'     => 'لا يوجد مزود ذكاء اصطناعي مفعّل. قم بتكوين واحد في الإعدادات → مزودي الذكاء الاصطناعي.',
+    'workbench.errors.name_required'      => 'الاسم مطلوب',
+    'workbench.errors.no_files_export'    => 'لا توجد ملفات للتصدير.',
+    'workbench.errors.invalid_env_key'    => 'key_name غير صالح (أحرف كبيرة، أرقام، شرطة سفلية)',
+    'workbench.errors.env_key_duplicate'  => 'هذا المفتاح موجود بالفعل',
+    'workbench.errors.env_var_not_found'  => 'المتغير غير موجود',
+    'workbench.errors.no_files_received'  => 'لم يتم استلام أي ملفات.',
+    'workbench.errors.no_static_publish'  => 'هذا الإطار لا يدعم النشر الثابت. استخدم تصدير ZIP.',
+    'workbench.errors.payload_too_large'  => 'الحمولة كبيرة جداً (الحد الأقصى 25 ميغابايت).',
+    'workbench.errors.invalid_domain'     => 'نطاق غير صالح',
+    'workbench.errors.domain_duplicate'   => 'النطاق مستخدم بالفعل',
+    'workbench.errors.domain_not_found'   => 'النطاق غير موجود',
+    'workbench.errors.files_too_large'    => 'الملفات كبيرة جداً (الحد الأقصى %max% ميغابايت)',
+
 ];

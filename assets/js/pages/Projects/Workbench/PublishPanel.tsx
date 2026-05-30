@@ -44,7 +44,7 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
         if (!newKey.trim()) return;
         const res = await api('/env', { method: 'POST', body: JSON.stringify({ key_name: newKey.trim(), value: newValue, is_secret: newSecret }) });
         const d = await res.json() as { data?: EnvVar; error?: string };
-        if (!res.ok) { toast.error(d.error ?? 'Erreur'); return; }
+        if (!res.ok) { toast.error(d.error ?? t('workbench.sites.error')); return; }
         setEnvVars(prev => [...prev, d.data!]);
         setNewKey(''); setNewValue(''); setNewSecret(false);
     };
@@ -58,7 +58,7 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
         if (!newDomain.trim()) return;
         const res = await api('/domains', { method: 'POST', body: JSON.stringify({ domain: newDomain.trim() }) });
         const d = await res.json() as { data?: Domain; error?: string };
-        if (!res.ok) { toast.error(d.error ?? 'Erreur'); return; }
+        if (!res.ok) { toast.error(d.error ?? t('workbench.sites.error')); return; }
         setDomains(prev => [...prev, d.data!]);
         setNewDomain('');
     };
@@ -89,12 +89,12 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
             });
 
             const data = await res.json() as { published_at?: string; error?: string };
-            if (!res.ok) { toast.error(data.error ?? 'Erreur publication'); return; }
+            if (!res.ok) { toast.error(data.error ?? t('workbench.sites.publish_error')); return; }
 
             setLastPublished(data.published_at ?? null);
             toast.success(t('workbench.sites.published'));
         } catch {
-            toast.error('Erreur de publication');
+            toast.error(t('workbench.sites.publish_error'));
         } finally {
             setPublishing(false);
         }
@@ -180,7 +180,7 @@ export default function PublishPanel({ projectUuid, workbenchUuid, publishedAt }
                 ))}
                 <p className="text-xs text-muted-foreground">{t('workbench.sites.domain_dns_hint')}</p>
                 <div className="flex gap-2">
-                    <Input placeholder="monsite.com" value={newDomain} onChange={e => setNewDomain(e.target.value)} className="h-8 text-xs" />
+                    <Input placeholder={t('workbench.sites.domain_placeholder')} value={newDomain} onChange={e => setNewDomain(e.target.value)} className="h-8 text-xs" />
                     <Button size="sm" variant="outline" onClick={handleAddDomain} disabled={!newDomain.trim()} className="h-8 gap-1 text-xs">
                         <Plus className="w-3 h-3" />{t('workbench.sites.domain_add')}
                     </Button>

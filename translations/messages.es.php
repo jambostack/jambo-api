@@ -1144,4 +1144,32 @@ return [
     'workbench.sites.coming_soon'       => 'Próximamente',
     'workbench.sites.no_static'         => 'Este framework no soporta publicación estática. Usa el export ZIP.',
 
+    // Workbench Deploy (pestaña export)
+    'workbench.deploy.export_tab' => 'Exportar',
+
+    // Errores Jambo Sites
+    'workbench.sites.error'              => 'Error',
+    'workbench.sites.publish_error'      => 'Error de publicación',
+    'workbench.sites.domain_placeholder' => 'mi-sitio.com',
+
+    // Mensajes de error de la API
+    'workbench.errors.project_not_found'  => 'Proyecto no encontrado',
+    'workbench.errors.not_found'          => 'WorkbenchProject no encontrado',
+    'workbench.errors.prompt_required'    => 'Prompt requerido',
+    'workbench.errors.prompt_too_long'    => 'Prompt demasiado largo (máx. %max% caracteres)',
+    'workbench.errors.invalid_framework'  => 'Framework inválido',
+    'workbench.errors.no_ai_provider'     => 'Ningún proveedor IA activado. Configure uno en Configuración → Proveedores IA.',
+    'workbench.errors.name_required'      => 'nombre requerido',
+    'workbench.errors.no_files_export'    => 'No hay archivos para exportar.',
+    'workbench.errors.invalid_env_key'    => 'key_name inválido (mayúsculas, dígitos, guión bajo)',
+    'workbench.errors.env_key_duplicate'  => 'Esta clave ya existe',
+    'workbench.errors.env_var_not_found'  => 'Variable no encontrada',
+    'workbench.errors.no_files_received'  => 'No se recibieron archivos.',
+    'workbench.errors.no_static_publish'  => 'Este framework no soporta publicación estática. Use la exportación ZIP.',
+    'workbench.errors.payload_too_large'  => 'Carga demasiado grande (máx. 25 MB).',
+    'workbench.errors.invalid_domain'     => 'Dominio inválido',
+    'workbench.errors.domain_duplicate'   => 'Dominio ya en uso',
+    'workbench.errors.domain_not_found'   => 'Dominio no encontrado',
+    'workbench.errors.files_too_large'    => 'Archivos demasiado grandes (máx. %max% MB)',
+
 ];
