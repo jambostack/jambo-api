@@ -1167,4 +1167,32 @@ return [
     'workbench.sites.coming_soon'       => 'Coming soon',
     'workbench.sites.no_static'         => 'This framework does not support static publishing. Use the ZIP export.',
 
+    // Workbench Deploy (export tab)
+    'workbench.deploy.export_tab' => 'Export',
+
+    // Jambo Sites errors
+    'workbench.sites.error'              => 'Error',
+    'workbench.sites.publish_error'      => 'Publish error',
+    'workbench.sites.domain_placeholder' => 'my-site.com',
+
+    // API error messages
+    'workbench.errors.project_not_found'  => 'Project not found',
+    'workbench.errors.not_found'          => 'WorkbenchProject not found',
+    'workbench.errors.prompt_required'    => 'Prompt required',
+    'workbench.errors.prompt_too_long'    => 'Prompt too long (max %max% characters)',
+    'workbench.errors.invalid_framework'  => 'Invalid framework',
+    'workbench.errors.no_ai_provider'     => 'No AI provider enabled. Configure one in Settings → AI Providers.',
+    'workbench.errors.name_required'      => 'name required',
+    'workbench.errors.no_files_export'    => 'No files to export.',
+    'workbench.errors.invalid_env_key'    => 'Invalid key_name (uppercase letters, digits, underscore)',
+    'workbench.errors.env_key_duplicate'  => 'This key already exists',
+    'workbench.errors.env_var_not_found'  => 'Variable not found',
+    'workbench.errors.no_files_received'  => 'No files received.',
+    'workbench.errors.no_static_publish'  => 'This framework does not support static publishing. Use ZIP export.',
+    'workbench.errors.payload_too_large'  => 'Payload too large (max 25 MB).',
+    'workbench.errors.invalid_domain'     => 'Invalid domain',
+    'workbench.errors.domain_duplicate'   => 'Domain already in use',
+    'workbench.errors.domain_not_found'   => 'Domain not found',
+    'workbench.errors.files_too_large'    => 'Files too large (max %max% MB)',
+
 ];

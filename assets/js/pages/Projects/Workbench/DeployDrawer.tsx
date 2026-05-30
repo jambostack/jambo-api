@@ -33,7 +33,7 @@ export default function DeployDrawer({ open, onClose, projectUuid, workbenchUuid
                 <Tabs defaultValue="publish" className="flex-1 flex flex-col overflow-hidden">
                     <TabsList className="w-full rounded-none border-b border-border bg-transparent h-10 px-5">
                         <TabsTrigger value="publish" className="flex-1 text-xs">{t('workbench.sites.publish')}</TabsTrigger>
-                        <TabsTrigger value="export" className="flex-1 text-xs">Export</TabsTrigger>
+                        <TabsTrigger value="export" className="flex-1 text-xs">{t('workbench.deploy.export_tab')}</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="publish" className="flex-1 overflow-y-auto p-5 mt-0">

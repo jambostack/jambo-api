@@ -1193,4 +1193,32 @@ return [
     'workbench.sites.coming_soon'       => 'Bientôt disponible',
     'workbench.sites.no_static'         => 'Ce framework ne supporte pas la publication statique. Utilisez l\'export ZIP.',
 
+    // Workbench Deploy (onglet export)
+    'workbench.deploy.export_tab' => 'Export',
+
+    // Erreurs Jambo Sites
+    'workbench.sites.error'              => 'Erreur',
+    'workbench.sites.publish_error'      => 'Erreur de publication',
+    'workbench.sites.domain_placeholder' => 'monsite.com',
+
+    // Messages d'erreur API Workbench
+    'workbench.errors.project_not_found'  => 'Projet introuvable',
+    'workbench.errors.not_found'          => 'WorkbenchProject introuvable',
+    'workbench.errors.prompt_required'    => 'Prompt requis',
+    'workbench.errors.prompt_too_long'    => 'Prompt trop long (max %max% caractères)',
+    'workbench.errors.invalid_framework'  => 'Framework invalide',
+    'workbench.errors.no_ai_provider'     => 'Aucun fournisseur IA activé. Configurez-en un dans Paramètres → Fournisseurs IA.',
+    'workbench.errors.name_required'      => 'name requis',
+    'workbench.errors.no_files_export'    => 'Aucun fichier à exporter.',
+    'workbench.errors.invalid_env_key'    => 'key_name invalide (lettres majuscules, chiffres, underscore)',
+    'workbench.errors.env_key_duplicate'  => 'Cette clé existe déjà',
+    'workbench.errors.env_var_not_found'  => 'Variable introuvable',
+    'workbench.errors.no_files_received'  => 'Aucun fichier reçu.',
+    'workbench.errors.no_static_publish'  => 'Ce framework ne supporte pas la publication statique. Utilisez l\'export ZIP.',
+    'workbench.errors.payload_too_large'  => 'Payload trop volumineux (max 25 Mo).',
+    'workbench.errors.invalid_domain'     => 'Domaine invalide',
+    'workbench.errors.domain_duplicate'   => 'Domaine déjà utilisé',
+    'workbench.errors.domain_not_found'   => 'Domaine introuvable',
+    'workbench.errors.files_too_large'    => 'Fichiers trop volumineux (max %max% Mo)',
+
 ];
