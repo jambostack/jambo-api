@@ -933,9 +933,8 @@ return [
 
     // Jambo Studio
     'studio.title'             => 'جامبو ستوديو',
-    'studio.desc'              => 'ابنِ تطبيقك بصرياً: المخطط، الصفحات، الكود',
+    'studio.desc'              => 'صمم بياناتك وأنشئ SDK واستعلامات وسجلات التدقيق',
     'studio.tab_schema'        => 'منشئ المخطط',
-    'studio.tab_pages'         => 'منشئ الصفحات',
     'studio.tab_export'        => 'تصدير و SDK',
     'studio.schema.title'             => 'منشئ المخطط',
     'studio.schema.desc'              => 'ابنِ مجموعاتك بصرياً',
@@ -1065,6 +1064,7 @@ return [
     'studio.graphql.desc'      => 'استعلامات GraphQL تفاعلية على مخطط مشروعك',
     'studio.graphql.endpoint'  => 'نقطة نهاية GraphQL',
     'studio.graphql.copy'      => 'نسخ',
+    'studio.graphql.copied'    => 'تم النسخ!',
     'studio.graphql.example'   => 'مثال على استعلام',
     'studio.graphql.hint'      => 'استخدم أي عميل GraphQL (Altair, Insomnia, Postman) لاستكشاف المخطط الكامل. يتم إنشاء المخطط تلقائياً من مجموعاتك.',
 

@@ -971,9 +971,8 @@ return [
 
     // Jambo Studio
     'studio.title'             => 'Jambo Studio',
-    'studio.desc'              => 'Visually build your application: schema, pages, code',
+    'studio.desc'              => 'Model your data and generate SDKs, queries and audit logs',
     'studio.tab_schema'        => 'Schema Builder',
-    'studio.tab_pages'         => 'Page Builder',
     'studio.tab_export'        => 'Export & SDK',
     'studio.schema.title'             => 'Schema Builder',
     'studio.schema.desc'              => 'Build your collections visually',
@@ -1118,6 +1117,7 @@ return [
     'studio.graphql.desc'      => 'Interactive GraphQL queries on your project schema',
     'studio.graphql.endpoint'  => 'GraphQL Endpoint',
     'studio.graphql.copy'      => 'Copy',
+    'studio.graphql.copied'    => 'Copied!',
     'studio.graphql.example'   => 'Example query',
     'studio.graphql.hint'      => 'Use any GraphQL client (Altair, Insomnia, Postman) to explore the full schema. The schema is auto-generated from your collections.',
 
