@@ -73,6 +73,11 @@ class AppSettingsController extends AbstractController
                 return $this->json(['errors' => [$formField => $error]], 422);
             }
 
+            // Assainir les SVG uploadés (XSS via <script> dans les logos)
+            if ($file->getMimeType() === 'image/svg+xml') {
+                $this->sanitizeSvg($file);
+            }
+
             $settings->$property = $file;
             $this->uploadHandler->upload($settings, $property);
             $changed = true;
@@ -139,6 +144,22 @@ class AppSettingsController extends AbstractController
         }
 
         return null;
+    }
+
+    /** Supprime les scripts et gestionnaires d'événements des fichiers SVG uploadés. */
+    private function sanitizeSvg(\Symfony\Component\HttpFoundation\File\UploadedFile $file): void
+    {
+        $content = file_get_contents($file->getPathname());
+        if ($content === false) return;
+
+        // Supprimer les balises <script> et leur contenu
+        $content = preg_replace('/<script[^>]*>.*?<\/script>/is', '', $content);
+        // Supprimer les gestionnaires d'événements inline (onload, onclick, etc.)
+        $content = preg_replace('/\s+on\w+\s*=\s*["\'][^"\']*["\']/i', '', $content);
+        // Supprimer les <foreignObject> (peuvent contenir du HTML arbitraire)
+        $content = preg_replace('/<foreignObject[^>]*>.*?<\/foreignObject>/is', '', $content);
+
+        file_put_contents($file->getPathname(), $content);
     }
 
     private function serialize(\App\Entity\AppSettings $s): array
