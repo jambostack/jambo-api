@@ -11,7 +11,7 @@ use Symfony\Component\Uid\Uuid;
 #[ORM\HasLifecycleCallbacks]
 class WorkbenchProject
 {
-    public const FRAMEWORKS = ['nextjs', 'nuxt', 'astro', 'sveltekit'];
+    public const FRAMEWORKS = ['nextjs', 'nuxt', 'astro', 'sveltekit', 'native'];
     public const STATUS_DRAFT    = 'draft';
     public const STATUS_EXPORTED = 'exported';
     public const STATUS_DEPLOYED = 'deployed';

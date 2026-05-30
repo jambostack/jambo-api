@@ -3,6 +3,7 @@
 namespace App\EventSubscriber;
 
 use App\Repository\SiteDomainRepository;
+use App\Service\NativeRenderer;
 use App\Service\PublishedSiteStorage;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\Response;
@@ -37,6 +38,7 @@ class SiteHostResolver implements EventSubscriberInterface
         private readonly SiteDomainRepository $siteDomainRepository,
         private readonly PublishedSiteStorage $storage,
         private readonly array $reservedHostnames = [],
+        private readonly ?NativeRenderer $nativeRenderer = null,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -62,9 +64,26 @@ class SiteHostResolver implements EventSubscriberInterface
             return;
         }
 
-        $uuid = $siteDomain->workbenchProject->uuid->toRfc4122();
+        $workbench = $siteDomain->workbenchProject;
+        $uuid = $workbench->uuid->toRfc4122();
         $path = $event->getRequest()->getPathInfo();
 
+        // Mode Twig natif — rendu serveur via NativeRenderer (Twig Sandbox + EAV direct)
+        if ($workbench->framework === 'native' && $this->nativeRenderer !== null) {
+            try {
+                $html = $this->nativeRenderer->render($workbench, $path);
+                $event->setResponse(new Response($html, 200, [
+                    'Content-Type' => 'text/html; charset=utf-8',
+                    'Cache-Control' => 'no-cache',
+                ]));
+                return;
+            } catch (\RuntimeException $e) {
+                $event->setResponse(new Response('Template Error: ' . $e->getMessage(), 500));
+                return;
+            }
+        }
+
+        // Mode statique (existants)
         [$content, $resolvedPath] = $this->resolveContent($uuid, $path);
 
         if ($content === null) {
