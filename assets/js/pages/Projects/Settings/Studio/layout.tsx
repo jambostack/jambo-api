@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { router } from '@inertiajs/react';
+import { router, Head } from '@inertiajs/react';
 import type { Project, Collection } from '@/types/index.d';
 import {
   Database, Download, Search, ScrollText, Braces,
@@ -47,6 +47,8 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
 
   return (
     <div className="studio-root">
+      <Head title={`${t('studio.title')} — ${project.name}`} />
+
       <style>{`
         .studio-root {
           --studio-bg: var(--background);
