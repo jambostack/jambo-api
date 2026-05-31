@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,19 +7,20 @@ import { router, Head } from '@inertiajs/react';
 import type { Project, Collection } from '@/types/index.d';
 import {
   Database, Download, Search, ScrollText, Braces,
-  ArrowRight, Box, Layers, ArrowLeft, X
+  ArrowRight, Box, Layers, ArrowLeft, X, Sparkles
 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 import SchemaBuilder from './SchemaBuilder';
 import CodeExporter from './CodeExporter';
 import SearchPage from './SearchPage';
 import AuditLogsPage from './AuditLogsPage';
+import AiGuide from './AiGuide';
 
 interface StudioLayoutProps { project: Project; collections: Collection[]; }
 
 function goBack(projectId: number) { router.get(`/projects/${projectId}/settings`); }
 
-type Panel = 'schema' | 'export' | 'search' | 'audit' | 'graphql';
+type Panel = 'schema' | 'export' | 'search' | 'audit' | 'graphql' | 'aiguide';
 
 interface NavItem {
   id: Panel;
@@ -29,9 +30,28 @@ interface NavItem {
   desc: string;
 }
 
-export default function StudioLayout({ project, collections }: StudioLayoutProps) {
+export default function StudioLayout({ project, collections: initialCollections }: StudioLayoutProps) {
   const t = useTranslation();
   const [active, setActive] = useState<Panel>('schema');
+  // La prop Inertia est figée au chargement de la page. On la garde comme valeur
+  // initiale, mais on recharge les collections depuis le serveur à l'ouverture des
+  // onglets qui en dépendent (SDK/export, recherche), afin de refléter les
+  // collections fraîchement créées dans le Schema Builder.
+  const [collections, setCollections] = useState<Collection[]>(initialCollections);
+
+  useEffect(() => {
+    if (active !== 'export' && active !== 'search' && active !== 'aiguide') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${project.uuid}/studio/collections`);
+        if (!res.ok) return;
+        const data = await res.json() as { data?: Collection[] };
+        if (!cancelled && Array.isArray(data.data)) setCollections(data.data);
+      } catch { /* garde la liste actuelle */ }
+    })();
+    return () => { cancelled = true; };
+  }, [active, project.uuid]);
 
   const nav: NavItem[] = [
     { id: 'schema',  num: '01', icon: Database,   label: t('studio.tab_schema'),  desc: t('studio.schema.desc') },
@@ -39,6 +59,7 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
     { id: 'search',  num: '03', icon: Search,     label: t('studio.tab_search'),  desc: t('studio.search.desc') },
     { id: 'audit',   num: '04', icon: ScrollText, label: t('studio.tab_audit'),   desc: t('studio.audit.desc') },
     { id: 'graphql', num: '05', icon: Braces,     label: t('studio.tab_graphql'), desc: t('studio.graphql.desc') },
+    { id: 'aiguide', num: '06', icon: Sparkles,   label: t('studio.tab_aiguide'), desc: t('studio.aiguide.desc') },
   ];
 
   const stats = {
@@ -96,7 +117,11 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
         .studio-sidebar .sb-nav-item.sb-active .nav-num { color: var(--studio-accent); }
         .studio-sidebar .sb-nav-item svg { width: 14px; height: 14px; flex-shrink: 0; }
         .studio-sidebar .sb-nav-item.sb-active svg { color: var(--studio-accent); }
-        .studio-sidebar .sb-nav-item span.label-text { display: none; }
+        .studio-sidebar .sb-nav-item span.label-text {
+          display: block; font-size: 9px; line-height: 1.15; font-weight: 600;
+          text-align: center; max-width: 100%; word-break: break-word;
+          letter-spacing: -.01em; color: inherit;
+        }
         .studio-sidebar .sb-nav-item .nav-num { display: none; }
         .studio-sidebar .studio-stats { display: none; }
         .studio-sidebar .sb-nav-item {
@@ -130,19 +155,19 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
         /* ── RESPONSIVE BREAKPOINTS ── */
         @media (min-width: 769px) {
           .studio-grid {
-            grid-template-columns: 44px 1fr;
+            grid-template-columns: 76px 1fr;
             gap: 16px;
           }
           .studio-sidebar .sb-nav-item {
             flex-direction: column; align-items: center; justify-content: center;
-            padding: 10px 4px; gap: 4px;
+            padding: 9px 4px; gap: 5px;
           }
-          .studio-sidebar .sb-nav-item span { display: none; }
-          .studio-sidebar .sb-nav-item .nav-num { font-size: 9px; }
+          /* On affiche le libellé (petit) sous l'icône ; seul le numéro reste masqué. */
+          .studio-sidebar .sb-nav-item .nav-num { display: none; }
         }
         @media (min-width: 1025px) {
           .studio-grid {
-            grid-template-columns: 56px 1fr;
+            grid-template-columns: 88px 1fr;
             gap: 24px;
           }
         }
@@ -270,6 +295,7 @@ export default function StudioLayout({ project, collections }: StudioLayoutProps
           {active === 'search' && <SearchPage project={project} collections={collections} />}
           {active === 'audit'  && <AuditLogsPage project={project} />}
           {active === 'graphql' && <GraphQLExplorer projectUuid={project.uuid} />}
+          {active === 'aiguide' && <AiGuide project={project} collections={collections} />}
         </div>
       </div>
     </div>
