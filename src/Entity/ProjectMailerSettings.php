@@ -35,7 +35,7 @@ class ProjectMailerSettings
     #[ORM\Column(type: 'text')]
     public string $encryptedPassword = '';
 
-    #[Assert\Choice(['tls', 'ssl', 'none'])]
+    #[Assert\Choice(choices: ['tls', 'ssl', 'none'])]
     #[ORM\Column(length: 10)]
     public string $encryption = 'tls';
 
