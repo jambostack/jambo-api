@@ -26,6 +26,10 @@ services:
         arguments:
             $appSecret: '%kernel.secret%'
 
+    App\Controller\ProjectSettingsController:
+        arguments:
+            $appSecret: '%kernel.secret%'
+
     App\Service\ApiTokenChecker:
         arguments:
             $appSecret: '%kernel.secret%'

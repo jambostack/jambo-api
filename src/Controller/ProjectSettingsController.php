@@ -20,6 +20,7 @@ class ProjectSettingsController extends AbstractController
         private ApiTokenRepository $apiTokenRepository,
         private ProjectMemberRepository $memberRepo,
         private EntityManagerInterface $em,
+        private string $appSecret = '',
     ) {}
 
     // ─── Localization ──────────────────────────────────────────────────────
@@ -201,7 +202,8 @@ class ProjectSettingsController extends AbstractController
         $token = new ApiToken();
         $token->project   = $project;
         $token->name      = $data['name'];
-        $token->tokenHash = ApiToken::hashToken($plainToken);
+        $token->tokenHash = ApiToken::hashToken($plainToken, $this->appSecret);
+        $token->tokenVersion = 2;
         $token->abilities = $data['abilities'] ?? ['read'];
         if (!empty($data['expires_at'])) {
             $token->expiresAt = new \DateTimeImmutable($data['expires_at']);
