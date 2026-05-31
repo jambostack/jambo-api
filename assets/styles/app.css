@@ -12,6 +12,8 @@
         'DM Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     --font-display:
         'Syne', ui-sans-serif, system-ui, sans-serif;
+    --font-mono:
+        'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
 
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);
@@ -233,6 +235,23 @@
     }
     .jambo-pulse-ring {
         animation: jambo-pulse-ring 2.4s ease-out infinite;
+    }
+
+    /* ─── Ligne console : fade + slide + glow pulse ───────────── */
+    @keyframes console-rise {
+        from {
+            opacity: 0;
+            transform: translateY(6px);
+            text-shadow: 0 0 12px #FFB84100, 0 0 24px #FFB84100;
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+            text-shadow: 0 0 4px #FFB84120, 0 0 8px #FFB84108;
+        }
+    }
+    .console-rise {
+        animation: console-rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
 }
 
