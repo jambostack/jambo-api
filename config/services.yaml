@@ -4,15 +4,6 @@
 # Files in the packages/ subdirectory configure your dependencies.
 # See also https://symfony.com/doc/current/service_container/import.html
 
-# Put parameters here that don't need to change on each machine where the app is deployed
-# https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
-parameters:
-    # Hostnames réservés au CMS — le SiteHostResolver ne les intercepte jamais.
-    jambo.reserved_hostnames:
-        - '%env(APP_HOSTNAME)%'
-        - 'localhost'
-        - '127.0.0.1'
-
 services:
     # default configuration for services in *this* file
     _defaults:
@@ -84,64 +75,6 @@ services:
             $ollamaPlatform: '@ai.traceable_platform.ollama'
             $deepseekPlatform: '@ai.traceable_platform.deepseek'
             $appSettingsRepository: '@App\Repository\AppSettingsRepository'
-
-    App\Workbench\Templates\NextjsTemplate: ~
-    App\Workbench\Templates\NuxtTemplate: ~
-    App\Workbench\Templates\AstroTemplate: ~
-    App\Workbench\Templates\SvelteKitTemplate: ~
-    App\Workbench\Templates\NativeTemplate: ~
-
-    App\Service\WorkbenchStreamService:
-        arguments:
-            $templates:
-                - '@App\Workbench\Templates\NextjsTemplate'
-                - '@App\Workbench\Templates\NuxtTemplate'
-                - '@App\Workbench\Templates\AstroTemplate'
-                - '@App\Workbench\Templates\SvelteKitTemplate'
-                - '@App\Workbench\Templates\NativeTemplate'
-
-    App\Controller\StudioController:
-        arguments:
-            $openaiPlatform: '@ai.traceable_platform.openai'
-            $anthropicPlatform: '@ai.traceable_platform.anthropic'
-            $ollamaPlatform: '@ai.traceable_platform.ollama'
-            $deepseekPlatform: '@ai.traceable_platform.deepseek'
-
-    App\Controller\WorkbenchController:
-        arguments:
-            $openaiPlatform: '@ai.traceable_platform.openai'
-            $anthropicPlatform: '@ai.traceable_platform.anthropic'
-            $ollamaPlatform: '@ai.traceable_platform.ollama'
-            $deepseekPlatform: '@ai.traceable_platform.deepseek'
-            $templates:
-                - '@App\Workbench\Templates\NextjsTemplate'
-                - '@App\Workbench\Templates\NuxtTemplate'
-                - '@App\Workbench\Templates\AstroTemplate'
-                - '@App\Workbench\Templates\SvelteKitTemplate'
-                - '@App\Workbench\Templates\NativeTemplate'
-
-    App\Service\ZipExportService:
-        arguments:
-            $templates:
-                - '@App\Workbench\Templates\NextjsTemplate'
-                - '@App\Workbench\Templates\NuxtTemplate'
-                - '@App\Workbench\Templates\AstroTemplate'
-                - '@App\Workbench\Templates\SvelteKitTemplate'
-                - '@App\Workbench\Templates\NativeTemplate'
-
-    App\Service\PublishedSiteStorage:
-        arguments:
-            $baseDir: '%kernel.project_dir%/var/published_sites'
-
-    # Le SiteHostResolver ne doit jamais intercepter le domaine du CMS lui-même.
-    # Le NativeRenderer optionnel active le mode bi-mode (statique OU Twig SSR).
-    App\EventSubscriber\SiteHostResolver:
-        arguments:
-            $reservedHostnames: '%jambo.reserved_hostnames%'
-            $nativeRenderer: '@App\Service\NativeRenderer'
-
-    # ── Jambo Native (Twig SSR) ────────────────────────────────────────────────
-    App\Service\NativeRenderer: ~
 
     # ── Email / SMTP ───────────────────────────────────────────────────────────
     App\Service\ProjectMailerService:
