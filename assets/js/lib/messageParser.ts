@@ -11,6 +11,10 @@ export interface ParserCallbacks {
 
 type ParseState = 'text' | 'in-file';
 
+// Buffer de sécurité pour éviter de tronquer les balises <jamboFile path="...">
+// avec des chemins longs (jusqu'à ~200 caractères)
+const SAFE_MARGIN = 200;
+
 export class MessageParser {
     private state: ParseState = 'text';
     private buffer = '';
@@ -35,10 +39,10 @@ export class MessageParser {
             if (this.state === 'text') {
                 const openIdx = this.buffer.indexOf('<jamboFile ');
                 if (openIdx === -1) {
-                    if (this.buffer.length > 20) {
-                        const safe = this.buffer.slice(0, -20);
+                    if (this.buffer.length > SAFE_MARGIN) {
+                        const safe = this.buffer.slice(0, -SAFE_MARGIN);
                         this.callbacks.onTextChunk(safe);
-                        this.buffer = this.buffer.slice(-20);
+                        this.buffer = this.buffer.slice(-SAFE_MARGIN);
                     }
                     break;
                 }
@@ -67,7 +71,7 @@ export class MessageParser {
                 const closeTag = `</jamboFile>`;
                 const closeIdx = this.buffer.indexOf(closeTag);
                 if (closeIdx === -1) {
-                    const safe = this.buffer.slice(0, -(closeTag.length));
+                    const safe = this.buffer.slice(0, -(closeTag.length + SAFE_MARGIN));
                     if (safe.length > 0) {
                         this.currentFileContent += safe;
                         this.callbacks.onFileChunk(this.currentFilePath, safe);
@@ -90,6 +94,14 @@ export class MessageParser {
     }
 
     private flush(): void {
+        // Si on est encore dans un fichier (stream coupé avant la balise fermante),
+        // on publie le contenu partiel au lieu de le perdre.
+        if (this.state === 'in-file' && this.currentFileContent.length > 0) {
+            this.callbacks.onFileClose(this.currentFilePath, this.currentFileContent.trim());
+            this.state = 'text';
+            this.currentFilePath = '';
+            this.currentFileContent = '';
+        }
         if (this.buffer.trim().length > 0) {
             this.callbacks.onTextChunk(this.buffer);
             this.buffer = '';
@@ -111,23 +123,42 @@ export async function consumeSseStream(
     const reader = response.body?.getReader();
     if (!reader) throw new Error('No readable stream');
     const decoder = new TextDecoder();
+    let buffer = '';
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        const text = decoder.decode(value, { stream: true });
-        const lines = text.split('\n');
-        for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const payload = line.slice(6).trim();
-            if (!payload) continue;
-            try {
-                const parsed = JSON.parse(payload) as { content?: string };
-                if (parsed.content !== undefined) parser.feed(parsed.content);
-            } catch {
-                if (payload === '[DONE]') parser.feed('[DONE]');
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const payload = line.slice(6).trim();
+                if (!payload) continue;
+                try {
+                    const parsed = JSON.parse(payload) as { content?: string };
+                    if (parsed.content !== undefined) parser.feed(parsed.content);
+                } catch {
+                    if (payload === '[DONE]') parser.feed('[DONE]');
+                    else console.warn('[SSE] Failed to parse payload:', payload.slice(0, 100));
+                }
             }
         }
+
+        if (buffer.startsWith('data: ')) {
+            const payload = buffer.slice(6).trim();
+            if (payload && payload !== '[DONE]') {
+                try {
+                    const parsed = JSON.parse(payload) as { content?: string };
+                    if (parsed.content !== undefined) parser.feed(parsed.content);
+                } catch { /* ignore */ }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+        parser.feed('[DONE]');
     }
 }
