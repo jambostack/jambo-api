@@ -13,13 +13,13 @@ class AdminFixtures extends Fixture
 
     public function load(ObjectManager $manager): void
     {
-        $existing = $manager->getRepository(User::class)->findOneBy(['email' => 'admin@jamboapicms.com']);
+        $existing = $manager->getRepository(User::class)->findOneBy(['email' => 'admin@jambostack.site']);
         if ($existing !== null) {
             return; // idempotent
         }
 
         $admin = new User();
-        $admin->email = 'admin@jamboapicms.com';
+        $admin->email = 'admin@jambostack.site';
         $admin->name  = 'Admin';
         $admin->roles = ['ROLE_SUPER_ADMIN'];
         $admin->password = $this->hasher->hashPassword($admin, 'admin1234');
