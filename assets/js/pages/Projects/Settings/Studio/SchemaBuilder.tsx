@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -120,7 +121,7 @@ function SchemaChatPanel({
         name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired ?? false,
       })),
     })));
-    setMessages(prev => [...prev, { role: 'system', content: `✅ ${schema.length} collection(s) ajoutée(s).`, schema: undefined }]);
+    setMessages(prev => [...prev, { role: 'system', content: `✅ ${schema.length} collection(s) ajoutée(s) au builder. Clique « Enregistrer » en haut pour sauvegarder en base.`, schema: undefined }]);
     scrollDown();
   }
 
@@ -365,25 +366,23 @@ export default function SchemaBuilder({ project }: { project: Project }) {
   const rightW = rightPanelOpen ? 280 : 0;
 
   /* ── Load ── */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/projects/${project.uuid}/studio/collections`);
-        if (!res.ok) throw new Error('Failed');
-        const data = await res.json() as { data: ServerCollection[] };
-        if (cancelled) return;
-        const loaded = (data.data ?? []).map((c): SchemaCollection => ({
-          key: `col_${c.id}`, name: c.name, slug: c.slug, description: c.description ?? '', isSingleton: c.isSingleton,
-          fields: (c.fields ?? []).map((f, fi): SchemaField => ({ key: `fld_${c.id}_${fi}`, name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired, options: f.options })),
-        }));
-        setCollections(loaded);
-        if (loaded.length > 0) setSelectedIdx(0);
-      } catch {} finally { if (!cancelled) setLoading(false); }
-    })();
-    return () => { cancelled = true; };
+  const loadCollections = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${project.uuid}/studio/collections`);
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json() as { data: ServerCollection[] };
+      const loaded = (data.data ?? []).map((c): SchemaCollection => ({
+        key: `col_${c.id}`, name: c.name, slug: c.slug, description: c.description ?? '', isSingleton: c.isSingleton,
+        fields: (c.fields ?? []).map((f, fi): SchemaField => ({ key: `fld_${c.id}_${fi}`, name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired, options: f.options })),
+      }));
+      setCollections(loaded);
+      // Conserve la sélection courante ; ne sélectionne la 1ère qu'au tout premier chargement.
+      setSelectedIdx(prev => prev ?? (loaded.length > 0 ? 0 : null));
+    } catch {} finally { setLoading(false); }
   }, [project.uuid]);
+
+  useEffect(() => { loadCollections(); }, [loadCollections]);
 
   /* ── Load EndUser fields ── */
   const loadEndUserFields = useCallback(async () => {
@@ -448,11 +447,18 @@ export default function SchemaBuilder({ project }: { project: Project }) {
   async function handleSave() {
     setSaving(true);
     try {
-      await fetch(`/api/projects/${project.uuid}/studio/schema`, {
+      const res = await fetch(`/api/projects/${project.uuid}/studio/schema`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ collections }),
       });
-    } catch {} finally { setSaving(false); }
+      if (!res.ok) throw new Error('Failed');
+      toast.success('Schéma enregistré.');
+      // Recharge depuis le serveur pour refléter l'état réellement persisté
+      // (slugs normalisés, ids, etc.).
+      await loadCollections();
+    } catch {
+      toast.error("Échec de l'enregistrement du schéma.");
+    } finally { setSaving(false); }
   }
   function generatePreview() {
     if (isEndUsers) {
