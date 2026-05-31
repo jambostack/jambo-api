@@ -29,6 +29,7 @@ export default function SnapshotTimeline({ projectUuid, workbenchUuid, open, onC
     const [loading, setLoading] = useState(false);
     const [restoring, setRestoring] = useState<string | null>(null);
     const [confirmRestore, setConfirmRestore] = useState<SnapshotData | null>(null);
+    const [saving, setSaving] = useState(false);
     const mountedRef = useRef(true);
 
     useEffect(() => {
@@ -62,7 +63,7 @@ export default function SnapshotTimeline({ projectUuid, workbenchUuid, open, onC
     }, [open, projectUuid, workbenchUuid, t]);
 
     const handleSaveSnapshot = async () => {
-        if (!workbenchUuid) return;
+        if (!workbenchUuid || saving) return;
         const storeFiles = filesStore.get();
         const fileMap: Record<string, string> = {};
         for (const [path, f] of Object.entries(storeFiles)) {
@@ -72,6 +73,7 @@ export default function SnapshotTimeline({ projectUuid, workbenchUuid, open, onC
             toast.error(t('workbench.errors.no_files_export'));
             return;
         }
+        setSaving(true);
         try {
             const res = await fetch(`/api/projects/${projectUuid}/workbench/${workbenchUuid}/snapshots`, {
                 method: 'POST',
@@ -91,6 +93,8 @@ export default function SnapshotTimeline({ projectUuid, workbenchUuid, open, onC
             }
         } catch {
             toast.error(t('common.error'));
+        } finally {
+            if (mountedRef.current) setSaving(false);
         }
     };
 
@@ -137,9 +141,9 @@ export default function SnapshotTimeline({ projectUuid, workbenchUuid, open, onC
                     </DialogHeader>
 
                     <div className="space-y-3 max-h-[50vh] overflow-y-auto">
-                        <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={handleSaveSnapshot} disabled={Object.keys(files).length === 0}>
-                            <Clock className="w-3.5 h-3.5" />
-                            {t('workbench.snapshots_create')}
+                        <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={handleSaveSnapshot} disabled={Object.keys(files).length === 0 || saving}>
+                            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+                            {saving ? t('workbench.deploy.exporting') : t('workbench.snapshots_create')}
                         </Button>
 
                         {loading && (
