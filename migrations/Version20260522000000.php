@@ -21,6 +21,10 @@ final class Version20260522000000 extends AbstractMigration
 
     public function up(Schema $schema): void
     {
+        // Nettoyage des tables orphelines issues d'anciennes versions
+        // (project_user existait quand Project avait un ManyToMany direct avec User)
+        $this->addSql('DROP TABLE IF EXISTS project_user');
+
         // project
         $this->addSql('CREATE TABLE project (
             id INT AUTO_INCREMENT NOT NULL,
