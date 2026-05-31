@@ -70,11 +70,10 @@ services:
 
     App\Service\AiContentService:
         arguments:
-            $openaiPlatform: '@ai.traceable_platform.openai'
-            $anthropicPlatform: '@ai.traceable_platform.anthropic'
-            $ollamaPlatform: '@ai.traceable_platform.ollama'
-            $deepseekPlatform: '@ai.traceable_platform.deepseek'
-            $appSettingsRepository: '@App\Repository\AppSettingsRepository'
+            $openaiKey: '%env(default::OPENAI_API_KEY)%'
+            $anthropicKey: '%env(default::ANTHROPIC_API_KEY)%'
+            $deepseekKey: '%env(default::DEEPSEEK_API_KEY)%'
+            $ollamaBaseUrl: '%env(default::OLLAMA_BASE_URL)%'
 
     # ── Email / SMTP ───────────────────────────────────────────────────────────
     App\Service\ProjectMailerService:

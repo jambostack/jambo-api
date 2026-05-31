@@ -17,7 +17,6 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class AiContentService
 {
-    private array $platforms;
     private ?array $resolved = null;
 
     private const DEFAULT_MODELS = [
@@ -34,22 +33,15 @@ class AiContentService
     ];
 
     public function __construct(
-        PlatformInterface $openaiPlatform,
-        PlatformInterface $anthropicPlatform,
-        PlatformInterface $ollamaPlatform,
-        PlatformInterface $deepseekPlatform,
         private readonly AppSettingsRepository $appSettingsRepository,
         private readonly HttpClientInterface $httpClient,
         private readonly AuditService $audit,
         private readonly Security $security,
-    ) {
-        $this->platforms = [
-            'openai'    => $openaiPlatform,
-            'anthropic' => $anthropicPlatform,
-            'ollama'    => $ollamaPlatform,
-            'deepseek'  => $deepseekPlatform,
-        ];
-    }
+        private readonly string $openaiKey = '',
+        private readonly string $anthropicKey = '',
+        private readonly string $deepseekKey = '',
+        private readonly string $ollamaBaseUrl = '',
+    ) {}
 
     /**
      * Wrap an AI call with timing + audit logging. Captures success and failure.
@@ -129,15 +121,23 @@ class AiContentService
      */
     private function buildPlatform(string $name, array $cfg): ?PlatformInterface
     {
+        // Clé DB prioritaire, sinon fallback sur la variable d'environnement
         $key = trim((string) ($cfg['key'] ?? ''));
         $url = trim((string) ($cfg['url'] ?? ''));
 
+        $resolvedKey = match ($name) {
+            'openai'    => $key !== '' ? $key : $this->openaiKey,
+            'anthropic' => $key !== '' ? $key : $this->anthropicKey,
+            'deepseek'  => $key !== '' ? $key : $this->deepseekKey,
+            default     => $key,
+        };
+
         try {
             return match ($name) {
-                'openai'    => $key !== '' ? OpenAiFactory::createPlatform($key, $this->httpClient)    : $this->platforms['openai'],
-                'anthropic' => $key !== '' ? AnthropicFactory::createPlatform($key, $this->httpClient) : $this->platforms['anthropic'],
-                'deepseek'  => $key !== '' ? DeepSeekFactory::createPlatform($key, $this->httpClient)  : $this->platforms['deepseek'],
-                'ollama'    => OllamaFactory::createPlatform($url !== '' ? $url : null, null, $this->httpClient),
+                'openai'    => $resolvedKey !== '' ? OpenAiFactory::createPlatform($resolvedKey, $this->httpClient) : null,
+                'anthropic' => $resolvedKey !== '' ? AnthropicFactory::createPlatform($resolvedKey, $this->httpClient) : null,
+                'deepseek'  => $resolvedKey !== '' ? DeepSeekFactory::createPlatform($resolvedKey, $this->httpClient) : null,
+                'ollama'    => OllamaFactory::createPlatform($url !== '' ? $url : ($this->ollamaBaseUrl !== '' ? $this->ollamaBaseUrl : null), null, $this->httpClient),
                 default     => null,
             };
         } catch (\Throwable) {
