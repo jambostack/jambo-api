@@ -8,6 +8,8 @@ use App\Entity\Project;
 use App\Repository\AppSettingsRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\StudioChatMessageRepository;
+use Doctrine\Inflector\Inflector;
+use Doctrine\Inflector\InflectorFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -28,6 +30,201 @@ class StudioController extends InertiaController
         private readonly StudioChatMessageRepository $chatMessageRepository,
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
+
+    /** Conventions de nommage imposées aux schémas générés par l'IA. */
+    private const NAMING_CONVENTIONS = <<<RULES
+## Naming conventions (STRICT — always enforce, regardless of the conversation language)
+- ALL `name` and `slug` values MUST be in English.
+- Collection `name`: PascalCase, starts with an UPPERCASE letter, NO spaces, and PLURAL for regular collections (e.g. "BlogPosts", "Products", "TeamMembers"). For singletons (isSingleton: true) use the SINGULAR form (e.g. "About", "HomePage", "Contact").
+- Field `name`: camelCase, starts with a LOWERCASE letter, NO spaces (e.g. "title", "publishedAt", "featuredImage").
+- Multi-word names use CamelCase WITHOUT any separator inside the name: collection = UpperCamelCase ("TeamMembers"), field = lowerCamelCase ("featuredImage"). Underscores ONLY appear in slugs.
+- Every `slug` (collection and field): lowercase snake_case, ASCII only, words separated by single underscores, matching ^[a-z][a-z0-9_]*$ (e.g. "blog_post", "published_at"). Never start with a digit.
+- NEVER use spaces, accents, hyphens or special characters in any `name` or `slug`.
+- Do NOT create system/automatic fields: id, uuid, status, locale, created_at, updated_at, deleted_at — they already exist.
+- Field slugs must be UNIQUE within a collection; collection slugs must be unique across the project.
+- Prefer concise descriptive English names; no abbreviations unless standard (url, id, seo).
+- Each content collection SHOULD include a "title" (text) field and a "slug" (type slug) field.
+- Boolean field names should be affirmative (e.g. "isPublished", "featured").
+- Relation fields must reference an existing or newly created collection.
+RULES;
+
+    /** Champs système gérés automatiquement — jamais générés par l'IA. */
+    private const RESERVED_FIELD_SLUGS = ['id', 'uuid', 'status', 'locale', 'created_at', 'updated_at', 'deleted_at'];
+
+    private ?Inflector $inflector = null;
+
+    private function inflector(): Inflector
+    {
+        return $this->inflector ??= InflectorFactory::create()->build();
+    }
+
+    /**
+     * Normalise un schéma généré par l'IA pour GARANTIR les conventions de
+     * nommage, même si le modèle ne les respecte pas :
+     *  - nom de collection : PascalCase, PLURIEL (SINGULIER pour les singletons) ;
+     *  - nom de champ : camelCase ;
+     *  - slugs : snake_case, dérivés du nom (cohérence garantie) ;
+     *  - suppression des champs système et des doublons.
+     *
+     * @param array<int,mixed> $collections
+     * @return array<int,array<string,mixed>>
+     */
+    private function normalizeSchema(array $collections): array
+    {
+        $out = [];
+        $seenCollectionSlugs = [];
+        foreach ($collections as $col) {
+            if (!is_array($col)) continue;
+
+            $isSingleton = (bool) ($col['isSingleton'] ?? false);
+            $name = $this->toPascalCase((string) ($col['name'] ?? ''));
+            if ($name === '') {
+                $name = $isSingleton ? 'Item' : 'Items';
+            } else {
+                // Forme canonique : on singularise puis on (re)pluralise au besoin,
+                // ce qui corrige aussi bien "BlogPost" que "BlogPosts".
+                $singular = $this->inflector()->singularize($name);
+                $name = $isSingleton ? $singular : $this->inflector()->pluralize($singular);
+            }
+            $slug = $this->toSnakeCase($name) ?: 'collection';
+            // Unicité des slugs de collection
+            $base = $slug; $i = 2;
+            while (isset($seenCollectionSlugs[$slug])) { $slug = $base . '_' . $i++; }
+            $seenCollectionSlugs[$slug] = true;
+
+            $col['name'] = $name;
+            $col['slug'] = $slug;
+
+            $fields = [];
+            $seenFieldSlugs = [];
+            foreach (($col['fields'] ?? []) as $field) {
+                if (!is_array($field)) continue;
+                $fname = $this->toCamelCase((string) ($field['name'] ?? ''));
+                if ($fname === '') continue;
+                $fslug = $this->toSnakeCase($fname);
+                if ($fslug === '' || in_array($fslug, self::RESERVED_FIELD_SLUGS, true)) continue;
+                if (isset($seenFieldSlugs[$fslug])) continue;
+                $seenFieldSlugs[$fslug] = true;
+                $field['name'] = $fname;
+                $field['slug'] = $fslug;
+                $fields[] = $field;
+            }
+            $col['fields'] = $fields;
+            $out[] = $col;
+        }
+        return $out;
+    }
+
+    /**
+     * Extrait de façon robuste le 1er objet JSON équilibré contenant la clé
+     * "collections" dans la réponse de l'IA (fencé ```json ou inline, à n'importe
+     * quel niveau d'imbrication). Remplace les regex fragiles.
+     *
+     * @return array{data: array<string,mixed>, raw: string}|null
+     */
+    private function extractSchemaJson(string $content): ?array
+    {
+        // Priorité aux blocs ```json … ``` (le modèle y met généralement le schéma).
+        if (preg_match_all('/```(?:json)?\s*([\s\S]*?)```/', $content, $blocks)) {
+            foreach ($blocks[1] as $block) {
+                $raw = $this->balancedJsonContaining($block, 'collections');
+                if ($raw !== null) {
+                    $data = json_decode($raw, true);
+                    if (is_array($data) && isset($data['collections'])) {
+                        return ['data' => $data, 'raw' => $raw];
+                    }
+                }
+            }
+        }
+        // Sinon, balayer tout le contenu.
+        $raw = $this->balancedJsonContaining($content, 'collections');
+        if ($raw !== null) {
+            $data = json_decode($raw, true);
+            if (is_array($data) && isset($data['collections'])) {
+                return ['data' => $data, 'raw' => $raw];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Retourne le 1er objet JSON équilibré (en tenant compte des chaînes/échappements)
+     * qui contient la clé "$needle", ou null.
+     */
+    private function balancedJsonContaining(string $text, string $needle): ?string
+    {
+        $len = strlen($text);
+        for ($start = 0; $start < $len; $start++) {
+            if ($text[$start] !== '{') continue;
+            $depth = 0; $inStr = false; $esc = false;
+            for ($i = $start; $i < $len; $i++) {
+                $ch = $text[$i];
+                if ($inStr) {
+                    if ($esc) { $esc = false; }
+                    elseif ($ch === '\\') { $esc = true; }
+                    elseif ($ch === '"') { $inStr = false; }
+                    continue;
+                }
+                if ($ch === '"') { $inStr = true; }
+                elseif ($ch === '{') { $depth++; }
+                elseif ($ch === '}') {
+                    if (--$depth === 0) {
+                        $candidate = substr($text, $start, $i - $start + 1);
+                        if (str_contains($candidate, '"' . $needle . '"')) {
+                            return $candidate;
+                        }
+                        break; // cet objet ne contient pas la clé → essayer le prochain '{'
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Table de repli des accents latins → lettre de base (déterministe, multi-plateforme). */
+    private const ACCENT_MAP = [
+        'à'=>'a','â'=>'a','ä'=>'a','á'=>'a','ã'=>'a','å'=>'a','è'=>'e','é'=>'e','ê'=>'e','ë'=>'e',
+        'ì'=>'i','í'=>'i','î'=>'i','ï'=>'i','ò'=>'o','ó'=>'o','ô'=>'o','ö'=>'o','õ'=>'o',
+        'ù'=>'u','ú'=>'u','û'=>'u','ü'=>'u','ç'=>'c','ñ'=>'n','ÿ'=>'y','œ'=>'oe','æ'=>'ae','ß'=>'ss',
+        'À'=>'A','Â'=>'A','Ä'=>'A','Á'=>'A','Ã'=>'A','È'=>'E','É'=>'E','Ê'=>'E','Ë'=>'E',
+        'Ì'=>'I','Í'=>'I','Î'=>'I','Ï'=>'I','Ò'=>'O','Ó'=>'O','Ô'=>'O','Ö'=>'O','Õ'=>'O',
+        'Ù'=>'U','Ú'=>'U','Û'=>'U','Ü'=>'U','Ç'=>'C','Ñ'=>'N',
+    ];
+
+    /** @return string[] mots ASCII extraits d'une chaîne (gère camelCase, espaces, séparateurs). */
+    private function splitWords(string $value): array
+    {
+        // Replie les accents en ASCII de façon déterministe, puis retire tout
+        // caractère non-ASCII résiduel.
+        $value = strtr($value, self::ACCENT_MAP);
+        $value = preg_replace('/[^\x20-\x7E]/', '', $value) ?? $value;
+        // Coupe aux frontières camelCase puis aux non-alphanumériques.
+        $value = preg_replace('/([a-z0-9])([A-Z])/', '$1 $2', $value) ?? $value;
+        $parts = preg_split('/[^A-Za-z0-9]+/', $value) ?: [];
+        return array_values(array_filter($parts, fn ($p) => $p !== ''));
+    }
+
+    private function toPascalCase(string $value): string
+    {
+        $words = $this->splitWords($value);
+        $out = implode('', array_map(fn ($w) => ucfirst(strtolower($w)), $words));
+        if ($out !== '' && !ctype_alpha($out[0])) $out = 'C' . $out; // doit commencer par une lettre
+        return $out;
+    }
+
+    private function toCamelCase(string $value): string
+    {
+        $pascal = $this->toPascalCase($value);
+        return $pascal === '' ? '' : lcfirst($pascal);
+    }
+
+    private function toSnakeCase(string $value): string
+    {
+        $words = array_map('strtolower', $this->splitWords($value));
+        $out = implode('_', $words);
+        if ($out !== '' && ctype_digit($out[0])) $out = 'f_' . $out; // ne doit pas commencer par un chiffre
+        return $out;
+    }
 
     /**
      * Render the Jambo Studio page via Inertia.
@@ -126,6 +323,7 @@ class StudioController extends InertiaController
         $prompt = trim((string) ($body['prompt'] ?? ''));
         if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
 
+        $namingRules = self::NAMING_CONVENTIONS;
         $systemPrompt = <<<PROMPT
 You are a CMS schema designer. Given a user's description, generate a list of collections with their fields.
 
@@ -134,25 +332,27 @@ You are a CMS schema designer. Given a user's description, generate a list of co
 {
   "collections": [
     {
-      "name": "Blog Posts",
+      "name": "BlogPosts",
       "slug": "blog_posts",
       "description": "Blog articles",
       "isSingleton": false,
       "fields": [
-        { "name": "Title", "slug": "title", "type": "text", "isRequired": true },
-        { "name": "Content", "slug": "content", "type": "richtext", "isRequired": true }
+        { "name": "title", "slug": "title", "type": "text", "isRequired": true },
+        { "name": "slug", "slug": "slug", "type": "slug", "isRequired": true },
+        { "name": "body", "slug": "body", "type": "richtext", "isRequired": true },
+        { "name": "publishedAt", "slug": "published_at", "type": "datetime", "isRequired": false }
       ]
     }
   ]
 }
+
+$namingRules
 
 - Field types available: text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
 - Choose appropriate types based on the field name and context.
 - For slug fields, mark them as required and use type "slug".
 - For dates, use "date". For timestamps, use "datetime".
 - If the user mentions "images" or "photos", use "media".
-- Generate reasonable field names with proper slugs.
-- Make collection names descriptive (plural for collections, singular for singletons).
 - If the user describes a single page (about, contact), mark isSingleton: true.
 - Generate at least 3-5 fields per collection that make sense for the domain.
 - Maximum 5 collections. Maximum 10 fields per collection.
@@ -162,7 +362,9 @@ PROMPT;
 
         if ($provider === null) {
             // Fallback: génération basée sur des règles (pas d'IA configurée)
-            return $this->json($this->ruleBasedSchema($prompt));
+            $schema = $this->ruleBasedSchema($prompt);
+            $schema['collections'] = $this->normalizeSchema($schema['collections'] ?? []);
+            return $this->json($schema);
         }
 
         try {
@@ -175,6 +377,7 @@ PROMPT;
             if (preg_match('/\{[\s\S]*\}/', $content, $m)) {
                 $data = json_decode($m[0], true);
                 if ($data && isset($data['collections'])) {
+                    $data['collections'] = $this->normalizeSchema($data['collections']);
                     return $this->json($data);
                 }
             }
@@ -215,30 +418,37 @@ PROMPT;
         $this->em->persist($userMsg);
         $this->em->flush();
 
+        $namingRules = self::NAMING_CONVENTIONS;
         $systemPrompt = <<<PROMPT
 You are a CMS schema architect. You help users design their content model by creating and modifying collections.
 
 ## Rules
-- Always respond in French (the user speaks French).
+- Always respond in French (the user speaks French) — but the schema `name`/`slug` values MUST stay in English (see naming conventions).
+- IMPORTANT: You can only PROPOSE a schema. You CANNOT create, add, apply, modify or save collections yourself. The schema becomes real ONLY when the user clicks the « Appliquer » button under it (and then saves). NEVER claim a collection is "créée", "ajoutée", "appliquée" or "enregistrée" — instead say it is "proposée" and invite the user to cliquer « Appliquer ».
 - First, acknowledge what the user asked. Then if applicable, propose a schema.
-- When proposing a schema, include it as a valid JSON object in your response, wrapped in a ```json code block.
+- When proposing or modifying a schema, you MUST include the FULL schema as valid JSON wrapped in a ```json fenced code block (never describe changes only in prose — without the JSON block, nothing can be applied).
+- When modifying/adding to existing collections, return the COMPLETE collection(s) concerned (not just the changed fields).
 - The JSON must use this exact structure:
 ```json
 {
   "collections": [
     {
-      "name": "Blog Posts",
+      "name": "BlogPosts",
       "slug": "blog_posts",
       "description": "Blog articles",
       "isSingleton": false,
       "fields": [
-        { "name": "Title", "slug": "title", "type": "text", "isRequired": true },
-        { "name": "Content", "slug": "content", "type": "richtext", "isRequired": true }
+        { "name": "title", "slug": "title", "type": "text", "isRequired": true },
+        { "name": "slug", "slug": "slug", "type": "slug", "isRequired": true },
+        { "name": "body", "slug": "body", "type": "richtext", "isRequired": true },
+        { "name": "publishedAt", "slug": "published_at", "type": "datetime", "isRequired": false }
       ]
     }
   ]
 }
 ```
+
+$namingRules
 
 ## Field types available
 text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
@@ -248,7 +458,6 @@ text, longtext, richtext, slug, email, password, number, decimal, boolean, date,
 - Use "media" for images/photos/files.
 - Use "richtext" for rich content (HTML/WYSIWYG).
 - Use "date" for dates, "datetime" for timestamps.
-- Collection names: plural for collections, singular for singletons (isSingleton: true).
 - If the user asks to modify an existing collection, reference it by name.
 - If the user asks to add fields, include the modified collection with the new fields.
 - Generate 3-5 fields per collection minimum.
@@ -262,6 +471,7 @@ PROMPT;
         if ($provider === null) {
             // Fallback: utiliser ruleBasedSchema pour générer, puis répondre textuellement
             $schema = $this->ruleBasedSchema($prompt);
+            $schema['collections'] = $this->normalizeSchema($schema['collections'] ?? []);
             $names = array_map(fn ($c) => $c['name'], $schema['collections'] ?? []);
             $reply = $names === []
                 ? "Je n'ai pas pu générer de schéma pour cette demande. Peux-tu être plus précis ?"
@@ -280,38 +490,22 @@ PROMPT;
 
             $content = $this->callAiApi($provider, $apiKey, $model, $endpoint, $msgs);
 
-            // Extraire le JSON éventuel de la réponse
+            // Extraction robuste : on cherche un objet JSON équilibré contenant
+            // "collections" (quel que soit le niveau d'imbrication, fencé ou non).
             $collections = null;
             $reply = $content;
-
-            // Pattern 1: JSON dans un bloc de code ```json ... ```
-            if (preg_match('/```(?:json)?\s*(\{[\s\S]*?"collections"[\s\S]*?\})\s*```/', $content, $m)) {
-                $data = json_decode($m[1], true);
-                if ($data && isset($data['collections'])) {
-                    $collections = $data['collections'];
-                }
-                // Nettoyer TOUT le bloc de code de la réponse
-                $reply = trim(preg_replace('/```(?:json)?\s*\{[\s\S]*?"collections"[\s\S]*?\}\s*```/', '', $content));
+            $extracted = $this->extractSchemaJson($content);
+            if ($extracted !== null) {
+                $collections = $extracted['data']['collections'] ?? null;
+                // Retire le JSON (et les fences ```) du texte affiché à l'utilisateur.
+                $reply = trim(str_replace($extracted['raw'], '', $content));
+                $reply = trim(preg_replace('/```(?:json)?\s*```/', '', $reply) ?? $reply);
             }
-            // Pattern 2: JSON inline (entre accolades, non-greedy)
-            elseif (preg_match('/\{[^{]*"collections"[^}]*\}/s', $content, $m)) {
-                // Essayer de parser avec une reconstruction progressive si le premier match est trop court
-                $data = json_decode($m[0], true);
-                if ($data && isset($data['collections'])) {
-                    $collections = $data['collections'];
-                } else {
-                    // Tentative plus large: JSON multi-ligne
-                    if (preg_match('/\{(?:[^{}]|(?:\{[^{}]*\}))*"collections"(?:[^{}]|(?:\{[^{}]*\}))*\}/s', $content, $m2)) {
-                        $data = json_decode($m2[0], true);
-                        if ($data && isset($data['collections'])) {
-                            $collections = $data['collections'];
-                        }
-                    }
-                }
-                // Nettoyer le JSON inline de la réponse
-                if ($collections !== null && isset($m[0])) {
-                    $reply = trim(str_replace($m[0], '', $content));
-                }
+
+            // Normaliser le schéma proposé pour garantir les conventions de
+            // nommage (PascalCase collection, camelCase champ, slugs snake_case).
+            if (is_array($collections)) {
+                $collections = $this->normalizeSchema($collections);
             }
 
             // Nettoyer les fragments de markdown résiduels
@@ -563,7 +757,10 @@ PROMPT;
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $data = json_decode($request->getContent(), true);
-        $collections = $data['collections'] ?? [];
+        // Garantie ultime : on normalise au point de persistance, donc quelle que
+        // soit la source (chat IA, schéma IA, builder visuel), les conventions de
+        // nommage sont toujours respectées en base.
+        $collections = $this->normalizeSchema($data['collections'] ?? []);
 
         $created = 0;
         $updated = 0;
