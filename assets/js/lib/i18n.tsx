@@ -5,6 +5,16 @@ type TFn = (key: string, params?: Record<string, string>) => string;
 
 const TranslationContext = createContext<TFn>((key) => key);
 
+let globalTranslations: Record<string, string> = {};
+
+export function getTranslation(key: string, params?: Record<string, string>): string {
+    let str = globalTranslations[key] ?? key;
+    if (params) {
+        Object.entries(params).forEach(([k, v]) => { str = str.replace(`{${k}}`, v); });
+    }
+    return str;
+}
+
 interface TranslationProviderProps {
     children: React.ReactNode;
     initialLocale: string;
@@ -14,6 +24,7 @@ interface TranslationProviderProps {
 export function TranslationProvider({ children, initialLocale, initialTranslations }: TranslationProviderProps) {
     const [locale, setLocale] = useState(initialLocale);
     const [translations, setTranslations] = useState(initialTranslations);
+    globalTranslations = translations;
 
     useEffect(() => {
         // Keep locale/translations in sync with Inertia page navigations
