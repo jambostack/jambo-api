@@ -5,13 +5,6 @@ namespace App\Service;
 use App\Entity\Collection;
 use App\Entity\Project;
 use App\Repository\AppSettingsRepository;
-use Symfony\AI\Platform\Bridge\Anthropic\Factory as AnthropicFactory;
-use Symfony\AI\Platform\Bridge\DeepSeek\Factory as DeepSeekFactory;
-use Symfony\AI\Platform\Bridge\Ollama\Factory as OllamaFactory;
-use Symfony\AI\Platform\Bridge\OpenAi\Factory as OpenAiFactory;
-use Symfony\AI\Platform\Message\Message;
-use Symfony\AI\Platform\Message\MessageBag;
-use Symfony\AI\Platform\PlatformInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -27,9 +20,15 @@ class AiContentService
     ];
 
     private const MODELS = [
-        'fast' => 'gpt-4o-mini',
+        'fast'  => 'gpt-4o-mini',
         'smart' => 'claude-sonnet-4-6',
         'local' => 'llama3.2',
+    ];
+
+    private const ENDPOINTS = [
+        'openai'    => 'https://api.openai.com/v1/chat/completions',
+        'anthropic' => 'https://api.anthropic.com/v1/messages',
+        'deepseek'  => 'https://api.deepseek.com/chat/completions',
     ];
 
     public function __construct(
@@ -39,9 +38,6 @@ class AiContentService
         private readonly Security $security,
     ) {}
 
-    /**
-     * Wrap an AI call with timing + audit logging. Captures success and failure.
-     */
     private function tracked(string $action, ?Project $project, array $input, callable $fn): mixed
     {
         $start = microtime(true);
@@ -76,11 +72,9 @@ class AiContentService
     }
 
     /**
-     * Construit la liste des fournisseurs activés depuis les paramètres en base.
-     * Chaque entrée : ['platform' => PlatformInterface, 'model' => string].
-     * Les clés saisies dans l'admin priment sur les variables d'environnement.
+     * Résout les fournisseurs activés depuis la base (Paramètres → Fournisseurs IA).
      *
-     * @return array<string, array{platform: PlatformInterface, model: string}>
+     * @return array<string, array{key: string, model: string, url: string}>
      */
     private function resolveProviders(): array
     {
@@ -96,15 +90,17 @@ class AiContentService
             if (empty($cfg['enabled'])) {
                 continue;
             }
+            $key = trim((string) ($cfg['key'] ?? ''));
+            $url = trim((string) ($cfg['url'] ?? ''));
 
-            $platform = $this->buildPlatform($name, $cfg);
-            if ($platform === null) {
+            if ($name !== 'ollama' && $key === '') {
                 continue;
             }
 
             $out[$name] = [
-                'platform' => $platform,
-                'model'    => !empty($cfg['model']) ? $cfg['model'] : self::DEFAULT_MODELS[$name],
+                'key'   => $key,
+                'model' => !empty($cfg['model']) ? $cfg['model'] : self::DEFAULT_MODELS[$name],
+                'url'   => $url,
             ];
         }
 
@@ -112,47 +108,62 @@ class AiContentService
     }
 
     /**
-     * Instancie une plateforme à partir de la clé stockée en base ; à défaut,
-     * réutilise la plateforme câblée sur les variables d'environnement.
+     * Appel direct à l'API du fournisseur via HTTP.
      */
-    private function buildPlatform(string $name, array $cfg): ?PlatformInterface
+    private function callProvider(string $name, string $key, string $model, string $prompt, string $ollamaUrl = ''): string
     {
-        $key = trim((string) ($cfg['key'] ?? ''));
-        $url = trim((string) ($cfg['url'] ?? ''));
+        $messages = [['role' => 'user', 'content' => $prompt]];
 
-        try {
-            return match ($name) {
-                'openai'    => $key !== '' ? OpenAiFactory::createPlatform($key, $this->httpClient) : null,
-                'anthropic' => $key !== '' ? AnthropicFactory::createPlatform($key, $this->httpClient) : null,
-                'deepseek'  => $key !== '' ? DeepSeekFactory::createPlatform($key, $this->httpClient) : null,
-                'ollama'    => OllamaFactory::createPlatform($url !== '' ? $url : null, null, $this->httpClient),
-                default     => null,
-            };
-        } catch (\Throwable) {
-            return null;
+        if ($name === 'anthropic') {
+            $response = $this->httpClient->request('POST', self::ENDPOINTS['anthropic'], [
+                'headers' => [
+                    'x-api-key'         => $key,
+                    'anthropic-version' => '2023-06-01',
+                    'Content-Type'      => 'application/json',
+                ],
+                'json'    => ['model' => $model, 'max_tokens' => 2048, 'messages' => $messages],
+                'timeout' => 60,
+            ]);
+            return $response->toArray()['content'][0]['text'] ?? '';
         }
+
+        if ($name === 'ollama') {
+            $endpoint = rtrim($ollamaUrl ?: 'http://localhost:11434', '/') . '/v1/chat/completions';
+            $response = $this->httpClient->request('POST', $endpoint, [
+                'headers' => ['Content-Type' => 'application/json'],
+                'json'    => ['model' => $model, 'messages' => $messages],
+                'timeout' => 120,
+            ]);
+            return $response->toArray()['choices'][0]['message']['content'] ?? '';
+        }
+
+        // OpenAI / DeepSeek (format compatible OpenAI)
+        $response = $this->httpClient->request('POST', self::ENDPOINTS[$name], [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $key,
+                'Content-Type'  => 'application/json',
+            ],
+            'json'    => ['model' => $model, 'messages' => $messages, 'temperature' => 0.7],
+            'timeout' => 60,
+        ]);
+        return $response->toArray()['choices'][0]['message']['content'] ?? '';
     }
 
-    /**
-     * Interroge un fournisseur IA via l'API officielle invoke()->asText(),
-     * avec repli automatique sur les autres fournisseurs activés.
-     */
     public function ask(string $prompt, string $model = 'gpt-4o-mini', ?string $provider = null): string
     {
         $active = $this->resolveProviders();
 
         if (empty($active)) {
-            throw new \RuntimeException('Aucun fournisseur IA activé. Activez et configurez un fournisseur dans Paramètres de l\'app > Fournisseurs IA.');
+            throw new \RuntimeException('Aucun fournisseur IA activé. Configurez-en un dans Paramètres → Fournisseurs IA.');
         }
 
-        $messages = new MessageBag(Message::ofUser($prompt));
-
-        // 1) Fournisseur explicitement demandé → son modèle configuré
+        // Fournisseur explicitement demandé
         if ($provider !== null && isset($active[$provider])) {
-            return $active[$provider]['platform']->invoke($active[$provider]['model'], $messages)->asText();
+            $cfg = $active[$provider];
+            return $this->callProvider($provider, $cfg['key'], $cfg['model'], $prompt, $cfg['url']);
         }
 
-        // 2) Fournisseur déduit du préfixe du modèle demandé (s'il est activé)
+        // Déduction depuis le préfixe du modèle
         $byModel = match (true) {
             str_starts_with($model, 'gpt-') || str_starts_with($model, 'o1') || str_starts_with($model, 'o3') => 'openai',
             str_starts_with($model, 'claude-')   => 'anthropic',
@@ -162,14 +173,15 @@ class AiContentService
         };
 
         if ($byModel !== null && isset($active[$byModel])) {
-            return $active[$byModel]['platform']->invoke($model, $messages)->asText();
+            $cfg = $active[$byModel];
+            return $this->callProvider($byModel, $cfg['key'], $model, $prompt, $cfg['url']);
         }
 
-        // 3) Repli : premier fournisseur activé, avec SON modèle configuré
+        // Repli : premier fournisseur activé
         $lastError = null;
-        foreach ($active as $entry) {
+        foreach ($active as $name => $cfg) {
             try {
-                return $entry['platform']->invoke($entry['model'], $messages)->asText();
+                return $this->callProvider($name, $cfg['key'], $cfg['model'], $prompt, $cfg['url']);
             } catch (\Throwable $e) {
                 $lastError = $e;
             }
@@ -178,9 +190,6 @@ class AiContentService
         throw new \RuntimeException('Aucun fournisseur IA disponible : ' . ($lastError?->getMessage() ?? 'erreur inconnue'));
     }
 
-    /**
-     * Generate content from a natural language brief.
-     */
     public function generateContent(string $brief, Collection $collection, string $locale = 'fr'): array
     {
         return $this->tracked(
@@ -189,7 +198,6 @@ class AiContentService
             ['brief' => $brief, 'collection' => $collection->slug, 'locale' => $locale],
             function () use ($brief, $collection, $locale) {
                 $fields = $this->describeFields($collection);
-
                 $prompt = <<<PROMPT
 Tu es un rédacteur de contenu expert. Génère le contenu pour une collection CMS.
 
@@ -203,20 +211,14 @@ $fields
 Brief de l'utilisateur: $brief
 
 Retourne UNIQUEMENT un objet JSON valide avec les champs comme clés (pas de texte autour).
-Chaque champ doit contenir une valeur appropriée au type décrit.
 PROMPT;
-
                 $response = $this->ask($prompt, self::MODELS['smart']);
                 $json = $this->extractJson($response);
-
                 return $json ?? ['error' => 'Impossible de parser la réponse IA', 'raw' => $response];
             }
         );
     }
 
-    /**
-     * Translate content to another locale.
-     */
     public function translateContent(array $content, string $targetLocale, ?Project $project = null): array
     {
         return $this->tracked(
@@ -226,15 +228,11 @@ PROMPT;
             function () use ($content, $targetLocale) {
                 $prompt = "Traduis ce contenu JSON en $targetLocale. Conserve la structure exacte, ne traduis QUE les valeurs textuelles. Retourne UNIQUEMENT le JSON traduit:\n\n" . json_encode($content, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
                 $response = $this->ask($prompt, self::MODELS['fast']);
-                $json = $this->extractJson($response);
-                return $json ?? ['error' => 'Erreur de traduction'];
+                return $this->extractJson($response) ?? ['error' => 'Erreur de traduction'];
             }
         );
     }
 
-    /**
-     * Summarize a text.
-     */
     public function summarize(string $text, int $maxWords = 80, ?Project $project = null): string
     {
         return $this->tracked(
@@ -242,15 +240,11 @@ PROMPT;
             $project,
             ['max_words' => $maxWords, 'text_length' => strlen($text)],
             function () use ($text, $maxWords) {
-                $prompt = "Résume ce texte en $maxWords mots maximum, en français:\n\n$text";
-                return $this->ask($prompt, self::MODELS['fast']);
+                return $this->ask("Résume ce texte en $maxWords mots maximum, en français:\n\n$text", self::MODELS['fast']);
             }
         );
     }
 
-    /**
-     * Generate SEO metadata for content.
-     */
     public function generateSeo(array $content, ?Project $project = null): array
     {
         return $this->tracked(
@@ -270,15 +264,11 @@ Analyse ce contenu et génère les métadonnées SEO. Retourne UNIQUEMENT un JSO
 
 Contenu: $text
 PROMPT;
-                $response = $this->ask($prompt, self::MODELS['fast']);
-                return $this->extractJson($response) ?? ['error' => 'Erreur SEO'];
+                return $this->extractJson($this->ask($prompt, self::MODELS['fast'])) ?? ['error' => 'Erreur SEO'];
             }
         );
     }
 
-    /**
-     * Suggest schema improvements for a collection.
-     */
     public function suggestSchema(Collection $collection): array
     {
         return $this->tracked(
@@ -301,15 +291,11 @@ Collection: {$collection->name} ({$collection->slug})
 Champs existants:
 $fields
 PROMPT;
-                $response = $this->ask($prompt, self::MODELS['smart']);
-                return $this->extractJson($response) ?? ['suggestions' => [], 'error' => 'Impossible d\'analyser'];
+                return $this->extractJson($this->ask($prompt, self::MODELS['smart'])) ?? ['suggestions' => [], 'error' => 'Impossible d\'analyser'];
             }
         );
     }
 
-    /**
-     * Generate alt text for an image filename.
-     */
     public function generateAltText(string $fileName, ?string $caption = null, ?Project $project = null): string
     {
         return $this->tracked(
@@ -318,23 +304,19 @@ PROMPT;
             ['file_name' => $fileName, 'has_caption' => $caption !== null],
             function () use ($fileName, $caption) {
                 $context = $caption ? "Légende: $caption. " : '';
-                $prompt = "{$context}Génère un texte alternatif concis et descriptif (alt-text) pour une image nommée \"$fileName\". Réponds uniquement avec le texte alternatif, pas d'explication.";
-                return $this->ask($prompt, self::MODELS['fast']);
+                return $this->ask("{$context}Génère un texte alternatif concis pour une image nommée \"$fileName\". Réponds uniquement avec le texte alternatif.", self::MODELS['fast']);
             }
         );
     }
 
-    /**
-     * List available AI models.
-     */
     public function getAvailableModels(): array
     {
         return [
             'providers' => [
                 'openai'    => ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1'],
-                'anthropic' => ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+                'anthropic' => ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
                 'deepseek'  => ['deepseek-chat', 'deepseek-reasoner'],
-                'ollama'    => ['llama3.2', 'mistral', 'phi4'],
+                'ollama'    => ['llama3.3', 'mistral', 'codellama'],
             ],
             'defaults' => self::MODELS,
         ];
@@ -348,23 +330,15 @@ PROMPT;
             $required = $field->isRequired ? ' (requis)' : '';
             $lines[] = "- {$field->slug}: {$field->type}{$required} — {$field->name}";
         }
-
         return implode("\n", $lines);
     }
 
     private function extractJson(string $response): ?array
     {
-        // Try to extract JSON from markdown code blocks
         if (preg_match('/```(?:json)?\s*\n?(.*?)\n?```/s', $response, $matches)) {
             return json_decode($matches[1], true);
         }
-
-        // Try parsing the whole response as JSON
         $decoded = json_decode($response, true);
-        if (json_last_error() === JSON_ERROR_NONE) {
-            return $decoded;
-        }
-
-        return null;
+        return json_last_error() === JSON_ERROR_NONE ? $decoded : null;
     }
 }
