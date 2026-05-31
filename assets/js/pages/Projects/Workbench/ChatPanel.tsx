@@ -357,7 +357,10 @@ export default function ChatPanel({ projectUuid, workbenchUuid, collections = []
         if (!change) return;
         upsertFile(change.path, change.before);
         if (isWebContainerSupported()) {
-            writeFile(change.path, change.before).catch(console.warn);
+            writeFile(change.path, change.before).catch(err => {
+                console.warn('[Undo] WebContainer write failed:', err);
+                toast.warning(t('workbench.undo_wc_unavailable'));
+            });
         }
         const undoLabel = t('workbench.undo_file');
         appendToLastAssistantMessage(`\n\n${undoLabel} \`${change.path}\``);
