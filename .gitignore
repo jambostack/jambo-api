@@ -1,4 +1,5 @@
 ###> symfony/framework-bundle ###
+/.env
 /.env.local
 /.env.local.php
 /.env.*.local
@@ -24,3 +25,4 @@ yarn-error.log
 /.superpowers/
 /.vscode/
 /docs/
+/others/
