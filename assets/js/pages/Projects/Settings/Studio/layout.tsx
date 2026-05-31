@@ -18,7 +18,7 @@ import AiGuide from './AiGuide';
 
 interface StudioLayoutProps { project: Project; collections: Collection[]; }
 
-function goBack(projectId: number) { router.get(`/projects/${projectId}/settings`); }
+function goBack(projectId: number) { router.get(`/projects/${projectId}/settings/project`); }
 
 type Panel = 'schema' | 'export' | 'search' | 'audit' | 'graphql' | 'aiguide';
 
