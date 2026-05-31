@@ -29,7 +29,7 @@ class StudioChatMessage
     public string $content = '';
 
     /** @var array|null Schema JSON attached to assistant messages */
-    #[ORM\Column(type: 'json', nullable: true)]
+    #[ORM\Column(name: 'schema_data', type: 'json', nullable: true)]
     public ?array $schema = null;
 
     #[ORM\Column]

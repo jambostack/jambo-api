@@ -13,7 +13,6 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
@@ -208,12 +207,13 @@ PROMPT;
 
         if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
 
-        // Persister le message utilisateur en DB
+        // Persister le message utilisateur en DB immédiatement
         $userMsg = new \App\Entity\StudioChatMessage();
         $userMsg->project = $project;
         $userMsg->role = 'user';
         $userMsg->content = $prompt;
         $this->em->persist($userMsg);
+        $this->em->flush();
 
         $systemPrompt = <<<PROMPT
 You are a CMS schema architect. You help users design their content model by creating and modifying collections.
@@ -333,7 +333,6 @@ PROMPT;
                 'collections' => $collections,
             ]);
         } catch (\Throwable $e) {
-            $this->em->flush(); // Sauvegarder le message utilisateur même en cas d'échec
             $this->logger->error('AI chat failed', ['exception' => $e, 'project' => $uuid]);
             return $this->json(['reply' => 'Désolé, une erreur est survenue. Réessaie.', 'error' => 'AI chat failed'], 500);
         }
@@ -456,6 +455,17 @@ PROMPT;
         }
         // OpenAI / DeepSeek / Ollama (format compatible OpenAI)
         return $data['choices'][0]['message']['content'] ?? '';
+    }
+
+    /**
+     * Flush sécurisé : ne fait rien si l'EntityManager est fermé
+     * (par ex. après une exception réseau lors d'un appel API).
+     */
+    private function safeFlush(): void
+    {
+        if ($this->em->isOpen()) {
+            $this->em->flush();
+        }
     }
 
     /** Schema basé sur des règles (fallback sans IA). */
