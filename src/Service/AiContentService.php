@@ -37,10 +37,6 @@ class AiContentService
         private readonly HttpClientInterface $httpClient,
         private readonly AuditService $audit,
         private readonly Security $security,
-        private readonly string $openaiKey = '',
-        private readonly string $anthropicKey = '',
-        private readonly string $deepseekKey = '',
-        private readonly string $ollamaBaseUrl = '',
     ) {}
 
     /**
@@ -121,23 +117,15 @@ class AiContentService
      */
     private function buildPlatform(string $name, array $cfg): ?PlatformInterface
     {
-        // Clé DB prioritaire, sinon fallback sur la variable d'environnement
         $key = trim((string) ($cfg['key'] ?? ''));
         $url = trim((string) ($cfg['url'] ?? ''));
 
-        $resolvedKey = match ($name) {
-            'openai'    => $key !== '' ? $key : $this->openaiKey,
-            'anthropic' => $key !== '' ? $key : $this->anthropicKey,
-            'deepseek'  => $key !== '' ? $key : $this->deepseekKey,
-            default     => $key,
-        };
-
         try {
             return match ($name) {
-                'openai'    => $resolvedKey !== '' ? OpenAiFactory::createPlatform($resolvedKey, $this->httpClient) : null,
-                'anthropic' => $resolvedKey !== '' ? AnthropicFactory::createPlatform($resolvedKey, $this->httpClient) : null,
-                'deepseek'  => $resolvedKey !== '' ? DeepSeekFactory::createPlatform($resolvedKey, $this->httpClient) : null,
-                'ollama'    => OllamaFactory::createPlatform($url !== '' ? $url : ($this->ollamaBaseUrl !== '' ? $this->ollamaBaseUrl : null), null, $this->httpClient),
+                'openai'    => $key !== '' ? OpenAiFactory::createPlatform($key, $this->httpClient) : null,
+                'anthropic' => $key !== '' ? AnthropicFactory::createPlatform($key, $this->httpClient) : null,
+                'deepseek'  => $key !== '' ? DeepSeekFactory::createPlatform($key, $this->httpClient) : null,
+                'ollama'    => OllamaFactory::createPlatform($url !== '' ? $url : null, null, $this->httpClient),
                 default     => null,
             };
         } catch (\Throwable) {

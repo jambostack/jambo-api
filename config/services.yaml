@@ -68,12 +68,8 @@ services:
             $meilisearchHost: '%env(MEILISEARCH_HOST)%'
             $meilisearchKey: '%env(MEILISEARCH_KEY)%'
 
-    App\Service\AiContentService:
-        arguments:
-            $openaiKey: '%env(default::OPENAI_API_KEY)%'
-            $anthropicKey: '%env(default::ANTHROPIC_API_KEY)%'
-            $deepseekKey: '%env(default::DEEPSEEK_API_KEY)%'
-            $ollamaBaseUrl: '%env(default::OLLAMA_BASE_URL)%'
+    # AiContentService — tous les fournisseurs IA sont configurés via l'admin
+    # (Paramètres → Fournisseurs IA), les clés viennent de la base de données.
 
     # ── Email / SMTP ───────────────────────────────────────────────────────────
     App\Service\ProjectMailerService:
