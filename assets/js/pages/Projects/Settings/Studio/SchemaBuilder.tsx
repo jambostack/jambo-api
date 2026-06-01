@@ -50,12 +50,12 @@ function slugify(s: string) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '_')
 
 type MobileTab = 'collections' | 'editor' | 'chat';
 
-const SCHEMA_CHAT_QUICK_PILLS = [
-  '/all Crée un blog avec articles, auteurs et commentaires',
-  '/schema Ajoute des champs personnalisés aux profils utilisateurs',
-  '/all Crée un catalogue produits avec catégories et images',
-  '/schema Structure un site e-learning avec cours et quiz',
-  '/data Génère 5 articles de blog professionnels en français',
+const SCHEMA_CHAT_QUICK_PILL_KEYS = [
+  'studio.chat.prompt_blog',
+  'studio.chat.prompt_enduser_fields',
+  'studio.chat.prompt_catalog',
+  'studio.chat.prompt_elearning',
+  'studio.chat.prompt_articles',
 ];
 
 /* ══════════════════════════ SCHEMA CHAT PANEL ══════════════════════════ */
@@ -66,6 +66,7 @@ function SchemaChatPanel({
   currentCollections: SchemaCollection[];
   onApplySchema: (newCollections: SchemaCollection[]) => void;
 }) {
+  const t = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -84,7 +85,7 @@ function SchemaChatPanel({
         if (cancelled) return;
         const loaded = (data.data ?? []).map(m => ({ role: m.role as ChatMessage['role'], content: m.content, schema: m.schema ?? undefined }));
         if (loaded.length === 0) {
-          loaded.push({ role: 'assistant' as const, content: 'Décris les collections à créer ou modifier. Utilise /schema, /data ou /all pour guider l\'IA.', schema: undefined });
+          loaded.push({ role: 'assistant' as const, content: t('studio.chat.welcome_v2'), schema: undefined });
         }
         setMessages(loaded);
       } catch {}
@@ -95,7 +96,7 @@ function SchemaChatPanel({
   // Effacer l'historique côté serveur
   async function clearHistory() {
     try { await fetch(`/api/projects/${project.uuid}/studio/chat-messages`, { method: 'DELETE' }); } catch {}
-    setMessages([{ role: 'assistant', content: 'Décris les collections à créer ou modifier. Utilise /schema, /data ou /all pour guider l\'IA.', schema: undefined }]);
+    setMessages([{ role: 'assistant', content: t('studio.chat.welcome_v2'), schema: undefined }]);
     setActiveCommand(null);
   }
 
@@ -180,7 +181,7 @@ function SchemaChatPanel({
         entries: data.entries ?? undefined,
       }]);
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Erreur — réessaie.', schema: undefined }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: t('studio.chat.error'), schema: undefined }]);
     } finally { setBusy(false); scrollDown(); }
   }
 
@@ -193,7 +194,7 @@ function SchemaChatPanel({
         name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired ?? false,
       })),
     })));
-    setMessages(prev => [...prev, { role: 'system', content: `✅ ${schema.length} collection(s) ajoutée(s) au builder. Clique « Enregistrer » en haut pour sauvegarder en base.`, schema: undefined }]);
+    setMessages(prev => [...prev, { role: 'system', content: t('studio.chat.applied', { count: schema.length }), schema: undefined }]);
     scrollDown();
   }
 
@@ -201,7 +202,7 @@ function SchemaChatPanel({
     // Pour l'instant, afficher les entrées dans le chat comme un aperçu
     // La création réelle en base nécessite un endpoint dédié (future itération)
     const totalEntries = entries.reduce((sum, e) => sum + (e.entries?.length ?? 0), 0);
-    setMessages(prev => [...prev, { role: 'system', content: `📊 ${totalEntries} entrées générées pour ${entries.length} collection(s). Copie-les ou utilise-les comme référence.`, schema: undefined }]);
+    setMessages(prev => [...prev, { role: 'system', content: t('studio.chat.entries_generated', { total: String(totalEntries), collections: String(entries.length) }), schema: undefined }]);
     scrollDown();
   }
 
@@ -216,10 +217,10 @@ function SchemaChatPanel({
   };
 
   // Rendu du placeholder contextuel
-  const placeholder = activeCommand === 'schema' ? 'Décris le schéma de collections à générer... (Shift+↵ pour nouvelle ligne)'
-    : activeCommand === 'data' ? 'Décris le contenu professionnel à générer et pour quelles collections... (Shift+↵ pour nouvelle ligne)'
-    : activeCommand === 'all' ? 'Décris le projet complet : structure des collections ET contenu... (Shift+↵ pour nouvelle ligne)'
-    : 'Décris les collections à créer ou modifier... (Shift+↵ pour nouvelle ligne)';
+  const placeholder = activeCommand === 'schema' ? t('studio.chat.placeholder_schema')
+    : activeCommand === 'data' ? t('studio.chat.placeholder_data')
+    : activeCommand === 'all' ? t('studio.chat.placeholder_all')
+    : t('studio.chat.placeholder_default');
 
   return (
     <div className="scp-root">
@@ -268,7 +269,7 @@ function SchemaChatPanel({
         <button className={`scp-cmd-btn ${activeCommand === 'schema' ? 'active' : ''}`} onClick={() => insertCommand('schema')} title="/schema — Générer uniquement le schéma de collections"><Slash className="w-3 h-3" />schema</button>
         <button className={`scp-cmd-btn ${activeCommand === 'data' ? 'active' : ''}`} onClick={() => insertCommand('data')} title="/data — Générer du contenu professionnel"><Database className="w-3 h-3" />data</button>
         <button className={`scp-cmd-btn ${activeCommand === 'all' ? 'active' : ''}`} onClick={() => insertCommand('all')} title="/all — Collections + contenu"><Table2 className="w-3 h-3" />all</button>
-        <button className="scp-clear-btn" onClick={clearHistory} disabled={busy} title="Effacer l'historique"><Trash2 className="w-3 h-3" />Effacer</button>
+        <button className="scp-clear-btn" onClick={clearHistory} disabled={busy} title={t('studio.chat.clear_title')}><Trash2 className="w-3 h-3" />{t('studio.chat.clear')}</button>
       </div>
 
       {/* Messages */}
@@ -289,7 +290,7 @@ function SchemaChatPanel({
                       <ul>{col.fields.map((f,fi)=>(<li key={fi}>{f.isRequired&&'· '}<b>{f.name}</b> <span style={{ fontFamily:'var(--studio-mono)',fontSize:'9px' }}>[{f.type}]</span></li>))}</ul>
                     </div>
                   ))}
-                  <button className="scp-apply-btn" onClick={() => handleApplySchema(m.schema!)}><Check className="w-3 h-3" />Appliquer le schéma</button>
+                  <button className="scp-apply-btn" onClick={() => handleApplySchema(m.schema!)}><Check className="w-3 h-3" />{t('studio.chat.apply_schema')}</button>
                 </div>
               )}
 
@@ -308,13 +309,13 @@ function SchemaChatPanel({
                       </div>
                     </div>
                   ))}
-                  <button className="scp-apply-btn" style={{ background:'#61afef' }} onClick={() => handleApplyEntries(m.entries!)}><Check className="w-3 h-3" />OK — Noté</button>
+                  <button className="scp-apply-btn" style={{ background:'#61afef' }} onClick={() => handleApplyEntries(m.entries!)}><Check className="w-3 h-3" />{t('studio.chat.entries_ok')}</button>
                 </div>
               ))}
             </div>
           </div>
         ))}
-        {busy && <div className="scp-msg assistant"><div className="avatar"><Bot className="w-3 h-3" /></div><div className="bubble"><Loader2 className="w-3 h-3 animate-spin" style={{ display:'inline', color:'var(--studio-accent)', marginRight:'6px', verticalAlign:'middle' }} />Génération...</div></div>}
+        {busy && <div className="scp-msg assistant"><div className="avatar"><Bot className="w-3 h-3" /></div><div className="bubble"><Loader2 className="w-3 h-3 animate-spin" style={{ display:'inline', color:'var(--studio-accent)', marginRight:'6px', verticalAlign:'middle' }} />{t('studio.chat.thinking')}</div></div>}
         <div ref={chatEndRef} />
       </div>
 
@@ -335,7 +336,7 @@ function SchemaChatPanel({
 
       {/* Quick prompts */}
       <div className="scp-quick-prompts">
-        {SCHEMA_CHAT_QUICK_PILLS.map((qp,i) => (<button key={i} className="scp-quick-pill" onClick={() => { setInput(qp); setActiveCommand(parseCommand(qp).command); textareaRef.current?.focus(); }} disabled={busy}>{qp}</button>))}
+        {SCHEMA_CHAT_QUICK_PILL_KEYS.map((key,i) => { const qp = t(key); return (<button key={i} className="scp-quick-pill" onClick={() => { setInput(qp); setActiveCommand(parseCommand(qp).command); textareaRef.current?.focus(); }} disabled={busy}>{qp}</button>); })}
       </div>
     </div>
   );
