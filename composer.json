@@ -1,6 +1,15 @@
 {
+    "name": "jambostack/jambo-api",
+    "description": "Jambo API — Headless CMS open-source. Backend API REST + GraphQL pour le JamboStack.",
     "type": "project",
-    "license": "proprietary",
+    "license": "AGPL-3.0",
+    "keywords": ["cms", "headless", "api", "rest", "graphql", "symfony", "jambostack"],
+    "homepage": "https://jambostack.site",
+    "support": {
+        "docs": "https://jambostack.site/docs",
+        "source": "https://github.com/jambostack/jambo-api",
+        "issues": "https://github.com/jambostack/jambo-api/issues"
+    },
     "minimum-stability": "stable",
     "prefer-stable": true,
     "require": {
