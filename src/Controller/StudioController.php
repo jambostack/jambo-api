@@ -769,8 +769,18 @@ PROMPT;
             if (empty($colData['name'])) continue;
 
             $slug = $colData['slug'] ?: $this->slugify($colData['name']);
-            $collection = $this->em->getRepository(Collection::class)
-                ->findOneBy(['project' => $project, 'slug' => $slug, 'deletedAt' => null]);
+
+            // Chercher par UUID d'abord (permet de renommer une collection sans créer de doublon)
+            $collection = null;
+            if (!empty($colData['uuid'])) {
+                $collection = $this->em->getRepository(Collection::class)
+                    ->findOneBy(['project' => $project, 'uuid' => $colData['uuid'], 'deletedAt' => null]);
+            }
+            // Fallback : chercher par slug
+            if (!$collection) {
+                $collection = $this->em->getRepository(Collection::class)
+                    ->findOneBy(['project' => $project, 'slug' => $slug, 'deletedAt' => null]);
+            }
 
             if (!$collection) {
                 $collection = new Collection();
