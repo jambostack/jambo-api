@@ -349,9 +349,13 @@ class ContentController extends AbstractController
             $ids = is_array($decoded) ? $decoded : [$value];
         }
 
-        // Pour les champs media : valider que chaque UUID appartient au projet
-        if ($fieldType === 'media' && $ids !== []) {
-            $validUuids = $this->mediaRepository->findProjectMediaUuids($project, $ids);
+        // Validation IDOR : chaque UUID doit appartenir au même projet
+        if ($ids !== []) {
+            $validUuids = match ($fieldType) {
+                'media'    => $this->mediaRepository->findProjectMediaUuids($project, $ids),
+                'relation' => $this->entryRepository->findProjectEntryUuids($project, $ids),
+                default    => $ids,
+            };
             $ids = array_values(array_intersect($ids, $validUuids));
         }
 
