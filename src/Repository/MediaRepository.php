@@ -41,4 +41,32 @@ class MediaRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    /**
+     * Vérifie l'appartenance au projet d'une liste d'UUIDs de média.
+     * Retourne uniquement les UUIDs qui appartiennent bien au projet donné.
+     *
+     * @param string[] $uuids
+     * @return string[]
+     */
+    public function findProjectMediaUuids(Project $project, array $uuids): array
+    {
+        if ($uuids === []) {
+            return [];
+        }
+
+        $uidObjects = array_map(fn ($u) => \Symfony\Component\Uid\Uuid::fromString($u), $uuids);
+
+        $rows = $this->createQueryBuilder('m')
+            ->select('m.uuid')
+            ->where('m.project = :project')
+            ->andWhere('m.uuid IN (:uuids)')
+            ->andWhere('m.deletedAt IS NULL')
+            ->setParameter('project', $project)
+            ->setParameter('uuids', $uidObjects)
+            ->getQuery()
+            ->getResult();
+
+        return array_map(fn ($row) => $row['uuid']->toRfc4122(), $rows);
+    }
 }
