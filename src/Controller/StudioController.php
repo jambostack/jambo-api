@@ -348,7 +348,16 @@ You are a CMS schema designer. Given a user's description, generate a list of co
 
 $namingRules
 
-- Field types available: text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
+## Field types available
+text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
+
+## API automatiquement générée
+Chaque collection créée expose automatiquement :
+- REST: GET /api/{project}/{slug} (liste), POST (créer), GET/PATCH/DELETE /api/{project}/{slug}/{uuid}
+- GraphQL: POST /api/projects/{project}/graphql — schema auto-généré (queries, mutations, filtres, pagination)
+- Spécification OpenAPI: GET /api/{project}/openapi.json
+- Auth: Bearer token (API token) ou JWT (end-users via /auth/login, /auth/register)
+
 - Choose appropriate types based on the field name and context.
 - For slug fields, mark them as required and use type "slug".
 - For dates, use "date". For timestamps, use "datetime".
@@ -452,6 +461,14 @@ $namingRules
 
 ## Field types available
 text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
+
+## API auto-générée par collection
+Chaque collection expose automatiquement :
+- REST: GET /api/{project}/{slug} (liste paginée, ?page=&per_page=&locale=&status=&sort=&filter[field]=value), POST /api/{project}/{slug} (créer), GET/PATCH/DELETE /api/{project}/{slug}/{uuid} (lire/modifier/supprimer)
+- GraphQL: POST /api/projects/{project}/graphql — schema auto-généré avec queries, mutations, filtres, pagination, tri. Supporter GET (paramètre ?query=) et POST (body JSON {query, variables}).
+- OpenAPI: GET /api/{project}/openapi.json — spécification complète
+- Auth: Bearer token (API token statique) pour l'API REST, ou JWT (end-users) via POST /api/{project}/auth/login et /auth/register
+- Fichiers/media: GET/POST /api/{project}/files — upload multipart/form-data, listing paginé
 
 ## Guidelines
 - Use "slug" type for URL-friendly identifiers (mark them required).

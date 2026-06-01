@@ -87,10 +87,37 @@ function SchemaChatPanel({
   }
 
   function buildContext(): string {
-    if (currentCollections.length === 0) return '(aucune collection existante)';
-    return currentCollections.map(c =>
-      `- ${c.name} (${c.slug}, ${c.isSingleton ? 'singleton' : 'collection'}): ${c.fields.map(f => f.name + '[' + f.type + ']' + (f.isRequired ? '*' : '')).join(', ') || 'aucun champ'}`
-    ).join('\n');
+    const baseUrl = '/api/' + project.uuid;
+    const graphqlUrl = '/api/projects/' + project.uuid + '/graphql';
+    const parts: string[] = [];
+
+    parts.push('## API REST');
+    parts.push('- Base URL: ' + baseUrl);
+    parts.push('- Auth endpoints: POST /auth/login, POST /auth/register, POST /auth/refresh (JWT)');
+    parts.push('- Files endpoint: GET/POST ' + baseUrl + '/files, GET ' + baseUrl + '/files/{uuid}');
+    parts.push('- OpenAPI spec: GET ' + baseUrl + '/openapi.json');
+    parts.push('- Authentification: Bearer token (API token) ou JWT end-user');
+    parts.push('');
+
+    parts.push('## GraphQL');
+    parts.push('- Endpoint: POST/GET ' + graphqlUrl);
+    parts.push('- Schema auto-généré depuis les collections du projet');
+    parts.push('- Supporte queries, mutations, filtres, pagination, tri');
+    parts.push('');
+
+    parts.push('## Collections existantes');
+    if (currentCollections.length === 0) {
+      parts.push('(aucune collection existante)');
+    } else {
+      currentCollections.forEach(c => {
+        const fields = c.fields.map(f => f.name + '[' + f.type + ']' + (f.isRequired ? '*' : '')).join(', ') || 'aucun champ';
+        parts.push('- ' + c.name + ' (slug: ' + c.slug + ', ' + (c.isSingleton ? 'singleton' : 'collection') + ')');
+        parts.push('  Fields: ' + fields);
+        parts.push('  REST: GET ' + baseUrl + '/' + c.slug + ' (list), GET/PATCH/DELETE ' + baseUrl + '/' + c.slug + '/{uuid}, POST ' + baseUrl + '/' + c.slug + ' (create)');
+      });
+    }
+
+    return parts.join('\n');
   }
 
   async function send() {
