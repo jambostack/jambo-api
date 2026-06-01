@@ -599,6 +599,41 @@ PROMPT;
                 'model'    => $config['ollama']['model'] ?? 'llama3.2',
                 'endpoint' => ($config['ollama']['url'] ?? 'http://localhost:11434') . '/v1/chat/completions',
             ],
+            'gemini' => [
+                'key'      => $config['gemini']['key'] ?? '',
+                'model'    => $config['gemini']['model'] ?? 'gemini-2.0-flash',
+                'endpoint' => 'https://generativelanguage.googleapis.com/v1beta/models/' . ($config['gemini']['model'] ?? 'gemini-2.0-flash') . ':generateContent',
+            ],
+            'openrouter' => [
+                'key'      => $config['openrouter']['key'] ?? '',
+                'model'    => $config['openrouter']['model'] ?? 'openai/gpt-4o',
+                'endpoint' => 'https://openrouter.ai/api/v1/chat/completions',
+            ],
+            'mistral' => [
+                'key'      => $config['mistral']['key'] ?? '',
+                'model'    => $config['mistral']['model'] ?? 'mistral-large-latest',
+                'endpoint' => 'https://api.mistral.ai/v1/chat/completions',
+            ],
+            'groq' => [
+                'key'      => $config['groq']['key'] ?? '',
+                'model'    => $config['groq']['model'] ?? 'llama-3.3-70b-versatile',
+                'endpoint' => 'https://api.groq.com/openai/v1/chat/completions',
+            ],
+            'xai' => [
+                'key'      => $config['xai']['key'] ?? '',
+                'model'    => $config['xai']['model'] ?? 'grok-2-latest',
+                'endpoint' => 'https://api.x.ai/v1/chat/completions',
+            ],
+            'perplexity' => [
+                'key'      => $config['perplexity']['key'] ?? '',
+                'model'    => $config['perplexity']['model'] ?? 'sonar-pro',
+                'endpoint' => 'https://api.perplexity.ai/chat/completions',
+            ],
+            'qwen' => [
+                'key'      => $config['qwen']['key'] ?? '',
+                'model'    => $config['qwen']['model'] ?? 'qwen-max',
+                'endpoint' => 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+            ],
         ];
 
         foreach ($providers as $name => $cfg) {
@@ -617,6 +652,22 @@ PROMPT;
     private function callAiApi(string $provider, string $apiKey, string $model, string $endpoint, array $messages): string
     {
         $headers = ['Content-Type' => 'application/json'];
+
+        if ($provider === 'gemini') {
+            $parts = [];
+            foreach ($messages as $m) {
+                $parts[] = ['text' => $m['content']];
+            }
+            $body = ['contents' => [['parts' => $parts]]];
+            $url = $endpoint . '?key=' . urlencode($apiKey);
+            $response = $this->httpClient->request('POST', $url, [
+                'headers' => $headers,
+                'json'    => $body,
+                'timeout' => 60,
+            ]);
+            $arr = $response->toArray();
+            return $arr['candidates'][0]['content']['parts'][0]['text'] ?? '';
+        }
 
         if ($provider === 'anthropic') {
             $headers['x-api-key'] = $apiKey;

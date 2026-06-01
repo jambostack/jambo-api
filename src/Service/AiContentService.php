@@ -17,6 +17,13 @@ class AiContentService
         'anthropic' => 'claude-sonnet-4-6',
         'deepseek'  => 'deepseek-chat',
         'ollama'    => 'llama3.2',
+        'gemini'    => 'gemini-2.0-flash',
+        'openrouter'=> 'openai/gpt-4o',
+        'mistral'   => 'mistral-large-latest',
+        'groq'      => 'llama-3.3-70b-versatile',
+        'xai'       => 'grok-2-latest',
+        'perplexity'=> 'sonar-pro',
+        'qwen'      => 'qwen-max',
     ];
 
     private const MODELS = [
@@ -29,6 +36,13 @@ class AiContentService
         'openai'    => 'https://api.openai.com/v1/chat/completions',
         'anthropic' => 'https://api.anthropic.com/v1/messages',
         'deepseek'  => 'https://api.deepseek.com/chat/completions',
+        'gemini'    => 'https://generativelanguage.googleapis.com/v1beta/models/',
+        'openrouter'=> 'https://openrouter.ai/api/v1/chat/completions',
+        'mistral'   => 'https://api.mistral.ai/v1/chat/completions',
+        'groq'      => 'https://api.groq.com/openai/v1/chat/completions',
+        'xai'       => 'https://api.x.ai/v1/chat/completions',
+        'perplexity'=> 'https://api.perplexity.ai/chat/completions',
+        'qwen'      => 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
     ];
 
     public function __construct(
@@ -85,7 +99,7 @@ class AiContentService
         $config = $this->appSettingsRepository->getOrCreate()->aiProviders ?? [];
         $out = [];
 
-        foreach (['openai', 'anthropic', 'deepseek', 'ollama'] as $name) {
+        foreach (['openai', 'anthropic', 'deepseek', 'ollama', 'gemini', 'openrouter', 'mistral', 'groq', 'xai', 'perplexity', 'qwen'] as $name) {
             $cfg = $config[$name] ?? [];
             if (empty($cfg['enabled'])) {
                 continue;
@@ -125,6 +139,23 @@ class AiContentService
                 'timeout' => 60,
             ]);
             return $response->toArray()['content'][0]['text'] ?? '';
+        }
+
+        if ($name === 'gemini') {
+            // Format natif Google Gemini
+            $endpoint = self::ENDPOINTS['gemini'] . $model . ':generateContent';
+            $payload = [
+                'contents' => [
+                    ['parts' => [['text' => $prompt]]],
+                ],
+            ];
+            $response = $this->httpClient->request('POST', $endpoint, [
+                'query'   => ['key' => $key],
+                'headers' => ['Content-Type' => 'application/json'],
+                'json'    => $payload,
+                'timeout' => 60,
+            ]);
+            return $response->toArray()['candidates'][0]['content']['parts'][0]['text'] ?? '';
         }
 
         if ($name === 'ollama') {
@@ -168,7 +199,13 @@ class AiContentService
             str_starts_with($model, 'gpt-') || str_starts_with($model, 'o1') || str_starts_with($model, 'o3') => 'openai',
             str_starts_with($model, 'claude-')   => 'anthropic',
             str_starts_with($model, 'deepseek-') => 'deepseek',
-            str_starts_with($model, 'llama') || str_starts_with($model, 'mistral') || str_starts_with($model, 'phi') => 'ollama',
+            str_starts_with($model, 'gemini-')   => 'gemini',
+            str_starts_with($model, 'openai/') || str_starts_with($model, 'google/') || str_starts_with($model, 'meta-llama/') || str_starts_with($model, 'anthropic/') => 'openrouter',
+            str_starts_with($model, 'mistral-')  => 'mistral',
+            str_starts_with($model, 'grok-')     => 'xai',
+            str_starts_with($model, 'sonar-') || str_starts_with($model, 'llama-3.1-sonar') => 'perplexity',
+            str_starts_with($model, 'qwen-')     => 'qwen',
+            str_starts_with($model, 'llama') || str_starts_with($model, 'phi') || str_starts_with($model, 'codellama') => 'ollama',
             default => null,
         };
 
@@ -313,10 +350,17 @@ PROMPT;
     {
         return [
             'providers' => [
-                'openai'    => ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1'],
+                'openai'    => ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'o1', 'o3-mini'],
                 'anthropic' => ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
                 'deepseek'  => ['deepseek-chat', 'deepseek-reasoner'],
                 'ollama'    => ['llama3.3', 'mistral', 'codellama'],
+                'gemini'    => ['gemini-2.0-flash', 'gemini-2.0-pro', 'gemini-1.5-pro'],
+                'openrouter'=> ['openai/gpt-4o', 'anthropic/claude-sonnet-4-6', 'google/gemini-2.0-flash', 'meta-llama/llama-4-maverick'],
+                'mistral'   => ['mistral-large-latest', 'mistral-small-latest', 'codestral-latest'],
+                'groq'      => ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
+                'xai'       => ['grok-2-latest', 'grok-2-vision-latest'],
+                'perplexity'=> ['sonar-pro', 'sonar-reasoning-pro'],
+                'qwen'      => ['qwen-max', 'qwen-plus', 'qwen-turbo'],
             ],
             'defaults' => self::MODELS,
         ];

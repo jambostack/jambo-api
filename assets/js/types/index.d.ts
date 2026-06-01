@@ -48,6 +48,13 @@ export interface AppSettings {
         anthropic: AiProviderStatus;
         deepseek:  AiProviderStatus;
         ollama:    AiProviderStatus;
+        gemini:    AiProviderStatus;
+        openrouter: AiProviderStatus;
+        mistral:   AiProviderStatus;
+        groq:      AiProviderStatus;
+        xai:       AiProviderStatus;
+        perplexity: AiProviderStatus;
+        qwen:      AiProviderStatus;
     };
 }
 

@@ -14,7 +14,7 @@ import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 type FileField = 'logo' | 'logo_dark' | 'logo_light' | 'icon_dark' | 'icon_light' | 'favicon';
-type ProviderName = 'openai' | 'anthropic' | 'deepseek' | 'ollama';
+type ProviderName = 'openai' | 'anthropic' | 'deepseek' | 'ollama' | 'gemini' | 'openrouter' | 'mistral' | 'groq' | 'xai' | 'perplexity' | 'qwen';
 
 interface ProviderState {
     enabled:    boolean;
@@ -82,6 +82,13 @@ export default function AppSettingsPage() {
         anthropic: initProvider(ai?.anthropic, 'claude-sonnet-4-6'),
         deepseek:  initProvider(ai?.deepseek,  'deepseek-chat'),
         ollama:    initProvider(ai?.ollama,    'llama3.2'),
+        gemini:    initProvider(ai?.gemini,    'gemini-2.0-flash'),
+        openrouter: initProvider(ai?.openrouter, 'openai/gpt-4o'),
+        mistral:   initProvider(ai?.mistral,   'mistral-large-latest'),
+        groq:      initProvider(ai?.groq,      'llama-3.3-70b-versatile'),
+        xai:       initProvider(ai?.xai,       'grok-2-latest'),
+        perplexity: initProvider(ai?.perplexity, 'sonar-pro'),
+        qwen:      initProvider(ai?.qwen,      'qwen-max'),
     });
 
     // ─── Helpers ──────────────────────────────────────────────────────────
@@ -429,6 +436,41 @@ export default function AppSettingsPage() {
                             label="Ollama (local)"
                             keyPlaceholder=""
                             showUrl={true}
+                        />
+                        <ProviderCard
+                            name="gemini"
+                            label="Google Gemini"
+                            keyPlaceholder="AIza..."
+                        />
+                        <ProviderCard
+                            name="openrouter"
+                            label="OpenRouter"
+                            keyPlaceholder="sk-or-v1-..."
+                        />
+                        <ProviderCard
+                            name="mistral"
+                            label="Mistral AI"
+                            keyPlaceholder="..."
+                        />
+                        <ProviderCard
+                            name="groq"
+                            label="Groq"
+                            keyPlaceholder="gsk_..."
+                        />
+                        <ProviderCard
+                            name="xai"
+                            label="xAI (Grok)"
+                            keyPlaceholder="xai-..."
+                        />
+                        <ProviderCard
+                            name="perplexity"
+                            label="Perplexity"
+                            keyPlaceholder="pplx-..."
+                        />
+                        <ProviderCard
+                            name="qwen"
+                            label="Qwen (Alibaba)"
+                            keyPlaceholder="sk-..."
                         />
                     </TabsContent>
                 </Tabs>

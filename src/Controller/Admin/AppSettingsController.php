@@ -90,7 +90,7 @@ class AppSettingsController extends AbstractController
                 $current  = $settings->aiProviders ?? [];
                 $incoming = $data['aiProviders'];
 
-                foreach (['openai', 'anthropic', 'deepseek', 'ollama'] as $provider) {
+                foreach (['openai', 'anthropic', 'deepseek', 'ollama', 'gemini', 'openrouter', 'mistral', 'groq', 'xai', 'perplexity', 'qwen'] as $provider) {
                     if (!array_key_exists($provider, $incoming)) {
                         continue;
                     }
@@ -195,6 +195,41 @@ class AppSettingsController extends AbstractController
                     'configured' => !empty($providers['ollama']['url']),
                     'url'        => $providers['ollama']['url']       ?? '',
                     'model'      => $providers['ollama']['model']     ?? 'llama3.2',
+                ],
+                'gemini'    => [
+                    'enabled'    => (bool) ($providers['gemini']['enabled']    ?? false),
+                    'configured' => !empty($providers['gemini']['key']),
+                    'model'      => $providers['gemini']['model']     ?? 'gemini-2.0-flash',
+                ],
+                'openrouter'=> [
+                    'enabled'    => (bool) ($providers['openrouter']['enabled'] ?? false),
+                    'configured' => !empty($providers['openrouter']['key']),
+                    'model'      => $providers['openrouter']['model'] ?? 'openai/gpt-4o',
+                ],
+                'mistral'   => [
+                    'enabled'    => (bool) ($providers['mistral']['enabled']   ?? false),
+                    'configured' => !empty($providers['mistral']['key']),
+                    'model'      => $providers['mistral']['model']    ?? 'mistral-large-latest',
+                ],
+                'groq'      => [
+                    'enabled'    => (bool) ($providers['groq']['enabled']      ?? false),
+                    'configured' => !empty($providers['groq']['key']),
+                    'model'      => $providers['groq']['model']       ?? 'llama-3.3-70b-versatile',
+                ],
+                'xai'       => [
+                    'enabled'    => (bool) ($providers['xai']['enabled']       ?? false),
+                    'configured' => !empty($providers['xai']['key']),
+                    'model'      => $providers['xai']['model']        ?? 'grok-2-latest',
+                ],
+                'perplexity'=> [
+                    'enabled'    => (bool) ($providers['perplexity']['enabled']?? false),
+                    'configured' => !empty($providers['perplexity']['key']),
+                    'model'      => $providers['perplexity']['model'] ?? 'sonar-pro',
+                ],
+                'qwen'      => [
+                    'enabled'    => (bool) ($providers['qwen']['enabled']      ?? false),
+                    'configured' => !empty($providers['qwen']['key']),
+                    'model'      => $providers['qwen']['model']       ?? 'qwen-max',
                 ],
             ],
         ];
