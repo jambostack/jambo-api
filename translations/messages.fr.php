@@ -308,6 +308,12 @@ return [
     'content.failed_load_trash'       => 'Échec du chargement de la corbeille',
     'content.failed_restore_entry'    => 'Échec de la restauration de l\'entrée',
     'content.failed_delete_entry'     => 'Échec de la suppression de l\'entrée',
+    'content.publish_action'          => 'Publier la sélection',
+    'content.publish_title'           => 'Publier le contenu',
+    'content.publish_desc'            => 'Êtes-vous sûr de vouloir publier {count} entrées de contenu ?',
+    'content.publish_btn'             => 'Publier',
+    'content.published_success'       => '{count} entrées publiées',
+    'content.failed_publish'          => 'Échec de la publication du contenu',
 
     // Content Form
     'content.form.save_draft'         => 'Enregistrer comme brouillon',

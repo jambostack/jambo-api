@@ -575,6 +575,12 @@ return [
     'content.failed_load_trash'       => 'Failed to load trashed entries',
     'content.failed_restore_entry'    => 'Failed to restore entry',
     'content.failed_delete_entry'     => 'Failed to delete entry',
+    'content.publish_action'          => 'Publish Selected',
+    'content.publish_title'           => 'Publish Content',
+    'content.publish_desc'            => 'Are you sure you want to publish {count} content entries?',
+    'content.publish_btn'             => 'Publish',
+    'content.published_success'       => '{count} content entries published',
+    'content.failed_publish'          => 'Failed to publish content',
 
     // Content Form
     'content.form.save_draft'         => 'Save as draft',

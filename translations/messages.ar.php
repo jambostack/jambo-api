@@ -301,6 +301,12 @@ return [
     'content.failed_load_trash'       => 'فشل تحميل سلة المحذوفات',
     'content.failed_restore_entry'    => 'فشل استعادة الإدخال',
     'content.failed_delete_entry'     => 'فشل حذف الإدخال',
+    'content.publish_action'          => 'نشر المحدد',
+    'content.publish_title'           => 'نشر المحتوى',
+    'content.publish_desc'            => 'هل أنت متأكد من نشر {count} إدخالات؟',
+    'content.publish_btn'             => 'نشر',
+    'content.published_success'       => 'تم نشر {count} إدخالات',
+    'content.failed_publish'          => 'فشل نشر المحتوى',
 
     // Content Form
     'content.form.save_draft'         => 'حفظ كمسودة',
