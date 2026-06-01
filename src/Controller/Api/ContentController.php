@@ -317,13 +317,35 @@ class ContentController extends AbstractController
 
             $value = $data[$field->slug];
             match ($field->type) {
-                'number'   => $fieldValue->numberValue = $value !== null ? (string) $value : null,
-                'boolean'  => $fieldValue->booleanValue = (bool) $value,
-                'date'     => $fieldValue->dateValue = $value ? new \DateTime($value) : null,
-                'datetime' => $fieldValue->datetimeValue = $value ? new \DateTime($value) : null,
-                'json'     => $fieldValue->jsonValue = is_array($value) ? $value : json_decode($value, true),
-                default    => $fieldValue->textValue = $value,
+                'number', 'decimal'              => $fieldValue->numberValue   = $value !== null ? (string) $value : null,
+                'boolean', 'checkbox'            => $fieldValue->booleanValue  = $value !== null ? (bool) $value : null,
+                'date'                           => $fieldValue->dateValue     = ($value && !str_contains((string) $value, '/')) ? new \DateTime($value) : null,
+                'datetime'                       => $fieldValue->datetimeValue = $value ? new \DateTime($value) : null,
+                'time'                           => $fieldValue->textValue     = $value !== null ? (string) $value : null,
+                'json', 'array', 'repeater'      => $fieldValue->jsonValue     = is_array($value) ? $value : json_decode($value, true),
+                'media', 'relation', 'enumeration' => $fieldValue->jsonValue   = $this->normalizeArrayOfIds($value),
+                default                          => $fieldValue->textValue     = $value !== null ? (string) $value : null,
             };
         }
+    }
+
+    /**
+     * Pour les conteneurs d'identifiants (media/relation/enumeration) :
+     * accepte un array tel quel, décode une string JSON-array, sinon emballe
+     * un scalaire isolé dans un tableau.
+     */
+    private function normalizeArrayOfIds(mixed $value): ?array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $decoded = json_decode((string) $value, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+        return [$value];
     }
 }
