@@ -314,6 +314,12 @@ return [
     'content.publish_btn'             => 'Publier',
     'content.published_success'       => '{count} entrées publiées',
     'content.failed_publish'          => 'Échec de la publication du contenu',
+    'content.draft_action'            => 'Mettre en brouillon',
+    'content.draft_title'             => 'Remettre en brouillon',
+    'content.draft_desc'              => 'Êtes-vous sûr de vouloir remettre {count} entrées en brouillon ? Elles ne seront plus visibles publiquement.',
+    'content.draft_btn'               => 'Remettre en brouillon',
+    'content.draft_success'           => '{count} entrées mises en brouillon',
+    'content.failed_draft'            => 'Échec de la mise en brouillon',
 
     // Content Form
     'content.form.save_draft'         => 'Enregistrer comme brouillon',

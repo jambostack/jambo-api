@@ -307,6 +307,12 @@ return [
     'content.publish_btn'             => 'Publicar',
     'content.published_success'       => '{count} entradas publicadas',
     'content.failed_publish'          => 'Error al publicar el contenido',
+    'content.draft_action'            => 'Marcar borrador',
+    'content.draft_title'             => 'Volver a borrador',
+    'content.draft_desc'              => '¿Estás seguro de que quieres volver a borrador {count} entradas? Ya no serán visibles públicamente.',
+    'content.draft_btn'               => 'Volver a borrador',
+    'content.draft_success'           => '{count} entradas marcadas como borrador',
+    'content.failed_draft'            => 'Error al marcar como borrador',
 
     // Content Form
     'content.form.save_draft'         => 'Guardar como borrador',
