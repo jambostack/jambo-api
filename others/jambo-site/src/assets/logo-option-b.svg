@@ -1,0 +1,24 @@
+<svg width="200" height="48" viewBox="0 0 200 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad-b" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2fcf8f"/>
+      <stop offset="100%" stop-color="#bef264"/>
+    </linearGradient>
+  </defs>
+  <!-- Icône fond -->
+  <rect width="48" height="48" rx="12" fill="#0a0f0d"/>
+  <rect x="0.75" y="0.75" width="46.5" height="46.5" rx="11.25" stroke="#2fcf8f" stroke-width="1.5" stroke-opacity="0.35"/>
+  <!-- 3 nœuds API connectés -->
+  <circle cx="24" cy="12" r="3.5" fill="url(#grad-b)"/>
+  <circle cx="12" cy="34" r="3.5" fill="#2fcf8f" opacity="0.75"/>
+  <circle cx="36" cy="34" r="3.5" fill="#2fcf8f" opacity="0.75"/>
+  <!-- Lignes de connexion -->
+  <line x1="24" y1="15.5" x2="12" y2="30.5" stroke="#2fcf8f" stroke-width="1.5" stroke-opacity="0.4"/>
+  <line x1="24" y1="15.5" x2="36" y2="30.5" stroke="#2fcf8f" stroke-width="1.5" stroke-opacity="0.4"/>
+  <line x1="15.5" y1="34" x2="32.5" y2="34" stroke="#2fcf8f" stroke-width="1.5" stroke-opacity="0.4"/>
+  <!-- Point central lumineux -->
+  <circle cx="24" cy="26" r="2" fill="#bef264"/>
+  <!-- Texte -->
+  <text x="60" y="32" font-family="'Syne', 'Inter', system-ui, sans-serif" font-weight="800" font-size="22" letter-spacing="-0.5" fill="#0c1512">Jambo</text>
+  <text x="128" y="32" font-family="'Syne', 'Inter', system-ui, sans-serif" font-weight="400" font-size="22" letter-spacing="-0.3" fill="#2fcf8f">API</text>
+</svg>
