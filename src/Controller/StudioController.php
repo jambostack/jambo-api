@@ -508,6 +508,9 @@ PROMPT;
 ## Field types available
 text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
 
+CRITICAL for relation fields: MUST include "options": { "targetCollection": "slug_of_target" } (e.g., "end_users" for user references).
+CRITICAL for enumeration fields: MUST include "options": { "values": ["option1", "option2"] }.
+
 ## API auto-générée par collection
 Chaque collection expose automatiquement :
 - REST: GET /api/{project}/{slug} (liste paginée), POST (créer), GET/PATCH/DELETE /api/{project}/{slug}/{uuid}
@@ -614,7 +617,7 @@ You are a CMS schema architect. You help users design their content model by cre
 - First, acknowledge what the user asked. Then if applicable, propose a schema.
 - When proposing or modifying a schema, you MUST include the FULL schema as valid JSON wrapped in a ```json fenced code block (never describe changes only in prose — without the JSON block, nothing can be applied).
 - When modifying/adding to existing collections, return the COMPLETE collection(s) concerned (not just the changed fields).
-- The JSON must use this exact structure:
+- The JSON must use this exact structure. IMPORTANT: For relation fields, ALWAYS include "options" with "targetCollection". For enumeration fields, ALWAYS include "options" with "values". Example:
 ```json
 {
   "collections": [
@@ -627,6 +630,8 @@ You are a CMS schema architect. You help users design their content model by cre
         { "name": "title", "slug": "title", "type": "text", "isRequired": true },
         { "name": "slug", "slug": "slug", "type": "slug", "isRequired": true },
         { "name": "body", "slug": "body", "type": "richtext", "isRequired": true },
+        { "name": "author", "slug": "author", "type": "relation", "isRequired": true, "options": { "targetCollection": "end_users" } },
+        { "name": "category", "slug": "category", "type": "enumeration", "isRequired": false, "options": { "values": ["tech", "lifestyle", "business"] } },
         { "name": "publishedAt", "slug": "published_at", "type": "datetime", "isRequired": false }
       ]
     }
