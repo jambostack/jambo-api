@@ -122,6 +122,13 @@ abstract class InertiaController extends AbstractController
                     'anthropic' => ['enabled' => (bool)($p['anthropic']['enabled'] ?? false), 'configured' => !empty($p['anthropic']['key']), 'model' => $p['anthropic']['model'] ?? 'claude-sonnet-4-6'],
                     'deepseek'  => ['enabled' => (bool)($p['deepseek']['enabled']  ?? false), 'configured' => !empty($p['deepseek']['key']),  'model' => $p['deepseek']['model']  ?? 'deepseek-chat'],
                     'ollama'    => ['enabled' => (bool)($p['ollama']['enabled']    ?? false), 'configured' => !empty($p['ollama']['url']),    'url'   => $p['ollama']['url']      ?? '', 'model' => $p['ollama']['model'] ?? 'llama3.2'],
+                    'gemini'    => ['enabled' => (bool)($p['gemini']['enabled']    ?? false), 'configured' => !empty($p['gemini']['key']),    'model' => $p['gemini']['model']    ?? 'gemini-2.0-flash'],
+                    'openrouter'=> ['enabled' => (bool)($p['openrouter']['enabled']?? false), 'configured' => !empty($p['openrouter']['key']),'model' => $p['openrouter']['model']?? 'openai/gpt-4o'],
+                    'mistral'   => ['enabled' => (bool)($p['mistral']['enabled']   ?? false), 'configured' => !empty($p['mistral']['key']),   'model' => $p['mistral']['model']   ?? 'mistral-large-latest'],
+                    'groq'      => ['enabled' => (bool)($p['groq']['enabled']      ?? false), 'configured' => !empty($p['groq']['key']),      'model' => $p['groq']['model']      ?? 'llama-3.3-70b-versatile'],
+                    'xai'       => ['enabled' => (bool)($p['xai']['enabled']       ?? false), 'configured' => !empty($p['xai']['key']),       'model' => $p['xai']['model']       ?? 'grok-2-latest'],
+                    'perplexity'=> ['enabled' => (bool)($p['perplexity']['enabled']?? false), 'configured' => !empty($p['perplexity']['key']),'model' => $p['perplexity']['model']?? 'sonar-pro'],
+                    'qwen'      => ['enabled' => (bool)($p['qwen']['enabled']      ?? false), 'configured' => !empty($p['qwen']['key']),      'model' => $p['qwen']['model']      ?? 'qwen-max'],
                 ],
             ];
         });
