@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\Collection;
 use App\Entity\ContentEntry;
+use App\Entity\Project;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -103,5 +104,33 @@ class ContentEntryRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
 
         return $count > 0;
+    }
+
+    /**
+     * Vérifie l'appartenance au projet d'une liste d'UUIDs de content entries.
+     * Retourne uniquement les UUIDs qui appartiennent bien au projet donné.
+     *
+     * @param string[] $uuids
+     * @return string[]
+     */
+    public function findProjectEntryUuids(Project $project, array $uuids): array
+    {
+        if ($uuids === []) {
+            return [];
+        }
+
+        $uidObjects = array_map(fn ($u) => \Symfony\Component\Uid\Uuid::fromString($u), $uuids);
+
+        $rows = $this->createQueryBuilder('e')
+            ->select('e.uuid')
+            ->where('e.project = :project')
+            ->andWhere('e.uuid IN (:uuids)')
+            ->andWhere('e.deletedAt IS NULL')
+            ->setParameter('project', $project)
+            ->setParameter('uuids', $uidObjects)
+            ->getQuery()
+            ->getResult();
+
+        return array_map(fn ($row) => $row['uuid']->toRfc4122(), $rows);
     }
 }
