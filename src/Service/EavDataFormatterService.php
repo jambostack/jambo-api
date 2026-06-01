@@ -8,6 +8,17 @@ use Psr\Log\NullLogger;
 
 class EavDataFormatterService
 {
+    /**
+     * Clés système réservées dans la réponse plate. Un champ de collection
+     * dont le slug correspond à l'une d'elles NE DOIT PAS écraser la valeur
+     * système (sinon, ex. un champ « status » masque le statut publish/draft).
+     */
+    private const RESERVED_KEYS = [
+        'id', 'uuid', 'locale', 'status', 'collection',
+        'created_at', 'updated_at', 'deleted_at', 'published_at',
+        'creator', 'updater',
+    ];
+
     public function __construct(
         private LoggerInterface $logger = new NullLogger(),
     ) {}
@@ -38,6 +49,15 @@ class EavDataFormatterService
                     'id' => $fieldValue->id,
                 ]);
                 continue;
+            }
+
+            // Un champ ne peut pas écraser une clé système (status, id, etc.).
+            // On expose sa valeur sous un alias préfixé pour rester accessible.
+            if (in_array($fieldName, self::RESERVED_KEYS, true)) {
+                $this->logger->warning('field slug "{slug}" collides with a reserved system key; exposed as "field_{slug}"', [
+                    'slug' => $fieldName,
+                ]);
+                $fieldName = 'field_' . $fieldName;
             }
 
             $value = match ($fieldValue->fieldType) {
