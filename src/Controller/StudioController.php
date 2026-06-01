@@ -48,6 +48,21 @@ class StudioController extends InertiaController
 - Relation fields must reference an existing or newly created collection.
 RULES;
 
+    /** Bloc EndUser injecté dans tous les prompts systèmes. */
+    private const ENDUSER_AWARENESS = <<<EUSER
+## User Management System (EndUsers)
+- The project has a BUILT-IN user collection: EndUsers (slug: end_users).
+- EndUsers ALWAYS exists — it is NOT a regular collection, it's a system entity.
+- EndUsers fields: email (email*, required), name (text), status (active/banned/pending), avatar_url (text), custom_fields (json).
+- Custom fields CAN be added to EndUsers: profile data (bio, website, phone), preferences, roles, company info, etc.
+- RULES for user-related requests:
+  1. When the user mentions "users", "authors", "members", "customers", "admins", "profiles", "clients", or any person/account entity → this is EndUsers. Do NOT create a new "Users", "Accounts", "Members" or "Profiles" collection.
+  2. If the user asks to add profile fields (bio, website, phone, role, avatar, preferences, social links, company...), propose adding them TO EndUsers — modify the existing EndUsers collection in your JSON output.
+  3. For ownership/assignment/authoring, use "relation" fields pointing TO EndUsers (e.g., author, owner, assignedTo, createdBy, customer).
+  4. Never duplicate EndUsers system fields (email, name, status, avatar_url) — only propose NEW custom fields.
+  5. EndUsers does NOT need title/slug fields — it's already handled by the system.
+EUSER;
+
     /** Champs système gérés automatiquement — jamais générés par l'IA. */
     private const RESERVED_FIELD_SLUGS = ['id', 'uuid', 'status', 'locale', 'created_at', 'updated_at', 'deleted_at'];
 
@@ -416,19 +431,202 @@ PROMPT;
         $prompt  = trim((string) ($body['prompt'] ?? ''));
         $context = trim((string) ($body['context'] ?? ''));
         $history = is_array($body['history'] ?? null) ? $body['history'] : [];
+        $command = isset($body['command']) && in_array($body['command'], ['schema','data','all'], true)
+            ? $body['command']
+            : 'schema'; // default = schema only
 
         if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
+
+        // Préfixer le prompt utilisateur pour l'affichage dans l'historique
+        $displayPrompt = $prompt;
+        $commandPrefix = $command !== 'schema' ? '/' . $command . ' ' : '';
 
         // Persister le message utilisateur en DB immédiatement
         $userMsg = new \App\Entity\StudioChatMessage();
         $userMsg->project = $project;
         $userMsg->role = 'user';
-        $userMsg->content = $prompt;
+        $userMsg->content = $commandPrefix . $prompt;
         $this->em->persist($userMsg);
         $this->em->flush();
 
         $namingRules = self::NAMING_CONVENTIONS;
-        $systemPrompt = <<<PROMPT
+        $endUserBlock = self::ENDUSER_AWARENESS;
+
+        // Choisir le prompt système selon la commande
+        $systemPrompt = $this->buildSystemPrompt($command, $namingRules, $endUserBlock, $context);
+
+        [$provider, $apiKey, $model, $endpoint] = $this->resolveAiConfig();
+        if ($provider === null) {
+            return $this->commandFallback($command, $prompt);
+        }
+
+        try {
+            $msgs = [['role' => 'system', 'content' => $systemPrompt]];
+            foreach ($history as $h) {
+                $role = ($h['role'] === 'assistant' || $h['role'] === 'user') ? $h['role'] : 'user';
+                $msgs[] = ['role' => $role, 'content' => (string) $h['content']];
+            }
+            $msgs[] = ['role' => 'user', 'content' => $prompt];
+
+            $content = $this->callAiApi($provider, $apiKey, $model, $endpoint, $msgs);
+
+            // Extraction JSON (collections ET/OU entries selon la commande)
+            $collections = null;
+            $entries     = null;
+            $reply       = $content;
+
+            $extracted = $this->extractJsonResponse($content);
+            if ($extracted !== null) {
+                $collections = $extracted['data']['collections'] ?? null;
+                $entries     = $extracted['data']['entries'] ?? null;
+                $reply = trim(str_replace($extracted['raw'], '', $content));
+                $reply = trim(preg_replace('/```(?:json)?\s*```/', '', $reply) ?? $reply);
+            }
+
+            if (is_array($collections)) {
+                $collections = $this->normalizeSchema($collections);
+            }
+
+            $reply = trim(preg_replace('/```\s*$/', '', $reply));
+
+            // Message par défaut selon la commande
+            if ($reply === '') {
+                $reply = match ($command) {
+                    'data' => ($entries !== null ? 'Contenu généré. Applique-le ci-dessous.' : 'Je n\'ai pas pu générer de contenu. Peux-tu être plus précis ?'),
+                    'all'  => 'Schéma et contenu générés. Applique chaque bloc ci-dessous.',
+                    default => ($collections !== null ? 'Schéma généré. Applique-le ci-dessous.' : 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?'),
+                };
+            }
+
+            // Persister le message assistant en DB
+            $assistantMsg = new \App\Entity\StudioChatMessage();
+            $assistantMsg->project = $project;
+            $assistantMsg->role = 'assistant';
+            $assistantMsg->content = $reply;
+            $assistantMsg->schema = $collections;
+            $this->em->persist($assistantMsg);
+            $this->em->flush();
+
+            $response = ['reply' => $reply];
+            if ($command !== 'data' || $collections !== null) {
+                $response['collections'] = $collections;
+            }
+            if ($command === 'data' || $command === 'all') {
+                $response['entries'] = $entries;
+            }
+
+            return $this->json($response);
+        } catch (\Throwable $e) {
+            $this->logger->error('AI chat failed', ['exception' => $e, 'project' => $uuid]);
+            return $this->json(['reply' => 'Désolé, une erreur est survenue. Réessaie.', 'error' => 'AI chat failed'], 500);
+        }
+    }
+
+    /** Construit le prompt système adapté à la commande. */
+    private function buildSystemPrompt(string $command, string $namingRules, string $endUserBlock, string $context): string
+    {
+        $baseGuidelines = <<<GUIDE
+## Field types available
+text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
+
+## API auto-générée par collection
+Chaque collection expose automatiquement :
+- REST: GET /api/{project}/{slug} (liste paginée), POST (créer), GET/PATCH/DELETE /api/{project}/{slug}/{uuid}
+- GraphQL: POST /api/projects/{project}/graphql — schema auto-généré avec queries, mutations, filtres, pagination, tri
+- OpenAPI: GET /api/{project}/openapi.json
+- Auth: Bearer token (API token) ou JWT (end-users via /auth/login, /auth/register)
+- Fichiers: GET/POST /api/{project}/files
+
+GUIDE;
+
+        return match ($command) {
+            'data' => <<<PROMPT
+You are a professional content writer for a CMS. Generate REAL, publication-ready content for the specified collection.
+
+## Rules
+- Write in French (the user speaks French).
+- Content MUST be professional, engaging, and ready to publish — NO lorem ipsum, NO placeholder text.
+- Research-realistic: names, dates, descriptions, prices, emails should feel authentic.
+- Match the tone of the collection (formal for corporate, casual for blogs, descriptive for products).
+- Return ONLY valid JSON in a ```json fenced code block:
+```json
+{
+  "collection": "target_collection_slug",
+  "entries": [
+    {
+      "title": "Titre professionnel pertinent et engageant",
+      "slug": "titre-professionnel-pertinent",
+      "...": "valeur réelle pour chaque champ de la collection"
+    }
+  ]
+}
+```
+- Generate 3-5 entries minimum per collection.
+- Fill ALL fields except system fields (uuid, status, locale, timestamps).
+- For relation fields referencing EndUsers: specify "end_users" as the target slug (avec un nom réaliste entre parenthèses).
+- For media fields: describe what image would be appropriate (e.g., "hero-banner-2026.jpg").
+- Content must be contextually coherent with the collection's purpose.
+- Dates should be realistic and recent (2025-2026).
+- Emails should look real (prenom.nom@example.fr).
+- NEVER include uuid, id, status, locale, created_at, updated_at, deleted_at in entries.
+
+$baseGuidelines
+
+$endUserBlock
+
+## Current project context
+$context
+PROMPT,
+            'all' => <<<PROMPT
+You are a CMS schema architect AND professional content writer. Generate BOTH the collection schema AND publication-ready content.
+
+## Part 1: Schema
+Follow the same rules as /schema mode — propose collections with their fields.
+
+## Part 2: Content
+For each collection you create, generate 2-4 professional, publication-ready entries.
+
+## Rules
+- Always respond in French — but schema names/slugs MUST stay in English.
+- IMPORTANT: You can only PROPOSE. The schema becomes real ONLY when the user clicks « Appliquer ».
+- Return ONLY valid JSON in a ```json fenced code block:
+```json
+{
+  "collections": [
+    {
+      "name": "BlogPosts",
+      "slug": "blog_posts",
+      "description": "Blog articles",
+      "isSingleton": false,
+      "fields": [...]
+    }
+  ],
+  "entries": [
+    {
+      "collection": "blog_posts",
+      "entries": [
+        { "title": "Titre pro", "slug": "titre-pro", ... }
+      ]
+    }
+  ]
+}
+```
+- Content MUST be professional — NO lorem ipsum.
+- Write content in French.
+- Fill ALL fields for each entry (except system fields).
+- Generate 3-5 entries minimum per collection.
+- Maximum 5 collections. Maximum 10 fields per collection.
+
+$namingRules
+
+$baseGuidelines
+
+$endUserBlock
+
+## Current project context
+$context
+PROMPT,
+            default => <<<PROMPT
 You are a CMS schema architect. You help users design their content model by creating and modifying collections.
 
 ## Rules
@@ -459,16 +657,7 @@ You are a CMS schema architect. You help users design their content model by cre
 
 $namingRules
 
-## Field types available
-text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
-
-## API auto-générée par collection
-Chaque collection expose automatiquement :
-- REST: GET /api/{project}/{slug} (liste paginée, ?page=&per_page=&locale=&status=&sort=&filter[field]=value), POST /api/{project}/{slug} (créer), GET/PATCH/DELETE /api/{project}/{slug}/{uuid} (lire/modifier/supprimer)
-- GraphQL: POST /api/projects/{project}/graphql — schema auto-généré avec queries, mutations, filtres, pagination, tri. Supporter GET (paramètre ?query=) et POST (body JSON {query, variables}).
-- OpenAPI: GET /api/{project}/openapi.json — spécification complète
-- Auth: Bearer token (API token statique) pour l'API REST, ou JWT (end-users) via POST /api/{project}/auth/login et /auth/register
-- Fichiers/media: GET/POST /api/{project}/files — upload multipart/form-data, listing paginé
+$baseGuidelines
 
 ## Guidelines
 - Use "slug" type for URL-friendly identifiers (mark them required).
@@ -480,73 +669,80 @@ Chaque collection expose automatiquement :
 - Generate 3-5 fields per collection minimum.
 - Maximum 5 collections per response. Maximum 10 fields per collection.
 
+$endUserBlock
+
 ## Current project context
 $context
-PROMPT;
+PROMPT,
+        };
+    }
 
-        [$provider, $apiKey, $model, $endpoint] = $this->resolveAiConfig();
-        if ($provider === null) {
-            // Fallback: utiliser ruleBasedSchema pour générer, puis répondre textuellement
-            $schema = $this->ruleBasedSchema($prompt);
-            $schema['collections'] = $this->normalizeSchema($schema['collections'] ?? []);
-            $names = array_map(fn ($c) => $c['name'], $schema['collections'] ?? []);
-            $reply = $names === []
-                ? "Je n'ai pas pu générer de schéma pour cette demande. Peux-tu être plus précis ?"
-                : "Voici un schéma de base pour : " . implode(', ', $names) . ". Tu peux l'appliquer et le modifier manuellement.";
-            return $this->json(['reply' => $reply, 'collections' => $schema['collections'] ?? []]);
+    /** Fallback quand aucun provider IA n'est configuré. */
+    private function commandFallback(string $command, string $prompt): JsonResponse
+    {
+        $schema = $this->ruleBasedSchema($prompt);
+        $schema['collections'] = $this->normalizeSchema($schema['collections'] ?? []);
+        $names = array_map(fn ($c) => $c['name'], $schema['collections'] ?? []);
+
+        $reply = $names === []
+            ? "Je n'ai pas pu générer de schéma pour cette demande. Peux-tu être plus précis ?"
+            : "Voici un schéma de base pour : " . implode(', ', $names) . ". Tu peux l'appliquer et le modifier manuellement.";
+
+        $response = ['reply' => $reply];
+        if ($command !== 'data') {
+            $response['collections'] = $schema['collections'] ?? [];
+        } else {
+            $response['entries'] = null;
         }
+        return $this->json($response);
+    }
 
-        try {
-            // Construire les messages pour le provider IA
-            $msgs = [['role' => 'system', 'content' => $systemPrompt]];
-            foreach ($history as $h) {
-                $role = ($h['role'] === 'assistant' || $h['role'] === 'user') ? $h['role'] : 'user';
-                $msgs[] = ['role' => $role, 'content' => (string) $h['content']];
+    /**
+     * Extraction JSON améliorée : cherche "collections" ET/OU "entries".
+     */
+    private function extractJsonResponse(string $content): ?array
+    {
+        // Priorité aux blocs ```json … ```
+        if (preg_match_all('/```(?:json)?\s*([\s\S]*?)```/', $content, $blocks)) {
+            foreach ($blocks[1] as $block) {
+                $raw = $this->balancedJsonContainingAny($block, ['collections', 'entries']);
+                if ($raw !== null) {
+                    $data = json_decode($raw, true);
+                    if (is_array($data) && (isset($data['collections']) || isset($data['entries']))) {
+                        return ['data' => $data, 'raw' => $raw];
+                    }
+                }
             }
-            $msgs[] = ['role' => 'user', 'content' => $prompt];
-
-            $content = $this->callAiApi($provider, $apiKey, $model, $endpoint, $msgs);
-
-            // Extraction robuste : on cherche un objet JSON équilibré contenant
-            // "collections" (quel que soit le niveau d'imbrication, fencé ou non).
-            $collections = null;
-            $reply = $content;
-            $extracted = $this->extractSchemaJson($content);
-            if ($extracted !== null) {
-                $collections = $extracted['data']['collections'] ?? null;
-                // Retire le JSON (et les fences ```) du texte affiché à l'utilisateur.
-                $reply = trim(str_replace($extracted['raw'], '', $content));
-                $reply = trim(preg_replace('/```(?:json)?\s*```/', '', $reply) ?? $reply);
-            }
-
-            // Normaliser le schéma proposé pour garantir les conventions de
-            // nommage (PascalCase collection, camelCase champ, slugs snake_case).
-            if (is_array($collections)) {
-                $collections = $this->normalizeSchema($collections);
-            }
-
-            // Nettoyer les fragments de markdown résiduels
-            $reply = trim(preg_replace('/```\s*$/', '', $reply));
-
-            $replyText = $reply !== '' ? $reply : ($collections !== null ? 'Schéma généré. Applique-le ci-dessous.' : 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?');
-
-            // Persister le message assistant en DB
-            $assistantMsg = new \App\Entity\StudioChatMessage();
-            $assistantMsg->project = $project;
-            $assistantMsg->role = 'assistant';
-            $assistantMsg->content = $replyText;
-            $assistantMsg->schema = $collections;
-            $this->em->persist($assistantMsg);
-            $this->em->flush();
-
-            return $this->json([
-                'reply'       => $replyText,
-                'collections' => $collections,
-            ]);
-        } catch (\Throwable $e) {
-            $this->logger->error('AI chat failed', ['exception' => $e, 'project' => $uuid]);
-            return $this->json(['reply' => 'Désolé, une erreur est survenue. Réessaie.', 'error' => 'AI chat failed'], 500);
         }
+        // Sinon, balayer tout le contenu
+        $raw = $this->balancedJsonContainingAny($content, ['collections', 'entries']);
+        if ($raw !== null) {
+            $data = json_decode($raw, true);
+            if (is_array($data) && (isset($data['collections']) || isset($data['entries']))) {
+                return ['data' => $data, 'raw' => $raw];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Comme balancedJsonContaining mais accepte plusieurs clés possibles.
+     */
+    private function balancedJsonContainingAny(string $text, array $needles): ?string
+    {
+        foreach ($needles as $needle) {
+            $result = $this->balancedJsonContaining($text, $needle);
+            if ($result !== null) {
+                return $result;
+            }
+        }
+        return null;
+    }
+
+    /** @deprecated Remplacé par extractJsonResponse — conservé pour compatibilité avec aiSchema */
+    private function extractSchemaJson(string $content): ?array
+    {
+        return $this->extractJsonResponse($content);
     }
 
     /**
