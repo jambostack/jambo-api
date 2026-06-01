@@ -25,4 +25,7 @@ yarn-error.log
 /.superpowers/
 /.vscode/
 /docs/
-/others/
+/others/jambo-site/node_modules/
+/others/jambo-site/dist/
+/others/jambo-site/.astro/
+/.kilo/

@@ -1,0 +1,369 @@
+---
+import { getCollection, getSingleton } from '../lib/jambo';
+import type { EcosystemProductEntry, ConfigEntry } from '../lib/jambo';
+
+interface Props { locale: string }
+const { locale } = Astro.props;
+
+const isRTL = locale === 'ar';
+
+const UI: Record<string, Record<string, string>> = {
+  en: {
+    back: '← Back',
+    page_title: 'The Jambo Ecosystem',
+    page_desc: 'A suite of open-source tools built to work together. Pick what you need.',
+    available: 'Available',
+    beta: 'Beta',
+    coming_soon: 'Coming soon',
+    view_docs: 'Docs',
+    view_github: 'GitHub',
+    visit: 'Visit →',
+    contact: 'Contact',
+  },
+  fr: {
+    back: '← Retour',
+    page_title: "L'écosystème Jambo",
+    page_desc: "Une suite d'outils open-source conçus pour fonctionner ensemble. Prenez ce dont vous avez besoin.",
+    available: 'Disponible',
+    beta: 'Bêta',
+    coming_soon: 'Bientôt',
+    view_docs: 'Docs',
+    view_github: 'GitHub',
+    visit: 'Visiter →',
+    contact: 'Contact',
+  },
+  es: {
+    back: '← Volver',
+    page_title: 'El ecosistema Jambo',
+    page_desc: 'Una suite de herramientas open-source diseñadas para trabajar juntas. Elige lo que necesitas.',
+    available: 'Disponible',
+    beta: 'Beta',
+    coming_soon: 'Próximamente',
+    view_docs: 'Docs',
+    view_github: 'GitHub',
+    visit: 'Visitar →',
+    contact: 'Contacto',
+  },
+  ar: {
+    back: '→ رجوع',
+    page_title: 'منظومة Jambo',
+    page_desc: 'مجموعة أدوات مفتوحة المصدر مصممة للعمل معاً. اختر ما تحتاجه.',
+    available: 'متاح',
+    beta: 'تجريبي',
+    coming_soon: 'قريباً',
+    view_docs: 'التوثيق',
+    view_github: 'GitHub',
+    visit: 'زيارة →',
+    contact: 'تواصل',
+  },
+};
+const t = UI[locale] ?? UI.en;
+
+const langPrefix = locale === 'en' ? '' : `/${locale}`;
+const altLangs = [
+  { code: 'en', label: 'English',  href: '/ecosystem/' },
+  { code: 'fr', label: 'Français', href: '/fr/ecosystem/' },
+  { code: 'es', label: 'Español',  href: '/es/ecosystem/' },
+  { code: 'ar', label: 'العربية',  href: '/ar/ecosystem/' },
+];
+
+const [products, config] = await Promise.all([
+  getCollection('ecosystem_products', locale) as Promise<EcosystemProductEntry[]>,
+  getSingleton('config', locale) as Promise<ConfigEntry | null>,
+]);
+
+const sorted = products.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+const statusClass = (s?: string) => {
+  if (s === 'available') return 'status-available';
+  if (s === 'beta') return 'status-beta';
+  return 'status-soon';
+};
+
+const statusText = (s?: string) => {
+  if (s === 'available') return t.available;
+  if (s === 'beta') return t.beta;
+  return t.coming_soon;
+};
+---
+
+<!DOCTYPE html>
+<html lang={locale} dir={isRTL ? 'rtl' : 'ltr'}>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ecosystem — {config?.site_name ?? 'JamboStack'}</title>
+  <meta name="description" content={t.page_desc} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  {altLangs.map(l => <link rel="alternate" hreflang={l.code} href={l.href} />)}
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: oklch(0.55 0.18 158);
+      --primary-light: oklch(0.68 0.20 158);
+      --bg: oklch(0.99 0.004 155);
+      --surface: #ffffff;
+      --text: oklch(0.12 0.015 170);
+      --muted: oklch(0.50 0.02 160);
+      --border: oklch(0.88 0.01 160);
+      --font: 'DM Sans', system-ui, sans-serif;
+      --font-display: 'Syne', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --radius: 14px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: oklch(0.10 0.012 165);
+        --surface: oklch(0.15 0.014 165);
+        --text: oklch(0.92 0.008 160);
+        --border: oklch(0.22 0.016 165);
+        --muted: oklch(0.60 0.02 160);
+      }
+    }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100dvh; }
+
+    nav {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 max(24px, calc(50vw - 680px)); height: 60px;
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in oklch, var(--bg) 85%, transparent);
+      backdrop-filter: blur(12px);
+    }
+    .nav-logo { font-family: var(--font-display); font-weight: 700; font-size: 17px; color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+    .logo-mark { width: 28px; height: 28px; border-radius: 7px; background: linear-gradient(135deg, var(--primary), var(--primary-light)); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #000; flex-shrink: 0; }
+    .nav-links { display: flex; align-items: center; gap: 16px; }
+    .nav-links a { font-size: 13px; color: var(--muted); text-decoration: none; transition: color .15s; }
+    .nav-links a:hover { color: var(--text); }
+    .lang-select {
+      appearance: none;
+      padding: 5px 28px 5px 10px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E") no-repeat right 8px center;
+      color: var(--text);
+      font-size: 12px; font-weight: 600;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: border-color .15s;
+    }
+    .lang-select:hover { border-color: var(--primary); }
+    .lang-select:focus { outline: none; border-color: var(--primary); }
+
+    .container { max-width: 1360px; margin: 0 auto; padding: 0 24px; }
+
+    /* ── HEADER ── */
+    .page-header {
+      padding: 72px 24px 56px;
+      text-align: center;
+      position: relative;
+    }
+    .page-header::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 900px 400px at 50% 0%, color-mix(in oklch, var(--primary) 8%, transparent), transparent 70%);
+      pointer-events: none;
+    }
+    .breadcrumb {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+      text-decoration: none; margin-bottom: 24px;
+      transition: color .15s;
+    }
+    .breadcrumb:hover { color: var(--primary-light); }
+    .page-header h1 {
+      font-family: var(--font-display);
+      font-size: clamp(32px, 5vw, 56px);
+      font-weight: 800; letter-spacing: -.03em;
+      margin-bottom: 16px;
+    }
+    .page-header p { font-size: 17px; color: var(--muted); max-width: 520px; margin: 0 auto; }
+
+    /* ── GRID ── */
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 20px;
+      padding: 0 24px 100px;
+    }
+
+    /* ── PRODUCT CARD ── */
+    .product-card {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      transition: box-shadow .2s, transform .2s;
+    }
+    .product-card:hover {
+      box-shadow: 0 8px 32px color-mix(in oklch, var(--text) 8%, transparent);
+      transform: translateY(-2px);
+    }
+
+    .card-color-bar {
+      height: 4px;
+      width: 100%;
+      flex-shrink: 0;
+    }
+
+    .card-body { padding: 28px; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+
+    .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+
+    .product-logo {
+      width: 52px; height: 52px; border-radius: 12px;
+      object-fit: contain; border: 1px solid var(--border);
+      background: var(--bg); padding: 8px;
+      flex-shrink: 0;
+    }
+    .product-logo-placeholder {
+      width: 52px; height: 52px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--product-color, var(--primary)), color-mix(in oklch, var(--product-color, var(--primary)) 70%, white));
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-weight: 800; font-size: 20px;
+      color: #fff; flex-shrink: 0; text-shadow: 0 1px 2px rgba(0,0,0,.3);
+    }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; font-family: var(--font-mono);
+      letter-spacing: .04em; flex-shrink: 0;
+    }
+    .status-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+    .status-available { background: color-mix(in oklch, #22c55e 12%, transparent); color: #16a34a; }
+    .status-available::before { background: #22c55e; }
+    .status-beta { background: color-mix(in oklch, #f59e0b 12%, transparent); color: #d97706; }
+    .status-beta::before { background: #f59e0b; }
+    .status-soon { background: color-mix(in oklch, #8b5cf6 12%, transparent); color: #7c3aed; }
+    .status-soon::before { background: #8b5cf6; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+    .product-name { font-family: var(--font-display); font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+    .product-tagline { font-size: 14px; color: var(--muted); font-weight: 500; }
+    .product-description { font-size: 14px; color: var(--muted); line-height: 1.7; flex: 1; }
+
+    .tech-badge {
+      display: inline-flex; align-items: center;
+      padding: 4px 10px; border-radius: 6px;
+      background: color-mix(in oklch, var(--primary) 8%, transparent);
+      border: 1px solid color-mix(in oklch, var(--primary) 20%, transparent);
+      color: var(--primary-light);
+      font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+      align-self: flex-start;
+    }
+
+    .card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; }
+    .btn-action {
+      padding: 8px 16px; border-radius: 8px;
+      font-size: 13px; font-weight: 600;
+      text-decoration: none; transition: all .15s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-primary-sm {
+      background: var(--product-color, var(--primary)); color: #000;
+    }
+    .btn-primary-sm:hover { filter: brightness(1.1); }
+    .btn-ghost {
+      border: 1px solid var(--border); color: var(--muted);
+      background: transparent;
+    }
+    .btn-ghost:hover { border-color: var(--primary); color: var(--primary-light); }
+
+    footer { padding: 32px 24px; border-top: 1px solid var(--border); text-align: center; font-size: 12px; color: var(--muted); }
+    footer a { color: var(--primary-light); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href={`${langPrefix}/`} class="nav-logo">
+    <span class="logo-mark">J</span>
+    JamboStack
+  </a>
+  <div class="nav-links">
+    <select class="lang-select" onchange="location.href=this.value" aria-label="Language">
+      {altLangs.map(l => (
+        <option value={l.href} selected={l.code === locale}>{l.label}</option>
+      ))}
+    </select>
+    <a href={`${langPrefix}/docs/`}>Docs</a>
+    <a href={config?.github_url ?? 'https://github.com/jambostack/jambo-api'} target="_blank">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-header">
+  <a href={`${langPrefix}/`} class="breadcrumb">{t.back}</a>
+  <h1>{t.page_title}</h1>
+  <p>{t.page_desc}</p>
+</div>
+
+<div class="container">
+  <div class="products-grid">
+    {sorted.map(product => {
+      const color = product.color ?? '#2fcf8f';
+      const initial = (product.name ?? 'J')[0];
+      return (
+        <div class="product-card">
+          <div class="card-color-bar" style={`background: ${color}`} />
+          <div class="card-body">
+            <div class="card-header">
+              {product.logo?.url
+                ? <img class="product-logo" src={product.logo.url} alt={product.name} />
+                : <div class="product-logo-placeholder" style={`--product-color: ${color}`}>{initial}</div>
+              }
+              <span class={`status-badge ${statusClass(product.field_status)}`}>
+                {statusText(product.field_status)}
+              </span>
+            </div>
+
+            <div>
+              <div class="product-name">{product.name}</div>
+              {product.tagline && <div class="product-tagline">{product.tagline}</div>}
+            </div>
+
+            {product.description && (
+              <p class="product-description">{product.description}</p>
+            )}
+
+            {product.tech_stack && (
+              <span class="tech-badge">{product.tech_stack}</span>
+            )}
+
+            <div class="card-actions">
+              {product.url && (
+                <a href={product.url} target="_blank" class="btn-action btn-primary-sm" style={`--product-color: ${color}`}>
+                  {t.visit}
+                </a>
+              )}
+              {product.github_url && (
+                <a href={product.github_url} target="_blank" class="btn-action btn-ghost">
+                  ★ {t.view_github}
+                </a>
+              )}
+              <a href={`${langPrefix}/docs/guides/installation/`} class="btn-action btn-ghost">
+                {t.view_docs}
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</div>
+
+<footer>
+  <p>
+    Built with ❤️ by <a href="https://jambostack.site">Jambostack</a> ·
+    <a href={config?.github_url ?? 'https://github.com/jambostack/jambo-api'} target="_blank">GitHub</a> ·
+    <a href={`mailto:${config?.contact_email ?? 'contact@jambostack.site'}`}>{t.contact}</a>
+  </p>
+</footer>
+
+</body>
+</html>

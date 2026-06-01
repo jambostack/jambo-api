@@ -1,0 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sl-font: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --color-accent-low: oklch(0.25 0.06 158);
+  --color-accent: oklch(0.55 0.18 158);
+  --color-accent-high: oklch(0.68 0.20 158);
+}
+
+.font-display { font-family: 'Syne', ui-sans-serif, system-ui, sans-serif; }
+
+/* Landing page — outside Starlight layout */
+.landing-page {
+  font-family: var(--sl-font);
+}

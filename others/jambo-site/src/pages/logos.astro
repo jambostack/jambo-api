@@ -1,0 +1,136 @@
+---
+// Page temporaire de preview des logos
+---
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Logos — Jambo API</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;600&display=swap" rel="stylesheet"/>
+  <style>
+    body { margin:0; font-family:'DM Sans',system-ui,sans-serif; background:#f5faf8; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:0; }
+    .card { padding:48px 40px; display:flex; flex-direction:column; gap:32px; border-right:1px solid #dde; }
+    .card:last-child { border-right:none; }
+    h3 { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; margin:0 0 6px; color:#0c1512; }
+    p { font-size:13px; color:#666; margin:0; line-height:1.6; }
+    .label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#2fcf8f; margin-bottom:4px; }
+
+    /* Fond clair */
+    .preview-light { background:#f5faf8; padding:24px 20px; border-radius:10px; display:flex; align-items:center; justify-content:center; border:1px solid #e0ede7; }
+    /* Fond sombre */
+    .preview-dark  { background:#0a0f0d; padding:24px 20px; border-radius:10px; display:flex; align-items:center; justify-content:center; }
+    /* Icône seule */
+    .preview-icon  { display:flex; gap:24px; justify-content:center; align-items:center; flex-wrap:wrap; }
+    .preview-icon .bg-light { background:#f5faf8; padding:14px; border-radius:8px; border:1px solid #e0ede7; }
+    .preview-icon .bg-dark  { background:#0a0f0d; padding:14px; border-radius:8px; }
+
+    img { display:block; max-width:100%; height:auto; }
+  </style>
+</head>
+<body>
+
+<div style="padding:32px 40px; border-bottom:1px solid #dde; background:#fff">
+  <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:#0c1512">Propositions de logo — Jambo API</div>
+  <div style="color:#666;font-size:13px;margin-top:4px">Ouvrir <strong>http://localhost:4321/logos</strong> pour voir les logos</div>
+</div>
+
+<div class="grid">
+
+  <!-- A -->
+  <div class="card">
+    <div>
+      <div class="label">Option A</div>
+      <h3>J Monogramme</h3>
+      <p>Carré arrondi dégradé émeraude, lettre J pleine. Simple, mémorisable, lisible à toutes les tailles. Référence directe au nom.</p>
+    </div>
+
+    <div>
+      <div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Mode clair</div>
+      <div class="preview-light">
+        <img src="/src/assets/logo-option-a.svg" width="180" alt="Logo A light"/>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Mode sombre</div>
+      <div class="preview-dark">
+        <img src="/src/assets/logo-option-a.svg" width="180" alt="Logo A dark"/>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Icône seule (32px)</div>
+      <div class="preview-icon">
+        <div class="bg-light"><img src="/src/assets/logo-option-a.svg" width="32" height="32" style="object-fit:none;object-position:0 0" alt="icon"/></div>
+        <div class="bg-dark"><img src="/src/assets/logo-option-a.svg" width="32" height="32" style="object-fit:none;object-position:0 0" alt="icon"/></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div class="card">
+    <div>
+      <div class="label">Option B</div>
+      <h3>Graphe de connexions</h3>
+      <p>3 nœuds reliés évoquant le réseau et les API. Point lime central = l'IA. Fond sombre premium. Conceptuel et distinctif.</p>
+    </div>
+
+    <div>
+      <div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Mode clair</div>
+      <div class="preview-light">
+        <img src="/src/assets/logo-option-b.svg" width="180" alt="Logo B light"/>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Mode sombre</div>
+      <div class="preview-dark">
+        <img src="/src/assets/logo-option-b.svg" width="180" alt="Logo B dark"/>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Icône seule (32px)</div>
+      <div class="preview-icon">
+        <div class="bg-light"><img src="/src/assets/logo-option-b.svg" width="32" height="32" style="object-fit:none;object-position:0 0" alt="icon"/></div>
+        <div class="bg-dark"><img src="/src/assets/logo-option-b.svg" width="32" height="32" style="object-fit:none;object-position:0 0" alt="icon"/></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div class="card">
+    <div>
+      <div class="label">Option C</div>
+      <h3>Accolades &#123;·&#125;</h3>
+      <p>Accolades dégradé émeraude → lime. Référence directe au JSON et au code. Identité developer-first forte et reconnaissable.</p>
+    </div>
+
+    <div>
+      <div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Mode clair</div>
+      <div class="preview-light">
+        <img src="/src/assets/logo-option-c.svg" width="180" alt="Logo C light"/>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Mode sombre</div>
+      <div class="preview-dark">
+        <img src="/src/assets/logo-option-c.svg" width="180" alt="Logo C dark"/>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;color:#999;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Icône seule (32px)</div>
+      <div class="preview-icon">
+        <div class="bg-light"><img src="/src/assets/logo-option-c.svg" width="32" height="32" style="object-fit:none;object-position:0 0" alt="icon"/></div>
+        <div class="bg-dark"><img src="/src/assets/logo-option-c.svg" width="32" height="32" style="object-fit:none;object-position:0 0" alt="icon"/></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
