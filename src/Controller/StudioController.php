@@ -131,35 +131,14 @@ EUSER;
     }
 
     /**
-     * Extrait de façon robuste le 1er objet JSON équilibré contenant la clé
-     * "collections" dans la réponse de l'IA (fencé ```json ou inline, à n'importe
-     * quel niveau d'imbrication). Remplace les regex fragiles.
+     * Extraction JSON : cherche "collections" dans la réponse IA.
+     * Délègue à extractJsonResponse (qui gère aussi "entries").
      *
      * @return array{data: array<string,mixed>, raw: string}|null
      */
     private function extractSchemaJson(string $content): ?array
     {
-        // Priorité aux blocs ```json … ``` (le modèle y met généralement le schéma).
-        if (preg_match_all('/```(?:json)?\s*([\s\S]*?)```/', $content, $blocks)) {
-            foreach ($blocks[1] as $block) {
-                $raw = $this->balancedJsonContaining($block, 'collections');
-                if ($raw !== null) {
-                    $data = json_decode($raw, true);
-                    if (is_array($data) && isset($data['collections'])) {
-                        return ['data' => $data, 'raw' => $raw];
-                    }
-                }
-            }
-        }
-        // Sinon, balayer tout le contenu.
-        $raw = $this->balancedJsonContaining($content, 'collections');
-        if ($raw !== null) {
-            $data = json_decode($raw, true);
-            if (is_array($data) && isset($data['collections'])) {
-                return ['data' => $data, 'raw' => $raw];
-            }
-        }
-        return null;
+        return $this->extractJsonResponse($content);
     }
 
     /**
@@ -737,12 +716,6 @@ PROMPT,
             }
         }
         return null;
-    }
-
-    /** @deprecated Remplacé par extractJsonResponse — conservé pour compatibilité avec aiSchema */
-    private function extractSchemaJson(string $content): ?array
-    {
-        return $this->extractJsonResponse($content);
     }
 
     /**
