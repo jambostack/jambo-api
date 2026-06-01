@@ -185,11 +185,14 @@ export default function ContentList({ collection, project }: Props) {
         
         // Add field columns from loaded fields
         if (collection.fields && collection.fields.length > 0) {
-            // Filter out fields that shouldn't be displayed (password, json)
-            const displayableFields = collection.fields.filter((field: Field) => 
-                field.type !== 'password' && 
+            // Slugs réservés par les colonnes système — ne pas dupliquer
+            const RESERVED_SLUGS = new Set(['status', 'created_at', 'updated_at', 'deleted_at', 'published_at', 'uuid', 'id']);
+
+            const displayableFields = collection.fields.filter((field: Field) =>
+                field.type !== 'password' &&
                 field.type !== 'json' &&
-                !field.options?.hideInContentList
+                !field.options?.hideInContentList &&
+                !RESERVED_SLUGS.has(field.slug)
             );
             
             // Add columns for each field
