@@ -33,7 +33,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 
 interface SchemaField { key: string; name: string; slug: string; type: string; isRequired: boolean; options?: Record<string, any>; }
 interface SchemaCollection {
-  key: string; name: string; slug: string; description: string;
+  key: string; uuid?: string; name: string; slug: string; description: string;
   isSingleton: boolean; fields: SchemaField[];
 }
 interface ServerCollection {
@@ -373,7 +373,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
       if (!res.ok) throw new Error('Failed');
       const data = await res.json() as { data: ServerCollection[] };
       const loaded = (data.data ?? []).map((c): SchemaCollection => ({
-        key: `col_${c.id}`, name: c.name, slug: c.slug, description: c.description ?? '', isSingleton: c.isSingleton,
+        key: `col_${c.id}`, uuid: c.uuid, name: c.name, slug: c.slug, description: c.description ?? '', isSingleton: c.isSingleton,
         fields: (c.fields ?? []).map((f, fi): SchemaField => ({ key: `fld_${c.id}_${fi}`, name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired, options: f.options })),
       }));
       setCollections(loaded);
