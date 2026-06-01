@@ -201,6 +201,7 @@ function SchemaChatPanel({
           fields: (c.fields ?? []).map(f => ({
             key: `fld_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
             name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired ?? false,
+              options: (f as any).options ?? undefined,
           })),
         });
       }
