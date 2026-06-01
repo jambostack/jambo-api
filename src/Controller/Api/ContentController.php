@@ -144,8 +144,8 @@ class ContentController extends AbstractController
     public function store(Request $request, string $projectId, string $collectionSlug): JsonResponse
     {
         $token = $this->tokenChecker->resolve($request);
-        if ($token === null || !$token->can('write')) {
-            return $this->json(['error' => 'Unauthorized. Token requires write ability.'], 401);
+        if ($token === null || !$token->can('create')) {
+            return $this->json(['error' => 'Unauthorized. Token requires create ability.'], 401);
         }
 
         if ($token->project->uuid->toString() !== $projectId) {
@@ -200,7 +200,7 @@ class ContentController extends AbstractController
     public function update(Request $request, string $projectId, string $collectionSlug, string $uuid): JsonResponse
     {
         $token = $this->tokenChecker->resolve($request);
-        if ($token === null || !$token->can('write')) {
+        if ($token === null || !$token->can('create')) {
             return $this->json(['error' => 'Unauthorized. Token requires write ability.'], 401);
         }
 
