@@ -245,7 +245,7 @@ function SchemaChatPanel({
         .scp-data-card h5 { margin:0 0 4px; font-size:11px; color:#61afef; }
         .scp-data-entry { padding:4px 6px; margin:2px 0; border-radius:4px; background:rgba(255,255,255,.02); }
         .scp-data-entry + .scp-data-entry { border-top:1px solid rgba(255,255,255,.03); }
-        .scp-command-bar { display:flex; gap:4px; padding:6px 8px; flex-shrink:0; border-bottom:1px solid var(--studio-border); align-items:center; }
+        .scp-command-bar { display:flex; gap:4px; padding:6px 8px; flex-shrink:0; border-top:1px solid var(--studio-border); align-items:center; }
         .scp-cmd-btn { display:flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; font-size:10.5px; font-weight:600; cursor:pointer; border:1px solid var(--studio-border); background:var(--studio-surface); color:var(--studio-text-muted); transition:all .12s; white-space:nowrap; }
         .scp-cmd-btn:hover { border-color:var(--studio-border-active); color:var(--studio-text-dim); }
         .scp-cmd-btn.active { border-color:var(--studio-accent); color:var(--studio-accent); background:rgba(47,207,143,.06); }
@@ -263,14 +263,6 @@ function SchemaChatPanel({
         .scp-quick-pill:hover { border-color:var(--studio-border-active); color:var(--studio-text-dim); }
         .scp-quick-pill:disabled { opacity:.3; cursor:not-allowed; }
       `}</style>
-
-      {/* CommandBar */}
-      <div className="scp-command-bar">
-        <button className={`scp-cmd-btn ${activeCommand === 'schema' ? 'active' : ''}`} onClick={() => insertCommand('schema')} title="/schema — Générer uniquement le schéma de collections"><Slash className="w-3 h-3" />schema</button>
-        <button className={`scp-cmd-btn ${activeCommand === 'data' ? 'active' : ''}`} onClick={() => insertCommand('data')} title="/data — Générer du contenu professionnel"><Database className="w-3 h-3" />data</button>
-        <button className={`scp-cmd-btn ${activeCommand === 'all' ? 'active' : ''}`} onClick={() => insertCommand('all')} title="/all — Collections + contenu"><Table2 className="w-3 h-3" />all</button>
-        <button className="scp-clear-btn" onClick={clearHistory} disabled={busy} title={t('studio.chat.clear_title')}><Trash2 className="w-3 h-3" />{t('studio.chat.clear')}</button>
-      </div>
 
       {/* Messages */}
       <div className="scp-messages">
@@ -317,6 +309,14 @@ function SchemaChatPanel({
         ))}
         {busy && <div className="scp-msg assistant"><div className="avatar"><Bot className="w-3 h-3" /></div><div className="bubble"><Loader2 className="w-3 h-3 animate-spin" style={{ display:'inline', color:'var(--studio-accent)', marginRight:'6px', verticalAlign:'middle' }} />{t('studio.chat.thinking')}</div></div>}
         <div ref={chatEndRef} />
+      </div>
+
+      {/* CommandBar — just above the textarea */}
+      <div className="scp-command-bar">
+        <button className={`scp-cmd-btn ${activeCommand === 'schema' ? 'active' : ''}`} onClick={() => insertCommand('schema')} title="/schema — Générer uniquement le schéma de collections"><Slash className="w-3 h-3" />schema</button>
+        <button className={`scp-cmd-btn ${activeCommand === 'data' ? 'active' : ''}`} onClick={() => insertCommand('data')} title="/data — Générer du contenu professionnel"><Database className="w-3 h-3" />data</button>
+        <button className={`scp-cmd-btn ${activeCommand === 'all' ? 'active' : ''}`} onClick={() => insertCommand('all')} title="/all — Collections + contenu"><Table2 className="w-3 h-3" />all</button>
+        <button className="scp-clear-btn" onClick={clearHistory} disabled={busy} title={t('studio.chat.clear_title')}><Trash2 className="w-3 h-3" />{t('studio.chat.clear')}</button>
       </div>
 
       {/* Input area */}
