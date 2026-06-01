@@ -1239,6 +1239,7 @@ return [
     'studio.chat.clear_title'           => 'Borrar historial de conversación',
     'studio.chat.apply_schema'          => 'Aplicar esquema',
     'studio.chat.entries_generated'     => '📊 {total} entradas generadas para {collections} colección(es). Cópialas o úsalas como referencia.',
+    'studio.chat.enduser_fields_added'  => '{count} campo(s) personalizado(s) añadido(s) a EndUsers.',
     'studio.chat.entries_ok'            => 'OK — Anotado',
     'studio.chat.no_result'             => 'No puedo generar un esquema para esta solicitud. ¿Puedes ser más específico?',
     'studio.chat.schema_generated'      => 'Esquema generado. Aplícalo abajo.',

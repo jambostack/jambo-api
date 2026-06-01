@@ -60,11 +60,12 @@ const SCHEMA_CHAT_QUICK_PILL_KEYS = [
 
 /* ══════════════════════════ SCHEMA CHAT PANEL ══════════════════════════ */
 function SchemaChatPanel({
-  project, currentCollections, onApplySchema,
+  project, currentCollections, onApplySchema, onApplyEndUserFields,
 }: {
   project: Project;
   currentCollections: SchemaCollection[];
   onApplySchema: (newCollections: SchemaCollection[]) => void;
+  onApplyEndUserFields: (fields: SchemaField[]) => void;
 }) {
   const t = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -186,15 +187,36 @@ function SchemaChatPanel({
   }
 
   function handleApplySchema(schema: NonNullable<ChatMessage['schema']>) {
-    onApplySchema(schema.map(c => ({
-      key: `col_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
-      name: c.name, slug: c.slug, description: c.description ?? '', isSingleton: c.isSingleton ?? false,
-      fields: (c.fields ?? []).map(f => ({
-        key: `fld_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
-        name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired ?? false,
-      })),
-    })));
-    setMessages(prev => [...prev, { role: 'system', content: t('studio.chat.applied', { count: schema.length }), schema: undefined }]);
+    const newCollections: SchemaCollection[] = [];
+    const existingEndUserFields: SchemaField[] = [];
+
+    for (const c of schema) {
+      if (c.slug === 'end_users') {
+        // EndUsers est une collection système : extraire les champs personnalisés
+        existingEndUserFields.push(...(c.fields ?? []).filter(f => !['email','name','status','avatar_url','custom_fields'].includes(f.slug)));
+      } else {
+        newCollections.push({
+          key: `col_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+          name: c.name, slug: c.slug, description: c.description ?? '', isSingleton: c.isSingleton ?? false,
+          fields: (c.fields ?? []).map(f => ({
+            key: `fld_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+            name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired ?? false,
+          })),
+        });
+      }
+    }
+
+    if (newCollections.length > 0) {
+      onApplySchema(newCollections);
+    }
+    if (existingEndUserFields.length > 0) {
+      onApplyEndUserFields(existingEndUserFields);
+    }
+
+    const parts = [];
+    if (newCollections.length > 0) parts.push(t('studio.chat.applied', { count: newCollections.length }));
+    if (existingEndUserFields.length > 0) parts.push('👤 ' + t('studio.chat.enduser_fields_added', { count: existingEndUserFields.length }));
+    setMessages(prev => [...prev, { role: 'system', content: parts.join(' — ') || 'OK', schema: undefined }]);
     scrollDown();
   }
 
@@ -279,7 +301,7 @@ function SchemaChatPanel({
                   {m.schema.map((col, ci) => (
                     <div key={ci} style={{ marginBottom: ci < m.schema!.length-1 ? 6 : 0 }}>
                       <div style={{ fontWeight:600, color:'var(--studio-text)', fontSize:'11px' }}>{col.name} <span style={{ fontFamily:'var(--studio-mono)', fontSize:'9px', color:'var(--studio-text-muted)' }}>{col.slug}</span></div>
-                      <ul>{col.fields.map((f,fi)=>(<li key={fi}>{f.isRequired&&'· '}<b>{f.name}</b> <span style={{ fontFamily:'var(--studio-mono)',fontSize:'9px' }}>[{f.type}]</span></li>))}</ul>
+                      <ul>{col.fields.map((f,fi)=>(<li key={fi}>{f.isRequired&&'· '}<b>{f.name}</b> <span style={{ fontFamily:'var(--studio-mono)',fontSize:'9px' }}>[{f.type}]</span>{f.type === 'relation' && <span style={{ color:'#61afef', fontSize:'8px', marginLeft:'2px' }}>→</span>}</li>))}</ul>
                     </div>
                   ))}
                   <button className="scp-apply-btn" onClick={() => handleApplySchema(m.schema!)}><Check className="w-3 h-3" />{t('studio.chat.apply_schema')}</button>
@@ -353,9 +375,18 @@ function SchemaPreviewPanel({ current, preview }: { current: SchemaCollection | 
           <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--studio-text)', margin: '0 0 8px' }}>{current.name || 'Sans titre'}</h4>
           <div style={{ fontFamily: 'var(--studio-mono)', fontSize: '11px', color: 'var(--studio-text-dim)', lineHeight: 1.6 }}>
             <p style={{ margin: '0 0 4px' }}>slug: {current.slug || '(auto)'} · {current.isSingleton ? 'singleton' : 'collection'}</p>
-            {current.fields.map((f, i) => (
-              <div key={f.key} style={{ marginLeft: '8px' }}>{i + 1}. {f.name || '?'} <span style={{ color: 'var(--studio-accent)' }}>[{f.type}]</span>{f.isRequired && <span style={{ color: 'var(--studio-amber)', fontSize: '9px' }}> • requis</span>}</div>
-            ))}
+            {current.fields.map((f, i) => {
+              const relTarget = f.type === 'relation' && (f.options as any)?.targetCollection;
+              const enumVals = f.type === 'enumeration' && (f.options as any)?.values?.length;
+              return (
+                <div key={f.key} style={{ marginLeft: '8px' }}>
+                  {i + 1}. {f.name || '?'} <span style={{ color: 'var(--studio-accent)' }}>[{f.type}]</span>
+                  {f.isRequired && <span style={{ color: 'var(--studio-amber)', fontSize: '9px' }}> • requis</span>}
+                  {relTarget && <span style={{ color: '#61afef', fontSize: '9px', marginLeft: '2px' }}> → {relTarget as string}</span>}
+                  {enumVals && <span style={{ color: 'var(--studio-text-muted)', fontSize: '9px', marginLeft: '2px' }}> [{((f.options as any)?.values as string[]).join(', ')}]</span>}
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (
@@ -367,9 +398,10 @@ function SchemaPreviewPanel({ current, preview }: { current: SchemaCollection | 
 
 /* ══════════════════════════ DESKTOP RIGHT PANEL ══════════════════════════ */
 function DesktopRightPanel({
-  project, currentCollections, onApplySchema, current, onGeneratePreview, preview,
+  project, currentCollections, onApplySchema, onApplyEndUserFields, current, onGeneratePreview, preview,
 }: {
   project: Project; currentCollections: SchemaCollection[]; onApplySchema: (c: SchemaCollection[]) => void;
+  onApplyEndUserFields: (fields: SchemaField[]) => void;
   current: SchemaCollection | null; onGeneratePreview: () => void; preview: string | null;
 }) {
   const [tab, setTab] = useState<'chat'|'preview'>('chat');
@@ -388,7 +420,7 @@ function DesktopRightPanel({
         <button className={`drp-tab ${tab==='preview'?'active':''}`} onClick={()=>{onGeneratePreview();setTab('preview');}}><Eye />Preview</button>
       </div>
       <div style={{ display: tab === 'chat' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
-        <SchemaChatPanel project={project} currentCollections={currentCollections} onApplySchema={onApplySchema} />
+        <SchemaChatPanel project={project} currentCollections={currentCollections} onApplySchema={onApplySchema} onApplyEndUserFields={onApplyEndUserFields} />
       </div>
       <div style={{ display: tab === 'preview' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
         <SchemaPreviewPanel current={current} preview={preview} />
@@ -568,7 +600,26 @@ export default function SchemaBuilder({ project }: { project: Project }) {
   function updateField(colIdx: number, fKey: string, d: Partial<SchemaField>) { setCollections(prev => prev.map((c, i) => i === colIdx ? { ...c, fields: c.fields.map(f => f.key === fKey ? { ...f, ...d, slug: d.name !== undefined ? slugify(d.name) : f.slug } : f) } : c)); }
   function removeField(colIdx: number, fKey: string) { setCollections(prev => prev.map((c, i) => i === colIdx ? { ...c, fields: c.fields.filter(f => f.key !== fKey) } : c)); }
   function duplicateField(colIdx: number, fKey: string) { const col = collections[colIdx]; const f = col?.fields.find(x => x.key === fKey); if (!f) return; setCollections(prev => prev.map((c, i) => i === colIdx ? { ...c, fields: [...c.fields, { ...f, key: `fld_${Date.now()}`, name: `${f.name} (copy)`, slug: `${f.slug}_copy` }] } : c)); }
-  function handleApplySchema(newCols: SchemaCollection[]) { setCollections(prev => [...prev, ...newCols]); if (selectedIdx === null && newCols.length > 0) setSelectedIdx(collections.length); }
+  function handleApplySchema(newCols: SchemaCollection[]) {
+    // Dedup: si le slug existe déjà, on ignore la nouvelle collection
+    const existingSlugs = new Set(collections.map(c => c.slug));
+    const trulyNew = newCols.filter(c => !existingSlugs.has(c.slug));
+    if (trulyNew.length === 0) return;
+    setCollections(prev => [...prev, ...trulyNew]);
+    if (selectedIdx === null && trulyNew.length > 0) setSelectedIdx(collections.length);
+  }
+  /** Crée les champs personnalisés EndUser proposés par l'IA */
+  async function handleApplyEndUserFields(fields: SchemaField[]) {
+    for (const f of fields) {
+      try {
+        await fetch(`/api/projects/${project.uuid}/end-users/fields`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: f.name, slug: f.slug, type: f.type, is_required: f.isRequired }),
+        });
+      } catch {}
+    }
+    await loadEndUserFields();
+  }
   /* ── EndUser field CRUD ── */
   async function addEndUserField() {
     if (!endUserNew.name.trim()) return;
@@ -619,7 +670,16 @@ export default function SchemaBuilder({ project }: { project: Project }) {
       return;
     }
     if (!current) return;
-    setPreview([`▸ ${current.name || untitled}`, `  slug: ${current.slug || '(auto)'}  ·  ${current.isSingleton ? 'singleton' : 'collection'}`, `  ${current.fields.length} champs:`, ...current.fields.map((f, i) => `  ${i + 1}. ${f.name || '?'} [${f.type}] ${f.isRequired ? '• requis' : ''}`)].join('\n'));
+    const fieldLines = current.fields.map((f, i) => {
+      let extra = '';
+      if (f.type === 'relation' && f.options?.targetCollection) {
+        extra = ' → ' + f.options.targetCollection;
+      } else if (f.type === 'enumeration' && f.options?.values?.length) {
+        extra = ' [' + f.options.values.join(', ') + ']';
+      }
+      return `  ${i + 1}. ${f.name || '?'} [${f.type}]${f.isRequired ? ' • requis' : ''}${extra}`;
+    });
+    setPreview([`▸ ${current.name || untitled}`, `  slug: ${current.slug || '(auto)'}  ·  ${current.isSingleton ? 'singleton' : 'collection'}`, `  ${current.fields.length} champs:`, ...fieldLines].join('\n'));
   }
   function selectNext() { if (selectedIdx !== null && selectedIdx < collections.length - 1) setSelectedIdx(selectedIdx + 1); }
   function selectPrev() { if (selectedIdx !== null && selectedIdx > 0) setSelectedIdx(selectedIdx - 1); }
@@ -799,7 +859,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
 
         <div className={`sb-right-panel${rightPanelOpen ? '' : ' collapsed'}`} style={{ width: rightW > 0 ? rightW + 'px' : undefined }}>
           {rightW > 0 && (
-            <DesktopRightPanel project={project} currentCollections={collections} onApplySchema={handleApplySchema} current={current} onGeneratePreview={generatePreview} preview={preview} />
+            <DesktopRightPanel project={project} currentCollections={collections} onApplySchema={handleApplySchema} onApplyEndUserFields={handleApplyEndUserFields} current={current} onGeneratePreview={generatePreview} preview={preview} />
           )}
         </div>
       </div>
@@ -965,12 +1025,17 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
     );
   }
   if (field.type === 'relation') {
+    // Merge EndUsers comme option système + allCollections
+    const relationTargets = [
+      { key: '__end_users__', name: 'EndUsers (système)', slug: 'end_users' },
+      ...allCollections.filter(c => c.slug && c.slug !== 'end_users'),
+    ];
     return (
       <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)' }}>
         <span style={S.label}>Collection liée</span>
         <select value={opts.targetCollection ?? ''} onChange={e => onChange({ ...opts, targetCollection: e.target.value })} style={{ ...S.input, width:'100%', marginTop:'4px' }}>
           <option value="">— Sélectionner —</option>
-          {allCollections.filter(c => c.slug).map(c => (<option key={c.key} value={c.slug}>{c.name || c.slug}</option>))}
+          {relationTargets.map(c => (<option key={c.key} value={c.slug}>{c.name || c.slug}</option>))}
         </select>
       </div>
     );

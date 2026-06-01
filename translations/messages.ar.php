@@ -1239,6 +1239,7 @@ return [
     'studio.chat.clear_title'           => 'مسح سجل المحادثة',
     'studio.chat.apply_schema'          => 'تطبيق المخطط',
     'studio.chat.entries_generated'     => '📊 {total} إدخال تم إنشاؤها لـ {collections} مجموعة (مجموعات). انسخها أو استخدمها كمرجع.',
+    'studio.chat.enduser_fields_added'  => '{count} حقل (حقول) مخصصة تمت إضافتها إلى EndUsers.',
     'studio.chat.entries_ok'            => 'موافق — تم التسجيل',
     'studio.chat.no_result'             => 'لا يمكنني إنشاء مخطط لهذا الطلب. هل يمكنك أن تكون أكثر تحديداً؟',
     'studio.chat.schema_generated'      => 'تم إنشاء المخطط. طبقه أدناه.',

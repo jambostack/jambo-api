@@ -1287,6 +1287,7 @@ return [
     'studio.chat.clear_title'           => 'Effacer l\'historique de conversation',
     'studio.chat.apply_schema'          => 'Appliquer le schéma',
     'studio.chat.entries_generated'     => '📊 {total} entrées générées pour {collections} collection(s). Copie-les ou utilise-les comme référence.',
+    'studio.chat.enduser_fields_added'  => '{count} champ(s) ajouté(s) à EndUsers.',
     'studio.chat.entries_ok'            => 'OK — Noté',
     'studio.chat.no_result'             => 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?',
     'studio.chat.schema_generated'      => 'Schéma généré. Applique-le ci-dessous.',

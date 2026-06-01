@@ -1262,6 +1262,7 @@ return [
     'studio.chat.clear_title'           => 'Clear conversation history',
     'studio.chat.apply_schema'          => 'Apply schema',
     'studio.chat.entries_generated'     => '📊 {total} entries generated for {collections} collection(s). Copy them or use as reference.',
+    'studio.chat.enduser_fields_added'  => '{count} custom field(s) added to EndUsers.',
     'studio.chat.entries_ok'            => 'OK — Noted',
     'studio.chat.no_result'             => 'I cannot generate a schema for this request. Can you be more specific?',
     'studio.chat.schema_generated'      => 'Schema generated. Apply it below.',
