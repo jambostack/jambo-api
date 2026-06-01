@@ -41,6 +41,7 @@ interface ActionButton {
     label: string;
     onClick: () => void;
     variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+    size?: 'default' | 'sm' | 'lg' | 'icon';
     icon?: React.ReactNode;
     show?: boolean;
 }
@@ -720,6 +721,7 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
                                     key={index}
                                     onClick={action.onClick}
                                     variant={action.variant || 'default'}
+                                    size={action.size || 'default'}
                                     className="w-full sm:w-auto"
                                 >
                                     {action.icon && <span>{action.icon}</span>}

@@ -10,10 +10,11 @@ import type { Collection, Project, Field, ContentEntry, ColumnDef, SharedData, U
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
-import { 
-    Plus, 
-    Trash, 
+import {
+    Plus,
+    Trash,
     FileText,
+    FileEdit,
     RotateCcw,
     AlignCenter,
     Link as LinkIcon,
@@ -37,6 +38,7 @@ export default function ContentList({ collection, project }: Props) {
     const [showForceDeleteDialog, setShowForceDeleteDialog] = useState(false);
     const [showRestoreDialog, setShowRestoreDialog] = useState(false);
     const [showPublishDialog, setShowPublishDialog] = useState(false);
+    const [showDraftDialog, setShowDraftDialog] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [richTextModal, setRichTextModal] = useState<{title:string, content:string}|null>(null);
     const [relationModal, setRelationModal] = useState<{title:string, entries:any[], fields:Field[]}|null>(null);
@@ -147,6 +149,24 @@ export default function ContentList({ collection, project }: Props) {
             dataTableRef.current?.fetchData();
         } catch {
             toast.error(t('content.failed_publish'));
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleDraft = async () => {
+        setProcessing(true);
+        try {
+            const requests = selectedItems.map(item =>
+                axios.patch(`${contentBase}/${item.uuid}`, { status: 'draft' })
+            );
+            await Promise.all(requests);
+            toast.success(t('content.draft_success', { count: String(selectedItems.length) }));
+            setSelectedItems([]);
+            setShowDraftDialog(false);
+            dataTableRef.current?.fetchData();
+        } catch {
+            toast.error(t('content.failed_draft'));
         } finally {
             setProcessing(false);
         }
@@ -426,22 +446,33 @@ export default function ContentList({ collection, project }: Props) {
                     !anyTrashedSelected ? {
                         label: t('content.publish_action'),
                         onClick: () => setShowPublishDialog(true),
-                        icon: <Send className="h-4 w-4 mr-2" />,
+                        icon: <Send className="h-4 w-4 mr-1" />,
                         variant: "default",
+                        size: "sm",
+                        show: selectedItems.length > 0 && can.update_content,
+                    } : null,
+                    !anyTrashedSelected ? {
+                        label: t('content.draft_action'),
+                        onClick: () => setShowDraftDialog(true),
+                        icon: <FileEdit className="h-4 w-4 mr-1" />,
+                        variant: "outline",
+                        size: "sm",
                         show: selectedItems.length > 0 && can.update_content,
                     } : null,
                     !anyTrashedSelected ? {
                         label: t('content.trash_action'),
                         onClick: () => setShowDeleteDialog(true),
-                        icon: <Trash className="h-4 w-4 mr-2" />,
+                        icon: <Trash className="h-4 w-4 mr-1" />,
                         variant: "warning",
+                        size: "sm",
                         show: selectedItems.length > 0 && can.move_content_to_trash,
                     } : null,
                     !anyTrashedSelected && {
                         label: t('content.delete_action'),
                         onClick: () => setShowForceDeleteDialog(true),
-                        icon: <Trash className="h-4 w-4 mr-2" />,
+                        icon: <Trash className="h-4 w-4 mr-1" />,
                         variant: "destructive",
+                        size: "sm",
                         show: selectedItems.length > 0 && can.delete_content,
                     },
                     // selectedItems.length === 1 ? {
@@ -466,7 +497,8 @@ export default function ContentList({ collection, project }: Props) {
                     anyTrashedSelected ? {
                         label: t('content.restore_selected'),
                         onClick: () => setShowRestoreDialog(true),
-                        icon: <RotateCcw className="h-4 w-4 mr-2" />,
+                        icon: <RotateCcw className="h-4 w-4 mr-1" />,
+                        size: "sm",
                         show: selectedItems.length > 0 && can.update_content,
                         variant: 'outline',
                     } : null,
@@ -500,6 +532,35 @@ export default function ContentList({ collection, project }: Props) {
                         >
                             <Send className="mr-2 h-4 w-4" />
                             {t('content.publish_btn')}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Set to Draft Confirmation Dialog */}
+            <Dialog open={showDraftDialog} onOpenChange={setShowDraftDialog}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{t('content.draft_title')}</DialogTitle>
+                        <DialogDescription>
+                            {t('content.draft_desc', { count: String(selectedItems.length) })}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowDraftDialog(false)}
+                            disabled={processing}
+                        >
+                            {t('common.cancel')}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={handleDraft}
+                            disabled={processing}
+                        >
+                            <FileEdit className="mr-2 h-4 w-4" />
+                            {t('content.draft_btn')}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

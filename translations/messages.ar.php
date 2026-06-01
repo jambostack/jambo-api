@@ -307,6 +307,12 @@ return [
     'content.publish_btn'             => 'نشر',
     'content.published_success'       => 'تم نشر {count} إدخالات',
     'content.failed_publish'          => 'فشل نشر المحتوى',
+    'content.draft_action'            => 'مسودة المحدد',
+    'content.draft_title'             => 'إعادة إلى المسودة',
+    'content.draft_desc'              => 'هل أنت متأكد من إعادة {count} إدخالات إلى المسودة؟ لن تكون مرئية للعموم.',
+    'content.draft_btn'               => 'إعادة إلى المسودة',
+    'content.draft_success'           => 'تم إعادة {count} إدخالات إلى المسودة',
+    'content.failed_draft'            => 'فشل إعادة الإدخالات إلى المسودة',
 
     // Content Form
     'content.form.save_draft'         => 'حفظ كمسودة',

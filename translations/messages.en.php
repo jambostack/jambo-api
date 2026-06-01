@@ -581,6 +581,12 @@ return [
     'content.publish_btn'             => 'Publish',
     'content.published_success'       => '{count} content entries published',
     'content.failed_publish'          => 'Failed to publish content',
+    'content.draft_action'            => 'Draft Selected',
+    'content.draft_title'             => 'Set to Draft',
+    'content.draft_desc'              => 'Are you sure you want to set {count} content entries back to draft? They will no longer be publicly visible.',
+    'content.draft_btn'               => 'Set to Draft',
+    'content.draft_success'           => '{count} content entries set to draft',
+    'content.failed_draft'            => 'Failed to set entries to draft',
 
     // Content Form
     'content.form.save_draft'         => 'Save as draft',
