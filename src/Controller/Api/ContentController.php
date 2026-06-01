@@ -8,6 +8,7 @@ use App\Entity\Project;
 use App\Repository\CollectionRepository;
 use App\Repository\ContentEntryRepository;
 use App\Repository\FieldRepository;
+use App\Repository\MediaRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
 use App\Service\EavDataFormatterService;
@@ -28,6 +29,7 @@ class ContentController extends AbstractController
         private CollectionRepository $collectionRepository,
         private ContentEntryRepository $entryRepository,
         private FieldRepository $fieldRepository,
+        private MediaRepository $mediaRepository,
         private EavDataFormatterService $formatter,
         private EntityManagerInterface $em,
     ) {}
@@ -166,8 +168,7 @@ class ContentController extends AbstractController
         $entry->locale     = $locale;
         $entry->status     = $data['status'] ?? 'draft';
 
-        $this->hydrateFieldValues($entry, $data, $collection);
-
+        $this->hydrateFieldValues($entry, $data, $collection, $token->project);
         $this->em->persist($entry);
         $this->em->flush();
 
@@ -226,8 +227,7 @@ class ContentController extends AbstractController
             $entry->locale = $data['locale'];
         }
 
-        $this->hydrateFieldValues($entry, $data, $collection);
-        $this->em->flush();
+        $this->hydrateFieldValues($entry, $data, $collection, $token->project);        $this->em->flush();
 
         return $this->json($this->formatter->formatEntry($entry));
     }
@@ -289,7 +289,7 @@ class ContentController extends AbstractController
         return $project;
     }
 
-    private function hydrateFieldValues(ContentEntry $entry, array $data, \App\Entity\Collection $collection): void
+    private function hydrateFieldValues(ContentEntry $entry, array $data, \App\Entity\Collection $collection, Project $project): void
     {
         $fields = $this->fieldRepository->findByCollection($collection);
 
@@ -323,7 +323,7 @@ class ContentController extends AbstractController
                 'datetime'                       => $fieldValue->datetimeValue = $value ? new \DateTime($value) : null,
                 'time'                           => $fieldValue->textValue     = $value !== null ? (string) $value : null,
                 'json', 'array', 'repeater'      => $fieldValue->jsonValue     = is_array($value) ? $value : json_decode($value, true),
-                'media', 'relation', 'enumeration' => $fieldValue->jsonValue   = $this->normalizeArrayOfIds($value),
+                'media', 'relation', 'enumeration' => $fieldValue->jsonValue   = $this->normalizeAndValidateIds($value, $field->type, $project),
                 default                          => $fieldValue->textValue     = $value !== null ? (string) $value : null,
             };
         }
@@ -333,19 +333,28 @@ class ContentController extends AbstractController
      * Pour les conteneurs d'identifiants (media/relation/enumeration) :
      * accepte un array tel quel, décode une string JSON-array, sinon emballe
      * un scalaire isolé dans un tableau.
+     *
+     * Pour les champs media : valide que chaque UUID appartient bien au même
+     * projet (prévention IDOR cross-project). Les UUIDs orphelins ou d'un
+     * autre projet sont silencieusement écartés.
      */
-    private function normalizeArrayOfIds(mixed $value): ?array
+    private function normalizeAndValidateIds(mixed $value, string $fieldType, Project $project): ?array
     {
         if (is_array($value)) {
-            return $value;
-        }
-        if ($value === null || $value === '') {
+            $ids = $value;
+        } elseif ($value === null || $value === '') {
             return null;
+        } else {
+            $decoded = json_decode((string) $value, true);
+            $ids = is_array($decoded) ? $decoded : [$value];
         }
-        $decoded = json_decode((string) $value, true);
-        if (is_array($decoded)) {
-            return $decoded;
+
+        // Pour les champs media : valider que chaque UUID appartient au projet
+        if ($fieldType === 'media' && $ids !== []) {
+            $validUuids = $this->mediaRepository->findProjectMediaUuids($project, $ids);
+            $ids = array_values(array_intersect($ids, $validUuids));
         }
-        return [$value];
+
+        return $ids !== [] ? $ids : null;
     }
 }
