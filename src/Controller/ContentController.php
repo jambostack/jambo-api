@@ -172,7 +172,27 @@ class ContentController extends AbstractController
                 $this->em->flush();
             });
         } else {
-            $this->em->flush();
+            // Doctrine ORM 3.x ne détecte pas systématiquement les changements
+            // via les property hooks PHP 8.4 lors du dirty-checking.
+            // On utilise un DQL UPDATE ciblé pour garantir la persistance.
+            $now = new \DateTimeImmutable();
+            $sets   = ['e.status = :s', 'e.updatedAt = :now'];
+            $params = ['s' => $entry->status, 'now' => $now, 'id' => $entry->id];
+
+            if (isset($data['locale'])) {
+                $sets[] = 'e.locale = :locale';
+                $params['locale'] = $entry->locale;
+            }
+
+            if ($entry->status === 'published') {
+                $sets[] = 'e.publishedAt = COALESCE(e.publishedAt, :now)';
+            }
+
+            $this->em->createQuery(
+                'UPDATE ' . ContentEntry::class . ' e SET ' . implode(', ', $sets) . ' WHERE e.id = :id'
+            )->setParameters($params)->execute();
+
+            $this->em->refresh($entry);
         }
 
         $this->dispatcher->dispatch(new ContentEvent(ContentEvent::UPDATED, $entry->project, $entry));
