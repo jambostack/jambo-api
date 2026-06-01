@@ -654,13 +654,14 @@ PROMPT;
         $headers = ['Content-Type' => 'application/json'];
 
         if ($provider === 'gemini') {
+            // Clé API dans le header x-goog-api-key, pas en URL
+            $headers['x-goog-api-key'] = $apiKey;
             $parts = [];
             foreach ($messages as $m) {
                 $parts[] = ['text' => $m['content']];
             }
             $body = ['contents' => [['parts' => $parts]]];
-            $url = $endpoint . '?key=' . urlencode($apiKey);
-            $response = $this->httpClient->request('POST', $url, [
+            $response = $this->httpClient->request('POST', $endpoint, [
                 'headers' => $headers,
                 'json'    => $body,
                 'timeout' => 60,

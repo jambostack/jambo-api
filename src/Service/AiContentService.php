@@ -142,7 +142,7 @@ class AiContentService
         }
 
         if ($name === 'gemini') {
-            // Format natif Google Gemini
+            // Format natif Google Gemini — clé API dans le header, pas en URL
             $endpoint = self::ENDPOINTS['gemini'] . $model . ':generateContent';
             $payload = [
                 'contents' => [
@@ -150,8 +150,10 @@ class AiContentService
                 ],
             ];
             $response = $this->httpClient->request('POST', $endpoint, [
-                'query'   => ['key' => $key],
-                'headers' => ['Content-Type' => 'application/json'],
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'x-goog-api-key' => $key,
+                ],
                 'json'    => $payload,
                 'timeout' => 60,
             ]);
