@@ -16,7 +16,8 @@ import {
   MessageSquare, Send, Bot, User, Check,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   FolderOpen, Pencil, Sparkles,
-  Users, Lock, UserPlus, Shield, GripVertical, ChevronDown, Settings2
+  Users, Lock, UserPlus, Shield, GripVertical, ChevronDown, Settings2,
+  Database, Table2, Slash
 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 import type { Project } from '@/types/index.d';
@@ -41,12 +42,21 @@ interface ServerCollection {
   description?: string; isSingleton: boolean;
   fields: Array<{ name: string; slug: string; type: string; isRequired: boolean; options?: any; order?: number }>;
 }
-interface ChatMessage { role: 'user' | 'assistant' | 'system'; content: string; schema?: Array<{ name: string; slug: string; description: string; isSingleton: boolean; fields: Array<{ name: string; slug: string; type: string; isRequired: boolean }> }>; }
+interface ChatMessage { role: 'user' | 'assistant' | 'system'; content: string; schema?: Array<{ name: string; slug: string; description: string; isSingleton: boolean; fields: Array<{ name: string; slug: string; type: string; isRequired: boolean }> }>; entries?: Array<{ collection: string; entries: Array<Record<string, any>> }>; }
 interface EndUserFieldData { id: number; name: string; slug: string; type: string; required: boolean; order: number; is_system: boolean; }
+type StudioCommand = 'schema' | 'data' | 'all' | null;
 
 function slugify(s: string) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
 
 type MobileTab = 'collections' | 'editor' | 'chat';
+
+const SCHEMA_CHAT_QUICK_PILLS = [
+  '/all Crée un blog avec articles, auteurs et commentaires',
+  '/schema Ajoute des champs personnalisés aux profils utilisateurs',
+  '/all Crée un catalogue produits avec catégories et images',
+  '/schema Structure un site e-learning avec cours et quiz',
+  '/data Génère 5 articles de blog professionnels en français',
+];
 
 /* ══════════════════════════ SCHEMA CHAT PANEL ══════════════════════════ */
 function SchemaChatPanel({
@@ -59,7 +69,9 @@ function SchemaChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [activeCommand, setActiveCommand] = useState<StudioCommand>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollDown = () => setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
 
   // Charger l'historique depuis la DB au montage
@@ -72,7 +84,7 @@ function SchemaChatPanel({
         if (cancelled) return;
         const loaded = (data.data ?? []).map(m => ({ role: m.role as ChatMessage['role'], content: m.content, schema: m.schema ?? undefined }));
         if (loaded.length === 0) {
-          loaded.push({ role: 'assistant' as const, content: 'Décris les collections à créer ou modifier.', schema: undefined });
+          loaded.push({ role: 'assistant' as const, content: 'Décris les collections à créer ou modifier. Utilise /schema, /data ou /all pour guider l\'IA.', schema: undefined });
         }
         setMessages(loaded);
       } catch {}
@@ -83,8 +95,28 @@ function SchemaChatPanel({
   // Effacer l'historique côté serveur
   async function clearHistory() {
     try { await fetch(`/api/projects/${project.uuid}/studio/chat-messages`, { method: 'DELETE' }); } catch {}
-    setMessages([{ role: 'assistant', content: 'Décris les collections à créer ou modifier.', schema: undefined }]);
+    setMessages([{ role: 'assistant', content: 'Décris les collections à créer ou modifier. Utilise /schema, /data ou /all pour guider l\'IA.', schema: undefined }]);
+    setActiveCommand(null);
   }
+
+  function parseCommand(input: string): { command: StudioCommand; prompt: string } {
+    const m = input.trim().match(/^\/(schema|data|all)\s+(.+)$/i);
+    if (m) return { command: m[1].toLowerCase() as Exclude<StudioCommand, null>, prompt: m[2].trim() };
+    return { command: null, prompt: input.trim() };
+  }
+
+  function insertCommand(cmd: 'schema' | 'data' | 'all') {
+    const prefix = '/' + cmd + ' ';
+    setInput(prefix);
+    setActiveCommand(cmd);
+    textareaRef.current?.focus();
+  }
+
+  // Surveiller l'input pour détecter/supprimer la commande active
+  useEffect(() => {
+    const { command } = parseCommand(input);
+    if (command !== activeCommand) setActiveCommand(command);
+  }, [input]);
 
   function buildContext(): string {
     const baseUrl = '/api/' + project.uuid;
@@ -105,6 +137,14 @@ function SchemaChatPanel({
     parts.push('- Supporte queries, mutations, filtres, pagination, tri');
     parts.push('');
 
+    parts.push('## EndUser (collection système - NE PAS recréer)');
+    parts.push('- Slug: end_users, toujours disponible pour la gestion utilisateurs');
+    parts.push('- Champs système: email (email*), name (text), status (active/banned/pending), avatar_url (text), custom_fields (json)');
+    parts.push('- Utiliser relation vers end_users pour auteurs, propriétaires, membres, clients');
+    parts.push('- Proposer des champs supplémentaires si pertinent (bio, website, phone, role, preferences...)');
+    parts.push('- Ne JAMAIS créer de nouvelle collection pour les utilisateurs/personnes');
+    parts.push('');
+
     parts.push('## Collections existantes');
     if (currentCollections.length === 0) {
       parts.push('(aucune collection existante)');
@@ -121,19 +161,24 @@ function SchemaChatPanel({
   }
 
   async function send() {
-    const prompt = input.trim();
+    const { command, prompt } = parseCommand(input);
     if (!prompt || busy) return;
     setInput(''); setBusy(true);
-    setMessages(prev => [...prev, { role: 'user', content: prompt, schema: undefined }]);
+    setMessages(prev => [...prev, { role: 'user', content: input.trim(), schema: undefined }]);
     scrollDown();
     try {
       const res = await fetch(`/api/projects/${project.uuid}/studio/ai-chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, context: buildContext(), history: messages.slice(-6).map(m => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({ command, prompt, context: buildContext(), history: messages.slice(-6).map(m => ({ role: m.role, content: m.content })) }),
       });
-      const data = await res.json() as { reply?: string; collections?: any[]; error?: string };
+      const data = await res.json() as { reply?: string; collections?: any[]; entries?: any[]; error?: string };
       if (!res.ok || data.error) throw new Error(data.error);
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply ?? 'Schéma généré.', schema: data.collections }]);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: data.reply ?? 'Généré.',
+        schema: data.collections ?? undefined,
+        entries: data.entries ?? undefined,
+      }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Erreur — réessaie.', schema: undefined }]);
     } finally { setBusy(false); scrollDown(); }
@@ -151,6 +196,30 @@ function SchemaChatPanel({
     setMessages(prev => [...prev, { role: 'system', content: `✅ ${schema.length} collection(s) ajoutée(s) au builder. Clique « Enregistrer » en haut pour sauvegarder en base.`, schema: undefined }]);
     scrollDown();
   }
+
+  function handleApplyEntries(entries: NonNullable<ChatMessage['entries']>) {
+    // Pour l'instant, afficher les entrées dans le chat comme un aperçu
+    // La création réelle en base nécessite un endpoint dédié (future itération)
+    const totalEntries = entries.reduce((sum, e) => sum + (e.entries?.length ?? 0), 0);
+    setMessages(prev => [...prev, { role: 'system', content: `📊 ${totalEntries} entrées générées pour ${entries.length} collection(s). Copie-les ou utilise-les comme référence.`, schema: undefined }]);
+    scrollDown();
+  }
+
+  // Auto-resize textarea
+  const handleTextareaChange = (value: string) => {
+    setInput(value);
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+  };
+
+  // Rendu du placeholder contextuel
+  const placeholder = activeCommand === 'schema' ? 'Décris le schéma de collections à générer... (Shift+↵ pour nouvelle ligne)'
+    : activeCommand === 'data' ? 'Décris le contenu professionnel à générer et pour quelles collections... (Shift+↵ pour nouvelle ligne)'
+    : activeCommand === 'all' ? 'Décris le projet complet : structure des collections ET contenu... (Shift+↵ pour nouvelle ligne)'
+    : 'Décris les collections à créer ou modifier... (Shift+↵ pour nouvelle ligne)';
 
   return (
     <div className="scp-root">
@@ -171,10 +240,21 @@ function SchemaChatPanel({
         .scp-schema-card li { color:var(--studio-text-muted,#5c6762); margin:1px 0; }
         .scp-schema-card li b { color:var(--studio-text-dim,#85918b); }
         .scp-apply-btn { margin-top:6px; display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:5px; cursor:pointer; font-size:10.5px; font-weight:600; border:none; background:var(--studio-accent); color:#000; }
-        .scp-input-row { display:flex; gap:6px; padding:8px 10px; border-top:1px solid var(--studio-border); flex-shrink:0; }
-        .scp-input-row input { flex:1; height:32px; border-radius:6px; padding:0 8px; font-size:11.5px; background:var(--studio-bg); border:1px solid var(--studio-border); color:var(--studio-text); outline:none; }
-        .scp-input-row input:focus { border-color:var(--studio-border-active); }
-        .scp-input-row button { height:32px; width:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; background:var(--studio-accent); color:#000; flex-shrink:0; }
+        .scp-data-card { margin-top:6px; padding:8px; border-radius:6px; background:var(--studio-surface,#111714); border:1px solid rgba(97,175,239,.15); font-size:10.5px; line-height:1.5; }
+        .scp-data-card h5 { margin:0 0 4px; font-size:11px; color:#61afef; }
+        .scp-data-entry { padding:4px 6px; margin:2px 0; border-radius:4px; background:rgba(255,255,255,.02); }
+        .scp-data-entry + .scp-data-entry { border-top:1px solid rgba(255,255,255,.03); }
+        .scp-command-bar { display:flex; gap:4px; padding:6px 8px; flex-shrink:0; border-bottom:1px solid var(--studio-border); align-items:center; }
+        .scp-cmd-btn { display:flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; font-size:10.5px; font-weight:600; cursor:pointer; border:1px solid var(--studio-border); background:var(--studio-surface); color:var(--studio-text-muted); transition:all .12s; white-space:nowrap; }
+        .scp-cmd-btn:hover { border-color:var(--studio-border-active); color:var(--studio-text-dim); }
+        .scp-cmd-btn.active { border-color:var(--studio-accent); color:var(--studio-accent); background:rgba(47,207,143,.06); }
+        .scp-cmd-btn svg { width:12px; height:12px; }
+        .scp-clear-btn { margin-left:auto; display:flex; align-items:center; gap:3px; padding:3px 8px; border-radius:6px; font-size:10.5px; cursor:pointer; border:1px solid transparent; background:transparent; color:var(--studio-text-muted); transition:all .12s; }
+        .scp-clear-btn:hover { color:#e06c75; border-color:rgba(224,108,117,.2); }
+        .scp-input-row { display:flex; gap:6px; padding:8px 10px; border-top:1px solid var(--studio-border); flex-shrink:0; align-items:flex-end; }
+        .scp-input-row textarea { flex:1; min-height:40px; max-height:120px; border-radius:6px; padding:6px 8px; font-size:11.5px; font-family:inherit; background:var(--studio-bg); border:1px solid var(--studio-border); color:var(--studio-text); outline:none; resize:none; line-height:1.4; }
+        .scp-input-row textarea:focus { border-color:var(--studio-border-active); }
+        .scp-input-row button { height:32px; min-width:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; background:var(--studio-accent); color:#000; flex-shrink:0; }
         .scp-input-row button:disabled { opacity:.4; cursor:not-allowed; }
         .scp-quick-prompts { display:flex; gap:4px; padding:6px 8px; overflow-x:auto; flex-shrink:0; scrollbar-width:none; border-top:1px solid var(--studio-border); }
         .scp-quick-prompts::-webkit-scrollbar { display:none; }
@@ -182,12 +262,24 @@ function SchemaChatPanel({
         .scp-quick-pill:hover { border-color:var(--studio-border-active); color:var(--studio-text-dim); }
         .scp-quick-pill:disabled { opacity:.3; cursor:not-allowed; }
       `}</style>
+
+      {/* CommandBar */}
+      <div className="scp-command-bar">
+        <button className={`scp-cmd-btn ${activeCommand === 'schema' ? 'active' : ''}`} onClick={() => insertCommand('schema')} title="/schema — Générer uniquement le schéma de collections"><Slash className="w-3 h-3" />schema</button>
+        <button className={`scp-cmd-btn ${activeCommand === 'data' ? 'active' : ''}`} onClick={() => insertCommand('data')} title="/data — Générer du contenu professionnel"><Database className="w-3 h-3" />data</button>
+        <button className={`scp-cmd-btn ${activeCommand === 'all' ? 'active' : ''}`} onClick={() => insertCommand('all')} title="/all — Collections + contenu"><Table2 className="w-3 h-3" />all</button>
+        <button className="scp-clear-btn" onClick={clearHistory} disabled={busy} title="Effacer l'historique"><Trash2 className="w-3 h-3" />Effacer</button>
+      </div>
+
+      {/* Messages */}
       <div className="scp-messages">
         {messages.map((m, i) => (
           <div key={i} className={`scp-msg ${m.role}`}>
             <div className="avatar">{m.role === 'assistant' ? <Bot className="w-3 h-3" /> : m.role === 'system' ? <Check className="w-3 h-3" /> : <User className="w-3 h-3" />}</div>
             <div className="bubble">
               <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
+
+              {/* Schema card */}
               {m.schema && m.schema.length > 0 && (
                 <div className="scp-schema-card">
                   <h5>{m.schema.length} collection{m.schema.length>1?'s':''} générée{m.schema.length>1?'s':''}</h5>
@@ -197,24 +289,55 @@ function SchemaChatPanel({
                       <ul>{col.fields.map((f,fi)=>(<li key={fi}>{f.isRequired&&'· '}<b>{f.name}</b> <span style={{ fontFamily:'var(--studio-mono)',fontSize:'9px' }}>[{f.type}]</span></li>))}</ul>
                     </div>
                   ))}
-                  <button className="scp-apply-btn" onClick={() => handleApplySchema(m.schema!)}><Check className="w-3 h-3" />Appliquer</button>
+                  <button className="scp-apply-btn" onClick={() => handleApplySchema(m.schema!)}><Check className="w-3 h-3" />Appliquer le schéma</button>
                 </div>
               )}
+
+              {/* Data card (entries) */}
+              {m.entries && m.entries.length > 0 && m.entries.map((entryGroup, gi) => (
+                <div key={gi} className="scp-data-card">
+                  <h5>📊 {entryGroup.collection} — {entryGroup.entries.length} entrée{entryGroup.entries.length>1?'s':''}</h5>
+                  {entryGroup.entries.slice(0, 3).map((entry, ei) => (
+                    <div key={ei} className="scp-data-entry">
+                      <div style={{ fontWeight:600, color:'var(--studio-text)', fontSize:'10.5px' }}>{ei + 1}. {entry.title || entry.name || 'Entrée ' + (ei+1)}</div>
+                      <div style={{ color:'var(--studio-text-muted)', fontSize:'10px' }}>
+                        {Object.entries(entry).filter(([k]) => !['title','name','slug'].includes(k)).slice(0, 3).map(([k,v]) => (
+                          <span key={k} style={{ marginRight:'8px' }}>{k}: <span style={{ color:'var(--studio-text-dim)' }}>{typeof v === 'string' ? v.slice(0, 40) + (v.length>40?'…':'') : String(v)}</span></span>
+                        ))}
+                        {Object.keys(entry).length > 6 && <span style={{ color:'var(--studio-text-muted)' }}>…</span>}
+                      </div>
+                    </div>
+                  ))}
+                  <button className="scp-apply-btn" style={{ background:'#61afef' }} onClick={() => handleApplyEntries(m.entries!)}><Check className="w-3 h-3" />OK — Noté</button>
+                </div>
+              ))}
             </div>
           </div>
         ))}
         {busy && <div className="scp-msg assistant"><div className="avatar"><Bot className="w-3 h-3" /></div><div className="bubble"><Loader2 className="w-3 h-3 animate-spin" style={{ display:'inline', color:'var(--studio-accent)', marginRight:'6px', verticalAlign:'middle' }} />Génération...</div></div>}
         <div ref={chatEndRef} />
       </div>
+
+      {/* Input area */}
       <div className="scp-input-row">
-        <input placeholder="Décris les collections..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key==='Enter'&&send()} disabled={busy} />
-        <button onClick={clearHistory} disabled={busy} title="Effacer l'historique" style={{ background: 'var(--studio-surface)', border: '1px solid var(--studio-border)', color: 'var(--studio-text-muted)' }}><Trash2 className="w-3.5 h-3.5" /></button>
-        <button onClick={send} disabled={busy || !input.trim()}>{busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}</button>
+        <textarea
+          ref={textareaRef}
+          placeholder={placeholder}
+          value={input}
+          onChange={e => handleTextareaChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+          disabled={busy}
+          rows={2}
+          maxLength={2000}
+        />
+        <button onClick={send} disabled={busy || !input.trim()}>{busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}</button>
       </div>
-        <div className="scp-quick-prompts">
-          {["Crée un blog avec articles, catégories et commentaires","Ajoute un champ auteur de type relation","Crée une page À propos en singleton avec image","Repense tout le schéma pour un site e-commerce","Ajoute un champ date de publication aux collections"].map((qp,i)=>(<button key={i} className="scp-quick-pill" onClick={()=>{setInput(qp)}} disabled={busy}>{qp}</button>))}
-        </div>
+
+      {/* Quick prompts */}
+      <div className="scp-quick-prompts">
+        {SCHEMA_CHAT_QUICK_PILLS.map((qp,i) => (<button key={i} className="scp-quick-pill" onClick={() => { setInput(qp); setActiveCommand(parseCommand(qp).command); textareaRef.current?.focus(); }} disabled={busy}>{qp}</button>))}
       </div>
+    </div>
   );
 }
 
