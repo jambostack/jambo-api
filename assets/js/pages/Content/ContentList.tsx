@@ -18,6 +18,7 @@ import {
     AlignCenter,
     Link as LinkIcon,
     Copy as DuplicateIcon,
+    Send,
 } from "lucide-react";
 import { DataTable, DataTableRef } from "@/components/ui/data-table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -35,6 +36,7 @@ export default function ContentList({ collection, project }: Props) {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showForceDeleteDialog, setShowForceDeleteDialog] = useState(false);
     const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+    const [showPublishDialog, setShowPublishDialog] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [richTextModal, setRichTextModal] = useState<{title:string, content:string}|null>(null);
     const [relationModal, setRelationModal] = useState<{title:string, entries:any[], fields:Field[]}|null>(null);
@@ -130,6 +132,24 @@ export default function ContentList({ collection, project }: Props) {
             toast.error(t('content.failed_restore'));
         }
         setProcessing(false);
+    };
+
+    const handlePublish = async () => {
+        setProcessing(true);
+        try {
+            const requests = selectedItems.map(item =>
+                axios.patch(`${contentBase}/${item.uuid}`, { status: 'published' })
+            );
+            await Promise.all(requests);
+            toast.success(t('content.published_success', { count: String(selectedItems.length) }));
+            setSelectedItems([]);
+            setShowPublishDialog(false);
+            dataTableRef.current?.fetchData();
+        } catch {
+            toast.error(t('content.failed_publish'));
+        } finally {
+            setProcessing(false);
+        }
     };
 
     const anyTrashedSelected = selectedItems.some(item => (item as any).deleted_at !== null);
@@ -401,6 +421,13 @@ export default function ContentList({ collection, project }: Props) {
                         show: can.create_content && !(collection.is_singleton && hasEntry),
                     },
                     !anyTrashedSelected ? {
+                        label: t('content.publish_action'),
+                        onClick: () => setShowPublishDialog(true),
+                        icon: <Send className="h-4 w-4 mr-2" />,
+                        variant: "default",
+                        show: selectedItems.length > 0 && can.update_content,
+                    } : null,
+                    !anyTrashedSelected ? {
                         label: t('content.trash_action'),
                         onClick: () => setShowDeleteDialog(true),
                         icon: <Trash className="h-4 w-4 mr-2" />,
@@ -447,6 +474,34 @@ export default function ContentList({ collection, project }: Props) {
                 selectedItems={selectedItems}
             />
             
+            {/* Publish Confirmation Dialog */}
+            <Dialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{t('content.publish_title')}</DialogTitle>
+                        <DialogDescription>
+                            {t('content.publish_desc', { count: String(selectedItems.length) })}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowPublishDialog(false)}
+                            disabled={processing}
+                        >
+                            {t('common.cancel')}
+                        </Button>
+                        <Button
+                            onClick={handlePublish}
+                            disabled={processing}
+                        >
+                            <Send className="mr-2 h-4 w-4" />
+                            {t('content.publish_btn')}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* Move to Trash Confirmation Dialog */}
             <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
                 <DialogContent className="sm:max-w-md">

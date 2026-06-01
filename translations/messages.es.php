@@ -301,6 +301,12 @@ return [
     'content.failed_load_trash'       => 'Error al cargar las entradas de la papelera',
     'content.failed_restore_entry'    => 'Error al restaurar la entrada',
     'content.failed_delete_entry'     => 'Error al eliminar la entrada',
+    'content.publish_action'          => 'Publicar selección',
+    'content.publish_title'           => 'Publicar contenido',
+    'content.publish_desc'            => '¿Estás seguro de que quieres publicar {count} entradas de contenido?',
+    'content.publish_btn'             => 'Publicar',
+    'content.published_success'       => '{count} entradas publicadas',
+    'content.failed_publish'          => 'Error al publicar el contenido',
 
     // Content Form
     'content.form.save_draft'         => 'Guardar como borrador',
