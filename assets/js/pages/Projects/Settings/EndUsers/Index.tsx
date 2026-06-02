@@ -1,7 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Search, Plus, MoreHorizontal, Eye, Pencil, Ban, CheckCircle, Trash2, Settings2 } from 'lucide-react';
+import { Search, Plus, MoreHorizontal, Eye, Pencil, Ban, CheckCircle, Trash2, Settings2, CheckSquare, Square } from 'lucide-react';
 
 import type { Project, BreadcrumbItem, UserCan, EndUser } from '@/types';
 
@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { useTranslation } from '@/lib/i18n';
 
@@ -39,6 +40,10 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
     const [search, setSearch] = useState(filters.search || '');
     const [statusFilter, setStatusFilter] = useState(filters.status || '');
     const [deleteTarget, setDeleteTarget] = useState<EndUser | null>(null);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [bulkBusy, setBulkBusy] = useState(false);
+
+    const allSelected = endUsers.data.length > 0 && selected.size === endUsers.data.length;
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: project.name, href: route('projects.show', project.id) },
@@ -76,7 +81,12 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
         router.delete(
             route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: deleteTarget.uuid }),
             {
-                onSuccess: () => { setDeleteTarget(null); toast.success(t('end_users.deleted')); },
+                onSuccess: () => {
+                    setDeleteTarget(null);
+                    setSelected(prev => { const next = new Set(prev); next.delete(deleteTarget.uuid); return next; });
+                    toast.success(t('end_users.deleted'));
+                    router.reload({ only: ['endUsers'] });
+                },
                 onError: () => toast.error(t('end_users.delete_error')),
             }
         );
@@ -88,10 +98,67 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
             route('projects.settings.end-users.status', { project: project.id, endUserUuid: endUser.uuid }),
             { status: newStatus },
             {
-                onSuccess: () => toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success')),
+                onSuccess: () => {
+                    toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success'));
+                    router.reload({ only: ['endUsers'] });
+                },
                 onError: () => toast.error(t('end_users.status_error')),
             }
         );
+    }
+
+    function toggleAll() {
+        if (allSelected) { setSelected(new Set()); }
+        else { setSelected(new Set(endUsers.data.map(eu => eu.uuid))); }
+    }
+
+    function toggleOne(uuid: string) {
+        setSelected(prev => {
+            const next = new Set(prev);
+            next.has(uuid) ? next.delete(uuid) : next.add(uuid);
+            return next;
+        });
+    }
+
+    async function bulkBan() {
+        if (selected.size === 0) return;
+        setBulkBusy(true);
+        let ok = 0;
+        for (const uuid of selected) {
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    router.patch(
+                        route('projects.settings.end-users.status', { project: project.id, endUserUuid: uuid }),
+                        { status: 'banned' },
+                        { onSuccess: () => resolve(), onError: () => reject() }
+                    );
+                });
+                ok++;
+            } catch {}
+        }
+        setBulkBusy(false); setSelected(new Set());
+        toast.success(t('end_users.bulk_ban_done', { count: String(ok) }));
+        router.reload({ only: ['endUsers'] });
+    }
+
+    async function bulkDelete() {
+        if (selected.size === 0) return;
+        setBulkBusy(true);
+        let ok = 0;
+        for (const uuid of selected) {
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    router.delete(
+                        route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: uuid }),
+                        { onSuccess: () => resolve(), onError: () => reject() }
+                    );
+                });
+                ok++;
+            } catch {}
+        }
+        setBulkBusy(false); setSelected(new Set());
+        toast.success(t('end_users.bulk_delete_done', { count: String(ok) }));
+        router.reload({ only: ['endUsers'] });
     }
 
     function getInitials(name: string | null, email: string): string {
@@ -158,11 +225,31 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
                         </select>
                     </div>
 
+                    {/* Bulk actions */}
+                    {selected.size > 0 && (
+                        <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
+                            <span className="text-sm font-medium">{t('end_users.selected_count', { count: String(selected.size) })}</span>
+                            <Button size="sm" variant="outline" disabled={bulkBusy} onClick={bulkBan}>
+                                <Ban className="mr-1 h-3.5 w-3.5" /> {t('end_users.ban')}
+                            </Button>
+                            <Button size="sm" variant="outline" className="text-destructive border-destructive" disabled={bulkBusy} onClick={bulkDelete}>
+                                <Trash2 className="mr-1 h-3.5 w-3.5" /> {t('end_users.delete')}
+                            </Button>
+                        </div>
+                    )}
+
                     {/* Table */}
                     <div className="rounded-md border">
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead className="w-10">
+                                        <Checkbox
+                                            checked={allSelected}
+                                            onCheckedChange={toggleAll}
+                                            aria-label="Select all"
+                                        />
+                                    </TableHead>
                                     <TableHead>{t('end_users.col_user')}</TableHead>
                                     <TableHead>{t('end_users.col_email')}</TableHead>
                                     <TableHead>{t('end_users.col_status')}</TableHead>
@@ -173,13 +260,20 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
                             <TableBody>
                                 {endUsers.data.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                                             {t('end_users.no_users')}
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     endUsers.data.map((eu) => (
                                         <TableRow key={eu.uuid}>
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={selected.has(eu.uuid)}
+                                                    onCheckedChange={() => toggleOne(eu.uuid)}
+                                                    aria-label={`Select ${eu.email}`}
+                                                />
+                                            </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
                                                     <Avatar className="h-8 w-8">

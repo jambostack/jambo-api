@@ -66,8 +66,8 @@ export default function EndUsersEdit({ project, endUser, endUserFields }: Props)
         { title: t('common.edit'), href: '#' },
     ];
 
-    const systemSlugs = ['email', 'password', 'name', 'status'];
-    const customFields = endUserFields.filter(f => !f.is_system && !systemSlugs.includes(f.name?.toLowerCase() ?? ''));
+    // Seuls les champs non-système sont modifiables (is_system est la source canonique)
+    const customFields = endUserFields.filter(f => !f.is_system);
 
     const { data, setData, patch, processing, errors } = useForm<{
         name: string;
