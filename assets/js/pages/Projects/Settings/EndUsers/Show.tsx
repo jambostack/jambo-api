@@ -21,8 +21,9 @@ interface Props {
     userCan: UserCan;
 }
 
-export default function EndUsersShow({ project, endUser }: Props) {
+export default function EndUsersShow({ project, endUser: initialEndUser }: Props) {
     const t = useTranslation();
+    const [endUser, setEndUser] = useState(initialEndUser);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [statusLoading, setStatusLoading] = useState(false);
 
@@ -46,6 +47,7 @@ export default function EndUsersShow({ project, endUser }: Props) {
             {
                 onSuccess: () => {
                     toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success'));
+                    setEndUser(prev => ({ ...prev, status: newStatus }));
                     setStatusLoading(false);
                 },
                 onError: () => { toast.error(t('end_users.status_error')); setStatusLoading(false); },
@@ -57,7 +59,10 @@ export default function EndUsersShow({ project, endUser }: Props) {
         router.delete(
             route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: endUser.uuid }),
             {
-                onSuccess: () => toast.success(t('end_users.deleted')),
+                onSuccess: () => {
+                    toast.success(t('end_users.deleted'));
+                    router.visit(route('projects.settings.end-users', project.id));
+                },
                 onError: () => toast.error(t('end_users.delete_error')),
             }
         );

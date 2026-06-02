@@ -49,8 +49,8 @@ export default function EndUsersCreate({ project, endUserFields }: Props) {
         { title: t('common.create'), href: '#' },
     ];
 
-    const systemSlugs = ['email', 'password', 'name', 'status'];
-    const customFields = endUserFields.filter(f => !f.is_system && !systemSlugs.includes(f.name?.toLowerCase() ?? ''));
+    // Seuls les champs non-système sont modifiables (is_system est la source canonique)
+    const customFields = endUserFields.filter(f => !f.is_system);
 
     const { data, setData, post, processing, errors } = useForm<{
         name: string;
