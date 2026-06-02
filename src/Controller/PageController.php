@@ -589,6 +589,11 @@ class PageController extends InertiaController
         }
         $this->em->flush();
 
+        // Retour JSON pour que le frontend garde le contrôle (bulk, etc.)
+        if ($request->headers->has('X-Inertia') || $request->isXmlHttpRequest()) {
+            return $this->json(['success' => true, 'status' => $newStatus]);
+        }
+
         return $this->redirectToRoute('projects_settings_end_users_show', ['project' => $project->id, 'endUserUuid' => $endUserUuid], 303);
     }
 
@@ -608,6 +613,11 @@ class PageController extends InertiaController
 
         $this->em->remove($endUser);
         $this->em->flush();
+
+        // Retour JSON pour que le frontend garde le contrôle (bulk, etc.)
+        if ($request->headers->has('X-Inertia') || $request->isXmlHttpRequest()) {
+            return $this->json(['success' => true]);
+        }
 
         return $this->redirectToRoute('projects_settings_end_users', ['project' => $project->id], 303);
     }
