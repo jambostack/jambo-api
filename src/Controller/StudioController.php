@@ -1243,17 +1243,25 @@ PROMPT;
             $tool   = $action['tool'] ?? '';
             $params = $action['params'] ?? [];
 
-            $result = match ($tool) {
-                'create_collections' => $this->executeCreateCollections($project, $params),
-                'create_entries'     => $this->executeCreateEntries($project, $params),
-                'update_entries'     => $this->executeUpdateEntries($project, $params),
-                'delete_entries'     => $this->executeDeleteEntries($project, $params),
-                'generate_images'    => $this->executeGenerateImages($project, $params),
-                'read_entries'       => $this->executeReadEntries($project, $params),
-                'translate_entries'  => $this->executeTranslateEntries($project, $params),
-                'explore_schema'     => $this->executeExploreSchema($project),
-                default              => ['error' => "Tool '$tool' inconnu"],
-            };
+            try {
+                $result = match ($tool) {
+                    'create_collections' => $this->executeCreateCollections($project, $params),
+                    'create_entries'     => $this->executeCreateEntries($project, $params),
+                    'update_entries'     => $this->executeUpdateEntries($project, $params),
+                    'delete_entries'     => $this->executeDeleteEntries($project, $params),
+                    'generate_images'    => $this->executeGenerateImages($project, $params),
+                    'read_entries'       => $this->executeReadEntries($project, $params),
+                    'translate_entries'  => $this->executeTranslateEntries($project, $params),
+                    'explore_schema'     => $this->executeExploreSchema($project),
+                    default              => ['error' => "Tool '$tool' inconnu"],
+                };
+            } catch (\Throwable $e) {
+                $this->logger->error('ai-execute tool failed', [
+                    'tool'   => $tool,
+                    'error'  => $e->getMessage(),
+                ]);
+                $result = ['error' => $e->getMessage()];
+            }
 
             // Prévenir le frontend si une confirmation est nécessaire
             if (in_array($tool, ['update_entries', 'delete_entries']) && !($body['auto_confirm'] ?? false)) {
