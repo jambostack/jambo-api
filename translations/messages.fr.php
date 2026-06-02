@@ -1303,6 +1303,7 @@ return [
     'studio.chat.default_reply'         => 'Généré.',
     'studio.chat.plan_title'            => 'Plan d\'exécution',
     'studio.chat.execute_plan'          => 'Exécuter le plan',
+    'studio.chat.plan_halted'           => 'Exécution interrompue — confirmation requise pour continuer.',
     'studio.chat.entries_applied'       => '✅ {created} entrée(s) créée(s), {errors} erreur(s).',
     'studio.chat.entries_ok'            => 'OK — Noté',
     'studio.chat.no_result'             => 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?',

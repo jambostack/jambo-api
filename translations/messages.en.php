@@ -1278,6 +1278,7 @@ return [
     'studio.chat.default_reply'         => 'Generated.',
     'studio.chat.plan_title'            => 'Execution plan',
     'studio.chat.execute_plan'          => 'Execute plan',
+    'studio.chat.plan_halted'           => 'Execution halted — confirmation required to continue.',
     'studio.chat.entries_applied'       => '✅ {created} entries created, {errors} error(s).',
     'studio.chat.entries_ok'            => 'OK — Noted',
     'studio.chat.no_result'             => 'I cannot generate a schema for this request. Can you be more specific?',

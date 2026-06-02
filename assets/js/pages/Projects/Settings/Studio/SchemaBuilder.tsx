@@ -225,17 +225,25 @@ function SchemaChatPanel({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actions: plan.actions, auto_confirm: true }),
       });
-      const data = await res.json() as { log?: ExecLogEntry[]; halted?: boolean };
-      if (data.log) execLog.push(...data.log);
-
-      // Si l'IA a généré des collections via create_collections, rafraîchir
-      const hasCollections = plan.actions.some(a => a.tool === 'create_collections');
-      if (hasCollections) {
-        onApplySchema([]); // trigger parent refresh via side effect
-        window.location.reload(); // fallback: reload complet
+      // Si le serveur renvoie une erreur HTTP, on log quand même
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Erreur inconnue');
+        execLog.push({ tool: 'error', result: { error: `HTTP ${res.status}: ${errText.slice(0, 150)}` } });
+      } else {
+        const data = await res.json().catch(() => null);
+        if (data?.log) execLog.push(...data.log);
+        if (data?.halted) {
+          execLog.push({ tool: 'warning', result: { warning: t('studio.chat.plan_halted') } });
+        }
       }
-    } catch {
-      execLog.push({ tool: 'error', result: { error: t('studio.chat.error') } });
+    } catch (e) {
+      execLog.push({ tool: 'error', result: { error: (e as Error).message || t('studio.chat.error') } });
+    }
+    // Si create_collections a été exécuté avec succès, rafraîchir les données
+    const hasCollectionsOk = execLog.some(l => l.tool === 'create_collections' && !l.result?.error);
+    if (hasCollectionsOk) {
+      onApplySchema([]); // trigger parent state
+      setTimeout(() => window.location.reload(), 500); // reload différé pour laisser le log s'afficher
     }
     setMessages(prev => [...prev, { role: 'system', content: '', schema: undefined, executionLog: execLog }]);
     setBusy(false);
