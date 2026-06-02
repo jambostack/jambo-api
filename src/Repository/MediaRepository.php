@@ -55,17 +55,23 @@ class MediaRepository extends ServiceEntityRepository
             return [];
         }
 
-        $uidObjects = array_map(fn ($u) => \Symfony\Component\Uid\Uuid::fromString($u), $uuids);
-
-        $rows = $this->createQueryBuilder('m')
+        $qb = $this->createQueryBuilder('m')
             ->select('m.uuid')
             ->where('m.project = :project')
-            ->andWhere('m.uuid IN (:uuids)')
             ->andWhere('m.deletedAt IS NULL')
-            ->setParameter('project', $project)
-            ->setParameter('uuids', $uidObjects)
-            ->getQuery()
-            ->getResult();
+            ->setParameter('project', $project);
+
+        // Doctrine ORM 3.x ne convertit pas correctement les tableaux
+        // de Uuid objects pour IN() — on utilise des conditions OR individuelles.
+        $orParts = [];
+        foreach ($uuids as $i => $u) {
+            $key = 'uid' . $i;
+            $orParts[] = 'm.uuid = :' . $key;
+            $qb->setParameter($key, \Symfony\Component\Uid\Uuid::fromString($u));
+        }
+        $qb->andWhere(implode(' OR ', $orParts));
+
+        $rows = $qb->getQuery()->getResult();
 
         return array_map(fn ($row) => $row['uuid']->toRfc4122(), $rows);
     }
