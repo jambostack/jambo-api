@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import moment from "moment";
 import { useTranslation } from '@/lib/i18n';
 
-import type { Collection, Project, Field, ContentEntry, ColumnDef, SharedData, UserCan } from "@/types";
+import type { Collection, Project, Field, ContentEntry, ColumnDef, SharedData, UserCan, Asset } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,8 @@ import {
     Link as LinkIcon,
     Copy as DuplicateIcon,
     Send,
+    Copy,
+    ExternalLink,
 } from "lucide-react";
 import { DataTable, DataTableRef } from "@/components/ui/data-table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -42,6 +44,7 @@ export default function ContentList({ collection, project }: Props) {
     const [processing, setProcessing] = useState(false);
     const [richTextModal, setRichTextModal] = useState<{title:string, content:string}|null>(null);
     const [relationModal, setRelationModal] = useState<{title:string, entries:any[], fields:Field[]}|null>(null);
+    const [mediaPreview, setMediaPreview] = useState<Asset | null>(null);
     const [hasEntry, setHasEntry] = useState(false);
     
     const can = usePage().props.userCan as UserCan;
@@ -320,19 +323,25 @@ export default function ContentList({ collection, project }: Props) {
                                     return (
                                         <div className="flex flex-wrap gap-1">
                                             {value.map((asset, index) => (
-                                                <div key={index} className="w-8 h-8">
+                                                <button
+                                                    key={index}
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); setMediaPreview(asset); }}
+                                                    title={asset.original_filename ?? asset.filename ?? ''}
+                                                    className="w-8 h-8 rounded overflow-hidden cursor-pointer hover:opacity-75 hover:ring-2 hover:ring-primary transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                >
                                                     {asset.thumbnail_url ? (
-                                                        <img 
-                                                            src={asset.thumbnail_url} 
+                                                        <img
+                                                            src={asset.thumbnail_url}
                                                             alt=""
-                                                            className="w-full h-full object-cover rounded"
+                                                            className="w-full h-full object-cover"
                                                         />
                                                     ) : (
-                                                        <div className="w-full h-full flex items-center justify-center bg-muted rounded">
-                                                            <FileText className="w-4 h-4" />
+                                                        <div className="w-full h-full flex items-center justify-center bg-muted">
+                                                            <FileText className="w-4 h-4 text-muted-foreground" />
                                                         </div>
                                                     )}
-                                                </div>
+                                                </button>
                                             ))}
                                         </div>
                                     );
@@ -656,6 +665,98 @@ export default function ContentList({ collection, project }: Props) {
                     )}
                     <DialogFooter>
                         <Button variant="outline" onClick={()=>setRichTextModal(null)}>{t('content.close')}</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Media Preview Dialog */}
+            <Dialog open={!!mediaPreview} onOpenChange={(open) => !open && setMediaPreview(null)}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="truncate pr-6">
+                            {mediaPreview?.original_filename ?? mediaPreview?.filename ?? t('content.media_preview')}
+                        </DialogTitle>
+                        {mediaPreview?.mime_type && (
+                            <DialogDescription>{mediaPreview.mime_type}</DialogDescription>
+                        )}
+                    </DialogHeader>
+                    {mediaPreview && (
+                        <div className="space-y-4">
+                            {/* Aperçu */}
+                            <div className="rounded-lg overflow-hidden bg-muted flex items-center justify-center" style={{ minHeight: '180px', maxHeight: '340px' }}>
+                                {mediaPreview.mime_type?.startsWith('image/') && (mediaPreview.full_url ?? mediaPreview.url) ? (
+                                    <img
+                                        src={mediaPreview.full_url ?? mediaPreview.url ?? ''}
+                                        alt={mediaPreview.metadata?.alt_text ?? ''}
+                                        className="max-w-full max-h-[340px] object-contain"
+                                    />
+                                ) : mediaPreview.thumbnail_url ? (
+                                    <img
+                                        src={mediaPreview.thumbnail_url}
+                                        alt=""
+                                        className="max-w-full max-h-[340px] object-contain"
+                                    />
+                                ) : (
+                                    <div className="flex flex-col items-center gap-2 p-8 text-muted-foreground">
+                                        <FileText className="w-12 h-12" />
+                                        <span className="text-sm font-mono uppercase">
+                                            {mediaPreview.extension ?? mediaPreview.mime_type ?? '—'}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Métadonnées */}
+                            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                                <span className="text-muted-foreground">{t('content.media_size')}</span>
+                                <span>{mediaPreview.formatted_size}</span>
+                                {mediaPreview.metadata?.alt_text && (<>
+                                    <span className="text-muted-foreground">Alt</span>
+                                    <span className="truncate">{mediaPreview.metadata.alt_text}</span>
+                                </>)}
+                                {mediaPreview.metadata?.caption && (<>
+                                    <span className="text-muted-foreground">Caption</span>
+                                    <span className="truncate">{mediaPreview.metadata.caption}</span>
+                                </>)}
+                            </div>
+
+                            {/* URL + copier */}
+                            {(mediaPreview.full_url ?? mediaPreview.url) && (
+                                <div className="flex gap-2 items-center">
+                                    <code className="flex-1 truncate text-xs bg-muted rounded px-2 py-1.5 font-mono">
+                                        {mediaPreview.full_url ?? mediaPreview.url}
+                                    </code>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="shrink-0"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(mediaPreview.full_url ?? mediaPreview.url ?? '');
+                                            toast.success(t('content.url_copied'));
+                                        }}
+                                    >
+                                        <Copy className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <DialogFooter className="gap-2 sm:gap-2">
+                        {(mediaPreview?.full_url ?? mediaPreview?.url) && (
+                            <Button variant="outline" asChild>
+                                <a
+                                    href={mediaPreview?.full_url ?? mediaPreview?.url ?? ''}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    <ExternalLink className="mr-2 w-4 h-4" />
+                                    {t('content.open_tab')}
+                                </a>
+                            </Button>
+                        )}
+                        <Button variant="outline" onClick={() => setMediaPreview(null)}>
+                            {t('content.close')}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
