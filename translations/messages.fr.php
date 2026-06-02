@@ -1290,6 +1290,8 @@ return [
     'studio.chat.enduser_fields_added'  => '{count} champ(s) ajouté(s) à EndUsers.',
     'studio.chat.data_entries'          => 'Données',
     'studio.chat.entry_count'           => '{count} entrée(s)',
+    'studio.chat.entries'               => 'entrées',
+    'studio.chat.entry_single'          => 'entrée',
     'studio.chat.entry_label'           => 'Entrée',
     'studio.chat.default_reply'         => 'Généré.',
     'studio.chat.entries_applied'       => '✅ {created} entrée(s) créée(s), {errors} erreur(s).',

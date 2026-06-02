@@ -1265,6 +1265,8 @@ return [
     'studio.chat.enduser_fields_added'  => '{count} custom field(s) added to EndUsers.',
     'studio.chat.data_entries'          => 'Data',
     'studio.chat.entry_count'           => '{count} entry/entries',
+    'studio.chat.entries'               => 'entries',
+    'studio.chat.entry_single'          => 'entry',
     'studio.chat.entry_label'           => 'Entry',
     'studio.chat.default_reply'         => 'Generated.',
     'studio.chat.entries_applied'       => '✅ {created} entries created, {errors} error(s).',
