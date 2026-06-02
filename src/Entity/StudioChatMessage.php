@@ -32,6 +32,10 @@ class StudioChatMessage
     #[ORM\Column(name: 'schema_data', type: 'json', nullable: true)]
     public ?array $schema = null;
 
+    /** @var array|null Entries JSON attached to /data or /all responses */
+    #[ORM\Column(name: 'entries_data', type: 'json', nullable: true)]
+    public ?array $entries = null;
+
     #[ORM\Column]
     public \DateTimeImmutable $createdAt;
 

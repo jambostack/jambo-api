@@ -33,7 +33,7 @@ class StudioController extends InertiaController
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
 
-    /** Conventions de nommage imposÃ©es aux schÃ©mas gÃ©nÃ©rÃ©s par l'IA. */
+    /** Conventions de nommage imposées aux schémas générés par l'IA. */
     private const NAMING_CONVENTIONS = <<<RULES
 ## Naming conventions (STRICT â€” always enforce, regardless of the conversation language)
 - ALL `name` and `slug` values MUST be in English.
@@ -50,7 +50,7 @@ class StudioController extends InertiaController
 - Relation fields must reference an existing or newly created collection.
 RULES;
 
-    /** Bloc EndUser injectÃ© dans tous les prompts systÃ¨mes. */
+    /** Bloc EndUser injecté dans tous les prompts systèmes. */
     private const ENDUSER_AWARENESS = <<<EUSER
 ## User Management System (EndUsers)
 - The project has a BUILT-IN user collection: EndUsers (slug: end_users).
@@ -65,7 +65,7 @@ RULES;
   5. EndUsers does NOT need title/slug fields â€” it's already handled by the system.
 EUSER;
 
-    /** Champs systÃ¨me gÃ©rÃ©s automatiquement â€” jamais gÃ©nÃ©rÃ©s par l'IA. */
+    /** Champs système gérés automatiquement â€” jamais générés par l'IA. */
     private const RESERVED_FIELD_SLUGS = ['id', 'uuid', 'status', 'locale', 'created_at', 'updated_at', 'deleted_at'];
 
     private ?Inflector $inflector = null;
@@ -76,12 +76,12 @@ EUSER;
     }
 
     /**
-     * Normalise un schÃ©ma gÃ©nÃ©rÃ© par l'IA pour GARANTIR les conventions de
-     * nommage, mÃªme si le modÃ¨le ne les respecte pas :
+     * Normalise un schéma généré par l'IA pour GARANTIR les conventions de
+     * nommage, même si le modèle ne les respecte pas :
      *  - nom de collection : PascalCase, PLURIEL (SINGULIER pour les singletons) ;
      *  - nom de champ : camelCase ;
-     *  - slugs : snake_case, dÃ©rivÃ©s du nom (cohÃ©rence garantie) ;
-     *  - suppression des champs systÃ¨me et des doublons.
+     *  - slugs : snake_case, dérivés du nom (cohérence garantie) ;
+     *  - suppression des champs système et des doublons.
      *
      * @param array<int,mixed> $collections
      * @return array<int,array<string,mixed>>
@@ -104,7 +104,7 @@ EUSER;
                 $name = $isSingleton ? $singular : $this->inflector()->pluralize($singular);
             }
             $slug = $this->toSnakeCase($name) ?: 'collection';
-            // UnicitÃ© des slugs de collection
+            // Unicité des slugs de collection
             $base = $slug; $i = 2;
             while (isset($seenCollectionSlugs[$slug])) { $slug = $base . '_' . $i++; }
             $seenCollectionSlugs[$slug] = true;
@@ -133,8 +133,8 @@ EUSER;
     }
 
     /**
-     * Extraction JSON : cherche "collections" dans la rÃ©ponse IA.
-     * DÃ©lÃ¨gue Ã  extractJsonResponse (qui gÃ¨re aussi "entries").
+     * Extraction JSON : cherche "collections" dans la réponse IA.
+     * Délègue à  extractJsonResponse (qui gère aussi "entries").
      *
      * @return array{data: array<string,mixed>, raw: string}|null
      */
@@ -144,8 +144,8 @@ EUSER;
     }
 
     /**
-     * Retourne le 1er objet JSON Ã©quilibrÃ© (en tenant compte des chaÃ®nes/Ã©chappements)
-     * qui contient la clÃ© "$needle", ou null.
+     * Retourne le 1er objet JSON équilibré (en tenant compte des chaà®nes/échappements)
+     * qui contient la clé "$needle", ou null.
      */
     private function balancedJsonContaining(string $text, string $needle): ?string
     {
@@ -169,7 +169,7 @@ EUSER;
                         if (str_contains($candidate, '"' . $needle . '"')) {
                             return $candidate;
                         }
-                        break; // cet objet ne contient pas la clÃ© â†’ essayer le prochain '{'
+                        break; // cet objet ne contient pas la clé â†’ essayer le prochain '{'
                     }
                 }
             }
@@ -177,24 +177,24 @@ EUSER;
         return null;
     }
 
-    /** Table de repli des accents latins â†’ lettre de base (dÃ©terministe, multi-plateforme). */
+    /** Table de repli des accents latins â†’ lettre de base (déterministe, multi-plateforme). */
     private const ACCENT_MAP = [
-        'Ã '=>'a','Ã¢'=>'a','Ã¤'=>'a','Ã¡'=>'a','Ã£'=>'a','Ã¥'=>'a','Ã¨'=>'e','Ã©'=>'e','Ãª'=>'e','Ã«'=>'e',
-        'Ã¬'=>'i','Ã­'=>'i','Ã®'=>'i','Ã¯'=>'i','Ã²'=>'o','Ã³'=>'o','Ã´'=>'o','Ã¶'=>'o','Ãµ'=>'o',
-        'Ã¹'=>'u','Ãº'=>'u','Ã»'=>'u','Ã¼'=>'u','Ã§'=>'c','Ã±'=>'n','Ã¿'=>'y','Å“'=>'oe','Ã¦'=>'ae','ÃŸ'=>'ss',
-        'Ã€'=>'A','Ã‚'=>'A','Ã„'=>'A','Ã'=>'A','Ãƒ'=>'A','Ãˆ'=>'E','Ã‰'=>'E','ÃŠ'=>'E','Ã‹'=>'E',
-        'ÃŒ'=>'I','Ã'=>'I','ÃŽ'=>'I','Ã'=>'I','Ã’'=>'O','Ã“'=>'O','Ã”'=>'O','Ã–'=>'O','Ã•'=>'O',
-        'Ã™'=>'U','Ãš'=>'U','Ã›'=>'U','Ãœ'=>'U','Ã‡'=>'C','Ã‘'=>'N',
+        'à '=>'a','à¢'=>'a','à¤'=>'a','à¡'=>'a','à£'=>'a','à¥'=>'a','è'=>'e','é'=>'e','ê'=>'e','à«'=>'e',
+        'à¬'=>'i','à­'=>'i','à®'=>'i','à¯'=>'i','à²'=>'o','à³'=>'o','à´'=>'o','à¶'=>'o','àµ'=>'o',
+        'à¹'=>'u','àº'=>'u','à»'=>'u','à¼'=>'u','à§'=>'c','à±'=>'n','à¿'=>'y','Å“'=>'oe','à¦'=>'ae','àŸ'=>'ss',
+        'à€'=>'A','à‚'=>'A','à„'=>'A','à'=>'A','àƒ'=>'A','àˆ'=>'E','à‰'=>'E','àŠ'=>'E','à‹'=>'E',
+        'àŒ'=>'I','à'=>'I','àŽ'=>'I','à'=>'I','à’'=>'O','à“'=>'O','à”'=>'O','à–'=>'O','à•'=>'O',
+        'à™'=>'U','àš'=>'U','à›'=>'U','àœ'=>'U','à‡'=>'C','à‘'=>'N',
     ];
 
-    /** @return string[] mots ASCII extraits d'une chaÃ®ne (gÃ¨re camelCase, espaces, sÃ©parateurs). */
+    /** @return string[] mots ASCII extraits d'une chaà®ne (gère camelCase, espaces, séparateurs). */
     private function splitWords(string $value): array
     {
-        // Replie les accents en ASCII de faÃ§on dÃ©terministe, puis retire tout
-        // caractÃ¨re non-ASCII rÃ©siduel.
+        // Replie les accents en ASCII de faà§on déterministe, puis retire tout
+        // caractère non-ASCII résiduel.
         $value = strtr($value, self::ACCENT_MAP);
         $value = preg_replace('/[^\x20-\x7E]/', '', $value) ?? $value;
-        // Coupe aux frontiÃ¨res camelCase puis aux non-alphanumÃ©riques.
+        // Coupe aux frontières camelCase puis aux non-alphanumériques.
         $value = preg_replace('/([a-z0-9])([A-Z])/', '$1 $2', $value) ?? $value;
         $parts = preg_split('/[^A-Za-z0-9]+/', $value) ?: [];
         return array_values(array_filter($parts, fn ($p) => $p !== ''));
@@ -306,7 +306,7 @@ EUSER;
     }
 
     /**
-     * GÃ©nÃ¨re un schÃ©ma de collection via IA Ã  partir d'un prompt.
+     * Génère un schéma de collection via IA à  partir d'un prompt.
      */
     #[Route('/api/projects/{uuid}/studio/ai-schema', name: 'studio_ai_schema', methods: ['POST'])]
     public function aiSchema(string $uuid, Request $request): JsonResponse
@@ -347,11 +347,11 @@ $namingRules
 ## Field types available
 text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
 
-## API automatiquement gÃ©nÃ©rÃ©e
-Chaque collection crÃ©Ã©e expose automatiquement :
-- REST: GET /api/{project}/{slug} (liste), POST (crÃ©er), GET/PATCH/DELETE /api/{project}/{slug}/{uuid}
-- GraphQL: POST /api/projects/{project}/graphql â€” schema auto-gÃ©nÃ©rÃ© (queries, mutations, filtres, pagination)
-- SpÃ©cification OpenAPI: GET /api/{project}/openapi.json
+## API automatiquement générée
+Chaque collection créée expose automatiquement :
+- REST: GET /api/{project}/{slug} (liste), POST (créer), GET/PATCH/DELETE /api/{project}/{slug}/{uuid}
+- GraphQL: POST /api/projects/{project}/graphql â€” schema auto-généré (queries, mutations, filtres, pagination)
+- Spécification OpenAPI: GET /api/{project}/openapi.json
 - Auth: Bearer token (API token) ou JWT (end-users via /auth/login, /auth/register)
 
 - Choose appropriate types based on the field name and context.
@@ -366,7 +366,7 @@ PROMPT;
         [$provider, $apiKey, $model, $endpoint] = $this->resolveAiConfig();
 
         if ($provider === null) {
-            // Fallback: gÃ©nÃ©ration basÃ©e sur des rÃ¨gles (pas d'IA configurÃ©e)
+            // Fallback: génération basée sur des règles (pas d'IA configurée)
             $schema = $this->ruleBasedSchema($prompt);
             $schema['collections'] = $this->normalizeSchema($schema['collections'] ?? []);
             return $this->json($schema);
@@ -378,7 +378,7 @@ PROMPT;
                 ['role' => 'user', 'content' => $prompt],
             ]);
 
-            // Extraire le JSON (le modÃ¨le peut wrapper dans ```json)
+            // Extraire le JSON (le modèle peut wrapper dans ```json)
             if (preg_match('/\{[\s\S]*\}/', $content, $m)) {
                 $data = json_decode($m[0], true);
                 if ($data && isset($data['collections'])) {
@@ -387,19 +387,19 @@ PROMPT;
                 }
             }
 
-            return $this->json(['error' => 'Ã‰chec du parsing JSON de la rÃ©ponse IA'], 500);
+            return $this->json(['error' => 'à‰chec du parsing JSON de la réponse IA'], 500);
         } catch (\Throwable $e) {
             $this->logger->error('AI schema generation failed', [
                 'exception' => $e,
                 'project'   => $uuid,
             ]);
-            return $this->json(['error' => 'Ã‰chec de la gÃ©nÃ©ration IA. RÃ©essayez.'], 500);
+            return $this->json(['error' => 'à‰chec de la génération IA. Réessayez.'], 500);
         }
     }
 
     /**
-     * Chat IA conversationnel pour gÃ©nÃ©rer/modifier le schÃ©ma de collections.
-     * ReÃ§oit l'historique de conversation + le contexte des collections existantes.
+     * Chat IA conversationnel pour générer/modifier le schéma de collections.
+     * Reà§oit l'historique de conversation + le contexte des collections existantes.
      */
     #[Route('/api/projects/{uuid}/studio/ai-chat', name: 'studio_ai_chat', methods: ['POST'])]
     public function aiChat(string $uuid, Request $request): JsonResponse
@@ -418,11 +418,11 @@ PROMPT;
 
         if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
 
-        // PrÃ©fixer le prompt utilisateur pour l'affichage dans l'historique
+        // Préfixer le prompt utilisateur pour l'affichage dans l'historique
         $displayPrompt = $prompt;
         $commandPrefix = $command !== 'schema' ? '/' . $command . ' ' : '';
 
-        // Persister le message utilisateur en DB immÃ©diatement
+        // Persister le message utilisateur en DB immédiatement
         $userMsg = new \App\Entity\StudioChatMessage();
         $userMsg->project = $project;
         $userMsg->role = 'user';
@@ -433,7 +433,7 @@ PROMPT;
         $namingRules = self::NAMING_CONVENTIONS;
         $endUserBlock = self::ENDUSER_AWARENESS;
 
-        // Choisir le prompt systÃ¨me selon la commande
+        // Choisir le prompt système selon la commande
         $systemPrompt = $this->buildSystemPrompt($command, $namingRules, $endUserBlock, $context);
 
         [$provider, $apiKey, $model, $endpoint] = $this->resolveAiConfig();
@@ -470,12 +470,12 @@ PROMPT;
 
             $reply = trim(preg_replace('/```\s*$/', '', $reply));
 
-            // Message par dÃ©faut selon la commande
+            // Message par défaut selon la commande
             if ($reply === '') {
                 $reply = match ($command) {
-                    'data' => ($entries !== null ? 'Contenu gÃ©nÃ©rÃ©. Applique-le ci-dessous.' : 'Je n\'ai pas pu gÃ©nÃ©rer de contenu. Peux-tu Ãªtre plus prÃ©cis ?'),
-                    'all'  => 'SchÃ©ma et contenu gÃ©nÃ©rÃ©s. Applique chaque bloc ci-dessous.',
-                    default => ($collections !== null ? 'SchÃ©ma gÃ©nÃ©rÃ©. Applique-le ci-dessous.' : 'Je ne peux pas gÃ©nÃ©rer de schÃ©ma pour cette demande. Peux-tu Ãªtre plus prÃ©cis ?'),
+                    'data' => ($entries !== null ? 'Contenu généré. Applique-le ci-dessous.' : 'Je n\'ai pas pu générer de contenu. Peux-tu être plus précis ?'),
+                    'all'  => 'Schéma et contenu générés. Applique chaque bloc ci-dessous.',
+                    default => ($collections !== null ? 'Schéma généré. Applique-le ci-dessous.' : 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?'),
                 };
             }
 
@@ -485,6 +485,7 @@ PROMPT;
             $assistantMsg->role = 'assistant';
             $assistantMsg->content = $reply;
             $assistantMsg->schema = $collections;
+            $assistantMsg->entries = $entries;
             $this->em->persist($assistantMsg);
             $this->em->flush();
 
@@ -499,11 +500,11 @@ PROMPT;
             return $this->json($response);
         } catch (\Throwable $e) {
             $this->logger->error('AI chat failed', ['exception' => $e, 'project' => $uuid]);
-            return $this->json(['reply' => 'DÃ©solÃ©, une erreur est survenue. RÃ©essaie.', 'error' => 'AI chat failed'], 500);
+            return $this->json(['reply' => 'Désolé, une erreur est survenue. Réessaie.', 'error' => 'AI chat failed'], 500);
         }
     }
 
-    /** Construit le prompt systÃ¨me adaptÃ© Ã  la commande. */
+    /** Construit le prompt système adapté à  la commande. */
     private function buildSystemPrompt(string $command, string $namingRules, string $endUserBlock, string $context): string
     {
         $baseGuidelines = "## Field types available\n"
@@ -579,7 +580,7 @@ PROMPT;
             default => $schemaPrompt,
         };
     }
-    /** Fallback quand aucun provider IA n'est configurÃ©. */
+    /** Fallback quand aucun provider IA n'est configuré. */
     private function commandFallback(string $command, string $prompt): JsonResponse
     {
         $schema = $this->ruleBasedSchema($prompt);
@@ -587,8 +588,8 @@ PROMPT;
         $names = array_map(fn ($c) => $c['name'], $schema['collections'] ?? []);
 
         $reply = $names === []
-            ? "Je n'ai pas pu gÃ©nÃ©rer de schÃ©ma pour cette demande. Peux-tu Ãªtre plus prÃ©cis ?"
-            : "Voici un schÃ©ma de base pour : " . implode(', ', $names) . ". Tu peux l'appliquer et le modifier manuellement.";
+            ? "Je n'ai pas pu générer de schéma pour cette demande. Peux-tu être plus précis ?"
+            : "Voici un schéma de base pour : " . implode(', ', $names) . ". Tu peux l'appliquer et le modifier manuellement.";
 
         $response = ['reply' => $reply];
         if ($command !== 'data') {
@@ -600,11 +601,11 @@ PROMPT;
     }
 
     /**
-     * Extraction JSON amÃ©liorÃ©e : cherche "collections" ET/OU "entries".
+     * Extraction JSON améliorée : cherche "collections" ET/OU "entries".
      */
     private function extractJsonResponse(string $content): ?array
     {
-        // PrioritÃ© aux blocs ```json â€¦ ```
+        // Priorité aux blocs ```json â€¦ ```
         if (preg_match_all('/```(?:json)?\s*([\s\S]*?)```/', $content, $blocks)) {
             foreach ($blocks[1] as $block) {
                 $raw = $this->balancedJsonContainingAny($block, ['collections', 'entries']);
@@ -628,7 +629,7 @@ PROMPT;
     }
 
     /**
-     * Comme balancedJsonContaining mais accepte plusieurs clÃ©s possibles.
+     * Comme balancedJsonContaining mais accepte plusieurs clés possibles.
      */
     private function balancedJsonContainingAny(string $text, array $needles): ?string
     {
@@ -642,7 +643,7 @@ PROMPT;
     }
 
     /**
-     * CrÃ©e des entrÃ©es de contenu gÃ©nÃ©rÃ©es par l'IA (/data ou /all).
+     * Crée des entrées de contenu générées par l'IA (/data ou /all).
      */
     #[Route('/api/projects/{uuid}/studio/apply-entries', name: 'studio_apply_entries', methods: ['POST'])]
     public function applyEntries(string $uuid, Request $request): JsonResponse
@@ -659,7 +660,7 @@ PROMPT;
             return $this->json(['error' => 'Collection et entry requis'], 422);
         }
 
-        // Cas spÃ©cial EndUsers
+        // Cas spécial EndUsers
         if ($collectionSlug === 'end_users') {
             return $this->createEndUserEntry($project, $entryData);
         }
@@ -696,7 +697,7 @@ PROMPT;
             return $this->json(['error' => 'Email requis pour EndUser'], 422);
         }
 
-        // VÃ©rifier si l'utilisateur existe dÃ©jÃ 
+        // Vérifier si l'utilisateur existe déjà 
         $existing = $this->em->getRepository(\App\Entity\EndUser::class)
             ->findOneBy(['project' => $project, 'email' => $email]);
 
@@ -729,7 +730,7 @@ PROMPT;
     }
 
     /**
-     * Sauvegarde les field values pour une ContentEntry (rÃ©utilise la logique du ContentController).
+     * Sauvegarde les field values pour une ContentEntry (réutilise la logique du ContentController).
      */
     private function saveFieldValues(\App\Entity\ContentEntry $entry, Collection $collection, array $data): void
     {
@@ -790,6 +791,7 @@ PROMPT;
                 'role'    => $m->role,
                 'content' => $m->content,
                 'schema'  => $m->schema,
+                'entries' => $m->entries,
                 'created_at' => $m->createdAt->format(\DateTimeInterface::ATOM),
             ], $messages),
         ]);
@@ -811,7 +813,7 @@ PROMPT;
     }
 
     /**
-     * RÃ©sout le premier provider IA activÃ© depuis AppSettings (DB).
+     * Résout le premier provider IA activé depuis AppSettings (DB).
      * Retourne [providerName, apiKey, model, endpoint] ou [null, null, null, null].
      */
     private function resolveAiConfig(): array
@@ -886,15 +888,15 @@ PROMPT;
     }
 
     /**
-     * Appelle l'API du provider IA avec les messages donnÃ©s.
-     * Utilise HttpClientInterface avec la clÃ© API depuis AppSettings (DB).
+     * Appelle l'API du provider IA avec les messages donnés.
+     * Utilise HttpClientInterface avec la clé API depuis AppSettings (DB).
      */
     private function callAiApi(string $provider, string $apiKey, string $model, string $endpoint, array $messages): string
     {
         $headers = ['Content-Type' => 'application/json'];
 
         if ($provider === 'gemini') {
-            // ClÃ© API dans le header x-goog-api-key, pas en URL
+            // Clé API dans le header x-goog-api-key, pas en URL
             $headers['x-goog-api-key'] = $apiKey;
             $parts = [];
             foreach ($messages as $m) {
@@ -913,7 +915,7 @@ PROMPT;
         if ($provider === 'anthropic') {
             $headers['x-api-key'] = $apiKey;
             $headers['anthropic-version'] = '2023-06-01';
-            // Anthropic utilise un format diffÃ©rent
+            // Anthropic utilise un format différent
             $systemMsg = '';
             $bodyMessages = [];
             foreach ($messages as $m) {
@@ -944,8 +946,8 @@ PROMPT;
     }
 
     /**
-     * Flush sÃ©curisÃ© : ne fait rien si l'EntityManager est fermÃ©
-     * (par ex. aprÃ¨s une exception rÃ©seau lors d'un appel API).
+     * Flush sécurisé : ne fait rien si l'EntityManager est fermé
+     * (par ex. après une exception réseau lors d'un appel API).
      */
     private function safeFlush(): void
     {
@@ -954,7 +956,7 @@ PROMPT;
         }
     }
 
-    /** Schema basÃ© sur des rÃ¨gles (fallback sans IA). */
+    /** Schema basé sur des règles (fallback sans IA). */
     private function ruleBasedSchema(string $prompt): array
     {
         $lower = mb_strtolower($prompt);
@@ -1050,15 +1052,15 @@ PROMPT;
 
         $data = json_decode($request->getContent(), true);
         // Garantie ultime : on normalise au point de persistance, donc quelle que
-        // soit la source (chat IA, schÃ©ma IA, builder visuel), les conventions de
-        // nommage sont toujours respectÃ©es en base.
+        // soit la source (chat IA, schéma IA, builder visuel), les conventions de
+        // nommage sont toujours respectées en base.
         $collections = $this->normalizeSchema($data['collections'] ?? []);
 
         $created = 0;
         $updated = 0;
 
-        // Collecter les identifiants des collections envoyÃ©es pour savoir
-        // lesquelles doivent Ãªtre supprimÃ©es (celles en DB mais absentes du payload).
+        // Collecter les identifiants des collections envoyées pour savoir
+        // lesquelles doivent être supprimées (celles en DB mais absentes du payload).
         $keptCollectionUuids = [];
         $keptCollectionSlugs = [];
 
@@ -1067,7 +1069,7 @@ PROMPT;
 
             $slug = $colData['slug'] ?: $this->slugify($colData['name']);
 
-            // Chercher par UUID d'abord (permet de renommer une collection sans crÃ©er de doublon)
+            // Chercher par UUID d'abord (permet de renommer une collection sans créer de doublon)
             $collection = null;
             if (!empty($colData['uuid'])) {
                 $collection = $this->em->getRepository(Collection::class)
@@ -1092,7 +1094,7 @@ PROMPT;
             $collection->slug = $slug;
             $collection->description = $colData['description'] ?? null;
             $collection->isSingleton = $colData['isSingleton'] ?? false;
-            $collection->deletedAt = null; // Restaurer si soft-deletÃ©e auparavant
+            $collection->deletedAt = null; // Restaurer si soft-deletée auparavant
 
             $keptCollectionUuids[] = $collection->uuid?->toRfc4122();
             $keptCollectionSlugs[] = $slug;
@@ -1140,8 +1142,8 @@ PROMPT;
         $deleted = 0;
         foreach ($allDbCollections as $dbCol) {
             $uuid = $dbCol->uuid?->toRfc4122();
-            // Garder si UUID prÃ©sent dans la liste, ou slug prÃ©sent (fallback pour
-            // les nouvelles collections dont l'UUID n'est assignÃ© qu'au flush).
+            // Garder si UUID présent dans la liste, ou slug présent (fallback pour
+            // les nouvelles collections dont l'UUID n'est assigné qu'au flush).
             $isKept = ($uuid !== null && in_array($uuid, $keptCollectionUuids, true))
                 || in_array($dbCol->slug, $keptCollectionSlugs, true);
             if (!$isKept) {

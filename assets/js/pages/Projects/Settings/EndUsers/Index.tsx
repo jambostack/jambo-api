@@ -231,7 +231,7 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
                         <AlertDialogContent>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>
-                                    {bulkConfirmOpen === 'ban' ? t('end_users.bulk_ban_title') : t('end_users.bulk_delete_title')}
+                                    {bulkConfirmOpen === 'ban' ? t('end_users.bulk_ban_title', { count: String(selected.size) }) : t('end_users.bulk_delete_title', { count: String(selected.size) })}
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
                                     {bulkConfirmOpen === 'ban'
