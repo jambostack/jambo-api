@@ -1415,6 +1415,7 @@ PROMPT;
             }
         }
         $this->em->flush();
+        return ['created' => $created, 'errors' => $errors];
     }
 
     private function executeUpdateEntries(Project $project, array $params): array
