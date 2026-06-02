@@ -55,25 +55,17 @@ class MediaRepository extends ServiceEntityRepository
             return [];
         }
 
-        $qb = $this->createQueryBuilder('m')
-            ->select('m.uuid')
-            ->where('m.project = :project')
-            ->andWhere('m.deletedAt IS NULL')
-            ->setParameter('project', $project);
-
-        // Doctrine ORM 3.x ne convertit pas correctement les tableaux d'UUIDs
-        // pour IN(). On utilise findOneBy-style avec des conditions OR individuelles
-        // en passant les strings brutes (Doctrine gère la conversion via le type uuid).
-        $orParts = [];
-        foreach ($uuids as $i => $u) {
-            $key = 'uid' . $i;
-            $orParts[] = 'm.uuid = :' . $key;
-            $qb->setParameter($key, $u);
+        // findOneBy gère correctement la conversion UUID binaire (même logique que
+        // AssetController::show). On évite le QueryBuilder dont le IN() ne convertit
+        // pas fiablement les UUIDs en binaire avec Doctrine ORM 3.x.
+        $validUuids = [];
+        foreach ($uuids as $uuid) {
+            $media = $this->findOneBy(['uuid' => $uuid, 'project' => $project, 'deletedAt' => null]);
+            if ($media !== null) {
+                $validUuids[] = $media->uuid->toRfc4122();
+            }
         }
-        $qb->andWhere(implode(' OR ', $orParts));
 
-        $rows = $qb->getQuery()->getResult();
-
-        return array_map(fn ($row) => $row['uuid']->toRfc4122(), $rows);
+        return $validUuids;
     }
 }
