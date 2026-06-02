@@ -1008,6 +1008,11 @@ PROMPT,
         $created = 0;
         $updated = 0;
 
+        // Collecter les identifiants des collections envoyées pour savoir
+        // lesquelles doivent être supprimées (celles en DB mais absentes du payload).
+        $keptCollectionUuids = [];
+        $keptCollectionSlugs = [];
+
         foreach ($collections as $colData) {
             if (empty($colData['name'])) continue;
 
@@ -1038,7 +1043,10 @@ PROMPT,
             $collection->slug = $slug;
             $collection->description = $colData['description'] ?? null;
             $collection->isSingleton = $colData['isSingleton'] ?? false;
+            $collection->deletedAt = null; // Restaurer si soft-deletée auparavant
 
+            $keptCollectionUuids[] = $collection->uuid?->toRfc4122();
+            $keptCollectionSlugs[] = $slug;
             $this->em->persist($collection);
 
             $existingSlugs = [];
@@ -1077,12 +1085,30 @@ PROMPT,
             }
         }
 
+        // Soft-delete collections that are in DB but absent from the request
+        $allDbCollections = $this->em->getRepository(Collection::class)
+            ->findBy(['project' => $project, 'deletedAt' => null]);
+        $deleted = 0;
+        foreach ($allDbCollections as $dbCol) {
+            $uuid = $dbCol->uuid?->toRfc4122();
+            // Garder si UUID présent dans la liste, ou slug présent (fallback pour
+            // les nouvelles collections dont l'UUID n'est assigné qu'au flush).
+            $isKept = ($uuid !== null && in_array($uuid, $keptCollectionUuids, true))
+                || in_array($dbCol->slug, $keptCollectionSlugs, true);
+            if (!$isKept) {
+                $dbCol->deletedAt = new \DateTimeImmutable();
+                $this->em->persist($dbCol);
+                $deleted++;
+            }
+        }
+
         $this->em->flush();
 
         return $this->json([
             'success' => true,
             'created' => $created,
             'updated' => $updated,
+            'deleted' => $deleted,
         ]);
     }
 
