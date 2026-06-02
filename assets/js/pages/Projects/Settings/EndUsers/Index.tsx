@@ -76,31 +76,38 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
         setDeleteTarget(endUser);
     }
 
-    function executeDelete() {
+    async function executeDelete() {
         if (!deleteTarget) return;
-        router.delete(
-            route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: deleteTarget.uuid }),
-            {
-                onSuccess: () => {
-                    setDeleteTarget(null);
-                    setSelected(prev => { const next = new Set(prev); next.delete(deleteTarget.uuid); return next; });
-                    toast.success(t('end_users.deleted'));
-                },
-                onError: () => toast.error(t('end_users.delete_error')),
+        try {
+            const res = await fetch(
+                route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: deleteTarget.uuid }),
+                { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } }
+            );
+            if (res.ok) {
+                setDeleteTarget(null);
+                setSelected(prev => { const next = new Set(prev); next.delete(deleteTarget.uuid); return next; });
+                toast.success(t('end_users.deleted'));
+                router.reload({ only: ['endUsers'] });
+            } else {
+                toast.error(t('end_users.delete_error'));
             }
-        );
+        } catch (e) { toast.error(t('end_users.delete_error')); }
     }
 
-    function toggleBan(endUser: EndUser) {
+    async function toggleBan(endUser: EndUser) {
         const newStatus = endUser.status === 'banned' ? 'active' : 'banned';
-        router.patch(
-            route('projects.settings.end-users.status', { project: project.id, endUserUuid: endUser.uuid }),
-            { status: newStatus },
-            {
-                onSuccess: () => toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success')),
-                onError: () => toast.error(t('end_users.status_error')),
+        try {
+            const res = await fetch(
+                route('projects.settings.end-users.status', { project: project.id, endUserUuid: endUser.uuid }),
+                { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }, body: JSON.stringify({ status: newStatus }) }
+            );
+            if (res.ok) {
+                toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success'));
+                router.reload({ only: ['endUsers'] });
+            } else {
+                toast.error(t('end_users.status_error'));
             }
-        );
+        } catch (e) { toast.error(t('end_users.status_error')); }
     }
 
     function toggleAll() {
