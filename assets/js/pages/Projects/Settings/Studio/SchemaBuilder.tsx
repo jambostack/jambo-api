@@ -42,9 +42,11 @@ interface ServerCollection {
   description?: string; isSingleton: boolean;
   fields: Array<{ name: string; slug: string; type: string; isRequired: boolean; options?: any; order?: number }>;
 }
-interface ChatMessage { role: 'user' | 'assistant' | 'system'; content: string; schema?: Array<{ name: string; slug: string; description: string; isSingleton: boolean; fields: Array<{ name: string; slug: string; type: string; isRequired: boolean }> }>; entries?: Array<{ collection: string; entries: Array<Record<string, any>> }>; }
+interface ChatMessage { role: 'user' | 'assistant' | 'system'; content: string; schema?: Array<{ name: string; slug: string; description: string; isSingleton: boolean; fields: Array<{ name: string; slug: string; type: string; isRequired: boolean }> }>; entries?: Array<{ collection: string; entries: Array<Record<string, any>> }>; agentPlan?: AgentPlan; executionLog?: Array<{ tool: string; result: any }>; }
 interface EndUserFieldData { id: number; name: string; slug: string; type: string; required: boolean; order: number; is_system: boolean; }
 type StudioCommand = 'schema' | 'data' | 'all' | null;
+interface AgentPlan { plan: string; actions: Array<{ tool: string; params: any }>; }
+interface ExecLogEntry { tool: string; result: any; }
 
 function slugify(s: string) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
 
@@ -186,17 +188,58 @@ function SchemaChatPanel({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command, prompt, context: buildContext(), history: messages.slice(-20).map(m => ({ role: m.role, content: m.content })) }),
       });
-      const data = await res.json() as { reply?: string; collections?: any[]; entries?: any[]; error?: string };
+      const data = await res.json() as { reply?: string; collections?: any[]; entries?: any[]; agentPlan?: AgentPlan; error?: string };
       if (!res.ok || data.error) throw new Error(data.error);
+
+      // Détecter si la réponse contient un plan d'agent (format JSON avec "plan" + "actions")
+      const rawContent = data.reply ?? '';
+      let agentPlan: AgentPlan | undefined;
+      try {
+        const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[1]);
+          if (parsed.plan && Array.isArray(parsed.actions)) {
+            agentPlan = parsed;
+          }
+        }
+      } catch {}
+
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: data.reply ?? t('studio.chat.default_reply'),
         schema: data.collections ?? undefined,
         entries: data.entries ?? undefined,
+        agentPlan,
       }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: t('studio.chat.error'), schema: undefined }]);
     } finally { setBusy(false); scrollDown(); }
+  }
+
+  /** Exécute un plan d'agent IA et affiche le log d'exécution. */
+  async function executeAgentPlan(plan: AgentPlan) {
+    setBusy(true);
+    const execLog: ExecLogEntry[] = [];
+    try {
+      const res = await fetch(`/api/projects/${project.uuid}/studio/ai-execute`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actions: plan.actions, auto_confirm: true }),
+      });
+      const data = await res.json() as { log?: ExecLogEntry[]; halted?: boolean };
+      if (data.log) execLog.push(...data.log);
+
+      // Si l'IA a généré des collections via create_collections, rafraîchir
+      const hasCollections = plan.actions.some(a => a.tool === 'create_collections');
+      if (hasCollections) {
+        onApplySchema([]); // trigger parent refresh via side effect
+        window.location.reload(); // fallback: reload complet
+      }
+    } catch {
+      execLog.push({ tool: 'error', result: { error: t('studio.chat.error') } });
+    }
+    setMessages(prev => [...prev, { role: 'system', content: '', schema: undefined, executionLog: execLog }]);
+    setBusy(false);
+    scrollDown();
   }
 
   function handleApplySchema(schema: NonNullable<ChatMessage['schema']>) {
@@ -318,6 +361,10 @@ function SchemaChatPanel({
         .scp-quick-pill { flex-shrink:0; padding:3px 8px; border-radius:999px; font-size:9.5px; cursor:pointer; border:1px solid var(--studio-border); background:var(--studio-surface); color:var(--studio-text-muted); transition:all .12s; white-space:nowrap; }
         .scp-quick-pill:hover { border-color:var(--studio-border-active); color:var(--studio-text-dim); }
         .scp-quick-pill:disabled { opacity:.3; cursor:not-allowed; }
+        .scp-plan-card { animation: plan-in .3s ease; }
+        @keyframes plan-in { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+        .scp-exec-log { animation: log-in .25s ease; }
+        @keyframes log-in { from { opacity:0; } to { opacity:1; } }
       `}</style>
 
       {/* Capabilities badge */}
@@ -373,6 +420,65 @@ function SchemaChatPanel({
                 </div>
                 );
               })}
+
+              {/* PlanCard — affiché quand l'IA propose un plan d'agent */}
+              {m.agentPlan && (
+                <div className="scp-plan-card" style={{ marginTop:'8px', padding:'10px', borderRadius:'7px', background:'rgba(240,184,73,0.05)', border:'1px solid rgba(240,184,73,0.18)', fontSize:'10.5px', lineHeight:'1.5' }}>
+                  <div style={{ fontWeight:600, color:'var(--studio-amber)', marginBottom:'6px', fontSize:'11.5px' }}>📋 {t('studio.chat.plan_title')}</div>
+                  <div style={{ color:'var(--studio-text-dim)', marginBottom:'8px', whiteSpace:'pre-wrap' }}>{m.agentPlan.plan}</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'3px', marginBottom:'8px' }}>
+                    {m.agentPlan.actions.map((a, ai) => (
+                      <div key={ai} style={{ display:'flex', gap:'6px', fontSize:'10px', color:'var(--studio-text-muted)' }}>
+                        <span style={{ color:'var(--studio-accent)', fontFamily:'var(--studio-mono)', minWidth:'20px' }}>{ai + 1}.</span>
+                        <span style={{ fontFamily:'var(--studio-mono)', fontWeight:600 }}>{a.tool}</span>
+                        <span style={{ color:'var(--studio-text-dim)' }}>
+                          {a.params.collection ? a.params.collection : ''}
+                          {a.params.collections ? a.params.collections.length + ' coll.' : ''}
+                          {a.params.entries ? a.params.entries.length + ' entrées' : ''}
+                          {a.params.locales ? ' × ' + a.params.locales.length + ' langues' : ''}
+                          {a.params.uuids ? a.params.uuids.length + ' UUIDs' : ''}
+                          {a.params.prompts ? a.params.prompts.length + ' images' : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    className="scp-apply-btn"
+                    style={{ background:'var(--studio-amber)', color:'#000' }}
+                    onClick={() => executeAgentPlan(m.agentPlan!)}
+                    disabled={busy}
+                  >
+                    {busy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Check className="w-3 h-3 mr-1" />}
+                    {t('studio.chat.execute_plan')}
+                  </button>
+                </div>
+              )}
+
+              {/* ExecutionLog — affiché après exécution */}
+              {m.executionLog && m.executionLog.length > 0 && (
+                <div className="scp-exec-log" style={{ marginTop:'8px', padding:'8px', borderRadius:'6px', background:'var(--studio-surface)', border:'1px solid var(--studio-border)', fontSize:'10px', fontFamily:'var(--studio-mono)', lineHeight:'1.6' }}>
+                  {m.executionLog.map((log, li) => {
+                    const r = log.result || {};
+                    const ok = !r.error && !r.needs_confirmation;
+                    const emoji = r.error ? '❌' : r.needs_confirmation ? '⚠️' : '✅';
+                    const created = r.created ?? r.updated ?? r.deleted ?? 0;
+                    const summary = r.error
+                      ? String(r.error)
+                      : r.needs_confirmation
+                        ? (r.preview ?? 'Confirmation requise')
+                        : created > 0
+                          ? `${created} élément(s)`
+                          : r.warning
+                            ? r.warning
+                            : 'OK';
+                    return (
+                      <div key={li} style={{ color: ok ? 'var(--studio-accent)' : 'var(--studio-amber)', marginBottom:'2px' }}>
+                        {emoji} {log.tool}: {summary}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         ))}
