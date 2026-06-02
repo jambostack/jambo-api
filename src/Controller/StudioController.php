@@ -28,6 +28,8 @@ class StudioController extends InertiaController
         private AppSettingsRepository $appSettingsRepository,
         private HttpClientInterface $httpClient,
         private readonly StudioChatMessageRepository $chatMessageRepository,
+        private readonly \App\Repository\EndUserRepository $endUserRepository,
+        private readonly \Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface $passwordHasher,
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
 
@@ -705,12 +707,12 @@ PROMPT;
         $endUser = new \App\Entity\EndUser($project, $email);
         $endUser->name = $data['name'] ?? '';
         $endUser->status = 'active'; // Toujours actif à la création, non modifiable par l'IA
-        // Mot de passe aléatoire (non utilisé — l'utilisateur pourra le réinitialiser)
-        $endUser->password = bin2hex(random_bytes(16));
+        $endUser->password = $this->passwordHasher->hashPassword($endUser, bin2hex(random_bytes(16)));
 
-        // Champs personnalisés
+        // Champs personnalisés : collecter tout ce qui n'est pas système
+        // Les EndUserFields (définis dans le Schema Builder EndUser) sont attendus par nom.
         $customData = [];
-        $systemFields = ['email', 'name', 'status', 'avatar_url', 'uuid', 'id', 'created_at', 'updated_at', 'password'];
+        $systemFields = ['email', 'name', 'status', 'avatar_url', 'password', 'uuid', 'id', 'created_at', 'updated_at', 'collection', 'entries', 'token_version'];
         foreach ($data as $k => $v) {
             if (!in_array($k, $systemFields, true)) {
                 $customData[$k] = $v;
