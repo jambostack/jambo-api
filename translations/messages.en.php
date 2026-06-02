@@ -1267,6 +1267,7 @@ return [
     'studio.chat.entry_count'           => '{count} entry/entries',
     'studio.chat.entry_label'           => 'Entry',
     'studio.chat.default_reply'         => 'Generated.',
+    'studio.chat.entries_applied'       => '✅ {created} entries created, {errors} error(s).',
     'studio.chat.entries_ok'            => 'OK — Noted',
     'studio.chat.no_result'             => 'I cannot generate a schema for this request. Can you be more specific?',
     'studio.chat.schema_generated'      => 'Schema generated. Apply it below.',
