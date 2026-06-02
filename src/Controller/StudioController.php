@@ -704,7 +704,7 @@ PROMPT;
 
         $endUser = new \App\Entity\EndUser($project, $email);
         $endUser->name = $data['name'] ?? '';
-        $endUser->status = $data['status'] ?? 'active';
+        $endUser->status = 'active'; // Toujours actif à la création, non modifiable par l'IA
         // Mot de passe aléatoire (non utilisé — l'utilisateur pourra le réinitialiser)
         $endUser->password = bin2hex(random_bytes(16));
 
