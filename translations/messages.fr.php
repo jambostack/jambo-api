@@ -1301,6 +1301,8 @@ return [
     'studio.chat.entry_single'          => 'entrée',
     'studio.chat.entry_label'           => 'Entrée',
     'studio.chat.default_reply'         => 'Généré.',
+    'studio.chat.plan_title'            => 'Plan d\'exécution',
+    'studio.chat.execute_plan'          => 'Exécuter le plan',
     'studio.chat.entries_applied'       => '✅ {created} entrée(s) créée(s), {errors} erreur(s).',
     'studio.chat.entries_ok'            => 'OK — Noté',
     'studio.chat.no_result'             => 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?',

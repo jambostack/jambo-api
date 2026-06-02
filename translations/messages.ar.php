@@ -1253,6 +1253,8 @@ return [
     'studio.chat.entry_single'          => 'إدخال',
     'studio.chat.entry_label'           => 'إدخال',
     'studio.chat.default_reply'         => 'تم الإنشاء.',
+    'studio.chat.plan_title'            => 'خطة التنفيذ',
+    'studio.chat.execute_plan'          => 'تنفيذ الخطة',
     'studio.chat.entries_applied'       => '✅ {created} إدخال تم إنشاؤها، {errors} خطأ.',
     'studio.chat.entries_ok'            => 'موافق — تم التسجيل',
     'studio.chat.no_result'             => 'لا يمكنني إنشاء مخطط لهذا الطلب. هل يمكنك أن تكون أكثر تحديداً؟',

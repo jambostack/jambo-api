@@ -516,6 +516,39 @@ PROMPT;
     /** Construit le prompt système adapté à  la commande. */
     private function buildSystemPrompt(string $command, string $namingRules, string $endUserBlock, string $context): string
     {
+        $agentToolsBlock = "## AGENT MODE — Tools Available\n"
+            . "You have access to real CMS tools. When the user asks for BULK operations\n"
+            . "(creating dozens of entries, generating images, modifying or deleting content),\n"
+            . "respond with a tool execution plan instead of plain JSON.\n\n"
+            . "Format:\n"
+            . "```json\n"
+            . "{\n"
+            . "  \"plan\": \"Resume de ce que je vais faire\",\n"
+            . "  \"actions\": [\n"
+            . "    { \"tool\": \"explore_schema\", \"params\": {} },\n"
+            . "    { \"tool\": \"create_collections\", \"params\": { \"collections\": [...] } },\n"
+            . "    { \"tool\": \"create_entries\", \"params\": { \"collection\": \"slug\", \"entries\": [...], \"locales\": [\"fr\",\"en\",\"es\",\"ar\"] } },\n"
+            . "    { \"tool\": \"update_entries\", \"params\": { \"collection\": \"slug\", \"uuids\": [...], \"patch\": {...} } },\n"
+            . "    { \"tool\": \"delete_entries\", \"params\": { \"collection\": \"slug\", \"uuids\": [...] } },\n"
+            . "    { \"tool\": \"generate_images\", \"params\": { \"prompts\": [{\"label\":\"Hero\",\"description\":\"Dark dashboard...\"}] } }\n"
+            . "  ]\n"
+            . "}\n"
+            . "```\n\n"
+            . "Tools:\n"
+            . "- explore_schema: returns all collections with their fields\n"
+            . "- read_entries(collection, locale?, limit?): reads existing entries\n"
+            . "- create_collections(collections): creates collections + fields (auto-confirmed)\n"
+            . "- create_entries(collection, entries, locales?): bulk create (auto-confirmed, supports multi-locale)\n"
+            . "- update_entries(collection, uuids, patch): bulk update (preview required)\n"
+            . "- delete_entries(collection, uuids): bulk soft-delete (preview + confirmation required)\n"
+            . "- generate_images(prompts): AI image generation + auto-upload to media library\n\n"
+            . "RULES:\n"
+            . "- Use tools for bulk operations (3+ entries, multi-locale, mass update/delete).\n"
+            . "- Use standard JSON format for simple /schema /data /all queries (1-2 collections, 3-5 entries).\n"
+            . "- ALWAYS start with a \"plan\" summary.\n"
+            . "- For multi-locale: use the locales array. The system creates entries in all specified locales.\n"
+            . "- For images: describe what you want visually. The system auto-generates and uploads.\n\n";
+
         $baseGuidelines = "## Field types available\n"
             . "text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation\n\n"
             . "CRITICAL for relation fields: MUST include \"options\": { \"targetCollection\": \"slug_of_target\" } (e.g., \"end_users\" for user references).\n"
@@ -528,7 +561,7 @@ PROMPT;
             . "- Auth: Bearer token (API token) ou JWT (end-users via /auth/login, /auth/register)\n"
             . "- Fichiers: GET/POST /api/{project}/files\n";
 
-        $dataPrompt = "You are a professional content writer for a CMS. Generate REAL, publication-ready content.\n\n"
+        $dataPrompt = "You are a professional content writer for a CMS. Generate REAL, publication-ready content.\n\n" . $agentToolsBlock
             . "## CRITICAL — Output format\n"
             . "You MUST output EXACTLY ONE ```json fenced code block. NO text before it. NO text after it. NO markdown tables. NO bullet lists. NO 'Voici les données'. ONLY the JSON block.\n\n"
             . "```json`n{\n  \"entries\": [\n    {\n      \"collection\": \"slug_of_collection\",\n      \"entries\": [\n        { \"title\": \"Titre pro\", \"slug\": \"titre-pro\", ... }\n      ]\n    }\n  ]\n}\n```\n\n"
@@ -546,7 +579,7 @@ PROMPT;
             . $baseGuidelines . "\n"
             . "## Current project context\n" . $context;
 
-        $allPrompt = "You are a CMS schema architect AND professional content writer. Generate BOTH schema AND content.\n\n"
+        $allPrompt = "You are a CMS schema architect AND professional content writer. Generate BOTH schema AND content.\n\n" . $agentToolsBlock
             . "## CRITICAL — Output format\n"
             . "You MUST output EXACTLY ONE ```json fenced code block. NO text before/after. NO markdown tables. ONLY the JSON:\n\n"
             . "```json`n{\n  \"collections\": [...],\n  \"entries\": [{\"collection\":\"blog_posts\",\"entries\":[{\"title\":\"...\",\"slug\":\"...\"}]}]\n}\n```\n\n"
@@ -562,7 +595,7 @@ PROMPT;
             . $endUserBlock . "\n\n"
             . "## Current project context\n" . $context;
 
-        $schemaPrompt = "You are a CMS schema architect. Design collections based on user requirements.\n\n"
+        $schemaPrompt = "You are a CMS schema architect. Design collections based on user requirements.\n\n" . $agentToolsBlock
             . "## Rules\n"
             . "- Always respond in French — but schema name/slug values MUST stay in English.\n"
             . "- You can only PROPOSE. User clicks « Appliquer » to persist.\n"
@@ -1217,6 +1250,7 @@ PROMPT;
                 'delete_entries'     => $this->executeDeleteEntries($project, $params),
                 'generate_images'    => $this->executeGenerateImages($project, $params),
                 'read_entries'       => $this->executeReadEntries($project, $params),
+                'translate_entries'  => $this->executeTranslateEntries($project, $params),
                 'explore_schema'     => $this->executeExploreSchema($project),
                 default              => ['error' => "Tool '$tool' inconnu"],
             };
@@ -1552,6 +1586,96 @@ PROMPT;
             $results[] = ['url' => $this->aiService->generatePlaceholder($p['label'] ?? 'Jambo'), 'type' => 'placeholder'];
         }
         return ['images' => $results];
+    }
+
+    private function executeTranslateEntries(Project $project, array $params): array
+    {
+        $collectionSlug = $params['collection'] ?? '';
+        $sourceLocale  = $params['source_locale'] ?? $project->defaultLocale;
+        $targetLocales = $params['target_locales'] ?? [];
+        $uuids         = $params['uuids'] ?? [];
+
+        if ($collectionSlug === '' || empty($targetLocales)) {
+            return ['error' => 'Collection et target_locales requis'];
+        }
+
+        // Récupérer la collection
+        $collection = $this->em->getRepository(Collection::class)
+            ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
+        if (!$collection) return ['error' => "Collection '$collectionSlug' introuvable"];
+
+        // Récupérer les entrées source
+        if (empty($uuids)) {
+            $entries = $this->em->getRepository(\App\Entity\ContentEntry::class)
+                ->findByCollectionPaginated($collection, 1, 200, $sourceLocale);
+        } else {
+            $entries = [];
+            foreach ($uuids as $uuid) {
+                $e = $this->em->getRepository(\App\Entity\ContentEntry::class)
+                    ->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'locale' => $sourceLocale]);
+                if ($e) $entries[] = $e;
+            }
+        }
+
+        if (empty($entries)) return ['error' => 'Aucune entree source trouvee'];
+
+        $created = 0; $errors = 0;
+
+        foreach ($entries as $sourceEntry) {
+            // Extraire les valeurs texte de l'entrée source
+            $fieldValues = $this->extractEntryFieldValues($sourceEntry);
+            // Filtrer les champs textuels uniquement (pas les relations, media, dates)
+            $textFields = [];
+            foreach ($fieldValues as $slug => $val) {
+                // Garder tous les champs; l'IA traduira les textes, les autres restent inchangés
+                if (is_string($val) && $val !== '') $textFields[$slug] = $val;
+            }
+
+            if (empty($textFields)) continue;
+
+            // Construire le prompt de traduction
+            $promptJson = json_encode($textFields, JSON_UNESCAPED_UNICODE);
+            $langNames = implode(', ', $targetLocales);
+
+            foreach ($targetLocales as $targetLocale) {
+                try {
+                    // Appeler l'IA pour traduire
+                    $aiPrompt = "Translate the following JSON content from $sourceLocale to $targetLocale. "
+                        . "Return ONLY the translated JSON, same structure. Preserve all keys exactly."
+                        . "\n\n$promptJson";
+
+                    $translated = $this->aiService->ask($aiPrompt);
+                    $translatedData = json_decode($translated, true);
+
+                    if (!is_array($translatedData)) {
+                        $errors++; continue;
+                    }
+
+                    // Créer la nouvelle entrée dans la locale cible
+                    $newEntry = new \App\Entity\ContentEntry();
+                    $newEntry->project = $project;
+                    $newEntry->collection = $collection;
+                    $newEntry->locale = $targetLocale;
+                    $newEntry->status = $sourceEntry->status;
+                    $this->em->persist($newEntry);
+                    $this->em->flush();
+
+                    // Fusionner: valeurs traduites + valeurs non-textuelles de la source
+                    $mergedData = array_merge($fieldValues, $translatedData);
+                    $this->saveFieldValues($newEntry, $collection, $mergedData);
+                    $created++;
+                } catch (\Throwable $e) {
+                    $errors++;
+                    $this->logger->error('executeTranslateEntries failed', [
+                        'collection' => $collectionSlug,
+                        'locale'     => $targetLocale,
+                        'error'      => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+        $this->em->flush();
+        return ['created' => $created, 'errors' => $errors, 'source_locale' => $sourceLocale, 'target_locales' => $targetLocales];
     }
 
     private function executeReadEntries(Project $project, array $params): array

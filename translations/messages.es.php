@@ -1253,6 +1253,8 @@ return [
     'studio.chat.entry_single'          => 'entrada',
     'studio.chat.entry_label'           => 'Entrada',
     'studio.chat.default_reply'         => 'Generado.',
+    'studio.chat.plan_title'            => 'Plan de ejecución',
+    'studio.chat.execute_plan'          => 'Ejecutar plan',
     'studio.chat.entries_applied'       => '✅ {created} entrada(s) creada(s), {errors} error(es).',
     'studio.chat.entries_ok'            => 'OK — Anotado',
     'studio.chat.no_result'             => 'No puedo generar un esquema para esta solicitud. ¿Puedes ser más específico?',
