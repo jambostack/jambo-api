@@ -177,7 +177,7 @@ function SchemaChatPanel({
       if (!res.ok || data.error) throw new Error(data.error);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: data.reply ?? 'Généré.',
+        content: data.reply ?? t('studio.chat.default_reply'),
         schema: data.collections ?? undefined,
         entries: data.entries ?? undefined,
       }]);
@@ -217,14 +217,15 @@ function SchemaChatPanel({
     const parts = [];
     if (newCollections.length > 0) parts.push(t('studio.chat.applied', { count: newCollections.length }));
     if (existingEndUserFields.length > 0) parts.push('👤 ' + t('studio.chat.enduser_fields_added', { count: existingEndUserFields.length }));
-    setMessages(prev => [...prev, { role: 'system', content: parts.join(' — ') || 'OK', schema: undefined }]);
+    setMessages(prev => [...prev, { role: 'system', content: parts.join(' — ') || t('common.ok'), schema: undefined }]);
     scrollDown();
   }
 
   function handleApplyEntries(entries: NonNullable<ChatMessage['entries']>) {
     // Pour l'instant, afficher les entrées dans le chat comme un aperçu
     // La création réelle en base nécessite un endpoint dédié (future itération)
-    const totalEntries = entries.reduce((sum, e) => sum + (e.entries?.length ?? 0), 0);
+    if (!Array.isArray(entries)) return;
+    const totalEntries = entries.reduce((sum, e) => sum + (Array.isArray(e?.entries) ? e.entries.length : (e?.entry ? 1 : 0)), 0);
     setMessages(prev => [...prev, { role: 'system', content: t('studio.chat.entries_generated', { total: String(totalEntries), collections: String(entries.length) }), schema: undefined }]);
     scrollDown();
   }
@@ -310,23 +311,27 @@ function SchemaChatPanel({
               )}
 
               {/* Data card (entries) */}
-              {m.entries && m.entries.length > 0 && m.entries.map((entryGroup, gi) => (
+              {m.entries && m.entries.length > 0 && m.entries.map((entryGroup, gi) => {
+                const egEntries = Array.isArray(entryGroup?.entries) ? entryGroup.entries : (entryGroup?.entry ? [entryGroup.entry] : []);
+                if (!entryGroup?.collection && egEntries.length === 0) return null;
+                return (
                 <div key={gi} className="scp-data-card">
-                  <h5>📊 {entryGroup.collection} — {entryGroup.entries.length} entrée{entryGroup.entries.length>1?'s':''}</h5>
-                  {entryGroup.entries.slice(0, 3).map((entry, ei) => (
+                  <h5>📊 {entryGroup.collection || t('studio.chat.data_entries')} — {egEntries.length} {t('studio.chat.entry_count', { count: String(egEntries.length) })}</h5>
+                  {egEntries.slice(0, 3).map((entry, ei) => (
                     <div key={ei} className="scp-data-entry">
-                      <div style={{ fontWeight:600, color:'var(--studio-text)', fontSize:'10.5px' }}>{ei + 1}. {entry.title || entry.name || 'Entrée ' + (ei+1)}</div>
+                      <div style={{ fontWeight:600, color:'var(--studio-text)', fontSize:'10.5px' }}>{ei + 1}. {entry?.title || entry?.name || (t('studio.chat.entry_label') + ' ' + (ei+1))}</div>
                       <div style={{ color:'var(--studio-text-muted)', fontSize:'10px' }}>
-                        {Object.entries(entry).filter(([k]) => !['title','name','slug'].includes(k)).slice(0, 3).map(([k,v]) => (
+                        {entry && Object.entries(entry).filter(([k]) => !['title','name','slug'].includes(k)).slice(0, 3).map(([k,v]) => (
                           <span key={k} style={{ marginRight:'8px' }}>{k}: <span style={{ color:'var(--studio-text-dim)' }}>{typeof v === 'string' ? v.slice(0, 40) + (v.length>40?'…':'') : String(v)}</span></span>
                         ))}
-                        {Object.keys(entry).length > 6 && <span style={{ color:'var(--studio-text-muted)' }}>…</span>}
+                        {entry && Object.keys(entry).length > 6 && <span style={{ color:'var(--studio-text-muted)' }}>…</span>}
                       </div>
                     </div>
                   ))}
                   <button className="scp-apply-btn" style={{ background:'#61afef' }} onClick={() => handleApplyEntries(m.entries!)}><Check className="w-3 h-3" />{t('studio.chat.entries_ok')}</button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}
