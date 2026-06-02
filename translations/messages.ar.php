@@ -1242,6 +1242,8 @@ return [
     'studio.chat.enduser_fields_added'  => '{count} حقل (حقول) مخصصة تمت إضافتها إلى EndUsers.',
     'studio.chat.data_entries'          => 'بيانات',
     'studio.chat.entry_count'           => '{count} إدخال/إدخالات',
+    'studio.chat.entries'               => 'إدخالات',
+    'studio.chat.entry_single'          => 'إدخال',
     'studio.chat.entry_label'           => 'إدخال',
     'studio.chat.default_reply'         => 'تم الإنشاء.',
     'studio.chat.entries_applied'       => '✅ {created} إدخال تم إنشاؤها، {errors} خطأ.',

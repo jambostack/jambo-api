@@ -702,15 +702,15 @@ PROMPT;
             return $this->json(['success' => true, 'uuid' => $existing->uuid?->toRfc4122(), 'existed' => true]);
         }
 
-        $endUser = new \App\Entity\EndUser();
-        $endUser->project = $project;
-        $endUser->email = $email;
+        $endUser = new \App\Entity\EndUser($project, $email);
         $endUser->name = $data['name'] ?? '';
-        $endUser->status = 'active';
+        $endUser->status = $data['status'] ?? 'active';
+        // Mot de passe aléatoire (non utilisé — l'utilisateur pourra le réinitialiser)
+        $endUser->password = bin2hex(random_bytes(16));
 
-        // Champs personnalisÃ©s
+        // Champs personnalisés
         $customData = [];
-        $systemFields = ['email', 'name', 'status', 'avatar_url', 'uuid', 'id', 'created_at', 'updated_at'];
+        $systemFields = ['email', 'name', 'status', 'avatar_url', 'uuid', 'id', 'created_at', 'updated_at', 'password'];
         foreach ($data as $k => $v) {
             if (!in_array($k, $systemFields, true)) {
                 $customData[$k] = $v;
