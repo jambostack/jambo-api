@@ -1259,8 +1259,9 @@ PROMPT;
                 $this->logger->error('ai-execute tool failed', [
                     'tool'   => $tool,
                     'error'  => $e->getMessage(),
+                    'trace'  => $e->getTraceAsString(),
                 ]);
-                $result = ['error' => $e->getMessage()];
+                $result = ['error' => 'Internal error executing tool. Check server logs for details.'];
             }
 
             // Prévenir le frontend si une confirmation est nécessaire
