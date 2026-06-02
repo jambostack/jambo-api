@@ -590,8 +590,9 @@ class PageController extends InertiaController
         $this->em->flush();
 
         // Rediriger vers la page d'où vient la requête (liste ou détail)
+        // Validation du referer pour prévenir l'open redirect
         $referer = $request->headers->get('referer');
-        if ($referer) {
+        if ($referer && parse_url($referer, PHP_URL_HOST) === $request->getHost()) {
             return $this->redirect($referer);
         }
         return $this->redirectToRoute('projects_settings_end_users', ['project' => $project->id]);
