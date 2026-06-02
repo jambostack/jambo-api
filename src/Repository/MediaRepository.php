@@ -61,13 +61,14 @@ class MediaRepository extends ServiceEntityRepository
             ->andWhere('m.deletedAt IS NULL')
             ->setParameter('project', $project);
 
-        // Doctrine ORM 3.x ne convertit pas correctement les tableaux
-        // de Uuid objects pour IN() — on utilise des conditions OR individuelles.
+        // Doctrine ORM 3.x ne convertit pas correctement les tableaux d'UUIDs
+        // pour IN(). On utilise findOneBy-style avec des conditions OR individuelles
+        // en passant les strings brutes (Doctrine gère la conversion via le type uuid).
         $orParts = [];
         foreach ($uuids as $i => $u) {
             $key = 'uid' . $i;
             $orParts[] = 'm.uuid = :' . $key;
-            $qb->setParameter($key, \Symfony\Component\Uid\Uuid::fromString($u));
+            $qb->setParameter($key, $u);
         }
         $qb->andWhere(implode(' OR ', $orParts));
 
