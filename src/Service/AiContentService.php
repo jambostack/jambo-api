@@ -368,6 +368,134 @@ PROMPT;
         ];
     }
 
+    /**
+     * Retourne le profil de capacités basé sur les providers activés.
+     */
+    public function getCapabilities(): array
+    {
+        $providers = $this->resolveProviders();
+        $hasText = false;
+        $hasImages = false;
+        $textProvider = null;
+        $imageProvider = null;
+        $textModel = '';
+        $limits = [];
+
+        foreach ($providers as $name => $cfg) {
+            $hasText = true;
+            if ($textProvider === null) {
+                $textProvider = $name;
+                $textModel = $cfg['model'];
+            }
+            // Providers avec génération d'images
+            if (in_array($name, ['openai', 'gemini'], true)) {
+                $hasImages = true;
+                if ($imageProvider === null) $imageProvider = $name;
+            }
+        }
+
+        // Ollama a des capacités limitées
+        if ($textProvider === 'ollama') {
+            $limits[] = 'qualite_limitee';
+        }
+
+        return [
+            'text'    => $hasText,
+            'images'  => $hasImages,
+            'voice'   => false,
+            'provider'    => $textProvider,
+            'model'       => $textModel,
+            'image_provider' => $imageProvider,
+            'limits'    => $limits,
+            'available' => $hasText,
+        ];
+    }
+
+    /**
+     * Génère une image via DALL-E ou Gemini Imagen.
+     * Retourne l'URL de l'image ou null si pas de provider image.
+     */
+    public function generateImage(string $prompt, string $size = '1024x1024'): ?string
+    {
+        $caps = $this->getCapabilities();
+        if (!$caps['images'] || $caps['image_provider'] === null) {
+            return null;
+        }
+
+        $providers = $this->resolveProviders();
+        $imageProvider = $caps['image_provider'];
+        $cfg = $providers[$imageProvider];
+
+        try {
+            if ($imageProvider === 'openai') {
+                $response = $this->httpClient->request('POST', 'https://api.openai.com/v1/images/generations', [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $cfg['key'],
+                        'Content-Type'  => 'application/json',
+                    ],
+                    'json' => [
+                        'model'  => 'dall-e-3',
+                        'prompt' => $prompt,
+                        'n'      => 1,
+                        'size'   => $size,
+                    ],
+                    'timeout' => 60,
+                ]);
+                $data = $response->toArray();
+                return $data['data'][0]['url'] ?? null;
+            }
+
+            if ($imageProvider === 'gemini') {
+                // Gemini Imagen via generateContent avec responseModalities
+                $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent';
+                $response = $this->httpClient->request('POST', $endpoint, [
+                    'headers' => [
+                        'Content-Type'  => 'application/json',
+                        'x-goog-api-key' => $cfg['key'],
+                    ],
+                    'json' => [
+                        'contents' => [['parts' => [['text' => $prompt]]]],
+                        'generationConfig' => ['responseModalities' => ['Text', 'Image']],
+                    ],
+                    'timeout' => 60,
+                ]);
+                $data = $response->toArray();
+                // Extraction de l'image inline (base64)
+                foreach ($data['candidates'][0]['content']['parts'] ?? [] as $part) {
+                    if (isset($part['inlineData'])) {
+                        return 'data:' . ($part['inlineData']['mimeType'] ?? 'image/png')
+                            . ';base64,' . $part['inlineData']['data'];
+                    }
+                }
+                return null;
+            }
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Génère un placeholder SVG professionnel quand pas de provider image.
+     */
+    public function generatePlaceholder(string $text, string $width = '800', string $height = '600'): string
+    {
+        $bg = '0e1611';
+        $accent = '2fcf8f';
+        $textColor = '99a89f';
+        $fontSize = '28';
+        $encoded = htmlspecialchars($text, ENT_XML1, 'UTF-8');
+        return 'data:image/svg+xml,' . rawurlencode(<<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="$width" height="$height" viewBox="0 0 $width $height">
+  <rect width="$width" height="$height" fill="#$bg"/>
+  <rect x="1" y="1" width="$width-2" height="$height-2" fill="none" stroke="#$accent" stroke-opacity="0.15" rx="12"/>
+  <circle cx="$width/2" cy="$height/2-30" r="50" fill="none" stroke="#$accent" stroke-opacity="0.1" stroke-width="2"/>
+  <text x="$width/2" y="$height/2+30" text-anchor="middle" fill="#$textColor" font-family="system-ui,sans-serif" font-size="$fontSize" font-weight="600">$encoded</text>
+</svg>
+SVG);
+    }
+
     private function describeFields(Collection $collection): string
     {
         $lines = [];

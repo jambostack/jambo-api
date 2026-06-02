@@ -3,15 +3,22 @@
 namespace App\Controller;
 
 use App\Entity\Collection;
+use App\Entity\ContentEntry;
+use App\Entity\ContentFieldValue;
 use App\Entity\Field;
+use App\Entity\Media;
 use App\Entity\Project;
+use App\Entity\StudioChatMessage;
 use App\Repository\AppSettingsRepository;
+use App\Repository\MediaRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\StudioChatMessageRepository;
+use App\Service\AiContentService;
 use Doctrine\Inflector\Inflector;
 use Doctrine\Inflector\InflectorFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\HttpFoundation\File\File as HttpFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -30,6 +37,8 @@ class StudioController extends InertiaController
         private readonly StudioChatMessageRepository $chatMessageRepository,
         private readonly \App\Repository\EndUserRepository $endUserRepository,
         private readonly \Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface $passwordHasher,
+        private readonly \App\Repository\MediaRepository $mediaRepository,
+        private readonly \App\Service\AiContentService $aiService,
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
 
@@ -1161,6 +1170,415 @@ PROMPT;
             'updated' => $updated,
             'deleted' => $deleted,
         ]);
+    }
+
+    // ════════════════════ AGENT IA v3 — Endpoints ════════════════════
+
+    /**
+     * Retourne le profil de capacités du provider IA configuré.
+     */
+    #[Route('/api/projects/{uuid}/studio/ai-capabilities', name: 'studio_ai_capabilities', methods: ['GET'])]
+    public function aiCapabilities(string $uuid): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.view', $project);
+
+        return $this->json($this->aiService->getCapabilities());
+    }
+
+    /**
+     * Exécute un plan d'actions généré par l'IA (collections, entrées, images).
+     */
+    #[Route('/api/projects/{uuid}/studio/ai-execute', name: 'studio_ai_execute', methods: ['POST'])]
+    public function aiExecute(string $uuid, Request $request): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.manage', $project);
+
+        $body = json_decode($request->getContent(), true);
+        $actions = $body['actions'] ?? [];
+        if (empty($actions)) return $this->json(['error' => 'Aucune action fournie'], 422);
+
+        $log = [];
+        $halt = false;
+
+        foreach ($actions as $action) {
+            if ($halt) break;
+
+            $tool   = $action['tool'] ?? '';
+            $params = $action['params'] ?? [];
+
+            $result = match ($tool) {
+                'create_collections' => $this->executeCreateCollections($project, $params),
+                'create_entries'     => $this->executeCreateEntries($project, $params),
+                'update_entries'     => $this->executeUpdateEntries($project, $params),
+                'delete_entries'     => $this->executeDeleteEntries($project, $params),
+                'generate_images'    => $this->executeGenerateImages($project, $params),
+                'read_entries'       => $this->executeReadEntries($project, $params),
+                'explore_schema'     => $this->executeExploreSchema($project),
+                default              => ['error' => "Tool '$tool' inconnu"],
+            };
+
+            // Prévenir le frontend si une confirmation est nécessaire
+            if (in_array($tool, ['update_entries', 'delete_entries']) && !($body['auto_confirm'] ?? false)) {
+                $result['needs_confirmation'] = true;
+                $halt = true;
+            }
+
+            $log[] = ['tool' => $tool, 'result' => $result];
+        }
+
+        return $this->json(['log' => $log, 'halted' => $halt]);
+    }
+
+    /**
+     * Génère une image via le provider IA et l'upload dans la médiathèque.
+     */
+    #[Route('/api/projects/{uuid}/studio/ai-generate-image', name: 'studio_ai_generate_image', methods: ['POST'])]
+    public function aiGenerateImage(string $uuid, Request $request): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.manage', $project);
+
+        $body = json_decode($request->getContent(), true);
+        $prompt = $body['prompt'] ?? '';
+        if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
+
+        // Tenter la génération via le provider
+        $imageUrl = $this->aiService->generateImage($prompt);
+        if ($imageUrl === null) {
+            // Fallback placeholder
+            $placeholder = $this->aiService->generatePlaceholder($body['label'] ?? 'Jambo');
+            return $this->json(['url' => $placeholder, 'type' => 'placeholder']);
+        }
+
+        // Télécharger l'image et l'uploader dans la médiathèque
+        try {
+            $imageData = file_get_contents($imageUrl);
+            if ($imageData === false) throw new \RuntimeException('Download failed');
+
+            $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_ai_img_');
+            file_put_contents($tmpFile, $imageData);
+
+            $media = new \App\Entity\Media();
+            $media->project = $project;
+            $media->originalName = 'ai-generated-' . substr(md5($prompt), 0, 8) . '.png';
+            $media->alt = $body['alt'] ?? $prompt;
+            $media->setFile(new \Symfony\Component\HttpFoundation\File\File($tmpFile));
+            $this->em->persist($media);
+            $this->em->flush();
+
+            @unlink($tmpFile);
+
+            return $this->json([
+                'url'  => $media->getPublicUrl(),
+                'uuid' => $media->uuid?->toRfc4122(),
+                'type' => 'generated',
+            ]);
+        } catch (\Throwable $e) {
+            $placeholder = $this->aiService->generatePlaceholder($body['label'] ?? 'Jambo');
+            return $this->json(['url' => $placeholder, 'type' => 'placeholder', 'error' => $e->getMessage()]);
+        }
+    }
+
+    // ═══════════════ TOOL EXECUTORS ═══════════════
+
+    private function executeCreateCollections(Project $project, array $params): array
+    {
+        $collections = $params['collections'] ?? [];
+        if (empty($collections)) return ['error' => 'Aucune collection fournie'];
+
+        $normalized = $this->normalizeSchema($collections);
+        $created = 0;
+
+        foreach ($normalized as $colData) {
+            if (empty($colData['name'])) continue;
+            $slug = $colData['slug'];
+            $existing = $this->em->getRepository(Collection::class)
+                ->findOneBy(['project' => $project, 'slug' => $slug, 'deletedAt' => null]);
+            if ($existing) continue;
+
+            $collection = new Collection();
+            $collection->project = $project;
+            $collection->name = $colData['name'];
+            $collection->slug = $slug;
+            $collection->description = $colData['description'] ?? null;
+            $collection->isSingleton = $colData['isSingleton'] ?? false;
+            $this->em->persist($collection);
+
+            $order = 0;
+            foreach ($colData['fields'] ?? [] as $fData) {
+                if (empty($fData['name'])) continue;
+                $field = new Field();
+                $field->collection = $collection;
+                $field->name = $fData['name'];
+                $field->slug = $fData['slug'] ?: $slug . '_' . $order;
+                $field->type = $fData['type'] ?? 'text';
+                $field->isRequired = $fData['isRequired'] ?? false;
+                $field->options = $fData['options'] ?? null;
+                $field->order = $order++;
+                $this->em->persist($field);
+            }
+            $created++;
+        }
+        $this->em->flush();
+        return ['created' => $created, 'collections' => array_column($normalized, 'slug')];
+    }
+
+    private function executeCreateEntries(Project $project, array $params): array
+    {
+        $collectionSlug = $params['collection'] ?? '';
+        $entries = $params['entries'] ?? [];
+        $locales = $params['locales'] ?? null; // null = locale par défaut uniquement
+
+        if ($collectionSlug === '' || empty($entries)) {
+            return ['error' => 'Collection et entries requis'];
+        }
+
+        // EndUsers
+        if ($collectionSlug === 'end_users') {
+            $created = 0; $errors = 0;
+            foreach ($entries as $entryData) {
+                try {
+                    $email = $entryData['email'] ?? null;
+                    if (!$email) { $errors++; continue; }
+                    $existing = $this->em->getRepository(\App\Entity\EndUser::class)
+                        ->findOneBy(['project' => $project, 'email' => $email]);
+                    if ($existing) continue;
+                    $endUser = new \App\Entity\EndUser($project, $email);
+                    $endUser->name = $entryData['name'] ?? '';
+                    $endUser->password = $this->passwordHasher->hashPassword($endUser, bin2hex(random_bytes(16)));
+                    $customData = [];
+                    foreach ($entryData as $k => $v) {
+                        if (!in_array($k, ['email','name','status','password'], true)) $customData[$k] = $v;
+                    }
+                    if ($customData) $endUser->customFields = $customData;
+                    $this->em->persist($endUser);
+                    $created++;
+                } catch (\Throwable) { $errors++; }
+            }
+            $this->em->flush();
+            return ['created' => $created, 'errors' => $errors];
+        }
+
+        // Collection standard
+        $collection = $this->em->getRepository(Collection::class)
+            ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
+        if (!$collection) return ['error' => "Collection '$collectionSlug' introuvable"];
+
+        $targetLocales = $locales ?? [$project->defaultLocale];
+        $created = 0; $errors = 0;
+
+        foreach ($entries as $entryData) {
+            foreach ($targetLocales as $locale) {
+                try {
+                    $entry = new \App\Entity\ContentEntry();
+                    $entry->project = $project;
+                    $entry->collection = $collection;
+                    $entry->locale = $locale;
+                    $entry->status = $entryData['status'] ?? 'published';
+                    $this->em->persist($entry);
+                    $this->em->flush();
+
+                    $this->saveFieldValues($entry, $collection, $entryData);
+                    $created++;
+                } catch (\Throwable) { $errors++; }
+            }
+        }
+        $this->em->flush();
+        return ['created' => $created, 'errors' => $errors];
+    }
+
+    private function executeUpdateEntries(Project $project, array $params): array
+    {
+        $collectionSlug = $params['collection'] ?? '';
+        $uuids = $params['uuids'] ?? [];
+        $patch = $params['patch'] ?? [];
+
+        if (empty($uuids) || empty($patch)) return ['error' => 'uuids et patch requis'];
+        if ($collectionSlug === '') return ['error' => 'Collection requise'];
+
+        $collection = $this->em->getRepository(Collection::class)
+            ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
+        if (!$collection) return ['error' => 'Collection introuvable'];
+
+        $updated = 0;
+        foreach ($uuids as $uuid) {
+            $entry = $this->em->getRepository(\App\Entity\ContentEntry::class)
+                ->findOneBy(['uuid' => $uuid, 'collection' => $collection]);
+            if (!$entry) continue;
+
+            foreach ($patch as $slug => $value) {
+                $field = $this->em->getRepository(Field::class)
+                    ->findOneBy(['collection' => $collection, 'slug' => $slug]);
+                if (!$field || $field->isDeleted()) continue;
+
+                // Chercher field value existante
+                $fv = null;
+                foreach ($entry->fieldValues as $existingFv) {
+                    if ($existingFv->field?->id === $field->id) { $fv = $existingFv; break; }
+                }
+                if (!$fv) {
+                    $fv = new \App\Entity\ContentFieldValue();
+                    $fv->contentEntry = $entry;
+                    $fv->field = $field;
+                    $fv->fieldType = $field->type;
+                    $entry->fieldValues->add($fv);
+                    $this->em->persist($fv);
+                }
+
+                $fv->fieldType = $field->type;
+                match ($field->type) {
+                    'number', 'decimal'              => $fv->numberValue   = $value !== null ? (string) $value : null,
+                    'boolean', 'checkbox'            => $fv->booleanValue  = (bool) $value,
+                    'date'                           => $fv->dateValue     = $value ? new \DateTime($value) : null,
+                    'datetime'                       => $fv->datetimeValue = $value ? new \DateTime($value) : null,
+                    'json', 'array'                  => $fv->jsonValue     = is_array($value) ? $value : json_decode($value, true),
+                    default                          => $fv->textValue     = $value,
+                };
+            }
+            $updated++;
+        }
+        $this->em->flush();
+        return ['updated' => $updated];
+    }
+
+    private function executeDeleteEntries(Project $project, array $params): array
+    {
+        $collectionSlug = $params['collection'] ?? '';
+        $uuids = $params['uuids'] ?? [];
+
+        if ($collectionSlug === '') return ['error' => 'Collection requise'];
+        if (empty($uuids)) return ['deleted' => 0];
+
+        $collection = $this->em->getRepository(Collection::class)
+            ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
+        if (!$collection) return ['error' => 'Collection introuvable'];
+
+        $deleted = 0;
+        foreach ($uuids as $uuid) {
+            $entry = $this->em->getRepository(\App\Entity\ContentEntry::class)
+                ->findOneBy(['uuid' => $uuid, 'collection' => $collection]);
+            if ($entry) {
+                $entry->deletedAt = new \DateTimeImmutable();
+                $this->em->persist($entry);
+                $deleted++;
+            }
+        }
+        $this->em->flush();
+        return ['deleted' => $deleted];
+    }
+
+    private function executeGenerateImages(Project $project, array $params): array
+    {
+        $prompts = $params['prompts'] ?? [];
+        if (empty($prompts)) return ['error' => 'Aucun prompt'];
+
+        // Vérifier si le provider supporte les images
+        $caps = $this->aiService->getCapabilities();
+        if (!$caps['images']) {
+            // Fallback placeholders
+            $results = [];
+            foreach ($prompts as $p) {
+                $results[] = [
+                    'url'  => $this->aiService->generatePlaceholder($p['label'] ?? 'Jambo'),
+                    'type' => 'placeholder',
+                ];
+            }
+            return ['images' => $results, 'warning' => 'provider_images_indisponible'];
+        }
+
+        $results = [];
+        foreach ($prompts as $p) {
+            $imageUrl = $this->aiService->generateImage($p['description'] ?? $p['label'] ?? '');
+            if ($imageUrl) {
+                try {
+                    $imageData = file_get_contents($imageUrl);
+                    if ($imageData) {
+                        $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_ai_');
+                        file_put_contents($tmpFile, $imageData);
+                        $media = new \App\Entity\Media();
+                        $media->project = $project;
+                        $media->originalName = 'ai-' . substr(md5($p['description'] ?? ''), 0, 8) . '.png';
+                        $media->alt = $p['alt'] ?? ($p['label'] ?? '');
+                        $media->setFile(new \Symfony\Component\HttpFoundation\File\File($tmpFile));
+                        $this->em->persist($media);
+                        $this->em->flush();
+                        @unlink($tmpFile);
+                        $results[] = ['url' => $media->getPublicUrl(), 'uuid' => $media->uuid?->toRfc4122(), 'type' => 'generated'];
+                        continue;
+                    }
+                } catch (\Throwable) {}
+            }
+            $results[] = ['url' => $this->aiService->generatePlaceholder($p['label'] ?? 'Jambo'), 'type' => 'placeholder'];
+        }
+        $this->em->flush();
+        return ['images' => $results];
+    }
+
+    private function executeReadEntries(Project $project, array $params): array
+    {
+        $collectionSlug = $params['collection'] ?? '';
+        $locale = $params['locale'] ?? $project->defaultLocale;
+        $limit = min(100, $params['limit'] ?? 50);
+
+        if ($collectionSlug === '') return ['error' => 'Collection requise'];
+
+        $collection = $this->em->getRepository(Collection::class)
+            ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
+        if (!$collection) return ['entries' => []];
+
+        $entries = $this->em->getRepository(\App\Entity\ContentEntry::class)
+            ->findByCollectionPaginated($collection, 1, $limit, $locale);
+
+        return [
+            'collection' => $collectionSlug,
+            'count'      => count($entries),
+            'entries'    => array_map(fn ($e) => [
+                'uuid' => $e->uuid?->toRfc4122(),
+                'locale' => $e->locale,
+                'status' => $e->status,
+                'fields' => $this->extractEntryFieldValues($e),
+            ], $entries),
+        ];
+    }
+
+    private function executeExploreSchema(Project $project): array
+    {
+        $collections = $this->em->getRepository(Collection::class)
+            ->findBy(['project' => $project, 'deletedAt' => null], ['order' => 'ASC']);
+
+        return [
+            'collections' => array_map(function (Collection $c) {
+                $fields = [];
+                foreach ($c->fields as $f) {
+                    if ($f->isDeleted()) continue;
+                    $fields[] = [
+                        'name' => $f->name, 'slug' => $f->slug,
+                        'type' => $f->type, 'isRequired' => $f->isRequired,
+                        'options' => $f->options,
+                    ];
+                }
+                return [
+                    'name' => $c->name, 'slug' => $c->slug,
+                    'description' => $c->description,
+                    'isSingleton' => $c->isSingleton,
+                    'fields' => $fields,
+                ];
+            }, $collections),
+        ];
+    }
+
+    private function extractEntryFieldValues(\App\Entity\ContentEntry $entry): array
+    {
+        $values = [];
+        foreach ($entry->fieldValues as $fv) {
+            $values[$fv->field?->slug ?? ''] = $fv->getValue();
+        }
+        return $values;
     }
 
     /**
