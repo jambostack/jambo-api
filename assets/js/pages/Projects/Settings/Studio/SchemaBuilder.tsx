@@ -83,9 +83,9 @@ function SchemaChatPanel({
     (async () => {
       try {
         const res = await fetch(`/api/projects/${project.uuid}/studio/chat-messages`);
-        const data = await res.json() as { data?: Array<{ role: string; content: string; schema: any }> };
+        const data = await res.json() as { data?: Array<{ role: string; content: string; schema: any; entries: any }> };
         if (cancelled) return;
-        const loaded = (data.data ?? []).map(m => ({ role: m.role as ChatMessage['role'], content: m.content, schema: m.schema ?? undefined }));
+        const loaded = (data.data ?? []).map(m => ({ role: m.role as ChatMessage['role'], content: m.content, schema: m.schema ?? undefined, entries: m.entries ?? undefined }));
         if (loaded.length === 0) {
           loaded.push({ role: 'assistant' as const, content: t('studio.chat.welcome_v2'), schema: undefined });
         }
@@ -177,7 +177,7 @@ function SchemaChatPanel({
     try {
       const res = await fetch(`/api/projects/${project.uuid}/studio/ai-chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command, prompt, context: buildContext(), history: messages.slice(-6).map(m => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({ command, prompt, context: buildContext(), history: messages.slice(-20).map(m => ({ role: m.role, content: m.content })) }),
       });
       const data = await res.json() as { reply?: string; collections?: any[]; entries?: any[]; error?: string };
       if (!res.ok || data.error) throw new Error(data.error);
