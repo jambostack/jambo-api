@@ -1283,7 +1283,7 @@ PROMPT;
                 'error'   => $e->getMessage(),
             ]);
             $placeholder = $this->aiService->generatePlaceholder($body['label'] ?? 'Jambo');
-            return $this->json(['url' => $placeholder, 'type' => 'placeholder', 'error' => $e->getMessage()]);
+            return $this->json(['url' => $placeholder, 'type' => 'placeholder', 'error' => 'Image generation failed. Using placeholder instead.']);
         } finally {
             if ($tmpFile !== null) @unlink($tmpFile);
         }
