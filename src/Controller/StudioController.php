@@ -1256,8 +1256,9 @@ PROMPT;
         }
 
         // Télécharger l'image et l'uploader dans la médiathèque
+        $tmpFile = null;
         try {
-            $imageData = file_get_contents($imageUrl);
+            $imageData = @file_get_contents($imageUrl);
             if ($imageData === false) throw new \RuntimeException('Download failed');
 
             $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_ai_img_');
@@ -1271,16 +1272,20 @@ PROMPT;
             $this->em->persist($media);
             $this->em->flush();
 
-            @unlink($tmpFile);
-
             return $this->json([
                 'url'  => $media->getPublicUrl(),
                 'uuid' => $media->uuid?->toRfc4122(),
                 'type' => 'generated',
             ]);
         } catch (\Throwable $e) {
+            $this->logger->error('AI image generation upload failed', [
+                'project' => $uuid,
+                'error'   => $e->getMessage(),
+            ]);
             $placeholder = $this->aiService->generatePlaceholder($body['label'] ?? 'Jambo');
             return $this->json(['url' => $placeholder, 'type' => 'placeholder', 'error' => $e->getMessage()]);
+        } finally {
+            if ($tmpFile !== null) @unlink($tmpFile);
         }
     }
 
@@ -1297,8 +1302,17 @@ PROMPT;
         foreach ($normalized as $colData) {
             if (empty($colData['name'])) continue;
             $slug = $colData['slug'];
-            $existing = $this->em->getRepository(Collection::class)
-                ->findOneBy(['project' => $project, 'slug' => $slug, 'deletedAt' => null]);
+
+            // Chercher d'abord par UUID (prioritaire), puis par slug
+            $existing = null;
+            if (!empty($colData['uuid'])) {
+                $existing = $this->em->getRepository(Collection::class)
+                    ->findOneBy(['project' => $project, 'uuid' => $colData['uuid'], 'deletedAt' => null]);
+            }
+            if (!$existing) {
+                $existing = $this->em->getRepository(Collection::class)
+                    ->findOneBy(['project' => $project, 'slug' => $slug, 'deletedAt' => null]);
+            }
             if ($existing) continue;
 
             $collection = new Collection();
@@ -1358,10 +1372,16 @@ PROMPT;
                     if ($customData) $endUser->customFields = $customData;
                     $this->em->persist($endUser);
                     $created++;
-                } catch (\Throwable) { $errors++; }
+                } catch (\Throwable $e) {
+                    $errors++;
+                    $this->logger->error('executeCreateEntries end_users failed', [
+                        'email' => $entryData['email'] ?? '?',
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
             $this->em->flush();
-            return ['created' => $created, 'errors' => $errors];
+            return ['created' => $created, 'errors' => $errors, 'note' => 'Mot de passe aleatoire. Utilisateurs crees sans possibilite de connexion directe.'];
         }
 
         // Collection standard
@@ -1381,15 +1401,20 @@ PROMPT;
                     $entry->locale = $locale;
                     $entry->status = $entryData['status'] ?? 'published';
                     $this->em->persist($entry);
-                    $this->em->flush();
-
+                    $this->em->flush(); // flush pour générer l'UUID avant saveFieldValues
                     $this->saveFieldValues($entry, $collection, $entryData);
                     $created++;
-                } catch (\Throwable) { $errors++; }
+                } catch (\Throwable $e) {
+                    $errors++;
+                    $this->logger->error('executeCreateEntries failed', [
+                        'collection' => $collectionSlug,
+                        'locale'     => $locale,
+                        'error'      => $e->getMessage(),
+                    ]);
+                }
             }
         }
         $this->em->flush();
-        return ['created' => $created, 'errors' => $errors];
     }
 
     private function executeUpdateEntries(Project $project, array $params): array
@@ -1405,6 +1430,13 @@ PROMPT;
             ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
         if (!$collection) return ['error' => 'Collection introuvable'];
 
+        // Pré-charger tous les champs (évite N+1 queries)
+        $fields = $this->em->getRepository(Field::class)->findByCollection($collection);
+        $fieldMap = [];
+        foreach ($fields as $f) {
+            if (!$f->isDeleted()) $fieldMap[$f->slug] = $f;
+        }
+
         $updated = 0;
         foreach ($uuids as $uuid) {
             $entry = $this->em->getRepository(\App\Entity\ContentEntry::class)
@@ -1412,9 +1444,8 @@ PROMPT;
             if (!$entry) continue;
 
             foreach ($patch as $slug => $value) {
-                $field = $this->em->getRepository(Field::class)
-                    ->findOneBy(['collection' => $collection, 'slug' => $slug]);
-                if (!$field || $field->isDeleted()) continue;
+                $field = $fieldMap[$slug] ?? null;
+                if ($field === null) continue;
 
                 // Chercher field value existante
                 $fv = null;
@@ -1433,11 +1464,13 @@ PROMPT;
                 $fv->fieldType = $field->type;
                 match ($field->type) {
                     'number', 'decimal'              => $fv->numberValue   = $value !== null ? (string) $value : null,
-                    'boolean', 'checkbox'            => $fv->booleanValue  = (bool) $value,
-                    'date'                           => $fv->dateValue     = $value ? new \DateTime($value) : null,
+                    'boolean', 'checkbox'            => $fv->booleanValue  = $value !== null ? (bool) $value : null,
+                    'date'                           => $fv->dateValue     = ($value && !str_contains((string) $value, '/')) ? new \DateTime($value) : null,
                     'datetime'                       => $fv->datetimeValue = $value ? new \DateTime($value) : null,
-                    'json', 'array'                  => $fv->jsonValue     = is_array($value) ? $value : json_decode($value, true),
-                    default                          => $fv->textValue     = $value,
+                    'time'                           => $fv->textValue     = $value !== null ? (string) $value : null,
+                    'json', 'array', 'repeater'      => $fv->jsonValue     = is_array($value) ? $value : json_decode($value, true),
+                    'media', 'relation', 'enumeration' => $fv->jsonValue   = $this->normalizeArrayOfIds($value),
+                    default                          => $fv->textValue     = $value !== null ? (string) $value : null,
                 };
             }
             $updated++;
@@ -1477,10 +1510,8 @@ PROMPT;
         $prompts = $params['prompts'] ?? [];
         if (empty($prompts)) return ['error' => 'Aucun prompt'];
 
-        // Vérifier si le provider supporte les images
         $caps = $this->aiService->getCapabilities();
         if (!$caps['images']) {
-            // Fallback placeholders
             $results = [];
             foreach ($prompts as $p) {
                 $results[] = [
@@ -1493,10 +1524,11 @@ PROMPT;
 
         $results = [];
         foreach ($prompts as $p) {
-            $imageUrl = $this->aiService->generateImage($p['description'] ?? $p['label'] ?? '');
-            if ($imageUrl) {
-                try {
-                    $imageData = file_get_contents($imageUrl);
+            $tmpFile = null;
+            try {
+                $imageUrl = $this->aiService->generateImage($p['description'] ?? $p['label'] ?? '');
+                if ($imageUrl) {
+                    $imageData = @file_get_contents($imageUrl);
                     if ($imageData) {
                         $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_ai_');
                         file_put_contents($tmpFile, $imageData);
@@ -1507,15 +1539,17 @@ PROMPT;
                         $media->setFile(new \Symfony\Component\HttpFoundation\File\File($tmpFile));
                         $this->em->persist($media);
                         $this->em->flush();
-                        @unlink($tmpFile);
                         $results[] = ['url' => $media->getPublicUrl(), 'uuid' => $media->uuid?->toRfc4122(), 'type' => 'generated'];
                         continue;
                     }
-                } catch (\Throwable) {}
+                }
+            } catch (\Throwable $e) {
+                $this->logger->error('executeGenerateImages failed', ['error' => $e->getMessage()]);
+            } finally {
+                if ($tmpFile !== null) @unlink($tmpFile);
             }
             $results[] = ['url' => $this->aiService->generatePlaceholder($p['label'] ?? 'Jambo'), 'type' => 'placeholder'];
         }
-        $this->em->flush();
         return ['images' => $results];
     }
 
