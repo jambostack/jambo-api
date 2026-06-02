@@ -73,9 +73,16 @@ function SchemaChatPanel({
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [activeCommand, setActiveCommand] = useState<StudioCommand>(null);
+  const [capabilities, setCapabilities] = useState<{ text: boolean; images: boolean; voice: boolean; provider: string | null; model: string; limits: string[] } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollDown = () => setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
+
+  // Charger les capacités IA
+  useEffect(() => {
+    fetch(`/api/projects/${project.uuid}/studio/ai-capabilities`)
+      .then(r => r.json()).then(d => setCapabilities(d)).catch(() => {});
+  }, [project.uuid]);
 
   // Charger l'historique depuis la DB au montage
   useEffect(() => {
@@ -312,6 +319,15 @@ function SchemaChatPanel({
         .scp-quick-pill:hover { border-color:var(--studio-border-active); color:var(--studio-text-dim); }
         .scp-quick-pill:disabled { opacity:.3; cursor:not-allowed; }
       `}</style>
+
+      {/* Capabilities badge */}
+      {capabilities && (
+        <div className="scp-capabilities" style={{ display:'flex', gap:'8px', padding:'5px 10px', fontSize:'10px', fontFamily:'var(--studio-mono)', color:'var(--studio-text-muted)', borderBottom:'1px solid var(--studio-border)', flexShrink:0 }}>
+          <span style={{ color: capabilities.text ? 'var(--studio-accent)' : '#e06c75' }}>{capabilities.text ? '🟢 Texte' : '🔴 Texte'}{capabilities.provider ? ` (${capabilities.model})` : ''}</span>
+          <span style={{ color: capabilities.images ? 'var(--studio-accent)' : '#e06c75' }}>{capabilities.images ? '🟢 Images' : '🔴 Images'}</span>
+          {capabilities.limits.includes('qualite_limitee') && <span style={{ color:'var(--studio-amber)' }}>⚠️ Qualité limitée</span>}
+        </div>
+      )}
 
       {/* Messages */}
       <div className="scp-messages">
