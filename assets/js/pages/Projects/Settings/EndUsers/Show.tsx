@@ -21,9 +21,8 @@ interface Props {
     userCan: UserCan;
 }
 
-export default function EndUsersShow({ project, endUser: initialEndUser }: Props) {
+export default function EndUsersShow({ project, endUser }: Props) {
     const t = useTranslation();
-    const [endUser, setEndUser] = useState(initialEndUser);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [statusLoading, setStatusLoading] = useState(false);
 
@@ -38,37 +37,29 @@ export default function EndUsersShow({ project, endUser: initialEndUser }: Props
         return endUser.email.substring(0, 2).toUpperCase();
     }
 
-    async function toggleBan() {
+    function toggleBan() {
         setStatusLoading(true);
         const newStatus = endUser.status === 'banned' ? 'active' : 'banned';
-        try {
-            const res = await fetch(
-                route('projects.settings.end-users.status', { project: project.id, endUserUuid: endUser.uuid }),
-                { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }, body: JSON.stringify({ status: newStatus }) }
-            );
-            if (res.ok) {
-                toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success'));
-                setEndUser(prev => ({ ...prev, status: newStatus }));
-            } else {
-                toast.error(t('end_users.status_error'));
+        router.patch(
+            route('projects.settings.end-users.status', { project: project.id, endUserUuid: endUser.uuid }),
+            { status: newStatus },
+            {
+                onSuccess: () => toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success')),
+                onError: () => toast.error(t('end_users.status_error')),
+                onFinish: () => setStatusLoading(false),
             }
-        } catch (e) { toast.error(t('end_users.status_error')); }
-        setStatusLoading(false);
+        );
     }
 
-    async function executeDelete() {
-        try {
-            const res = await fetch(
-                route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: endUser.uuid }),
-                { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } }
-            );
-            if (res.ok) {
-                toast.success(t('end_users.deleted'));
-                router.visit(route('projects.settings.end-users', project.id));
-            } else {
-                toast.error(t('end_users.delete_error'));
+    function executeDelete() {
+        // Le backend DELETE redirige vers la liste -> Inertia suit automatiquement
+        router.delete(
+            route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: endUser.uuid }),
+            {
+                onSuccess: () => toast.success(t('end_users.deleted')),
+                onError: () => toast.error(t('end_users.delete_error')),
             }
-        } catch (e) { toast.error(t('end_users.delete_error')); }
+        );
     }
 
     function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
