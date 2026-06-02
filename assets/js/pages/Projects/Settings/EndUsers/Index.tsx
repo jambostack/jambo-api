@@ -76,38 +76,28 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
         setDeleteTarget(endUser);
     }
 
-    async function executeDelete() {
+    function executeDelete() {
         if (!deleteTarget) return;
-        try {
-            const res = await fetch(
-                route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: deleteTarget.uuid }),
-                { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } }
-            );
-            if (res.ok) {
-                setDeleteTarget(null);
-                setSelected(prev => { const next = new Set(prev); next.delete(deleteTarget.uuid); return next; });
-                toast.success(t('end_users.deleted'));
-                router.reload({ only: ['endUsers'] });
-            } else {
-                toast.error(t('end_users.delete_error'));
+        router.delete(
+            route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: deleteTarget.uuid }),
+            {
+                onSuccess: () => toast.success(t('end_users.deleted')),
+                onError: () => toast.error(t('end_users.delete_error')),
+                onFinish: () => setDeleteTarget(null),
             }
-        } catch (e) { toast.error(t('end_users.delete_error')); }
+        );
     }
 
-    async function toggleBan(endUser: EndUser) {
+    function toggleBan(endUser: EndUser) {
         const newStatus = endUser.status === 'banned' ? 'active' : 'banned';
-        try {
-            const res = await fetch(
-                route('projects.settings.end-users.status', { project: project.id, endUserUuid: endUser.uuid }),
-                { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }, body: JSON.stringify({ status: newStatus }) }
-            );
-            if (res.ok) {
-                toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success'));
-                router.reload({ only: ['endUsers'] });
-            } else {
-                toast.error(t('end_users.status_error'));
+        router.patch(
+            route('projects.settings.end-users.status', { project: project.id, endUserUuid: endUser.uuid }),
+            { status: newStatus },
+            {
+                onSuccess: () => toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success')),
+                onError: () => toast.error(t('end_users.status_error')),
             }
-        } catch (e) { toast.error(t('end_users.status_error')); }
+        );
     }
 
     function toggleAll() {
@@ -129,11 +119,11 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
         let ok = 0;
         for (const uuid of selected) {
             try {
-                await fetch(
+                const res = await fetch(
                     route('projects.settings.end-users.status', { project: project.id, endUserUuid: uuid }),
-                    { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ status: 'banned' }) }
+                    { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }, body: JSON.stringify({ status: 'banned' }) }
                 );
-                ok++;
+                if (res.ok) ok++;
             } catch {}
         }
         setBulkBusy(false); setSelected(new Set());
@@ -147,11 +137,11 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
         let ok = 0;
         for (const uuid of selected) {
             try {
-                await fetch(
+                const res = await fetch(
                     route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: uuid }),
-                    { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } }
+                    { method: 'DELETE', credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } }
                 );
-                ok++;
+                if (res.ok) ok++;
             } catch {}
         }
         setBulkBusy(false); setSelected(new Set());
