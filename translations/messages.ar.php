@@ -1244,6 +1244,7 @@ return [
     'studio.chat.entry_count'           => '{count} إدخال/إدخالات',
     'studio.chat.entry_label'           => 'إدخال',
     'studio.chat.default_reply'         => 'تم الإنشاء.',
+    'studio.chat.entries_applied'       => '✅ {created} إدخال تم إنشاؤها، {errors} خطأ.',
     'studio.chat.entries_ok'            => 'موافق — تم التسجيل',
     'studio.chat.no_result'             => 'لا يمكنني إنشاء مخطط لهذا الطلب. هل يمكنك أن تكون أكثر تحديداً؟',
     'studio.chat.schema_generated'      => 'تم إنشاء المخطط. طبقه أدناه.',

@@ -31,16 +31,16 @@ class StudioController extends InertiaController
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
 
-    /** Conventions de nommage imposées aux schémas générés par l'IA. */
+    /** Conventions de nommage imposÃ©es aux schÃ©mas gÃ©nÃ©rÃ©s par l'IA. */
     private const NAMING_CONVENTIONS = <<<RULES
-## Naming conventions (STRICT — always enforce, regardless of the conversation language)
+## Naming conventions (STRICT â€” always enforce, regardless of the conversation language)
 - ALL `name` and `slug` values MUST be in English.
 - Collection `name`: PascalCase, starts with an UPPERCASE letter, NO spaces, and PLURAL for regular collections (e.g. "BlogPosts", "Products", "TeamMembers"). For singletons (isSingleton: true) use the SINGULAR form (e.g. "About", "HomePage", "Contact").
 - Field `name`: camelCase, starts with a LOWERCASE letter, NO spaces (e.g. "title", "publishedAt", "featuredImage").
 - Multi-word names use CamelCase WITHOUT any separator inside the name: collection = UpperCamelCase ("TeamMembers"), field = lowerCamelCase ("featuredImage"). Underscores ONLY appear in slugs.
 - Every `slug` (collection and field): lowercase snake_case, ASCII only, words separated by single underscores, matching ^[a-z][a-z0-9_]*$ (e.g. "blog_post", "published_at"). Never start with a digit.
 - NEVER use spaces, accents, hyphens or special characters in any `name` or `slug`.
-- Do NOT create system/automatic fields: id, uuid, status, locale, created_at, updated_at, deleted_at — they already exist.
+- Do NOT create system/automatic fields: id, uuid, status, locale, created_at, updated_at, deleted_at â€” they already exist.
 - Field slugs must be UNIQUE within a collection; collection slugs must be unique across the project.
 - Prefer concise descriptive English names; no abbreviations unless standard (url, id, seo).
 - Each content collection SHOULD include a "title" (text) field and a "slug" (type slug) field.
@@ -48,22 +48,22 @@ class StudioController extends InertiaController
 - Relation fields must reference an existing or newly created collection.
 RULES;
 
-    /** Bloc EndUser injecté dans tous les prompts systèmes. */
+    /** Bloc EndUser injectÃ© dans tous les prompts systÃ¨mes. */
     private const ENDUSER_AWARENESS = <<<EUSER
 ## User Management System (EndUsers)
 - The project has a BUILT-IN user collection: EndUsers (slug: end_users).
-- EndUsers ALWAYS exists — it is NOT a regular collection, it's a system entity.
+- EndUsers ALWAYS exists â€” it is NOT a regular collection, it's a system entity.
 - EndUsers fields: email (email*, required), name (text), status (active/banned/pending), avatar_url (text), custom_fields (json).
 - Custom fields CAN be added to EndUsers: profile data (bio, website, phone), preferences, roles, company info, etc.
 - RULES for user-related requests:
-  1. When the user mentions "users", "authors", "members", "customers", "admins", "profiles", "clients", or any person/account entity → this is EndUsers. Do NOT create a new "Users", "Accounts", "Members" or "Profiles" collection.
-  2. If the user asks to add profile fields (bio, website, phone, role, avatar, preferences, social links, company...), propose adding them TO EndUsers — modify the existing EndUsers collection in your JSON output.
+  1. When the user mentions "users", "authors", "members", "customers", "admins", "profiles", "clients", or any person/account entity â†’ this is EndUsers. Do NOT create a new "Users", "Accounts", "Members" or "Profiles" collection.
+  2. If the user asks to add profile fields (bio, website, phone, role, avatar, preferences, social links, company...), propose adding them TO EndUsers â€” modify the existing EndUsers collection in your JSON output.
   3. For ownership/assignment/authoring, use "relation" fields pointing TO EndUsers (e.g., author, owner, assignedTo, createdBy, customer).
-  4. Never duplicate EndUsers system fields (email, name, status, avatar_url) — only propose NEW custom fields.
-  5. EndUsers does NOT need title/slug fields — it's already handled by the system.
+  4. Never duplicate EndUsers system fields (email, name, status, avatar_url) â€” only propose NEW custom fields.
+  5. EndUsers does NOT need title/slug fields â€” it's already handled by the system.
 EUSER;
 
-    /** Champs système gérés automatiquement — jamais générés par l'IA. */
+    /** Champs systÃ¨me gÃ©rÃ©s automatiquement â€” jamais gÃ©nÃ©rÃ©s par l'IA. */
     private const RESERVED_FIELD_SLUGS = ['id', 'uuid', 'status', 'locale', 'created_at', 'updated_at', 'deleted_at'];
 
     private ?Inflector $inflector = null;
@@ -74,12 +74,12 @@ EUSER;
     }
 
     /**
-     * Normalise un schéma généré par l'IA pour GARANTIR les conventions de
-     * nommage, même si le modèle ne les respecte pas :
+     * Normalise un schÃ©ma gÃ©nÃ©rÃ© par l'IA pour GARANTIR les conventions de
+     * nommage, mÃªme si le modÃ¨le ne les respecte pas :
      *  - nom de collection : PascalCase, PLURIEL (SINGULIER pour les singletons) ;
      *  - nom de champ : camelCase ;
-     *  - slugs : snake_case, dérivés du nom (cohérence garantie) ;
-     *  - suppression des champs système et des doublons.
+     *  - slugs : snake_case, dÃ©rivÃ©s du nom (cohÃ©rence garantie) ;
+     *  - suppression des champs systÃ¨me et des doublons.
      *
      * @param array<int,mixed> $collections
      * @return array<int,array<string,mixed>>
@@ -102,7 +102,7 @@ EUSER;
                 $name = $isSingleton ? $singular : $this->inflector()->pluralize($singular);
             }
             $slug = $this->toSnakeCase($name) ?: 'collection';
-            // Unicité des slugs de collection
+            // UnicitÃ© des slugs de collection
             $base = $slug; $i = 2;
             while (isset($seenCollectionSlugs[$slug])) { $slug = $base . '_' . $i++; }
             $seenCollectionSlugs[$slug] = true;
@@ -131,8 +131,8 @@ EUSER;
     }
 
     /**
-     * Extraction JSON : cherche "collections" dans la réponse IA.
-     * Délègue à extractJsonResponse (qui gère aussi "entries").
+     * Extraction JSON : cherche "collections" dans la rÃ©ponse IA.
+     * DÃ©lÃ¨gue Ã  extractJsonResponse (qui gÃ¨re aussi "entries").
      *
      * @return array{data: array<string,mixed>, raw: string}|null
      */
@@ -142,8 +142,8 @@ EUSER;
     }
 
     /**
-     * Retourne le 1er objet JSON équilibré (en tenant compte des chaînes/échappements)
-     * qui contient la clé "$needle", ou null.
+     * Retourne le 1er objet JSON Ã©quilibrÃ© (en tenant compte des chaÃ®nes/Ã©chappements)
+     * qui contient la clÃ© "$needle", ou null.
      */
     private function balancedJsonContaining(string $text, string $needle): ?string
     {
@@ -167,7 +167,7 @@ EUSER;
                         if (str_contains($candidate, '"' . $needle . '"')) {
                             return $candidate;
                         }
-                        break; // cet objet ne contient pas la clé → essayer le prochain '{'
+                        break; // cet objet ne contient pas la clÃ© â†’ essayer le prochain '{'
                     }
                 }
             }
@@ -175,24 +175,24 @@ EUSER;
         return null;
     }
 
-    /** Table de repli des accents latins → lettre de base (déterministe, multi-plateforme). */
+    /** Table de repli des accents latins â†’ lettre de base (dÃ©terministe, multi-plateforme). */
     private const ACCENT_MAP = [
-        'à'=>'a','â'=>'a','ä'=>'a','á'=>'a','ã'=>'a','å'=>'a','è'=>'e','é'=>'e','ê'=>'e','ë'=>'e',
-        'ì'=>'i','í'=>'i','î'=>'i','ï'=>'i','ò'=>'o','ó'=>'o','ô'=>'o','ö'=>'o','õ'=>'o',
-        'ù'=>'u','ú'=>'u','û'=>'u','ü'=>'u','ç'=>'c','ñ'=>'n','ÿ'=>'y','œ'=>'oe','æ'=>'ae','ß'=>'ss',
-        'À'=>'A','Â'=>'A','Ä'=>'A','Á'=>'A','Ã'=>'A','È'=>'E','É'=>'E','Ê'=>'E','Ë'=>'E',
-        'Ì'=>'I','Í'=>'I','Î'=>'I','Ï'=>'I','Ò'=>'O','Ó'=>'O','Ô'=>'O','Ö'=>'O','Õ'=>'O',
-        'Ù'=>'U','Ú'=>'U','Û'=>'U','Ü'=>'U','Ç'=>'C','Ñ'=>'N',
+        'Ã '=>'a','Ã¢'=>'a','Ã¤'=>'a','Ã¡'=>'a','Ã£'=>'a','Ã¥'=>'a','Ã¨'=>'e','Ã©'=>'e','Ãª'=>'e','Ã«'=>'e',
+        'Ã¬'=>'i','Ã­'=>'i','Ã®'=>'i','Ã¯'=>'i','Ã²'=>'o','Ã³'=>'o','Ã´'=>'o','Ã¶'=>'o','Ãµ'=>'o',
+        'Ã¹'=>'u','Ãº'=>'u','Ã»'=>'u','Ã¼'=>'u','Ã§'=>'c','Ã±'=>'n','Ã¿'=>'y','Å“'=>'oe','Ã¦'=>'ae','ÃŸ'=>'ss',
+        'Ã€'=>'A','Ã‚'=>'A','Ã„'=>'A','Ã'=>'A','Ãƒ'=>'A','Ãˆ'=>'E','Ã‰'=>'E','ÃŠ'=>'E','Ã‹'=>'E',
+        'ÃŒ'=>'I','Ã'=>'I','ÃŽ'=>'I','Ã'=>'I','Ã’'=>'O','Ã“'=>'O','Ã”'=>'O','Ã–'=>'O','Ã•'=>'O',
+        'Ã™'=>'U','Ãš'=>'U','Ã›'=>'U','Ãœ'=>'U','Ã‡'=>'C','Ã‘'=>'N',
     ];
 
-    /** @return string[] mots ASCII extraits d'une chaîne (gère camelCase, espaces, séparateurs). */
+    /** @return string[] mots ASCII extraits d'une chaÃ®ne (gÃ¨re camelCase, espaces, sÃ©parateurs). */
     private function splitWords(string $value): array
     {
-        // Replie les accents en ASCII de façon déterministe, puis retire tout
-        // caractère non-ASCII résiduel.
+        // Replie les accents en ASCII de faÃ§on dÃ©terministe, puis retire tout
+        // caractÃ¨re non-ASCII rÃ©siduel.
         $value = strtr($value, self::ACCENT_MAP);
         $value = preg_replace('/[^\x20-\x7E]/', '', $value) ?? $value;
-        // Coupe aux frontières camelCase puis aux non-alphanumériques.
+        // Coupe aux frontiÃ¨res camelCase puis aux non-alphanumÃ©riques.
         $value = preg_replace('/([a-z0-9])([A-Z])/', '$1 $2', $value) ?? $value;
         $parts = preg_split('/[^A-Za-z0-9]+/', $value) ?: [];
         return array_values(array_filter($parts, fn ($p) => $p !== ''));
@@ -304,7 +304,7 @@ EUSER;
     }
 
     /**
-     * Génère un schéma de collection via IA à partir d'un prompt.
+     * GÃ©nÃ¨re un schÃ©ma de collection via IA Ã  partir d'un prompt.
      */
     #[Route('/api/projects/{uuid}/studio/ai-schema', name: 'studio_ai_schema', methods: ['POST'])]
     public function aiSchema(string $uuid, Request $request): JsonResponse
@@ -345,11 +345,11 @@ $namingRules
 ## Field types available
 text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
 
-## API automatiquement générée
-Chaque collection créée expose automatiquement :
-- REST: GET /api/{project}/{slug} (liste), POST (créer), GET/PATCH/DELETE /api/{project}/{slug}/{uuid}
-- GraphQL: POST /api/projects/{project}/graphql — schema auto-généré (queries, mutations, filtres, pagination)
-- Spécification OpenAPI: GET /api/{project}/openapi.json
+## API automatiquement gÃ©nÃ©rÃ©e
+Chaque collection crÃ©Ã©e expose automatiquement :
+- REST: GET /api/{project}/{slug} (liste), POST (crÃ©er), GET/PATCH/DELETE /api/{project}/{slug}/{uuid}
+- GraphQL: POST /api/projects/{project}/graphql â€” schema auto-gÃ©nÃ©rÃ© (queries, mutations, filtres, pagination)
+- SpÃ©cification OpenAPI: GET /api/{project}/openapi.json
 - Auth: Bearer token (API token) ou JWT (end-users via /auth/login, /auth/register)
 
 - Choose appropriate types based on the field name and context.
@@ -364,7 +364,7 @@ PROMPT;
         [$provider, $apiKey, $model, $endpoint] = $this->resolveAiConfig();
 
         if ($provider === null) {
-            // Fallback: génération basée sur des règles (pas d'IA configurée)
+            // Fallback: gÃ©nÃ©ration basÃ©e sur des rÃ¨gles (pas d'IA configurÃ©e)
             $schema = $this->ruleBasedSchema($prompt);
             $schema['collections'] = $this->normalizeSchema($schema['collections'] ?? []);
             return $this->json($schema);
@@ -376,7 +376,7 @@ PROMPT;
                 ['role' => 'user', 'content' => $prompt],
             ]);
 
-            // Extraire le JSON (le modèle peut wrapper dans ```json)
+            // Extraire le JSON (le modÃ¨le peut wrapper dans ```json)
             if (preg_match('/\{[\s\S]*\}/', $content, $m)) {
                 $data = json_decode($m[0], true);
                 if ($data && isset($data['collections'])) {
@@ -385,19 +385,19 @@ PROMPT;
                 }
             }
 
-            return $this->json(['error' => 'Échec du parsing JSON de la réponse IA'], 500);
+            return $this->json(['error' => 'Ã‰chec du parsing JSON de la rÃ©ponse IA'], 500);
         } catch (\Throwable $e) {
             $this->logger->error('AI schema generation failed', [
                 'exception' => $e,
                 'project'   => $uuid,
             ]);
-            return $this->json(['error' => 'Échec de la génération IA. Réessayez.'], 500);
+            return $this->json(['error' => 'Ã‰chec de la gÃ©nÃ©ration IA. RÃ©essayez.'], 500);
         }
     }
 
     /**
-     * Chat IA conversationnel pour générer/modifier le schéma de collections.
-     * Reçoit l'historique de conversation + le contexte des collections existantes.
+     * Chat IA conversationnel pour gÃ©nÃ©rer/modifier le schÃ©ma de collections.
+     * ReÃ§oit l'historique de conversation + le contexte des collections existantes.
      */
     #[Route('/api/projects/{uuid}/studio/ai-chat', name: 'studio_ai_chat', methods: ['POST'])]
     public function aiChat(string $uuid, Request $request): JsonResponse
@@ -416,11 +416,11 @@ PROMPT;
 
         if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
 
-        // Préfixer le prompt utilisateur pour l'affichage dans l'historique
+        // PrÃ©fixer le prompt utilisateur pour l'affichage dans l'historique
         $displayPrompt = $prompt;
         $commandPrefix = $command !== 'schema' ? '/' . $command . ' ' : '';
 
-        // Persister le message utilisateur en DB immédiatement
+        // Persister le message utilisateur en DB immÃ©diatement
         $userMsg = new \App\Entity\StudioChatMessage();
         $userMsg->project = $project;
         $userMsg->role = 'user';
@@ -431,7 +431,7 @@ PROMPT;
         $namingRules = self::NAMING_CONVENTIONS;
         $endUserBlock = self::ENDUSER_AWARENESS;
 
-        // Choisir le prompt système selon la commande
+        // Choisir le prompt systÃ¨me selon la commande
         $systemPrompt = $this->buildSystemPrompt($command, $namingRules, $endUserBlock, $context);
 
         [$provider, $apiKey, $model, $endpoint] = $this->resolveAiConfig();
@@ -468,12 +468,12 @@ PROMPT;
 
             $reply = trim(preg_replace('/```\s*$/', '', $reply));
 
-            // Message par défaut selon la commande
+            // Message par dÃ©faut selon la commande
             if ($reply === '') {
                 $reply = match ($command) {
-                    'data' => ($entries !== null ? 'Contenu généré. Applique-le ci-dessous.' : 'Je n\'ai pas pu générer de contenu. Peux-tu être plus précis ?'),
-                    'all'  => 'Schéma et contenu générés. Applique chaque bloc ci-dessous.',
-                    default => ($collections !== null ? 'Schéma généré. Applique-le ci-dessous.' : 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?'),
+                    'data' => ($entries !== null ? 'Contenu gÃ©nÃ©rÃ©. Applique-le ci-dessous.' : 'Je n\'ai pas pu gÃ©nÃ©rer de contenu. Peux-tu Ãªtre plus prÃ©cis ?'),
+                    'all'  => 'SchÃ©ma et contenu gÃ©nÃ©rÃ©s. Applique chaque bloc ci-dessous.',
+                    default => ($collections !== null ? 'SchÃ©ma gÃ©nÃ©rÃ©. Applique-le ci-dessous.' : 'Je ne peux pas gÃ©nÃ©rer de schÃ©ma pour cette demande. Peux-tu Ãªtre plus prÃ©cis ?'),
                 };
             }
 
@@ -497,171 +497,87 @@ PROMPT;
             return $this->json($response);
         } catch (\Throwable $e) {
             $this->logger->error('AI chat failed', ['exception' => $e, 'project' => $uuid]);
-            return $this->json(['reply' => 'Désolé, une erreur est survenue. Réessaie.', 'error' => 'AI chat failed'], 500);
+            return $this->json(['reply' => 'DÃ©solÃ©, une erreur est survenue. RÃ©essaie.', 'error' => 'AI chat failed'], 500);
         }
     }
 
-    /** Construit le prompt système adapté à la commande. */
+    /** Construit le prompt systÃ¨me adaptÃ© Ã  la commande. */
     private function buildSystemPrompt(string $command, string $namingRules, string $endUserBlock, string $context): string
     {
-        $baseGuidelines = <<<GUIDE
-## Field types available
-text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation
+        $baseGuidelines = "## Field types available\n"
+            . "text, longtext, richtext, slug, email, password, number, decimal, boolean, date, datetime, time, color, json, enumeration, media, relation\n\n"
+            . "CRITICAL for relation fields: MUST include \"options\": { \"targetCollection\": \"slug_of_target\" } (e.g., \"end_users\" for user references).\n"
+            . "CRITICAL for enumeration fields: MUST include \"options\": { \"values\": [\"option1\", \"option2\"] }.\n\n"
+            . "## API auto-générée par collection\n"
+            . "Chaque collection expose automatiquement :\n"
+            . "- REST: GET /api/{project}/{slug} (liste paginée), POST (créer), GET/PATCH/DELETE /api/{project}/{slug}/{uuid}\n"
+            . "- GraphQL: POST /api/projects/{project}/graphql\n"
+            . "- OpenAPI: GET /api/{project}/openapi.json\n"
+            . "- Auth: Bearer token (API token) ou JWT (end-users via /auth/login, /auth/register)\n"
+            . "- Fichiers: GET/POST /api/{project}/files\n";
 
-CRITICAL for relation fields: MUST include "options": { "targetCollection": "slug_of_target" } (e.g., "end_users" for user references).
-CRITICAL for enumeration fields: MUST include "options": { "values": ["option1", "option2"] }.
+        $dataPrompt = "You are a professional content writer for a CMS. Generate REAL, publication-ready content.\n\n"
+            . "## CRITICAL — Output format\n"
+            . "You MUST output EXACTLY ONE ```json fenced code block. NO text before it. NO text after it. NO markdown tables. NO bullet lists. NO 'Voici les données'. ONLY the JSON block.\n\n"
+            . "```json`n{\n  \"entries\": [\n    {\n      \"collection\": \"slug_of_collection\",\n      \"entries\": [\n        { \"title\": \"Titre pro\", \"slug\": \"titre-pro\", ... }\n      ]\n    }\n  ]\n}\n```\n\n"
+            . "## Rules\n"
+            . "- Write content in French.\n"
+            . "- Content MUST be professional — NO lorem ipsum.\n"
+            . "- Generate 3-5 entries minimum per collection.\n"
+            . "- Fill ALL non-system fields for each entry.\n"
+            . "- System fields to NEVER include: uuid, id, status, locale, created_at, updated_at, deleted_at.\n"
+            . "- Dates: realistic and recent (2025-2026). Emails: real-looking.\n"
+            . "- For relation fields: use the target slug as value (e.g., \"end_users\").\n"
+            . "- For enumeration fields: use one of the configured values.\n"
+            . "- When generating EndUsers, include: email, name, and custom fields.\n\n"
+            . $endUserBlock . "\n\n"
+            . $baseGuidelines . "\n"
+            . "## Current project context\n" . $context;
 
-## API auto-générée par collection
-Chaque collection expose automatiquement :
-- REST: GET /api/{project}/{slug} (liste paginée), POST (créer), GET/PATCH/DELETE /api/{project}/{slug}/{uuid}
-- GraphQL: POST /api/projects/{project}/graphql — schema auto-généré avec queries, mutations, filtres, pagination, tri
-- OpenAPI: GET /api/{project}/openapi.json
-- Auth: Bearer token (API token) ou JWT (end-users via /auth/login, /auth/register)
-- Fichiers: GET/POST /api/{project}/files
+        $allPrompt = "You are a CMS schema architect AND professional content writer. Generate BOTH schema AND content.\n\n"
+            . "## CRITICAL — Output format\n"
+            . "You MUST output EXACTLY ONE ```json fenced code block. NO text before/after. NO markdown tables. ONLY the JSON:\n\n"
+            . "```json`n{\n  \"collections\": [...],\n  \"entries\": [{\"collection\":\"blog_posts\",\"entries\":[{\"title\":\"...\",\"slug\":\"...\"}]}]\n}\n```\n\n"
+            . "## Rules\n"
+            . "- Write in French — but schema names/slugs MUST stay in English.\n"
+            . "- You can only PROPOSE. User clicks « Appliquer » to make it real.\n"
+            . "- Content MUST be professional — NO lorem ipsum.\n"
+            . "- For relation: \"options\":{\"targetCollection\":\"slug\"} MANDATORY.\n"
+            . "- For enumeration: \"options\":{\"values\":[...]} MANDATORY.\n"
+            . "- Generate 3-5 entries per collection. Max 5 collections, max 10 fields each.\n\n"
+            . $namingRules . "\n\n"
+            . $baseGuidelines . "\n"
+            . $endUserBlock . "\n\n"
+            . "## Current project context\n" . $context;
 
-GUIDE;
+        $schemaPrompt = "You are a CMS schema architect. Design collections based on user requirements.\n\n"
+            . "## Rules\n"
+            . "- Always respond in French — but schema name/slug values MUST stay in English.\n"
+            . "- You can only PROPOSE. User clicks « Appliquer » to persist.\n"
+            . "- NEVER claim a collection is 'créée' — say 'proposée'.\n"
+            . "- Include FULL schema as valid JSON in a ```json fenced code block.\n"
+            . "- Return COMPLETE collection(s), not just changed fields.\n"
+            . "- JSON structure (IMPORTANT: relation fields MUST have targetCollection, enum MUST have values):\n"
+            . "```json`n{\n  \"collections\": [{\n    \"name\":\"BlogPosts\",\"slug\":\"blog_posts\",\"description\":\"Blog articles\",\"isSingleton\":false,\n    \"fields\":[\n      {\"name\":\"title\",\"slug\":\"title\",\"type\":\"text\",\"isRequired\":true},\n      {\"name\":\"slug\",\"slug\":\"slug\",\"type\":\"slug\",\"isRequired\":true},\n      {\"name\":\"body\",\"slug\":\"body\",\"type\":\"richtext\",\"isRequired\":true},\n      {\"name\":\"author\",\"slug\":\"author\",\"type\":\"relation\",\"isRequired\":true,\"options\":{\"targetCollection\":\"end_users\"}},\n      {\"name\":\"category\",\"slug\":\"category\",\"type\":\"enumeration\",\"isRequired\":false,\"options\":{\"values\":[\"tech\",\"lifestyle\"]}}\n    ]\n  }]\n}\n```\n\n"
+            . $namingRules . "\n\n"
+            . $baseGuidelines . "\n"
+            . "## Guidelines\n"
+            . "- Use \"slug\" type for URL-friendly identifiers (mark required).\n"
+            . "- Use \"media\" for images/photos/files, \"richtext\" for HTML content.\n"
+            . "- Use \"date\" for dates, \"datetime\" for timestamps.\n"
+            . "- If modifying existing collections, reference by name, return complete collection.\n"
+            . "- Generate 3-5 fields per collection minimum.\n"
+            . "- Maximum 5 collections per response. Maximum 10 fields per collection.\n\n"
+            . $endUserBlock . "\n\n"
+            . "## Current project context\n" . $context;
 
         return match ($command) {
-            'data' => <<<PROMPT
-You are a professional content writer for a CMS. Generate REAL, publication-ready content for the specified collection.
-
-## Rules
-- Write in French (the user speaks French).
-- Content MUST be professional, engaging, and ready to publish — NO lorem ipsum, NO placeholder text.
-- Research-realistic: names, dates, descriptions, prices, emails should feel authentic.
-- Match the tone of the collection (formal for corporate, casual for blogs, descriptive for products).
-- Return ONLY valid JSON in a ```json fenced code block:
-```json
-{
-  "collection": "target_collection_slug",
-  "entries": [
-    {
-      "title": "Titre professionnel pertinent et engageant",
-      "slug": "titre-professionnel-pertinent",
-      "...": "valeur réelle pour chaque champ de la collection"
-    }
-  ]
-}
-```
-- Generate 3-5 entries minimum per collection.
-- Fill ALL fields except system fields (uuid, status, locale, timestamps).
-- For relation fields referencing EndUsers: specify "end_users" as the target slug (avec un nom réaliste entre parenthèses).
-- For media fields: describe what image would be appropriate (e.g., "hero-banner-2026.jpg").
-- Content must be contextually coherent with the collection's purpose.
-- Dates should be realistic and recent (2025-2026).
-- Emails should look real (prenom.nom@example.fr).
-- NEVER include uuid, id, status, locale, created_at, updated_at, deleted_at in entries.
-
-$baseGuidelines
-
-$endUserBlock
-
-## Current project context
-$context
-PROMPT,
-            'all' => <<<PROMPT
-You are a CMS schema architect AND professional content writer. Generate BOTH the collection schema AND publication-ready content.
-
-## Part 1: Schema
-Follow the same rules as /schema mode — propose collections with their fields.
-
-## Part 2: Content
-For each collection you create, generate 2-4 professional, publication-ready entries.
-
-## Rules
-- Always respond in French — but schema names/slugs MUST stay in English.
-- IMPORTANT: You can only PROPOSE. The schema becomes real ONLY when the user clicks « Appliquer ».
-- Return ONLY valid JSON in a ```json fenced code block:
-```json
-{
-  "collections": [
-    {
-      "name": "BlogPosts",
-      "slug": "blog_posts",
-      "description": "Blog articles",
-      "isSingleton": false,
-      "fields": [...]
-    }
-  ],
-  "entries": [
-    {
-      "collection": "blog_posts",
-      "entries": [
-        { "title": "Titre pro", "slug": "titre-pro", ... }
-      ]
-    }
-  ]
-}
-```
-- Content MUST be professional — NO lorem ipsum.
-- Write content in French.
-- Fill ALL fields for each entry (except system fields).
-- Generate 3-5 entries minimum per collection.
-- Maximum 5 collections. Maximum 10 fields per collection.
-
-$namingRules
-
-$baseGuidelines
-
-$endUserBlock
-
-## Current project context
-$context
-PROMPT,
-            default => <<<PROMPT
-You are a CMS schema architect. You help users design their content model by creating and modifying collections.
-
-## Rules
-- Always respond in French (the user speaks French) — but the schema `name`/`slug` values MUST stay in English (see naming conventions).
-- IMPORTANT: You can only PROPOSE a schema. You CANNOT create, add, apply, modify or save collections yourself. The schema becomes real ONLY when the user clicks the « Appliquer » button under it (and then saves). NEVER claim a collection is "créée", "ajoutée", "appliquée" or "enregistrée" — instead say it is "proposée" and invite the user to cliquer « Appliquer ».
-- First, acknowledge what the user asked. Then if applicable, propose a schema.
-- When proposing or modifying a schema, you MUST include the FULL schema as valid JSON wrapped in a ```json fenced code block (never describe changes only in prose — without the JSON block, nothing can be applied).
-- When modifying/adding to existing collections, return the COMPLETE collection(s) concerned (not just the changed fields).
-- The JSON must use this exact structure. IMPORTANT: For relation fields, ALWAYS include "options" with "targetCollection". For enumeration fields, ALWAYS include "options" with "values". Example:
-```json
-{
-  "collections": [
-    {
-      "name": "BlogPosts",
-      "slug": "blog_posts",
-      "description": "Blog articles",
-      "isSingleton": false,
-      "fields": [
-        { "name": "title", "slug": "title", "type": "text", "isRequired": true },
-        { "name": "slug", "slug": "slug", "type": "slug", "isRequired": true },
-        { "name": "body", "slug": "body", "type": "richtext", "isRequired": true },
-        { "name": "author", "slug": "author", "type": "relation", "isRequired": true, "options": { "targetCollection": "end_users" } },
-        { "name": "category", "slug": "category", "type": "enumeration", "isRequired": false, "options": { "values": ["tech", "lifestyle", "business"] } },
-        { "name": "publishedAt", "slug": "published_at", "type": "datetime", "isRequired": false }
-      ]
-    }
-  ]
-}
-```
-
-$namingRules
-
-$baseGuidelines
-
-## Guidelines
-- Use "slug" type for URL-friendly identifiers (mark them required).
-- Use "media" for images/photos/files.
-- Use "richtext" for rich content (HTML/WYSIWYG).
-- Use "date" for dates, "datetime" for timestamps.
-- If the user asks to modify an existing collection, reference it by name.
-- If the user asks to add fields, include the modified collection with the new fields.
-- Generate 3-5 fields per collection minimum.
-- Maximum 5 collections per response. Maximum 10 fields per collection.
-
-$endUserBlock
-
-## Current project context
-$context
-PROMPT,
+            'data' => $dataPrompt,
+            'all'  => $allPrompt,
+            default => $schemaPrompt,
         };
     }
-
-    /** Fallback quand aucun provider IA n'est configuré. */
+    /** Fallback quand aucun provider IA n'est configurÃ©. */
     private function commandFallback(string $command, string $prompt): JsonResponse
     {
         $schema = $this->ruleBasedSchema($prompt);
@@ -669,8 +585,8 @@ PROMPT,
         $names = array_map(fn ($c) => $c['name'], $schema['collections'] ?? []);
 
         $reply = $names === []
-            ? "Je n'ai pas pu générer de schéma pour cette demande. Peux-tu être plus précis ?"
-            : "Voici un schéma de base pour : " . implode(', ', $names) . ". Tu peux l'appliquer et le modifier manuellement.";
+            ? "Je n'ai pas pu gÃ©nÃ©rer de schÃ©ma pour cette demande. Peux-tu Ãªtre plus prÃ©cis ?"
+            : "Voici un schÃ©ma de base pour : " . implode(', ', $names) . ". Tu peux l'appliquer et le modifier manuellement.";
 
         $response = ['reply' => $reply];
         if ($command !== 'data') {
@@ -682,11 +598,11 @@ PROMPT,
     }
 
     /**
-     * Extraction JSON améliorée : cherche "collections" ET/OU "entries".
+     * Extraction JSON amÃ©liorÃ©e : cherche "collections" ET/OU "entries".
      */
     private function extractJsonResponse(string $content): ?array
     {
-        // Priorité aux blocs ```json … ```
+        // PrioritÃ© aux blocs ```json â€¦ ```
         if (preg_match_all('/```(?:json)?\s*([\s\S]*?)```/', $content, $blocks)) {
             foreach ($blocks[1] as $block) {
                 $raw = $this->balancedJsonContainingAny($block, ['collections', 'entries']);
@@ -710,7 +626,7 @@ PROMPT,
     }
 
     /**
-     * Comme balancedJsonContaining mais accepte plusieurs clés possibles.
+     * Comme balancedJsonContaining mais accepte plusieurs clÃ©s possibles.
      */
     private function balancedJsonContainingAny(string $text, array $needles): ?string
     {
@@ -721,6 +637,137 @@ PROMPT,
             }
         }
         return null;
+    }
+
+    /**
+     * CrÃ©e des entrÃ©es de contenu gÃ©nÃ©rÃ©es par l'IA (/data ou /all).
+     */
+    #[Route('/api/projects/{uuid}/studio/apply-entries', name: 'studio_apply_entries', methods: ['POST'])]
+    public function applyEntries(string $uuid, Request $request): JsonResponse
+    {
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        $this->denyAccessUnlessGranted('project.manage', $project);
+
+        $body = json_decode($request->getContent(), true);
+        $collectionSlug = $body['collection'] ?? '';
+        $entryData = $body['entry'] ?? [];
+
+        if ($collectionSlug === '' || empty($entryData)) {
+            return $this->json(['error' => 'Collection et entry requis'], 422);
+        }
+
+        // Cas spÃ©cial EndUsers
+        if ($collectionSlug === 'end_users') {
+            return $this->createEndUserEntry($project, $entryData);
+        }
+
+        // Collection standard
+        $collection = $this->em->getRepository(Collection::class)
+            ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
+
+        if (!$collection) {
+            return $this->json(['error' => "Collection '$collectionSlug' introuvable"], 404);
+        }
+
+        $entry = new \App\Entity\ContentEntry();
+        $entry->project = $project;
+        $entry->collection = $collection;
+        $entry->locale = $project->defaultLocale;
+        $entry->status = $entryData['status'] ?? 'published';
+
+        $this->em->persist($entry);
+        $this->em->flush(); // flush pour avoir l'ID avant les field values
+
+        // Sauvegarder les field values
+        $this->saveFieldValues($entry, $collection, $entryData);
+
+        $this->em->flush();
+
+        return $this->json(['success' => true, 'uuid' => $entry->uuid?->toRfc4122()], 201);
+    }
+
+    private function createEndUserEntry(Project $project, array $data): JsonResponse
+    {
+        $email = $data['email'] ?? null;
+        if (!$email) {
+            return $this->json(['error' => 'Email requis pour EndUser'], 422);
+        }
+
+        // VÃ©rifier si l'utilisateur existe dÃ©jÃ 
+        $existing = $this->em->getRepository(\App\Entity\EndUser::class)
+            ->findOneBy(['project' => $project, 'email' => $email]);
+
+        if ($existing) {
+            return $this->json(['success' => true, 'uuid' => $existing->uuid?->toRfc4122(), 'existed' => true]);
+        }
+
+        $endUser = new \App\Entity\EndUser();
+        $endUser->project = $project;
+        $endUser->email = $email;
+        $endUser->name = $data['name'] ?? '';
+        $endUser->status = 'active';
+
+        // Champs personnalisÃ©s
+        $customData = [];
+        $systemFields = ['email', 'name', 'status', 'avatar_url', 'uuid', 'id', 'created_at', 'updated_at'];
+        foreach ($data as $k => $v) {
+            if (!in_array($k, $systemFields, true)) {
+                $customData[$k] = $v;
+            }
+        }
+        if ($customData !== []) {
+            $endUser->customFields = $customData;
+        }
+
+        $this->em->persist($endUser);
+        $this->em->flush();
+
+        return $this->json(['success' => true, 'uuid' => $endUser->uuid?->toRfc4122()], 201);
+    }
+
+    /**
+     * Sauvegarde les field values pour une ContentEntry (rÃ©utilise la logique du ContentController).
+     */
+    private function saveFieldValues(\App\Entity\ContentEntry $entry, Collection $collection, array $data): void
+    {
+        $fields = $this->em->getRepository(Field::class)->findByCollection($collection);
+        $fieldMap = [];
+        foreach ($fields as $f) {
+            $fieldMap[$f->slug] = $f;
+        }
+
+        foreach ($data as $slug => $value) {
+            if (!isset($fieldMap[$slug])) continue;
+            $field = $fieldMap[$slug];
+
+            $fv = new \App\Entity\ContentFieldValue();
+            $fv->contentEntry = $entry;
+            $fv->field = $field;
+            $fv->fieldType = $field->type;
+
+            match ($field->type) {
+                'number', 'decimal'              => $fv->numberValue   = $value !== null ? (string) $value : null,
+                'boolean', 'checkbox'            => $fv->booleanValue  = $value !== null ? (bool) $value : null,
+                'date'                           => $fv->dateValue     = ($value && !str_contains((string) $value, '/')) ? new \DateTime($value) : null,
+                'datetime'                       => $fv->datetimeValue = $value ? new \DateTime($value) : null,
+                'time'                           => $fv->textValue     = $value !== null ? (string) $value : null,
+                'json', 'array', 'repeater'      => $fv->jsonValue     = is_array($value) ? $value : json_decode($value, true),
+                'media', 'relation', 'enumeration' => $fv->jsonValue   = $this->normalizeArrayOfIds($value),
+                default                          => $fv->textValue     = $value !== null ? (string) $value : null,
+            };
+
+            $this->em->persist($fv);
+        }
+    }
+
+    /** @see ContentController::normalizeArrayOfIds */
+    private function normalizeArrayOfIds(mixed $value): ?array
+    {
+        if (is_array($value)) return $value;
+        if ($value === null || $value === '') return null;
+        $decoded = json_decode((string) $value, true);
+        return is_array($decoded) ? $decoded : [$value];
     }
 
     /**
@@ -762,7 +809,7 @@ PROMPT,
     }
 
     /**
-     * Résout le premier provider IA activé depuis AppSettings (DB).
+     * RÃ©sout le premier provider IA activÃ© depuis AppSettings (DB).
      * Retourne [providerName, apiKey, model, endpoint] ou [null, null, null, null].
      */
     private function resolveAiConfig(): array
@@ -837,15 +884,15 @@ PROMPT,
     }
 
     /**
-     * Appelle l'API du provider IA avec les messages donnés.
-     * Utilise HttpClientInterface avec la clé API depuis AppSettings (DB).
+     * Appelle l'API du provider IA avec les messages donnÃ©s.
+     * Utilise HttpClientInterface avec la clÃ© API depuis AppSettings (DB).
      */
     private function callAiApi(string $provider, string $apiKey, string $model, string $endpoint, array $messages): string
     {
         $headers = ['Content-Type' => 'application/json'];
 
         if ($provider === 'gemini') {
-            // Clé API dans le header x-goog-api-key, pas en URL
+            // ClÃ© API dans le header x-goog-api-key, pas en URL
             $headers['x-goog-api-key'] = $apiKey;
             $parts = [];
             foreach ($messages as $m) {
@@ -864,7 +911,7 @@ PROMPT,
         if ($provider === 'anthropic') {
             $headers['x-api-key'] = $apiKey;
             $headers['anthropic-version'] = '2023-06-01';
-            // Anthropic utilise un format différent
+            // Anthropic utilise un format diffÃ©rent
             $systemMsg = '';
             $bodyMessages = [];
             foreach ($messages as $m) {
@@ -895,8 +942,8 @@ PROMPT,
     }
 
     /**
-     * Flush sécurisé : ne fait rien si l'EntityManager est fermé
-     * (par ex. après une exception réseau lors d'un appel API).
+     * Flush sÃ©curisÃ© : ne fait rien si l'EntityManager est fermÃ©
+     * (par ex. aprÃ¨s une exception rÃ©seau lors d'un appel API).
      */
     private function safeFlush(): void
     {
@@ -905,7 +952,7 @@ PROMPT,
         }
     }
 
-    /** Schema basé sur des règles (fallback sans IA). */
+    /** Schema basÃ© sur des rÃ¨gles (fallback sans IA). */
     private function ruleBasedSchema(string $prompt): array
     {
         $lower = mb_strtolower($prompt);
@@ -1001,15 +1048,15 @@ PROMPT,
 
         $data = json_decode($request->getContent(), true);
         // Garantie ultime : on normalise au point de persistance, donc quelle que
-        // soit la source (chat IA, schéma IA, builder visuel), les conventions de
-        // nommage sont toujours respectées en base.
+        // soit la source (chat IA, schÃ©ma IA, builder visuel), les conventions de
+        // nommage sont toujours respectÃ©es en base.
         $collections = $this->normalizeSchema($data['collections'] ?? []);
 
         $created = 0;
         $updated = 0;
 
-        // Collecter les identifiants des collections envoyées pour savoir
-        // lesquelles doivent être supprimées (celles en DB mais absentes du payload).
+        // Collecter les identifiants des collections envoyÃ©es pour savoir
+        // lesquelles doivent Ãªtre supprimÃ©es (celles en DB mais absentes du payload).
         $keptCollectionUuids = [];
         $keptCollectionSlugs = [];
 
@@ -1018,7 +1065,7 @@ PROMPT,
 
             $slug = $colData['slug'] ?: $this->slugify($colData['name']);
 
-            // Chercher par UUID d'abord (permet de renommer une collection sans créer de doublon)
+            // Chercher par UUID d'abord (permet de renommer une collection sans crÃ©er de doublon)
             $collection = null;
             if (!empty($colData['uuid'])) {
                 $collection = $this->em->getRepository(Collection::class)
@@ -1043,7 +1090,7 @@ PROMPT,
             $collection->slug = $slug;
             $collection->description = $colData['description'] ?? null;
             $collection->isSingleton = $colData['isSingleton'] ?? false;
-            $collection->deletedAt = null; // Restaurer si soft-deletée auparavant
+            $collection->deletedAt = null; // Restaurer si soft-deletÃ©e auparavant
 
             $keptCollectionUuids[] = $collection->uuid?->toRfc4122();
             $keptCollectionSlugs[] = $slug;
@@ -1091,8 +1138,8 @@ PROMPT,
         $deleted = 0;
         foreach ($allDbCollections as $dbCol) {
             $uuid = $dbCol->uuid?->toRfc4122();
-            // Garder si UUID présent dans la liste, ou slug présent (fallback pour
-            // les nouvelles collections dont l'UUID n'est assigné qu'au flush).
+            // Garder si UUID prÃ©sent dans la liste, ou slug prÃ©sent (fallback pour
+            // les nouvelles collections dont l'UUID n'est assignÃ© qu'au flush).
             $isKept = ($uuid !== null && in_array($uuid, $keptCollectionUuids, true))
                 || in_array($dbCol->slug, $keptCollectionSlugs, true);
             if (!$isKept) {

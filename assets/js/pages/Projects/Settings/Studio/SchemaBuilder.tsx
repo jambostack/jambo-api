@@ -221,12 +221,31 @@ function SchemaChatPanel({
     scrollDown();
   }
 
-  function handleApplyEntries(entries: NonNullable<ChatMessage['entries']>) {
-    // Pour l'instant, afficher les entrées dans le chat comme un aperçu
-    // La création réelle en base nécessite un endpoint dédié (future itération)
+  async function handleApplyEntries(entries: NonNullable<ChatMessage['entries']>) {
     if (!Array.isArray(entries)) return;
-    const totalEntries = entries.reduce((sum, e) => sum + (Array.isArray(e?.entries) ? e.entries.length : (e?.entry ? 1 : 0)), 0);
-    setMessages(prev => [...prev, { role: 'system', content: t('studio.chat.entries_generated', { total: String(totalEntries), collections: String(entries.length) }), schema: undefined }]);
+    setBusy(true);
+    let created = 0;
+    let errors = 0;
+    for (const eg of entries) {
+      const egEntries = Array.isArray(eg?.entries) ? eg.entries : [];
+      if (!eg?.collection || egEntries.length === 0) continue;
+      for (const entry of egEntries) {
+        try {
+          const body = { ...entry, status: 'published' };
+          // Supprimer les champs système que l'IA pourrait inclure
+          delete (body as any).uuid; delete (body as any).id;
+          delete (body as any).created_at; delete (body as any).updated_at;
+
+          const res = await fetch(`/api/projects/${project.uuid}/studio/apply-entries`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ collection: eg.collection, entry: body }),
+          });
+          if (res.ok) created++; else errors++;
+        } catch { errors++; }
+      }
+    }
+    setBusy(false);
+    setMessages(prev => [...prev, { role: 'system', content: t('studio.chat.entries_applied', { created: String(created), errors: String(errors) }), schema: undefined }]);
     scrollDown();
   }
 
