@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
+import axios from 'axios';
 import { toast } from 'sonner';
 import { ArrowLeft, Pencil, Ban, CheckCircle, Trash2 } from 'lucide-react';
 
@@ -37,29 +38,29 @@ export default function EndUsersShow({ project, endUser }: Props) {
         return endUser.email.substring(0, 2).toUpperCase();
     }
 
-    function toggleBan() {
+    const baseApi = `/api/projects/${project.uuid}/end-users`;
+
+    async function toggleBan() {
         setStatusLoading(true);
         const newStatus = endUser.status === 'banned' ? 'active' : 'banned';
-        router.patch(
-            route('projects.settings.end-users.status', { project: project.id, endUserUuid: endUser.uuid }),
-            { status: newStatus },
-            {
-                onSuccess: () => toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success')),
-                onError: () => toast.error(t('end_users.status_error')),
-                onFinish: () => setStatusLoading(false),
-            }
-        );
+        try {
+            await axios.patch(`${baseApi}/${endUser.uuid}/status`, { status: newStatus });
+            toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success'));
+        } catch {
+            toast.error(t('end_users.status_error'));
+        } finally {
+            setStatusLoading(false);
+        }
     }
 
     function executeDelete() {
-        // Le backend DELETE redirige vers la liste -> Inertia suit automatiquement
-        router.delete(
-            route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: endUser.uuid }),
-            {
-                onSuccess: () => toast.success(t('end_users.deleted')),
-                onError: () => toast.error(t('end_users.delete_error')),
-            }
-        );
+        setDeleteOpen(false);
+        axios.delete(`${baseApi}/${endUser.uuid}`)
+            .then(() => {
+                toast.success(t('end_users.deleted'));
+                router.visit(route('projects.settings.end-users', project.id));
+            })
+            .catch(() => toast.error(t('end_users.delete_error')));
     }
 
     function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {

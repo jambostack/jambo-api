@@ -589,13 +589,9 @@ class PageController extends InertiaController
         }
         $this->em->flush();
 
-        // Rediriger vers la page d'où vient la requête (liste ou détail)
-        // Validation du referer pour prévenir l'open redirect
-        $referer = $request->headers->get('referer');
-        if ($referer && parse_url($referer, PHP_URL_HOST) === $request->getHost()) {
-            return $this->redirect($referer);
-        }
-        return $this->redirectToRoute('projects_settings_end_users', ['project' => $project->id]);
+        // NOTE: Le frontend utilise maintenant l'API JSON (EndUserAdminController).
+        // Cette route Inertia est conservée pour compatibilité mais n'est plus appelée.
+        return $this->json(['success' => true, 'status' => $newStatus]);
     }
 
     #[Route('/projects/{project}/settings/end-users/{endUserUuid}', name: 'projects_settings_end_users_destroy', requirements: ['project' => '\d+', 'endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['DELETE'], priority: 10)]
@@ -615,7 +611,9 @@ class PageController extends InertiaController
         $this->em->remove($endUser);
         $this->em->flush();
 
-        return $this->redirectToRoute('projects_settings_end_users', ['project' => $project->id]);
+        // NOTE: Le frontend utilise maintenant l'API JSON (EndUserAdminController).
+        // Cette route Inertia est conservée pour compatibilité mais n'est plus appelée.
+        return $this->json(['success' => true]);
     }
 
     // -------------------------------------------------------------------------

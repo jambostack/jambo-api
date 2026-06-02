@@ -1,7 +1,8 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
+import axios from 'axios';
 import { toast } from 'sonner';
-import { Search, Plus, MoreHorizontal, Eye, Pencil, Ban, CheckCircle, Trash2, Settings2, CheckSquare, Square } from 'lucide-react';
+import { Search, Plus, MoreHorizontal, Eye, Pencil, Ban, CheckCircle, Trash2, Settings2 } from 'lucide-react';
 
 import type { Project, BreadcrumbItem, UserCan, EndUser } from '@/types';
 
@@ -17,6 +18,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { useTranslation } from '@/lib/i18n';
+
+const API = (projectUuid: string) => `/api/projects/${projectUuid}/end-users`;
 
 interface Props {
     project: Project;
@@ -72,32 +75,34 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
         );
     }
 
+    const baseApi = API(project.uuid);
+
     function confirmDelete(endUser: EndUser) {
         setDeleteTarget(endUser);
     }
 
-    function executeDelete() {
+    async function executeDelete() {
         if (!deleteTarget) return;
-        router.delete(
-            route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: deleteTarget.uuid }),
-            {
-                onSuccess: () => toast.success(t('end_users.deleted')),
-                onError: () => toast.error(t('end_users.delete_error')),
-                onFinish: () => setDeleteTarget(null),
-            }
-        );
+        try {
+            await axios.delete(`${baseApi}/${deleteTarget.uuid}`);
+            toast.success(t('end_users.deleted'));
+            router.reload({ only: ['endUsers'] });
+        } catch {
+            toast.error(t('end_users.delete_error'));
+        } finally {
+            setDeleteTarget(null);
+        }
     }
 
-    function toggleBan(endUser: EndUser) {
+    async function toggleBan(endUser: EndUser) {
         const newStatus = endUser.status === 'banned' ? 'active' : 'banned';
-        router.patch(
-            route('projects.settings.end-users.status', { project: project.id, endUserUuid: endUser.uuid }),
-            { status: newStatus },
-            {
-                onSuccess: () => toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success')),
-                onError: () => toast.error(t('end_users.status_error')),
-            }
-        );
+        try {
+            await axios.patch(`${baseApi}/${endUser.uuid}/status`, { status: newStatus });
+            toast.success(newStatus === 'banned' ? t('end_users.ban_success') : t('end_users.unban_success'));
+            router.reload({ only: ['endUsers'] });
+        } catch {
+            toast.error(t('end_users.status_error'));
+        }
     }
 
     function toggleAll() {
@@ -119,11 +124,8 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
         let ok = 0;
         for (const uuid of selected) {
             try {
-                const res = await fetch(
-                    route('projects.settings.end-users.status', { project: project.id, endUserUuid: uuid }),
-                    { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }, body: JSON.stringify({ status: 'banned' }) }
-                );
-                if (res.ok) ok++;
+                await axios.patch(`${baseApi}/${uuid}/status`, { status: 'banned' });
+                ok++;
             } catch {}
         }
         setBulkBusy(false); setSelected(new Set());
@@ -137,11 +139,8 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
         let ok = 0;
         for (const uuid of selected) {
             try {
-                const res = await fetch(
-                    route('projects.settings.end-users.destroy', { project: project.id, endUserUuid: uuid }),
-                    { method: 'DELETE', credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } }
-                );
-                if (res.ok) ok++;
+                await axios.delete(`${baseApi}/${uuid}`);
+                ok++;
             } catch {}
         }
         setBulkBusy(false); setSelected(new Set());
