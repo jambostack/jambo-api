@@ -60,12 +60,13 @@ const SCHEMA_CHAT_QUICK_PILL_KEYS = [
 
 /* ══════════════════════════ SCHEMA CHAT PANEL ══════════════════════════ */
 function SchemaChatPanel({
-  project, currentCollections, onApplySchema, onApplyEndUserFields,
+  project, currentCollections, onApplySchema, onApplyEndUserFields, endUserFields,
 }: {
   project: Project;
   currentCollections: SchemaCollection[];
   onApplySchema: (newCollections: SchemaCollection[]) => void;
   onApplyEndUserFields: (fields: SchemaField[]) => void;
+  endUserFields: EndUserFieldData[];
 }) {
   const t = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -142,9 +143,14 @@ function SchemaChatPanel({
     parts.push('## EndUser (collection système - NE PAS recréer)');
     parts.push('- Slug: end_users, toujours disponible pour la gestion utilisateurs');
     parts.push('- Champs système: email (email*), name (text), status (active/banned/pending), avatar_url (text), custom_fields (json)');
+    const customEUF = endUserFields.filter(f => !f.is_system);
+    if (customEUF.length > 0) {
+      parts.push('- Champs personnalisés EndUser ACTUELS (à inclure dans les entrées):');
+      customEUF.forEach(f => parts.push('  ' + f.name + ' (' + f.slug + ') [' + f.type + ']' + (f.required ? '*' : '')));
+    }
     parts.push('- Utiliser relation vers end_users pour auteurs, propriétaires, membres, clients');
-    parts.push('- Proposer des champs supplémentaires si pertinent (bio, website, phone, role, preferences...)');
     parts.push('- Ne JAMAIS créer de nouvelle collection pour les utilisateurs/personnes');
+    parts.push('- Pour /data sur end_users: inclure TOUS les champs personnalisés listés ci-dessus dans chaque entrée');
     parts.push('');
 
     parts.push('## Collections existantes');
@@ -423,10 +429,11 @@ function SchemaPreviewPanel({ current, preview }: { current: SchemaCollection | 
 
 /* ══════════════════════════ DESKTOP RIGHT PANEL ══════════════════════════ */
 function DesktopRightPanel({
-  project, currentCollections, onApplySchema, onApplyEndUserFields, current, onGeneratePreview, preview,
+  project, currentCollections, onApplySchema, onApplyEndUserFields, endUserFields, current, onGeneratePreview, preview,
 }: {
   project: Project; currentCollections: SchemaCollection[]; onApplySchema: (c: SchemaCollection[]) => void;
   onApplyEndUserFields: (fields: SchemaField[]) => void;
+  endUserFields: EndUserFieldData[];
   current: SchemaCollection | null; onGeneratePreview: () => void; preview: string | null;
 }) {
   const [tab, setTab] = useState<'chat'|'preview'>('chat');
@@ -445,7 +452,7 @@ function DesktopRightPanel({
         <button className={`drp-tab ${tab==='preview'?'active':''}`} onClick={()=>{onGeneratePreview();setTab('preview');}}><Eye />Preview</button>
       </div>
       <div style={{ display: tab === 'chat' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
-        <SchemaChatPanel project={project} currentCollections={currentCollections} onApplySchema={onApplySchema} onApplyEndUserFields={onApplyEndUserFields} />
+        <SchemaChatPanel project={project} currentCollections={currentCollections} onApplySchema={onApplySchema} onApplyEndUserFields={onApplyEndUserFields} endUserFields={endUserFields} />
       </div>
       <div style={{ display: tab === 'preview' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
         <SchemaPreviewPanel current={current} preview={preview} />
@@ -884,7 +891,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
 
         <div className={`sb-right-panel${rightPanelOpen ? '' : ' collapsed'}`} style={{ width: rightW > 0 ? rightW + 'px' : undefined }}>
           {rightW > 0 && (
-            <DesktopRightPanel project={project} currentCollections={collections} onApplySchema={handleApplySchema} onApplyEndUserFields={handleApplyEndUserFields} current={current} onGeneratePreview={generatePreview} preview={preview} />
+            <DesktopRightPanel project={project} currentCollections={collections} onApplySchema={handleApplySchema} onApplyEndUserFields={handleApplyEndUserFields} endUserFields={endUserFields} current={current} onGeneratePreview={generatePreview} preview={preview} />
           )}
         </div>
       </div>
@@ -920,6 +927,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
         <div style={{ display: mobileTab === 'chat' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <DesktopRightPanel
             project={project} currentCollections={collections} onApplySchema={handleApplySchema}
+            onApplyEndUserFields={handleApplyEndUserFields} endUserFields={endUserFields}
             current={current} onGeneratePreview={generatePreview} preview={preview}
           />
         </div>
