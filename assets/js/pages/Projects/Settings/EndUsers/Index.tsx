@@ -43,6 +43,7 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
     const [search, setSearch] = useState(filters.search || '');
     const [statusFilter, setStatusFilter] = useState(filters.status || '');
     const [deleteTarget, setDeleteTarget] = useState<EndUser | null>(null);
+    const [bulkConfirmOpen, setBulkConfirmOpen] = useState<'ban' | 'delete' | null>(null);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [bulkBusy, setBulkBusy] = useState(false);
 
@@ -216,14 +217,43 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
                     {selected.size > 0 && (
                         <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
                             <span className="text-sm font-medium">{t('end_users.selected_count', { count: String(selected.size) })}</span>
-                            <Button size="sm" variant="outline" disabled={bulkBusy} onClick={bulkBan}>
+                            <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => setBulkConfirmOpen('ban')}>
                                 <Ban className="mr-1 h-3.5 w-3.5" /> {t('end_users.ban')}
                             </Button>
-                            <Button size="sm" variant="outline" className="text-destructive border-destructive" disabled={bulkBusy} onClick={bulkDelete}>
+                            <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => setBulkConfirmOpen('delete')}>
                                 <Trash2 className="mr-1 h-3.5 w-3.5" /> {t('end_users.delete')}
                             </Button>
                         </div>
                     )}
+
+                    {/* Bulk confirmation dialog */}
+                    <AlertDialog open={bulkConfirmOpen !== null} onOpenChange={() => setBulkConfirmOpen(null)}>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                    {bulkConfirmOpen === 'ban' ? t('end_users.bulk_ban_title') : t('end_users.bulk_delete_title')}
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    {bulkConfirmOpen === 'ban'
+                                        ? t('end_users.bulk_ban_desc', { count: String(selected.size) })
+                                        : t('end_users.bulk_delete_desc', { count: String(selected.size) })}
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel disabled={bulkBusy}>{t('common.cancel')}</AlertDialogCancel>
+                                <AlertDialogAction
+                                    disabled={bulkBusy}
+                                    className={bulkConfirmOpen === 'delete' ? 'bg-destructive text-destructive-foreground' : ''}
+                                    onClick={() => {
+                                        if (bulkConfirmOpen === 'ban') bulkBan();
+                                        else bulkDelete();
+                                    }}
+                                >
+                                    {bulkBusy ? t('common.loading') : (bulkConfirmOpen === 'ban' ? t('end_users.ban') : t('end_users.delete'))}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
                     {/* Table */}
                     <div className="rounded-md border">
