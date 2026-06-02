@@ -589,12 +589,8 @@ class PageController extends InertiaController
         }
         $this->em->flush();
 
-        // Retour JSON pour que le frontend garde le contrôle (bulk, etc.)
-        if ($request->headers->has('X-Inertia') || $request->isXmlHttpRequest()) {
-            return $this->json(['success' => true, 'status' => $newStatus]);
-        }
-
-        return $this->redirectToRoute('projects_settings_end_users_show', ['project' => $project->id, 'endUserUuid' => $endUserUuid], 303);
+        // Inertia suit les 303 → on reste en JSON pour que le frontend garde le contrôle
+        return $this->json(['success' => true, 'status' => $newStatus]);
     }
 
     #[Route('/projects/{project}/settings/end-users/{endUserUuid}', name: 'projects_settings_end_users_destroy', requirements: ['project' => '\d+', 'endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['DELETE'], priority: 10)]
@@ -614,12 +610,8 @@ class PageController extends InertiaController
         $this->em->remove($endUser);
         $this->em->flush();
 
-        // Retour JSON pour que le frontend garde le contrôle (bulk, etc.)
-        if ($request->headers->has('X-Inertia') || $request->isXmlHttpRequest()) {
-            return $this->json(['success' => true]);
-        }
-
-        return $this->redirectToRoute('projects_settings_end_users', ['project' => $project->id], 303);
+        // Inertia suit les 303 → on reste en JSON pour que le frontend garde le contrôle
+        return $this->json(['success' => true]);
     }
 
     // -------------------------------------------------------------------------
