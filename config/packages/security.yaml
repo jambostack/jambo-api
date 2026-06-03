@@ -46,6 +46,7 @@ security:
 
     access_control:
         - { path: ^/api/docs, roles: PUBLIC_ACCESS }
+        - { path: ^/favicon, roles: PUBLIC_ACCESS }
         - { path: ^/login, roles: PUBLIC_ACCESS }
         - { path: ^/register, roles: PUBLIC_ACCESS }
         - { path: ^/forgot-password, roles: PUBLIC_ACCESS }
