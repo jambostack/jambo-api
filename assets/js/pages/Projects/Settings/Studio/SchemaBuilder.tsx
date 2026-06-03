@@ -42,10 +42,27 @@ interface ServerCollection {
   description?: string; isSingleton: boolean;
   fields: Array<{ name: string; slug: string; type: string; isRequired: boolean; options?: any; order?: number }>;
 }
-interface ChatMessage { role: 'user' | 'assistant' | 'system'; content: string; schema?: Array<{ name: string; slug: string; description: string; isSingleton: boolean; fields: Array<{ name: string; slug: string; type: string; isRequired: boolean }> }>; entries?: Array<{ collection: string; entries: Array<Record<string, any>> }>; agentPlan?: AgentPlan; executionLog?: Array<{ tool: string; result: any }>; }
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  attachment?: { name: string; mimeType: string; size: number };
+  schema?: Array<{ name: string; slug: string; description: string; isSingleton: boolean; fields: Array<{ name: string; slug: string; type: string; isRequired: boolean }> }>;
+  entries?: Array<{ collection: string; entries: Array<Record<string, any>> }>;
+  agentPlan?: AgentPlan;
+  executionLog?: Array<{ tool: string; result: any }>;
+}
 interface EndUserFieldData { id: number; name: string; slug: string; type: string; required: boolean; order: number; is_system: boolean; }
 type StudioCommand = 'schema' | 'data' | 'all' | null;
 interface AgentPlan { plan: string; actions: Array<{ tool: string; params: any }>; }
+interface AttachmentFile {
+  name: string;        // nom original du fichier
+  mimeType: string;    // ex: "image/png", "text/csv"
+  size: number;        // octets
+  source: 'upload' | 'media';
+  base64?: string;     // pour images : contenu base64 sans le préfixe data URI
+  text?: string;       // pour CSV/JSON/TXT/PDF : contenu texte (tronqué à 8 000 chars)
+  mediaUuid?: string;  // pour source='media' : UUID dans la médiathèque
+}
 interface ExecLogEntry { tool: string; result: any; }
 
 function slugify(s: string) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
