@@ -30,12 +30,16 @@ interface MediaLibraryModalProps {
     allowMultiple?: boolean;
 }
 
+// Référence stable : évite qu'un nouveau [] à chaque render ne relance le useEffect
+// de reset (cause de la boucle infinie / React error #185).
+const EMPTY_SELECTION: Asset[] = [];
+
 export function MediaLibraryModal({
     isOpen,
     onClose,
     project,
     onSelect,
-    currentlySelected = [],
+    currentlySelected = EMPTY_SELECTION,
     allowMultiple = false
 }: MediaLibraryModalProps) {
     const t = useTranslation();
@@ -73,19 +77,21 @@ export function MediaLibraryModal({
     const [assetToDelete, setAssetToDelete] = useState<Asset | null>(null);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-    // Reset the selected assets when the modal is opened
+    // Reset the selected assets when the modal is opened.
+    // Dépend de `isOpen` SEULEMENT : éviter de relancer cet effet à chaque
+    // changement de référence de `currentlySelected` (un [] inline passé par un
+    // parent recrée une nouvelle référence à chaque render → boucle infinie / React #185).
     useEffect(() => {
-        if (isOpen) {
-            // When modal opens, use the currentlySelected assets as the initial selection
-            if (currentlySelected && currentlySelected.length > 0) {
-                setSelectedAssets(currentlySelected.map(asset => asset.id));
-                setSelectedAssetObjects(currentlySelected);
-            } else {
-                setSelectedAssets([]);
-                setSelectedAssetObjects([]);
-            }
+        if (!isOpen) return;
+        if (currentlySelected && currentlySelected.length > 0) {
+            setSelectedAssets(currentlySelected.map(asset => asset.id));
+            setSelectedAssetObjects(currentlySelected);
+        } else {
+            setSelectedAssets([]);
+            setSelectedAssetObjects([]);
         }
-    }, [isOpen, currentlySelected]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
 
     // Load assets when modal opens or filters change
     useEffect(() => {
