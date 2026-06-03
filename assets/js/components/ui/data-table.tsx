@@ -814,7 +814,8 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
                                     key={index}
                                     className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
                                     onClick={(e) => {
-                                        if ((e.target as HTMLElement).closest('[data-no-row-click]')) return;
+                                        const t = e.target as HTMLElement;
+                                        if (t.closest('button') || t.closest('a') || t.closest('[data-no-row-click]')) return;
                                         onRowClick?.(item);
                                     }}
                                 >
