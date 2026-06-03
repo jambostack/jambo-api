@@ -22,6 +22,7 @@ use Symfony\Component\HttpFoundation\File\File as HttpFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
@@ -411,7 +412,7 @@ PROMPT;
      * Reà§oit l'historique de conversation + le contexte des collections existantes.
      */
     #[Route('/api/projects/{uuid}/studio/ai-chat', name: 'studio_ai_chat', methods: ['POST'])]
-    public function aiChat(string $uuid, Request $request): JsonResponse
+    public function aiChat(string $uuid, Request $request): Response
     {
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
@@ -423,7 +424,7 @@ PROMPT;
         $history = is_array($body['history'] ?? null) ? $body['history'] : [];
         $command = isset($body['command']) && in_array($body['command'], ['schema','data','all'], true)
             ? $body['command']
-            : 'schema'; // default = schema only
+            : 'schema';
         $attachment = is_array($body['attachment'] ?? null) ? $body['attachment'] : null;
 
         if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
@@ -433,20 +434,14 @@ PROMPT;
             $name     = (string) ($attachment['name'] ?? 'fichier');
             $mimeType = (string) ($attachment['mimeType'] ?? '');
             $text     = isset($attachment['text']) ? trim((string) $attachment['text']) : null;
-
             if ($text !== null && $text !== '') {
-                // CSV, JSON, TXT, PDF (text-based)
                 $attachmentContext = "\n\n--- FICHIER JOINT : {$name} ---\n" . mb_substr($text, 0, 8000) . "\n--- FIN DU FICHIER ---";
             } elseif (!str_starts_with($mimeType, 'image/') && empty($attachment['base64']) && empty($attachment['mediaUuid'])) {
                 $attachmentContext = "\n\n[Fichier joint : {$name} — contenu non extractible]";
             }
         }
 
-        // Préfixer le prompt utilisateur pour l'affichage dans l'historique
-        $displayPrompt = $prompt;
         $commandPrefix = $command !== 'schema' ? '/' . $command . ' ' : '';
-
-        // Persister le message utilisateur en DB immédiatement
         $userMsg = new \App\Entity\StudioChatMessage();
         $userMsg->project = $project;
         $userMsg->role = 'user';
@@ -454,78 +449,98 @@ PROMPT;
         $this->em->persist($userMsg);
         $this->em->flush();
 
-        $namingRules = self::NAMING_CONVENTIONS;
-        $endUserBlock = self::ENDUSER_AWARENESS;
-
-        // Choisir le prompt système selon la commande
-        $systemPrompt = $this->buildSystemPrompt($command, $namingRules, $endUserBlock, $context . $attachmentContext);
-
+        $systemPrompt = $this->buildSystemPrompt($command, self::NAMING_CONVENTIONS, self::ENDUSER_AWARENESS, $context . $attachmentContext);
         [$provider, $apiKey, $model, $endpoint] = $this->resolveAiConfig();
+
+        // Fallback sans IA : réponse immédiate enveloppée en SSE pour cohérence
         if ($provider === null) {
-            return $this->commandFallback($command, $prompt);
+            $fallbackData = json_decode($this->commandFallback($command, $prompt)->getContent(), true);
+            return new StreamedResponse(function () use ($fallbackData) {
+                echo ": ping\n\ndata: " . json_encode($fallbackData) . "\n\n";
+                flush();
+            }, 200, ['Content-Type' => 'text/event-stream', 'Cache-Control' => 'no-cache', 'X-Accel-Buffering' => 'no']);
         }
 
-        try {
-            $msgs = [['role' => 'system', 'content' => $systemPrompt]];
-            foreach ($history as $h) {
-                $role = ($h['role'] === 'assistant' || $h['role'] === 'user') ? $h['role'] : 'user';
-                $msgs[] = ['role' => $role, 'content' => (string) $h['content']];
-            }
-            $msgs[] = $this->buildUserMessage($provider, $prompt, $attachment, $project);
-
-            $content = $this->callAiApi($provider, $apiKey, $model, $endpoint, $msgs);
-
-            // Extraction JSON (collections ET/OU entries selon la commande)
-            $collections = null;
-            $entries     = null;
-            $reply       = $content;
-
-            $extracted = $this->extractJsonResponse($content);
-            if ($extracted !== null) {
-                $collections = $extracted['data']['collections'] ?? null;
-                $entries     = $extracted['data']['entries'] ?? null;
-                $reply = trim(str_replace($extracted['raw'], '', $content));
-                $reply = trim(preg_replace('/```(?:json)?\s*```/', '', $reply) ?? $reply);
-            }
-
-            if (is_array($collections)) {
-                $collections = $this->normalizeSchema($collections);
-            }
-
-            $reply = trim(preg_replace('/```\s*$/', '', $reply));
-
-            // Message par défaut selon la commande
-            if ($reply === '') {
-                $reply = match ($command) {
-                    'data' => ($entries !== null ? 'Contenu généré. Applique-le ci-dessous.' : 'Je n\'ai pas pu générer de contenu. Peux-tu être plus précis ?'),
-                    'all'  => 'Schéma et contenu générés. Applique chaque bloc ci-dessous.',
-                    default => ($collections !== null ? 'Schéma généré. Applique-le ci-dessous.' : 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?'),
-                };
-            }
-
-            // Persister le message assistant en DB
-            $assistantMsg = new \App\Entity\StudioChatMessage();
-            $assistantMsg->project = $project;
-            $assistantMsg->role = 'assistant';
-            $assistantMsg->content = $reply;
-            $assistantMsg->schema = $collections;
-            $assistantMsg->entries = $entries;
-            $this->em->persist($assistantMsg);
-            $this->em->flush();
-
-            $response = ['reply' => $reply];
-            if ($command !== 'data' || $collections !== null) {
-                $response['collections'] = $collections;
-            }
-            if ($command === 'data' || $command === 'all') {
-                $response['entries'] = $entries;
-            }
-
-            return $this->json($response);
-        } catch (\Throwable $e) {
-            $this->logger->error('AI chat failed', ['exception' => $e, 'project' => $uuid]);
-            return $this->json(['reply' => 'Désolé, une erreur est survenue. Réessaie.', 'error' => 'AI chat failed'], 500);
+        $msgs = [['role' => 'system', 'content' => $systemPrompt]];
+        foreach ($history as $h) {
+            $role = ($h['role'] === 'assistant' || $h['role'] === 'user') ? $h['role'] : 'user';
+            $msgs[] = ['role' => $role, 'content' => (string) $h['content']];
         }
+        $msgs[] = $this->buildUserMessage($provider, $prompt, $attachment, $project);
+        [$aiUrl, $aiOptions] = $this->buildAiRequestArgs($provider, $apiKey, $model, $endpoint, $msgs);
+
+        return new StreamedResponse(function () use ($aiUrl, $aiOptions, $provider, $command, $project) {
+            set_time_limit(300);
+            ignore_user_abort(true);
+
+            // Heartbeat immédiat pour éviter le timeout Apache 30 s
+            echo ": ping\n\n";
+            flush();
+
+            try {
+                $httpResponse = $this->httpClient->request('POST', $aiUrl, $aiOptions);
+
+                // Envoie un heartbeat toutes les 20 s pendant l'attente de la réponse IA
+                foreach ($this->httpClient->stream($httpResponse, 20.0) as $chunk) {
+                    if ($chunk->isTimeout()) {
+                        echo ": ping\n\n";
+                        flush();
+                    }
+                }
+
+                $content = $this->parseAiContent($provider, $httpResponse->toArray());
+
+                $collections = null;
+                $entries     = null;
+                $reply       = $content;
+
+                $extracted = $this->extractJsonResponse($content);
+                if ($extracted !== null) {
+                    $collections = $extracted['data']['collections'] ?? null;
+                    $entries     = $extracted['data']['entries'] ?? null;
+                    $reply = trim(str_replace($extracted['raw'], '', $content));
+                    $reply = trim(preg_replace('/```(?:json)?\s*```/', '', $reply) ?? $reply);
+                }
+
+                if (is_array($collections)) {
+                    $collections = $this->normalizeSchema($collections);
+                }
+
+                $reply = trim(preg_replace('/```\s*$/', '', $reply));
+
+                if ($reply === '') {
+                    $reply = match ($command) {
+                        'data'  => ($entries !== null ? 'Contenu généré. Applique-le ci-dessous.' : "Je n'ai pas pu générer de contenu. Peux-tu être plus précis ?"),
+                        'all'   => 'Schéma et contenu générés. Applique chaque bloc ci-dessous.',
+                        default => ($collections !== null ? 'Schéma généré. Applique-le ci-dessous.' : 'Je ne peux pas générer de schéma pour cette demande. Peux-tu être plus précis ?'),
+                    };
+                }
+
+                $assistantMsg = new \App\Entity\StudioChatMessage();
+                $assistantMsg->project = $project;
+                $assistantMsg->role = 'assistant';
+                $assistantMsg->content = $reply;
+                $assistantMsg->schema = $collections;
+                $assistantMsg->entries = $entries;
+                $this->em->persist($assistantMsg);
+                $this->em->flush();
+
+                $result = ['reply' => $reply];
+                if ($command !== 'data' || $collections !== null) {
+                    $result['collections'] = $collections;
+                }
+                if ($command === 'data' || $command === 'all') {
+                    $result['entries'] = $entries;
+                }
+
+                echo "data: " . json_encode($result) . "\n\n";
+                flush();
+            } catch (\Throwable $e) {
+                $this->logger->error('AI chat failed', ['exception' => $e]);
+                echo "data: " . json_encode(['reply' => "Désolé, une erreur est survenue. Réessaie.", 'error' => 'AI chat failed']) . "\n\n";
+                flush();
+            }
+        }, 200, ['Content-Type' => 'text/event-stream', 'Cache-Control' => 'no-cache', 'X-Accel-Buffering' => 'no']);
     }
 
     /** Construit le prompt système adapté à  la commande. */
@@ -948,31 +963,23 @@ PROMPT;
      * Appelle l'API du provider IA avec les messages donnés.
      * Utilise HttpClientInterface avec la clé API depuis AppSettings (DB).
      */
-    private function callAiApi(string $provider, string $apiKey, string $model, string $endpoint, array $messages): string
+    /** Prépare URL + options pour l'appel HTTP vers le provider IA. */
+    private function buildAiRequestArgs(string $provider, string $apiKey, string $model, string $endpoint, array $messages): array
     {
         $headers = ['Content-Type' => 'application/json'];
 
         if ($provider === 'gemini') {
-            // Clé API dans le header x-goog-api-key, pas en URL
             $headers['x-goog-api-key'] = $apiKey;
             $parts = [];
             foreach ($messages as $m) {
                 $parts[] = ['text' => $m['content']];
             }
-            $body = ['contents' => [['parts' => $parts]]];
-            $response = $this->httpClient->request('POST', $endpoint, [
-                'headers' => $headers,
-                'json'    => $body,
-                'timeout' => 60,
-            ]);
-            $arr = $response->toArray();
-            return $arr['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            return [$endpoint, ['headers' => $headers, 'json' => ['contents' => [['parts' => $parts]]], 'timeout' => 120]];
         }
 
         if ($provider === 'anthropic') {
             $headers['x-api-key'] = $apiKey;
             $headers['anthropic-version'] = '2023-06-01';
-            // Anthropic utilise un format différent
             $systemMsg = '';
             $bodyMessages = [];
             foreach ($messages as $m) {
@@ -986,20 +993,23 @@ PROMPT;
             $body = ['model' => $model, 'messages' => $messages, 'temperature' => 0.7];
         }
 
-        $response = $this->httpClient->request('POST', $endpoint, [
-            'headers' => $headers,
-            'json' => $body,
-            'timeout' => 60,
-        ]);
+        return [$endpoint, ['headers' => $headers, 'json' => $body, 'timeout' => 120]];
+    }
 
-        $data = $response->toArray();
+    /** Extrait le texte de la réponse selon le format du provider. */
+    private function parseAiContent(string $provider, array $data): string
+    {
+        return match ($provider) {
+            'anthropic' => $data['content'][0]['text'] ?? '',
+            'gemini'    => $data['candidates'][0]['content']['parts'][0]['text'] ?? '',
+            default     => $data['choices'][0]['message']['content'] ?? '',
+        };
+    }
 
-        // Extraire le contenu selon le format du provider
-        if ($provider === 'anthropic') {
-            return $data['content'][0]['text'] ?? '';
-        }
-        // OpenAI / DeepSeek / Ollama (format compatible OpenAI)
-        return $data['choices'][0]['message']['content'] ?? '';
+    private function callAiApi(string $provider, string $apiKey, string $model, string $endpoint, array $messages): string
+    {
+        [$url, $options] = $this->buildAiRequestArgs($provider, $apiKey, $model, $endpoint, $messages);
+        return $this->parseAiContent($provider, $this->httpClient->request('POST', $url, $options)->toArray());
     }
 
     /**
