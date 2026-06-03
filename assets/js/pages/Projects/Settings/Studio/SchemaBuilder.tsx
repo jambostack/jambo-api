@@ -596,25 +596,96 @@ function SchemaChatPanel({
         <button className="scp-clear-btn" onClick={clearHistory} disabled={busy} title={t('studio.chat.clear_title')}><Trash2 className="w-3 h-3" />{t('studio.chat.clear')}</button>
       </div>
 
-      {/* Input area */}
-      <div className="scp-input-row">
-        <textarea
-          ref={textareaRef}
-          placeholder={placeholder}
-          value={input}
-          onChange={e => handleTextareaChange(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          disabled={busy}
-          rows={2}
-          maxLength={2000}
-        />
-        <button onClick={send} disabled={busy || !input.trim()}>{busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}</button>
+      {/* Input wrapper with picker */}
+      <div className="scp-input-wrapper">
+
+        {/* Preview strip — visible when a file is attached */}
+        {attachment && (
+          <div className="scp-preview-strip">
+            <span style={{ fontSize:'12px' }}>{attachment.mimeType.startsWith('image/') ? '🖼️' : '📄'}</span>
+            <span className="scp-preview-name">{attachment.name}</span>
+            <span className="scp-preview-size">{attachment.size < 1024 ? attachment.size + ' B' : attachment.size < 1024*1024 ? Math.round(attachment.size/1024) + ' KB' : (attachment.size/1024/1024).toFixed(1) + ' MB'}</span>
+            <button className="scp-preview-del" onClick={() => setAttachment(null)} title={t('studio.picker.remove')}><X className="w-3 h-3" /></button>
+          </div>
+        )}
+
+        {/* Picker dropdown */}
+        {pickerOpen && (
+          <div className="scp-picker" ref={pickerRef}>
+            <div className="scp-picker-tabs">
+              <div className="scp-picker-tab active">💻 {t('studio.picker.tab_local')}</div>
+              <div className="scp-picker-tab" onClick={() => { setMediaModalOpen(true); setPickerOpen(false); }}>📚 {t('studio.picker.tab_media')}</div>
+            </div>
+            <div className="scp-picker-body">
+              <div
+                className="scp-drop-area"
+                onClick={() => { fileInputRef.current?.click(); setPickerOpen(false); }}
+                onDragOver={e => e.preventDefault()}
+                onDrop={async e => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files[0];
+                  if (file) { const att = await readFileAsAttachment(file); if (att) setAttachment(att); }
+                  setPickerOpen(false);
+                }}
+              >
+                <div style={{ fontSize:'18px', marginBottom:'4px' }}>📂</div>
+                <div>{t('studio.picker.drop_hint')}</div>
+                <div style={{ fontSize:'9px', opacity:.5, marginTop:'3px' }}>{t('studio.picker.formats')}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Input row */}
+        <div className="scp-input-row">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            style={{ display:'none' }}
+            accept="image/*,.csv,.json,.txt,.md,.pdf"
+            onChange={async e => {
+              const file = e.target.files?.[0];
+              if (file) { const att = await readFileAsAttachment(file); if (att) setAttachment(att); }
+              e.target.value = '';
+            }}
+          />
+          {/* Attachment button */}
+          <button
+            className={`scp-attach-btn ${attachment ? 'has-file' : ''}`}
+            onClick={() => setPickerOpen(p => !p)}
+            disabled={busy}
+            title={t('studio.picker.title')}
+          >
+            <Paperclip className="w-3.5 h-3.5" />
+          </button>
+          <textarea
+            ref={textareaRef}
+            placeholder={placeholder}
+            value={input}
+            onChange={e => handleTextareaChange(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+            disabled={busy}
+            rows={2}
+            maxLength={2000}
+          />
+          <button onClick={send} disabled={busy || (!input.trim() && !attachment)}>{busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}</button>
+        </div>
       </div>
 
       {/* Quick prompts */}
       <div className="scp-quick-prompts">
         {SCHEMA_CHAT_QUICK_PILL_KEYS.map((key,i) => { const qp = t(key); return (<button key={i} className="scp-quick-pill" onClick={() => { setInput(qp); setActiveCommand(parseCommand(qp).command); textareaRef.current?.focus(); }} disabled={busy}>{qp}</button>); })}
       </div>
+
+      {/* Media library modal */}
+      <MediaLibraryModal
+        isOpen={mediaModalOpen}
+        onClose={() => setMediaModalOpen(false)}
+        project={project}
+        onSelect={handleMediaSelect}
+        allowMultiple={false}
+      />
     </div>
   );
 }
