@@ -321,7 +321,10 @@ export default function ContentList({ collection, project }: Props) {
                                 if (!value) return '-';
                                 if (Array.isArray(value)) {
                                     return (
-                                        <div className="flex flex-wrap gap-1">
+                                        <div
+                                            className="flex flex-wrap gap-1"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
                                             {value.map((asset, index) => (
                                                 <button
                                                     key={index}
