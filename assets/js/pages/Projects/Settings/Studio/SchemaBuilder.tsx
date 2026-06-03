@@ -256,14 +256,27 @@ function SchemaChatPanel({
 
   async function send() {
     const { command, prompt } = parseCommand(input);
-    if (!prompt || busy) return;
+    if ((!prompt && !attachment) || busy) return;
+    const currentAttachment = attachment;
+    setAttachment(null);
     setInput(''); setBusy(true);
-    setMessages(prev => [...prev, { role: 'user', content: input.trim(), schema: undefined }]);
+    setMessages(prev => [...prev, {
+      role: 'user',
+      content: input.trim(),
+      schema: undefined,
+      attachment: currentAttachment ? { name: currentAttachment.name, mimeType: currentAttachment.mimeType, size: currentAttachment.size } : undefined,
+    }]);
     scrollDown();
     try {
       const res = await fetch(`/api/projects/${project.uuid}/studio/ai-chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command, prompt, context: buildContext(), history: messages.slice(-20).map(m => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({
+          command,
+          prompt,
+          context: buildContext(),
+          history: messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
+          attachment: currentAttachment ?? undefined,
+        }),
       });
       const data = await res.json() as { reply?: string; collections?: any[]; entries?: any[]; agentPlan?: AgentPlan; error?: string };
       if (!res.ok || data.error) throw new Error(data.error);
@@ -484,6 +497,13 @@ function SchemaChatPanel({
           <div key={i} className={`scp-msg ${m.role}`}>
             <div className="avatar">{m.role === 'assistant' ? <Bot className="w-3 h-3" /> : m.role === 'system' ? <Check className="w-3 h-3" /> : <User className="w-3 h-3" />}</div>
             <div className="bubble">
+              {m.attachment && (
+                <div style={{ marginBottom:'4px' }}>
+                  <span className="scp-file-pill">
+                    {m.attachment.mimeType.startsWith('image/') ? '🖼️' : '📄'} {m.attachment.name}
+                  </span>
+                </div>
+              )}
               <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
 
               {/* Schema card */}
