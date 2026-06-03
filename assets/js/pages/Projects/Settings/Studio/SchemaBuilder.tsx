@@ -436,7 +436,7 @@ function SchemaChatPanel({
         .scp-cmd-btn svg { width:12px; height:12px; }
         .scp-clear-btn { margin-left:auto; display:flex; align-items:center; gap:3px; padding:3px 8px; border-radius:6px; font-size:10.5px; cursor:pointer; border:1px solid transparent; background:transparent; color:var(--studio-text-muted); transition:all .12s; }
         .scp-clear-btn:hover { color:#e06c75; border-color:rgba(224,108,117,.2); }
-        .scp-input-row { display:flex; gap:6px; padding:8px 10px; border-top:1px solid var(--studio-border); flex-shrink:0; align-items:flex-end; }
+        .scp-input-row { display:flex; gap:6px; padding:8px 10px; align-items:flex-end; }
         .scp-input-row textarea { flex:1; min-height:40px; max-height:120px; border-radius:6px; padding:6px 8px; font-size:11.5px; font-family:inherit; background:var(--studio-bg); border:1px solid var(--studio-border); color:var(--studio-text); outline:none; resize:none; line-height:1.4; }
         .scp-input-row textarea:focus { border-color:var(--studio-border-active); }
         .scp-input-row button { height:32px; min-width:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; background:var(--studio-accent); color:#000; flex-shrink:0; }
@@ -450,6 +450,23 @@ function SchemaChatPanel({
         @keyframes plan-in { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
         .scp-exec-log { animation: log-in .25s ease; }
         @keyframes log-in { from { opacity:0; } to { opacity:1; } }
+        .scp-attach-btn { height:32px; min-width:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:1px solid var(--studio-border); background:var(--studio-surface); color:var(--studio-text-muted); flex-shrink:0; transition:all .12s; }
+        .scp-attach-btn:hover { border-color:var(--studio-border-active); color:var(--studio-text-dim); }
+        .scp-attach-btn.has-file { border-color:var(--studio-accent); color:var(--studio-accent); background:rgba(47,207,143,.06); }
+        .scp-picker { position:absolute; bottom:calc(100% + 4px); left:0; width:220px; background:var(--studio-surface); border:1px solid var(--studio-border); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:50; overflow:hidden; }
+        .scp-picker-tabs { display:flex; border-bottom:1px solid var(--studio-border); }
+        .scp-picker-tab { flex:1; padding:6px; text-align:center; font-size:9.5px; cursor:pointer; color:var(--studio-text-muted); transition:all .12s; }
+        .scp-picker-tab.active { background:rgba(47,207,143,.06); color:var(--studio-accent); border-bottom:2px solid var(--studio-accent); }
+        .scp-picker-body { padding:8px; }
+        .scp-drop-area { border:1.5px dashed var(--studio-border); border-radius:6px; padding:10px; text-align:center; cursor:pointer; font-size:10px; color:var(--studio-text-muted); transition:border-color .12s; }
+        .scp-drop-area:hover { border-color:var(--studio-accent); color:var(--studio-text-dim); }
+        .scp-preview-strip { display:flex; align-items:center; gap:6px; padding:5px 10px; background:rgba(47,207,143,.04); border-top:1px solid rgba(47,207,143,.1); flex-shrink:0; font-size:10px; }
+        .scp-preview-name { flex:1; color:var(--studio-text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+        .scp-preview-size { color:var(--studio-text-muted); font-size:9px; flex-shrink:0; }
+        .scp-preview-del { cursor:pointer; color:var(--studio-text-muted); padding:0 2px; background:none; border:none; line-height:1; flex-shrink:0; }
+        .scp-preview-del:hover { color:#e06c75; }
+        .scp-file-pill { display:inline-flex; align-items:center; gap:3px; background:rgba(47,207,143,.1); border:1px solid rgba(47,207,143,.2); border-radius:4px; padding:1px 6px; font-size:9.5px; color:var(--studio-accent); margin-right:4px; vertical-align:middle; }
+        .scp-input-wrapper { position:relative; border-top:1px solid var(--studio-border); flex-shrink:0; }
       `}</style>
 
       {/* Capabilities badge */}
