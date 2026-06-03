@@ -471,7 +471,7 @@ PROMPT;
                 $role = ($h['role'] === 'assistant' || $h['role'] === 'user') ? $h['role'] : 'user';
                 $msgs[] = ['role' => $role, 'content' => (string) $h['content']];
             }
-            $msgs[] = $this->buildUserMessage($provider, $prompt, $attachment);
+            $msgs[] = $this->buildUserMessage($provider, $prompt, $attachment, $project);
 
             $content = $this->callAiApi($provider, $apiKey, $model, $endpoint, $msgs);
 
@@ -1005,7 +1005,7 @@ PROMPT;
     /**
      * Construit le message utilisateur, avec vision si le provider le supporte et si une image est jointe.
      */
-    private function buildUserMessage(string $provider, string $prompt, ?array $attachment): array
+    private function buildUserMessage(string $provider, string $prompt, ?array $attachment, ?\App\Entity\Project $project = null): array
     {
         if ($attachment === null) {
             return ['role' => 'user', 'content' => $prompt];
@@ -1017,8 +1017,8 @@ PROMPT;
         $isImage   = str_starts_with($mimeType, 'image/');
 
         // Résoudre l'UUID médiathèque → base64 si image
-        if ($mediaUuid !== null && $isImage && $base64 === '') {
-            $base64 = $this->resolveMediaAsBase64($mediaUuid) ?? '';
+        if ($mediaUuid !== null && $isImage && $base64 === '' && $project !== null) {
+            $base64 = $this->resolveMediaAsBase64($mediaUuid, $project) ?? '';
         }
 
         // Vision disponible uniquement pour OpenAI, Anthropic et Gemini
@@ -1070,12 +1070,16 @@ PROMPT;
      * Résout un UUID médiathèque en chaîne base64 (pour vision).
      * L'entité Media a: $uuid (Uuid), $fileName (string), path physique: public/uploads/media/{fileName}
      */
-    private function resolveMediaAsBase64(string $mediaUuid): ?string
+    private function resolveMediaAsBase64(string $mediaUuid, \App\Entity\Project $project): ?string
     {
-        $media = $this->em->getRepository(\App\Entity\Media::class)->findOneBy(['uuid' => $mediaUuid]);
+        $media = $this->em->getRepository(\App\Entity\Media::class)->findOneBy([
+            'uuid'    => $mediaUuid,
+            'project' => $project,
+        ]);
         if ($media === null || $media->fileName === null) return null;
 
-        $fullPath = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . $media->fileName;
+        // basename() empêche toute traversée de chemin via un fileName compromis
+        $fullPath = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . basename($media->fileName);
         if (!is_file($fullPath)) return null;
 
         $content = file_get_contents($fullPath);
