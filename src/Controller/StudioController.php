@@ -424,8 +424,23 @@ PROMPT;
         $command = isset($body['command']) && in_array($body['command'], ['schema','data','all'], true)
             ? $body['command']
             : 'schema'; // default = schema only
+        $attachment = is_array($body['attachment'] ?? null) ? $body['attachment'] : null;
 
         if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
+
+        $attachmentContext = '';
+        if ($attachment !== null) {
+            $name     = (string) ($attachment['name'] ?? 'fichier');
+            $mimeType = (string) ($attachment['mimeType'] ?? '');
+            $text     = isset($attachment['text']) ? trim((string) $attachment['text']) : null;
+
+            if ($text !== null && $text !== '') {
+                // CSV, JSON, TXT, PDF (text-based)
+                $attachmentContext = "\n\n--- FICHIER JOINT : {$name} ---\n" . mb_substr($text, 0, 8000) . "\n--- FIN DU FICHIER ---";
+            } elseif (!str_starts_with($mimeType, 'image/') && empty($attachment['base64']) && empty($attachment['mediaUuid'])) {
+                $attachmentContext = "\n\n[Fichier joint : {$name} — contenu non extractible]";
+            }
+        }
 
         // Préfixer le prompt utilisateur pour l'affichage dans l'historique
         $displayPrompt = $prompt;
@@ -443,7 +458,7 @@ PROMPT;
         $endUserBlock = self::ENDUSER_AWARENESS;
 
         // Choisir le prompt système selon la commande
-        $systemPrompt = $this->buildSystemPrompt($command, $namingRules, $endUserBlock, $context);
+        $systemPrompt = $this->buildSystemPrompt($command, $namingRules, $endUserBlock, $context . $attachmentContext);
 
         [$provider, $apiKey, $model, $endpoint] = $this->resolveAiConfig();
         if ($provider === null) {
@@ -456,7 +471,7 @@ PROMPT;
                 $role = ($h['role'] === 'assistant' || $h['role'] === 'user') ? $h['role'] : 'user';
                 $msgs[] = ['role' => $role, 'content' => (string) $h['content']];
             }
-            $msgs[] = ['role' => 'user', 'content' => $prompt];
+            $msgs[] = $this->buildUserMessage($provider, $prompt, $attachment);
 
             $content = $this->callAiApi($provider, $apiKey, $model, $endpoint, $msgs);
 
@@ -985,6 +1000,86 @@ PROMPT;
         }
         // OpenAI / DeepSeek / Ollama (format compatible OpenAI)
         return $data['choices'][0]['message']['content'] ?? '';
+    }
+
+    /**
+     * Construit le message utilisateur, avec vision si le provider le supporte et si une image est jointe.
+     */
+    private function buildUserMessage(string $provider, string $prompt, ?array $attachment): array
+    {
+        if ($attachment === null) {
+            return ['role' => 'user', 'content' => $prompt];
+        }
+
+        $mimeType  = (string) ($attachment['mimeType'] ?? '');
+        $base64    = (string) ($attachment['base64'] ?? '');
+        $mediaUuid = isset($attachment['mediaUuid']) ? (string) $attachment['mediaUuid'] : null;
+        $isImage   = str_starts_with($mimeType, 'image/');
+
+        // Résoudre l'UUID médiathèque → base64 si image
+        if ($mediaUuid !== null && $isImage && $base64 === '') {
+            $base64 = $this->resolveMediaAsBase64($mediaUuid) ?? '';
+        }
+
+        // Vision disponible uniquement pour OpenAI, Anthropic et Gemini
+        $visionProviders = ['openai', 'anthropic', 'gemini'];
+        if ($isImage && $base64 !== '' && in_array($provider, $visionProviders, true)) {
+            return $this->buildVisionMessage($provider, $prompt, $mimeType, $base64);
+        }
+
+        // Fallback texte : note dans le prompt
+        $name = (string) ($attachment['name'] ?? 'fichier');
+        $note = "\n\n[Fichier joint : {$name} — analyse visuelle non disponible avec ce provider]";
+        return ['role' => 'user', 'content' => $prompt . $note];
+    }
+
+    /**
+     * Construit un message multi-part avec vision selon le format du provider.
+     */
+    private function buildVisionMessage(string $provider, string $prompt, string $mimeType, string $base64): array
+    {
+        if ($provider === 'openai') {
+            return [
+                'role' => 'user',
+                'content' => [
+                    ['type' => 'text', 'text' => $prompt],
+                    ['type' => 'image_url', 'image_url' => ['url' => "data:{$mimeType};base64,{$base64}"]],
+                ],
+            ];
+        }
+
+        if ($provider === 'anthropic') {
+            return [
+                'role' => 'user',
+                'content' => [
+                    ['type' => 'text', 'text' => $prompt],
+                    ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mimeType, 'data' => $base64]],
+                ],
+            ];
+        }
+
+        // Gemini — format intermédiaire reconnu par callAiApi()
+        return [
+            'role' => 'user',
+            'content' => $prompt,
+            '_vision' => ['mimeType' => $mimeType, 'base64' => $base64],
+        ];
+    }
+
+    /**
+     * Résout un UUID médiathèque en chaîne base64 (pour vision).
+     * L'entité Media a: $uuid (Uuid), $fileName (string), path physique: public/uploads/media/{fileName}
+     */
+    private function resolveMediaAsBase64(string $mediaUuid): ?string
+    {
+        $media = $this->em->getRepository(\App\Entity\Media::class)->findOneBy(['uuid' => $mediaUuid]);
+        if ($media === null || $media->fileName === null) return null;
+
+        $fullPath = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . $media->fileName;
+        if (!is_file($fullPath)) return null;
+
+        $content = file_get_contents($fullPath);
+        return $content !== false ? base64_encode($content) : null;
     }
 
     /**
