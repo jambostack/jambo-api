@@ -689,98 +689,113 @@ export default function ContentList({ collection, project }: Props) {
 
             {/* Media Preview Dialog */}
             <Dialog open={!!mediaPreview || mediaLoading} onOpenChange={(open) => { if (!open) { setMediaPreview(null); setMediaLoading(false); } }}>
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle className="truncate pr-6">
+                <DialogContent className="sm:max-w-md w-full p-0 overflow-hidden">
+                    {/* Header */}
+                    <div className="px-5 pt-5 pb-4 border-b border-border">
+                        <DialogTitle className="text-sm font-semibold truncate pr-6 leading-tight">
                             {mediaPreview?.original_filename ?? mediaPreview?.filename ?? t('content.media_preview')}
                         </DialogTitle>
                         {mediaPreview?.mime_type && (
-                            <DialogDescription>{mediaPreview.mime_type}</DialogDescription>
+                            <DialogDescription className="text-xs mt-0.5 truncate">
+                                {mediaPreview.mime_type}
+                                {mediaPreview.formatted_size && <span className="ml-2 opacity-60">· {mediaPreview.formatted_size}</span>}
+                            </DialogDescription>
                         )}
-                    </DialogHeader>
-                    {mediaLoading && (
-                        <div className="flex items-center justify-center py-12 text-muted-foreground">
-                            <svg className="animate-spin w-6 h-6" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z"/></svg>
-                        </div>
-                    )}
-                    {mediaPreview && !mediaLoading && (
-                        <div className="space-y-4">
-                            {/* Aperçu */}
-                            <div className="rounded-lg overflow-hidden bg-muted flex items-center justify-center" style={{ minHeight: '180px', maxHeight: '340px' }}>
-                                {mediaPreview.mime_type?.startsWith('image/') && (mediaPreview.full_url ?? mediaPreview.url) ? (
-                                    <img
-                                        src={mediaPreview.full_url ?? mediaPreview.url ?? ''}
-                                        alt={mediaPreview.metadata?.alt_text ?? ''}
-                                        className="max-w-full max-h-[340px] object-contain"
-                                    />
-                                ) : mediaPreview.thumbnail_url ? (
-                                    <img
-                                        src={mediaPreview.thumbnail_url}
-                                        alt=""
-                                        className="max-w-full max-h-[340px] object-contain"
-                                    />
-                                ) : (
-                                    <div className="flex flex-col items-center gap-2 p-8 text-muted-foreground">
-                                        <FileText className="w-12 h-12" />
-                                        <span className="text-sm font-mono uppercase">
-                                            {mediaPreview.extension ?? mediaPreview.mime_type ?? '—'}
-                                        </span>
-                                    </div>
-                                )}
+                    </div>
+
+                    {/* Body */}
+                    <div className="px-5 py-4 space-y-4 overflow-y-auto max-h-[60vh]">
+
+                        {/* Spinner chargement */}
+                        {mediaLoading && (
+                            <div className="flex items-center justify-center py-10 text-muted-foreground">
+                                <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z"/>
+                                </svg>
                             </div>
+                        )}
+
+                        {mediaPreview && !mediaLoading && (<>
+                            {/* Aperçu image */}
+                            {(mediaPreview.mime_type?.startsWith('image/') || mediaPreview.thumbnail_url) && (
+                                <div className="w-full rounded-md overflow-hidden bg-muted flex items-center justify-center" style={{ height: '200px' }}>
+                                    <img
+                                        src={
+                                            mediaPreview.mime_type?.startsWith('image/')
+                                                ? (mediaPreview.full_url ?? mediaPreview.url ?? mediaPreview.thumbnail_url ?? '')
+                                                : (mediaPreview.thumbnail_url ?? '')
+                                        }
+                                        alt={mediaPreview.metadata?.alt_text ?? ''}
+                                        className="w-full h-full object-contain"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Icône fichier non-image */}
+                            {!mediaPreview.mime_type?.startsWith('image/') && !mediaPreview.thumbnail_url && (
+                                <div className="w-full rounded-md bg-muted flex flex-col items-center justify-center gap-2 py-8">
+                                    <FileText className="w-10 h-10 text-muted-foreground" />
+                                    <span className="text-xs font-mono uppercase text-muted-foreground tracking-widest">
+                                        {mediaPreview.extension ?? (mediaPreview.mime_type?.split('/')[1]) ?? '—'}
+                                    </span>
+                                </div>
+                            )}
 
                             {/* Métadonnées */}
-                            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-                                <span className="text-muted-foreground">{t('content.media_size')}</span>
-                                <span>{mediaPreview.formatted_size}</span>
-                                {mediaPreview.metadata?.alt_text && (<>
-                                    <span className="text-muted-foreground">Alt</span>
-                                    <span className="truncate">{mediaPreview.metadata.alt_text}</span>
-                                </>)}
-                                {mediaPreview.metadata?.caption && (<>
-                                    <span className="text-muted-foreground">Caption</span>
-                                    <span className="truncate">{mediaPreview.metadata.caption}</span>
-                                </>)}
-                            </div>
+                            {(mediaPreview.metadata?.alt_text || mediaPreview.metadata?.caption) && (
+                                <div className="grid grid-cols-[80px_1fr] gap-x-3 gap-y-1 text-xs">
+                                    {mediaPreview.metadata?.alt_text && (<>
+                                        <span className="text-muted-foreground pt-px">Alt</span>
+                                        <span className="break-words min-w-0">{mediaPreview.metadata.alt_text}</span>
+                                    </>)}
+                                    {mediaPreview.metadata?.caption && (<>
+                                        <span className="text-muted-foreground pt-px">Caption</span>
+                                        <span className="break-words min-w-0">{mediaPreview.metadata.caption}</span>
+                                    </>)}
+                                </div>
+                            )}
 
                             {/* URL + copier */}
                             {(mediaPreview.full_url ?? mediaPreview.url) && (
-                                <div className="flex gap-2 items-center">
-                                    <code className="flex-1 truncate text-xs bg-muted rounded px-2 py-1.5 font-mono">
-                                        {mediaPreview.full_url ?? mediaPreview.url}
-                                    </code>
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <div className="flex-1 min-w-0 bg-muted rounded-md px-2.5 py-1.5 overflow-hidden">
+                                        <p className="text-xs font-mono text-muted-foreground truncate">
+                                            {mediaPreview.full_url ?? mediaPreview.url}
+                                        </p>
+                                    </div>
                                     <Button
                                         variant="outline"
                                         size="icon"
-                                        className="shrink-0"
+                                        className="shrink-0 h-8 w-8"
                                         onClick={() => {
                                             navigator.clipboard.writeText(mediaPreview.full_url ?? mediaPreview.url ?? '');
                                             toast.success(t('content.url_copied'));
                                         }}
                                     >
-                                        <Copy className="w-4 h-4" />
+                                        <Copy className="w-3.5 h-3.5" />
                                     </Button>
                                 </div>
                             )}
+                        </>)}
+                    </div>
+
+                    {/* Footer */}
+                    {!mediaLoading && (
+                        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border bg-muted/30">
+                            {(mediaPreview?.full_url ?? mediaPreview?.url) && (
+                                <Button variant="outline" size="sm" asChild>
+                                    <a href={mediaPreview?.full_url ?? mediaPreview?.url ?? ''} target="_blank" rel="noopener noreferrer">
+                                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                                        {t('content.open_tab')}
+                                    </a>
+                                </Button>
+                            )}
+                            <Button variant="outline" size="sm" onClick={() => setMediaPreview(null)}>
+                                {t('content.close')}
+                            </Button>
                         </div>
                     )}
-                    <DialogFooter className="gap-2 sm:gap-2">
-                        {(mediaPreview?.full_url ?? mediaPreview?.url) && (
-                            <Button variant="outline" asChild>
-                                <a
-                                    href={mediaPreview?.full_url ?? mediaPreview?.url ?? ''}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    <ExternalLink className="mr-2 w-4 h-4" />
-                                    {t('content.open_tab')}
-                                </a>
-                            </Button>
-                        )}
-                        <Button variant="outline" onClick={() => setMediaPreview(null)}>
-                            {t('content.close')}
-                        </Button>
-                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
