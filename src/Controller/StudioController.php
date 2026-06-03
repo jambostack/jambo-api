@@ -456,8 +456,9 @@ PROMPT;
         if ($provider === null) {
             $fallbackData = json_decode($this->commandFallback($command, $prompt)->getContent(), true);
             return new StreamedResponse(function () use ($fallbackData) {
+                while (ob_get_level() > 0) { ob_end_flush(); }
+                ob_implicit_flush(true);
                 echo ": ping\n\ndata: " . json_encode($fallbackData) . "\n\n";
-                flush();
             }, 200, ['Content-Type' => 'text/event-stream', 'Cache-Control' => 'no-cache', 'X-Accel-Buffering' => 'no']);
         }
 
@@ -472,6 +473,11 @@ PROMPT;
         return new StreamedResponse(function () use ($aiUrl, $aiOptions, $provider, $command, $project) {
             set_time_limit(300);
             ignore_user_abort(true);
+
+            // output_buffering de php.ini crée un ob level qui retient les données.
+            // ob_flush() + flush() ensemble percent tous les niveaux de buffer.
+            while (ob_get_level() > 0) { ob_end_flush(); }
+            ob_implicit_flush(true);
 
             // Heartbeat immédiat pour éviter le timeout Apache 30 s
             echo ": ping\n\n";
