@@ -102,20 +102,9 @@ function SchemaChatPanel({
 
   const [attachment, setAttachment] = useState<AttachmentFile | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<'local' | 'media'>('local');
   const [mediaModalOpen, setMediaModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!pickerOpen) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setPickerOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [pickerOpen]);
 
   // Charger les capacités IA
   useEffect(() => {
@@ -466,13 +455,27 @@ function SchemaChatPanel({
         .scp-attach-btn { height:32px; min-width:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:1px solid var(--studio-border); background:var(--studio-surface); color:var(--studio-text-muted); flex-shrink:0; transition:all .12s; }
         .scp-attach-btn:hover { border-color:var(--studio-border-active); color:var(--studio-text-dim); }
         .scp-attach-btn.has-file { border-color:var(--studio-accent); color:var(--studio-accent); background:rgba(47,207,143,.06); }
-        .scp-picker { position:absolute; bottom:calc(100% + 4px); left:0; width:220px; background:var(--studio-surface); border:1px solid var(--studio-border); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:50; overflow:hidden; }
-        .scp-picker-tabs { display:flex; border-bottom:1px solid var(--studio-border); }
-        .scp-picker-tab { flex:1; padding:6px; text-align:center; font-size:9.5px; cursor:pointer; color:var(--studio-text-muted); transition:all .12s; }
-        .scp-picker-tab.active { background:rgba(47,207,143,.06); color:var(--studio-accent); border-bottom:2px solid var(--studio-accent); }
-        .scp-picker-body { padding:8px; }
-        .scp-drop-area { border:1.5px dashed var(--studio-border); border-radius:6px; padding:10px; text-align:center; cursor:pointer; font-size:10px; color:var(--studio-text-muted); transition:border-color .12s; }
-        .scp-drop-area:hover { border-color:var(--studio-accent); color:var(--studio-text-dim); }
+        .scp-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(3px); z-index:100; display:flex; align-items:center; justify-content:center; animation:scp-overlay-in .15s ease; }
+        @keyframes scp-overlay-in { from { opacity:0; } to { opacity:1; } }
+        .scp-modal { width:340px; max-width:calc(100vw - 32px); background:var(--studio-surface,#111714); border:1px solid var(--studio-border,rgba(255,255,255,.07)); border-radius:12px; box-shadow:0 24px 64px rgba(0,0,0,.6); overflow:hidden; animation:scp-modal-in .18s cubic-bezier(.22,1,.36,1); }
+        @keyframes scp-modal-in { from { opacity:0; transform:translateY(8px) scale(.97); } to { opacity:1; transform:none; } }
+        .scp-modal-header { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 0; }
+        .scp-modal-title { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--studio-accent,#2fcf8f); }
+        .scp-modal-close { width:22px; height:22px; border-radius:4px; border:none; background:transparent; color:var(--studio-text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .1s; }
+        .scp-modal-close:hover { background:rgba(255,255,255,.06); color:var(--studio-text-dim); }
+        .scp-modal-tabs { display:flex; gap:2px; padding:10px 14px 0; }
+        .scp-modal-tab { flex:1; padding:6px 8px; font-size:10px; font-weight:600; cursor:pointer; border:none; background:transparent; border-radius:6px 6px 0 0; color:var(--studio-text-muted); border-bottom:2px solid transparent; transition:all .12s; }
+        .scp-modal-tab.active { color:var(--studio-accent); border-bottom-color:var(--studio-accent); background:rgba(47,207,143,.05); }
+        .scp-modal-tab:not(.active):hover { color:var(--studio-text-dim); background:rgba(255,255,255,.03); }
+        .scp-modal-body { padding:12px 14px 14px; }
+        .scp-drop-area { border:1.5px dashed var(--studio-border,rgba(255,255,255,.1)); border-radius:8px; padding:28px 16px; text-align:center; cursor:pointer; transition:all .15s; }
+        .scp-drop-area:hover, .scp-drop-area.drag-over { border-color:var(--studio-accent); background:rgba(47,207,143,.04); }
+        .scp-drop-icon { font-size:28px; margin-bottom:8px; }
+        .scp-drop-label { font-size:11px; color:var(--studio-text-dim); font-weight:500; margin-bottom:4px; }
+        .scp-drop-hint { font-size:9.5px; color:var(--studio-text-muted); }
+        .scp-media-tab-body { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px 0; gap:10px; }
+        .scp-media-open-btn { display:flex; align-items:center; gap:8px; padding:8px 18px; border-radius:7px; border:1px solid var(--studio-border); background:var(--studio-raised,#171d19); color:var(--studio-text-dim); font-size:11px; font-weight:600; cursor:pointer; transition:all .14s; }
+        .scp-media-open-btn:hover { border-color:var(--studio-accent); color:var(--studio-accent); background:rgba(47,207,143,.06); }
         .scp-preview-strip { display:flex; align-items:center; gap:6px; padding:5px 10px; background:rgba(47,207,143,.04); border-top:1px solid rgba(47,207,143,.1); flex-shrink:0; font-size:10px; }
         .scp-preview-name { flex:1; color:var(--studio-text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
         .scp-preview-size { color:var(--studio-text-muted); font-size:9px; flex-shrink:0; }
@@ -629,28 +632,50 @@ function SchemaChatPanel({
           </div>
         )}
 
-        {/* Picker dropdown */}
+        {/* Picker modal */}
         {pickerOpen && (
-          <div className="scp-picker" ref={pickerRef}>
-            <div className="scp-picker-tabs">
-              <div className="scp-picker-tab active">💻 {t('studio.picker.tab_local')}</div>
-              <div className="scp-picker-tab" onClick={() => { setMediaModalOpen(true); setPickerOpen(false); }}>📚 {t('studio.picker.tab_media')}</div>
-            </div>
-            <div className="scp-picker-body">
-              <div
-                className="scp-drop-area"
-                onClick={() => { fileInputRef.current?.click(); setPickerOpen(false); }}
-                onDragOver={e => e.preventDefault()}
-                onDrop={async e => {
-                  e.preventDefault();
-                  const file = e.dataTransfer.files[0];
-                  if (file) { const att = await readFileAsAttachment(file); if (att) setAttachment(att); }
-                  setPickerOpen(false);
-                }}
-              >
-                <div style={{ fontSize:'18px', marginBottom:'4px' }}>📂</div>
-                <div>{t('studio.picker.drop_hint')}</div>
-                <div style={{ fontSize:'9px', opacity:.5, marginTop:'3px' }}>{t('studio.picker.formats')}</div>
+          <div className="scp-modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setPickerOpen(false); }}>
+            <div className="scp-modal">
+              <div className="scp-modal-header">
+                <span className="scp-modal-title">📎 {t('studio.picker.title')}</span>
+                <button className="scp-modal-close" onClick={() => setPickerOpen(false)}><X className="w-3 h-3" /></button>
+              </div>
+              <div className="scp-modal-tabs">
+                <button className={`scp-modal-tab ${pickerTab === 'local' ? 'active' : ''}`} onClick={() => setPickerTab('local')}>💻 {t('studio.picker.tab_local')}</button>
+                <button className={`scp-modal-tab ${pickerTab === 'media' ? 'active' : ''}`} onClick={() => setPickerTab('media')}>📚 {t('studio.picker.tab_media')}</button>
+              </div>
+              <div className="scp-modal-body">
+                {pickerTab === 'local' ? (
+                  <div
+                    className="scp-drop-area"
+                    onClick={() => { fileInputRef.current?.click(); setPickerOpen(false); }}
+                    onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }}
+                    onDragLeave={e => e.currentTarget.classList.remove('drag-over')}
+                    onDrop={async e => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('drag-over');
+                      const file = e.dataTransfer.files[0];
+                      if (file) { const att = await readFileAsAttachment(file); if (att) setAttachment(att); }
+                      setPickerOpen(false);
+                    }}
+                  >
+                    <div className="scp-drop-icon">📂</div>
+                    <div className="scp-drop-label">{t('studio.picker.drop_hint')}</div>
+                    <div className="scp-drop-hint">{t('studio.picker.formats')}</div>
+                  </div>
+                ) : (
+                  <div className="scp-media-tab-body">
+                    <div style={{ fontSize:'28px' }}>🖼️</div>
+                    <div style={{ fontSize:'10.5px', color:'var(--studio-text-dim)', textAlign:'center' }}>{t('studio.picker.tab_media')}</div>
+                    <button
+                      className="scp-media-open-btn"
+                      onClick={() => { setMediaModalOpen(true); setPickerOpen(false); }}
+                    >
+                      <Library className="w-3.5 h-3.5" />
+                      {t('studio.picker.tab_media')}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
