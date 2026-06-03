@@ -17,11 +17,14 @@ import {
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   FolderOpen, Pencil, Sparkles,
   Users, Lock, UserPlus, Shield, GripVertical, ChevronDown, Settings2,
-  Database, Table2, Slash
+  Database, Table2, Slash,
+  Paperclip, Library,
 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 import type { Project } from '@/types/index.d';
 import fieldsDef from '@/lib/fields.json';
+import { MediaLibraryModal } from '@/pages/Assets/MediaFieldSelectModal';
+import type { Asset } from '@/types';
 
 const FIELD_TYPES = Object.entries(fieldsDef).map(([k, v]) => ({ type: k, label: v.label, desc: v.desc }));
 
@@ -96,6 +99,23 @@ function SchemaChatPanel({
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollDown = () => setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
+
+  const [attachment, setAttachment] = useState<AttachmentFile | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [mediaModalOpen, setMediaModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [pickerOpen]);
 
   // Charger les capacités IA
   useEffect(() => {
@@ -192,6 +212,46 @@ function SchemaChatPanel({
     }
 
     return parts.join('\n');
+  }
+
+  async function readFileAsAttachment(file: File): Promise<AttachmentFile | null> {
+    const MAX = 10 * 1024 * 1024;
+    if (file.size > MAX) {
+      toast.error(t('studio.picker.too_large'));
+      return null;
+    }
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      if (file.type.startsWith('image/')) {
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          const base64 = dataUrl.split(',')[1] ?? '';
+          resolve({ name: file.name, mimeType: file.type, size: file.size, source: 'upload', base64 });
+        };
+        reader.readAsDataURL(file);
+      } else {
+        reader.onload = () => {
+          const raw = reader.result as string;
+          resolve({ name: file.name, mimeType: file.type, size: file.size, source: 'upload', text: raw.slice(0, 8000) });
+        };
+        reader.readAsText(file);
+      }
+      reader.onerror = () => resolve(null);
+    });
+  }
+
+  function handleMediaSelect(assets: Asset[]) {
+    const asset = assets[0];
+    if (!asset) return;
+    setAttachment({
+      name: asset.original_filename ?? asset.filename ?? asset.uuid,
+      mimeType: asset.mime_type ?? 'application/octet-stream',
+      size: asset.size ?? 0,
+      source: 'media',
+      mediaUuid: asset.uuid,
+    });
+    setMediaModalOpen(false);
+    setPickerOpen(false);
   }
 
   async function send() {
