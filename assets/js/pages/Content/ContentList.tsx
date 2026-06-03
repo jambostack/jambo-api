@@ -323,7 +323,7 @@ export default function ContentList({ collection, project }: Props) {
                                     return (
                                         <div
                                             className="flex flex-wrap gap-1"
-                                            onClick={(e) => e.stopPropagation()}
+                                            data-no-row-click
                                         >
                                             {value.map((asset, index) => (
                                                 <button

@@ -810,10 +810,13 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
                             </TableRow>
                         ) : (
                             data.data.map((item, index) => (
-                                <TableRow 
+                                <TableRow
                                     key={index}
                                     className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
-                                    onClick={() => onRowClick?.(item)}
+                                    onClick={(e) => {
+                                        if ((e.target as HTMLElement).closest('[data-no-row-click]')) return;
+                                        onRowClick?.(item);
+                                    }}
                                 >
                                     {selectable && (
                                         <TableCell className="w-px">
