@@ -267,8 +267,27 @@ function SchemaChatPanel({
           attachment: currentAttachment ?? undefined,
         }),
       });
-      const data = await res.json() as { reply?: string; collections?: any[]; entries?: any[]; agentPlan?: AgentPlan; error?: string };
-      if (!res.ok || data.error) throw new Error(data.error);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Lire le flux SSE — heartbeats ": ping" ignorés, "data: {...}" = réponse finale
+      const data: { reply?: string; collections?: any[]; entries?: any[]; agentPlan?: AgentPlan; error?: string } = await (async () => {
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let found: any = null;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line.startsWith('data: ')) { try { found = JSON.parse(line.slice(6)); } catch {} }
+          }
+        }
+        if (!found) throw new Error('Pas de réponse reçue');
+        return found;
+      })();
+      if (data.error) throw new Error(data.error);
 
       // Détecter si la réponse contient un plan d'agent (format JSON avec "plan" + "actions")
       const rawContent = data.reply ?? '';
