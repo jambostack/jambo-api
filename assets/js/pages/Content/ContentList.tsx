@@ -337,10 +337,11 @@ export default function ContentList({ collection, project }: Props) {
                                                         <img
                                                             src={asset.thumbnail_url}
                                                             alt=""
-                                                            className="w-full h-full object-cover"
+                                                            draggable={false}
+                                                            className="w-full h-full object-cover pointer-events-none"
                                                         />
                                                     ) : (
-                                                        <div className="w-full h-full flex items-center justify-center bg-muted">
+                                                        <div className="w-full h-full flex items-center justify-center bg-muted pointer-events-none">
                                                             <FileText className="w-4 h-4 text-muted-foreground" />
                                                         </div>
                                                     )}
