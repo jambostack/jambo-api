@@ -45,6 +45,23 @@ export default function ContentList({ collection, project }: Props) {
     const [richTextModal, setRichTextModal] = useState<{title:string, content:string}|null>(null);
     const [relationModal, setRelationModal] = useState<{title:string, entries:any[], fields:Field[]}|null>(null);
     const [mediaPreview, setMediaPreview] = useState<Asset | null>(null);
+    const [mediaLoading, setMediaLoading] = useState(false);
+
+    const openMediaPreview = async (assetOrUuid: Asset | string) => {
+        if (typeof assetOrUuid === 'string') {
+            setMediaLoading(true);
+            try {
+                const res = await axios.get(`/api/projects/${project.uuid}/media/${assetOrUuid}`);
+                setMediaPreview(res.data?.data ?? res.data);
+            } catch {
+                toast.error('Could not load file details');
+            } finally {
+                setMediaLoading(false);
+            }
+        } else {
+            setMediaPreview(assetOrUuid);
+        }
+    };
     const [hasEntry, setHasEntry] = useState(false);
     
     const can = usePage().props.userCan as UserCan;
@@ -319,34 +336,31 @@ export default function ContentList({ collection, project }: Props) {
                                 return value === null ? '-' : Number(value).toString();
                             case 'media':
                                 if (!value) return '-';
-                                if (Array.isArray(value)) {
+                                if (Array.isArray(value) && value.length > 0) {
                                     return (
-                                        <div
-                                            className="flex flex-wrap gap-1"
-                                            data-no-row-click
-                                        >
-                                            {value.map((asset, index) => (
-                                                <button
-                                                    key={index}
-                                                    type="button"
-                                                    onClick={(e) => { e.stopPropagation(); setMediaPreview(asset); }}
-                                                    title={asset.original_filename ?? asset.filename ?? ''}
-                                                    className="w-8 h-8 rounded overflow-hidden cursor-pointer hover:opacity-75 hover:ring-2 hover:ring-primary transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                >
-                                                    {asset.thumbnail_url ? (
-                                                        <img
-                                                            src={asset.thumbnail_url}
-                                                            alt=""
-                                                            draggable={false}
-                                                            className="w-full h-full object-cover pointer-events-none"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center bg-muted pointer-events-none">
-                                                            <FileText className="w-4 h-4 text-muted-foreground" />
-                                                        </div>
-                                                    )}
-                                                </button>
-                                            ))}
+                                        <div className="flex flex-wrap gap-1" data-no-row-click>
+                                            {value.map((asset, index) => {
+                                                const isObj = typeof asset === 'object' && asset !== null;
+                                                const thumbUrl = isObj ? asset.thumbnail_url : null;
+                                                const title = isObj ? (asset.original_filename ?? asset.filename ?? '') : String(asset).slice(0, 8) + '…';
+                                                return (
+                                                    <button
+                                                        key={index}
+                                                        type="button"
+                                                        onClick={() => openMediaPreview(asset)}
+                                                        title={title}
+                                                        className="w-8 h-8 rounded overflow-hidden cursor-pointer hover:opacity-75 hover:ring-2 hover:ring-primary transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                    >
+                                                        {thumbUrl ? (
+                                                            <img src={thumbUrl} alt="" draggable={false} className="w-full h-full object-cover pointer-events-none" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center bg-muted pointer-events-none">
+                                                                <FileText className="w-4 h-4 text-muted-foreground" />
+                                                            </div>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     );
                                 }
@@ -674,7 +688,7 @@ export default function ContentList({ collection, project }: Props) {
             </Dialog>
 
             {/* Media Preview Dialog */}
-            <Dialog open={!!mediaPreview} onOpenChange={(open) => !open && setMediaPreview(null)}>
+            <Dialog open={!!mediaPreview || mediaLoading} onOpenChange={(open) => { if (!open) { setMediaPreview(null); setMediaLoading(false); } }}>
                 <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
                         <DialogTitle className="truncate pr-6">
@@ -684,7 +698,12 @@ export default function ContentList({ collection, project }: Props) {
                             <DialogDescription>{mediaPreview.mime_type}</DialogDescription>
                         )}
                     </DialogHeader>
-                    {mediaPreview && (
+                    {mediaLoading && (
+                        <div className="flex items-center justify-center py-12 text-muted-foreground">
+                            <svg className="animate-spin w-6 h-6" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z"/></svg>
+                        </div>
+                    )}
+                    {mediaPreview && !mediaLoading && (
                         <div className="space-y-4">
                             {/* Aperçu */}
                             <div className="rounded-lg overflow-hidden bg-muted flex items-center justify-center" style={{ minHeight: '180px', maxHeight: '340px' }}>
