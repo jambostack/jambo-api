@@ -94,17 +94,20 @@ export function MediaLibraryModal({
         }
     }, [isOpen, search, assetType, dateFilter, sortOption, currentPage, itemsPerPage]);
 
-    // Update selectedAssetObjects when assets or selectedAssets change
+    // Update selectedAssetObjects when assets or selectedAssets change.
+    // Functional update form avoids adding selectedAssetObjects to deps (which would loop).
     useEffect(() => {
-        // Get the assets that are currently visible and selected
         const visibleSelectedAssets = assets.data.filter(asset => selectedAssets.includes(asset.id));
-
-        // Add the previously selected assets that are not visible in the current view
-        const nonVisibleAssets = selectedAssetObjects.filter(asset =>
-            !assets.data.find(a => a.id === asset.id) && selectedAssets.includes(asset.id)
-        );
-
-        setSelectedAssetObjects([...visibleSelectedAssets, ...nonVisibleAssets]);
+        setSelectedAssetObjects(prev => {
+            const nonVisibleAssets = prev.filter(asset =>
+                !assets.data.find(a => a.id === asset.id) && selectedAssets.includes(asset.id)
+            );
+            const next = [...visibleSelectedAssets, ...nonVisibleAssets];
+            // Bail out if IDs unchanged — prevents React error #185
+            const sameIds = next.length === prev.length &&
+                next.every((a, i) => a.id === prev[i]?.id);
+            return sameIds ? prev : next;
+        });
     }, [assets.data, selectedAssets]);
 
     const loadAssets = async () => {
