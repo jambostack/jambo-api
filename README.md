@@ -172,16 +172,22 @@ APP_HOSTNAME=yourdomain.com
 php bin/console doctrine:database:create
 php bin/console doctrine:migrations:migrate
 
-# 6. Load fixtures (default admin + system permissions)
-php bin/console doctrine:fixtures:load --append
-# Default credentials: admin@jambostack.site / admin1234
+# 6. Create the first admin user and configure permissions
+php bin/console app:setup
+# Prompts for email and password — use strong credentials.
+# Alternatively, load demo fixtures (NOT for production):
+#   php bin/console doctrine:fixtures:load --append
+#   Default fixture credentials: admin@jambostack.site / admin1234
+#   ⚠️  Change the password immediately after first login.
 
 # 7. Start
 symfony serve
 # or: php -S localhost:8000 -t public/
 ```
 
-Open `http://localhost:8000` and log in with the default credentials above. **Change the password immediately.**
+Open `http://localhost:8000` and log in. If you used `app:setup`, enter the credentials you chose. If you loaded fixtures, the defaults are `admin@jambostack.site` / `admin1234` — **change them immediately**.
+
+> **Security note:** The fixture credentials are public knowledge. Never use them in a production environment without changing them first. See [SECURITY.md](SECURITY.md) for deployment best practices.
 
 ### Docker (coming soon)
 
