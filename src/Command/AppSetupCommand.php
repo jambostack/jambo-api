@@ -91,7 +91,11 @@ class AppSetupCommand extends Command
             $this->em->flush();
 
             $io->success(sprintf('Admin user created: %s', $email));
-            $io->caution('Change the default password immediately!');
+            $io->definitionList(
+                ['Email'    => $email],
+                ['Password' => $input->getOption('password')],
+            );
+            $io->caution('Change this password immediately after your first login.');
         }
 
         return Command::SUCCESS;
