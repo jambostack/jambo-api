@@ -75,6 +75,12 @@ services:
     # AiContentService — tous les fournisseurs IA sont configurés via l'admin
     # (Paramètres → Fournisseurs IA), les clés viennent de la base de données.
 
+    # ── Webhook rebuild site statique ─────────────────────────────────────────
+    App\Controller\WebhookRebuildController:
+        arguments:
+            $rebuildSecret:  '%env(default::REBUILD_SECRET)%'
+            $rebuildCommand: '%env(default::REBUILD_COMMAND)%'
+
     # ── Email / SMTP ───────────────────────────────────────────────────────────
     App\Service\ProjectMailerService:
         arguments:
