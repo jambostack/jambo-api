@@ -1148,6 +1148,8 @@ return [
     'app_settings.ai.provider_inactive'=> 'Proveedor inactivo — activa el interruptor para usarlo',
     'app_settings.ai.save_provider'    => 'Guardar',
     'app_settings.ai.edit_key'         => 'Modificar la clave',
+    'app_settings.ai.load_models'      => 'Cargar modelos',
+    'app_settings.ai.models_loaded'    => 'modelos',
 
     // Tabs Settings personales
     'settings.nav.profile'         => 'Perfil',

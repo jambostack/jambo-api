@@ -1148,6 +1148,8 @@ return [
     'app_settings.ai.provider_inactive'=> 'المزود غير نشط — قم بتفعيل المفتاح لاستخدامه',
     'app_settings.ai.save_provider'    => 'حفظ',
     'app_settings.ai.edit_key'         => 'تعديل المفتاح',
+    'app_settings.ai.load_models'      => 'تحميل النماذج',
+    'app_settings.ai.models_loaded'    => 'نماذج',
 
     // علامات تبويب الإعدادات الشخصية
     'settings.nav.profile'         => 'الملف الشخصي',
