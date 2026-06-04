@@ -977,6 +977,8 @@ return [
     'app_settings.ai.provider_inactive'=> 'Fournisseur inactif — activez le toggle pour l\'utiliser',
     'app_settings.ai.save_provider'    => 'Enregistrer',
     'app_settings.ai.edit_key'         => 'Modifier la clé',
+    'app_settings.ai.load_models'      => 'Charger les modèles',
+    'app_settings.ai.models_loaded'    => 'modèles',
 
     // Tabs Settings personnels
     'settings.heading'             => 'Paramètres',

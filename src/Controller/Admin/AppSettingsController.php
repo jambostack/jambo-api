@@ -24,6 +24,131 @@ class AppSettingsController extends AbstractController
         private CacheInterface $cache,
     ) {}
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Chargement dynamique des modèles d'un fournisseur IA
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private const PROVIDER_ENDPOINTS = [
+        'openai'     => ['url' => 'https://api.openai.com/v1/models',                          'auth' => 'bearer'],
+        'anthropic'  => ['url' => 'https://api.anthropic.com/v1/models',                       'auth' => 'anthropic'],
+        'deepseek'   => ['url' => 'https://api.deepseek.com/v1/models',                        'auth' => 'bearer'],
+        'gemini'     => ['url' => 'https://generativelanguage.googleapis.com/v1beta/models',    'auth' => 'query_key'],
+        'mistral'    => ['url' => 'https://api.mistral.ai/v1/models',                          'auth' => 'bearer'],
+        'groq'       => ['url' => 'https://api.groq.com/openai/v1/models',                     'auth' => 'bearer'],
+        'openrouter' => ['url' => 'https://openrouter.ai/api/v1/models',                       'auth' => 'bearer'],
+        'xai'        => ['url' => 'https://api.x.ai/v1/models',                                'auth' => 'bearer'],
+        'qwen'       => ['url' => 'https://dashscope.aliyuncs.com/compatible-mode/v1/models',  'auth' => 'bearer'],
+        'ollama'     => ['url' => null /* dynamic */,                                           'auth' => 'none'],
+        // Perplexity n'expose pas d'endpoint public de listage → liste statique
+        'perplexity' => ['url' => null,                                                         'auth' => 'static'],
+    ];
+
+    private const PERPLEXITY_MODELS = [
+        'sonar-pro', 'sonar', 'sonar-reasoning-pro', 'sonar-reasoning',
+        'sonar-deep-research', 'r1-1776',
+    ];
+
+    #[Route('/models/{provider}', name: 'models', methods: ['GET'])]
+    public function models(string $provider): JsonResponse
+    {
+        $allowed = array_keys(self::PROVIDER_ENDPOINTS);
+        if (!\in_array($provider, $allowed, true)) {
+            return $this->json(['error' => 'Unknown provider'], 400);
+        }
+
+        $settings = $this->repository->getOrCreate();
+        $cfg      = $settings->aiProviders[$provider] ?? [];
+        $key      = $cfg['key'] ?? null;
+        $baseUrl  = $cfg['url'] ?? null;
+        $meta     = self::PROVIDER_ENDPOINTS[$provider];
+
+        // Perplexity — liste statique
+        if ($meta['auth'] === 'static') {
+            return $this->json(['models' => self::PERPLEXITY_MODELS]);
+        }
+
+        // Ollama — endpoint local
+        if ($provider === 'ollama') {
+            if (empty($baseUrl)) {
+                return $this->json(['error' => 'Ollama URL not configured'], 422);
+            }
+            $url = rtrim($baseUrl, '/') . '/api/tags';
+            $raw = $this->fetchUrl($url, [], 6);
+            if ($raw === null) {
+                return $this->json(['error' => 'Could not reach Ollama at ' . $baseUrl], 502);
+            }
+            $data   = json_decode($raw, true);
+            $models = array_column($data['models'] ?? [], 'name');
+            return $this->json(['models' => $models]);
+        }
+
+        // Providers à clé API
+        if (empty($key)) {
+            return $this->json(['error' => 'API key not configured for ' . $provider], 422);
+        }
+
+        $url     = $meta['url'];
+        $headers = match ($meta['auth']) {
+            'bearer'    => ['Authorization: Bearer ' . $key],
+            'anthropic' => ['x-api-key: ' . $key, 'anthropic-version: 2023-06-01'],
+            'query_key' => [], // key passed as query param
+            default     => [],
+        };
+
+        if ($meta['auth'] === 'query_key') {
+            $url .= '?key=' . urlencode($key);
+        }
+
+        $raw = $this->fetchUrl($url, $headers, 10);
+        if ($raw === null) {
+            return $this->json(['error' => 'Provider API unreachable'], 502);
+        }
+
+        $data = json_decode($raw, true);
+        if (!is_array($data)) {
+            return $this->json(['error' => 'Unexpected response from provider'], 502);
+        }
+
+        $models = match ($provider) {
+            'gemini' => array_map(
+                fn($m) => str_replace('models/', '', $m['name'] ?? ''),
+                $data['models'] ?? []
+            ),
+            default => array_column($data['data'] ?? [], 'id'),
+        };
+
+        // Filtrer les modèles pertinents (exclure embeddings, audio, etc.)
+        $models = array_values(array_filter($models, fn($id) => match ($provider) {
+            'openai'     => str_starts_with($id, 'gpt-') || str_starts_with($id, 'o1') || str_starts_with($id, 'o3') || str_starts_with($id, 'o4'),
+            'anthropic'  => str_contains($id, 'claude'),
+            'gemini'     => str_contains($id, 'gemini') && !str_contains($id, 'embedding') && !str_contains($id, 'aqa'),
+            default      => !empty($id),
+        }));
+
+        sort($models);
+
+        return $this->json(['models' => $models]);
+    }
+
+    private function fetchUrl(string $url, array $headers, int $timeout): ?string
+    {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            \CURLOPT_RETURNTRANSFER => true,
+            \CURLOPT_TIMEOUT        => $timeout,
+            \CURLOPT_HTTPHEADER     => $headers,
+            \CURLOPT_SSL_VERIFYPEER => true,
+            \CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $body = curl_exec($ch);
+        $code = curl_getinfo($ch, \CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        return ($body !== false && $code >= 200 && $code < 300) ? $body : null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     #[Route('', name: 'get', methods: ['GET'])]
     public function get(): JsonResponse
     {

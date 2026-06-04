@@ -978,6 +978,8 @@ return [
     'app_settings.ai.provider_inactive'=> 'Provider inactive — enable the toggle to use it',
     'app_settings.ai.save_provider'    => 'Save',
     'app_settings.ai.edit_key'         => 'Change key',
+    'app_settings.ai.load_models'      => 'Load models',
+    'app_settings.ai.models_loaded'    => 'models',
 
     // Personal settings tabs
     'settings.heading'             => 'Settings',
@@ -1177,7 +1179,6 @@ return [
     'studio.graphql.copied'    => 'Copied!',
     'studio.graphql.example'   => 'Example query',
     'studio.graphql.hint'      => 'Use any GraphQL client (Altair, Insomnia, Postman) to explore the full schema. The schema is auto-generated from your collections.',
-    'studio.graphql.copied'    => 'Copied!',
 
     'studio.delete_confirm.title'   => 'Delete collection',
     'studio.delete_confirm.message' => 'Are you sure you want to delete {name}? This action is irreversible and will delete all associated fields.',

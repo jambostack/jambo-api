@@ -1,6 +1,6 @@
 import { Head, usePage } from '@inertiajs/react';
-import { useRef, useState } from 'react';
-import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
+import { useRef, useState, useCallback } from 'react';
+import { CheckCircle2, Circle, Loader2, RefreshCw } from 'lucide-react';
 
 import type { BreadcrumbItem, SharedData, AiProviderStatus } from '@/types/index.d';
 import AppLayout from '@/layouts/app-layout';
@@ -26,6 +26,10 @@ interface ProviderState {
     saving: boolean;
     saved:  boolean;
     error:  string | null;
+    // dynamic model list
+    models:        string[];
+    modelsLoading: boolean;
+    modelsError:   string | null;
 }
 
 function initProvider(status: AiProviderStatus | undefined, defaultModel: string): ProviderState {
@@ -33,13 +37,16 @@ function initProvider(status: AiProviderStatus | undefined, defaultModel: string
     return {
         enabled:    status?.enabled ?? false,
         configured,
-        editing:    !configured, // si pas encore de clé, on ouvre directement le champ
+        editing:    !configured,
         key:   '',
         model: status?.model ?? defaultModel,
         url:   status?.url   ?? '',
         saving: false,
         saved:  false,
         error:  null,
+        models:        [],
+        modelsLoading: false,
+        modelsError:   null,
     };
 }
 
@@ -173,20 +180,41 @@ export default function AppSettingsPage() {
 
             const data = await post(JSON.stringify({ aiProviders: { [name]: payload } }), true);
             const updated = data.aiProviders?.[name];
+            const nowConfigured = updated?.configured ?? p.configured;
             patchProvider(name, {
-                configured: updated?.configured ?? p.configured,
+                configured: nowConfigured,
                 model:      updated?.model      ?? p.model,
                 url:        updated?.url        ?? p.url,
-                key:    '',      // vider le champ — la clé masquée s'affiche via l'UI
-                editing: false,  // repasser en mode "clé masquée"
+                key:    '',
+                editing: false,
                 saving: false,
                 saved:  true,
             });
             setTimeout(() => patchProvider(name, { saved: false }), 2000);
+            // Charger les modèles automatiquement après enregistrement réussi
+            if (nowConfigured) loadModels(name);
         } catch (e: unknown) {
             patchProvider(name, { saving: false, error: e instanceof Error ? e.message : t('common.error') });
         }
     };
+
+    // ─── Chargement dynamique des modèles ────────────────────────────────
+    const loadModels = useCallback(async (name: ProviderName) => {
+        patchProvider(name, { modelsLoading: true, modelsError: null });
+        try {
+            const res = await fetch(`/admin/api/app-settings/models/${name}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error ?? t('common.error'));
+            patchProvider(name, { models: json.models ?? [], modelsLoading: false });
+        } catch (e: unknown) {
+            patchProvider(name, {
+                modelsLoading: false,
+                modelsError: e instanceof Error ? e.message : t('common.error'),
+            });
+        }
+    }, [providers]);
 
     // ─── Composant carte provider ─────────────────────────────────────────
     const ProviderCard = ({
@@ -300,11 +328,51 @@ export default function AppSettingsPage() {
                         {/* ── Modèle par défaut ───────────────────────── */}
                         {showModel && (
                             <div className="space-y-1.5">
-                                <Label className="text-xs">{t('app_settings.ai.default_model')}</Label>
-                                <Input
-                                    value={p.model}
-                                    onChange={e => patchProvider(name, { model: e.target.value })}
-                                />
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-xs">{t('app_settings.ai.default_model')}</Label>
+                                    {p.configured && (
+                                        <button
+                                            type="button"
+                                            onClick={() => loadModels(name)}
+                                            disabled={p.modelsLoading}
+                                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                                            title={t('app_settings.ai.load_models')}
+                                        >
+                                            {p.modelsLoading
+                                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                                : <RefreshCw className="h-3 w-3" />}
+                                            {p.models.length > 0
+                                                ? `${p.models.length} ${t('app_settings.ai.models_loaded')}`
+                                                : t('app_settings.ai.load_models')}
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Select quand les modèles sont chargés, Input sinon */}
+                                {p.models.length > 0 ? (
+                                    <select
+                                        value={p.model}
+                                        onChange={e => patchProvider(name, { model: e.target.value })}
+                                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                                    >
+                                        {!p.models.includes(p.model) && p.model && (
+                                            <option value={p.model}>{p.model}</option>
+                                        )}
+                                        {p.models.map(m => (
+                                            <option key={m} value={m}>{m}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <Input
+                                        value={p.model}
+                                        onChange={e => patchProvider(name, { model: e.target.value })}
+                                        placeholder={p.modelsLoading ? t('common.loading') : undefined}
+                                    />
+                                )}
+
+                                {p.modelsError && (
+                                    <p className="text-xs text-destructive">{p.modelsError}</p>
+                                )}
                             </div>
                         )}
 
