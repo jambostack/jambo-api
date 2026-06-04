@@ -21,6 +21,13 @@ class ProjectRepository extends ServiceEntityRepository
     /** @return Project[] */
     public function findByMember(User $user): array
     {
+        if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+            return $this->createQueryBuilder('p')
+                ->orderBy('p.name', 'ASC')
+                ->getQuery()
+                ->getResult();
+        }
+
         return $this->createQueryBuilder('p')
             ->join('p.projectMembers', 'pm')
             ->where('pm.user = :user')
