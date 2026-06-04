@@ -55,6 +55,10 @@ class ProfileController extends AbstractController
     #[Route('/profile', name: 'profile_delete', methods: ['DELETE'])]
     public function delete(): Response
     {
+        if ($_ENV['DEMO_MODE'] ?? false) {
+            return $this->json(['error' => 'Account deletion is disabled in demo mode.'], 403);
+        }
+
         $user = $this->getUser();
         $this->em->remove($user);
         $this->em->flush();

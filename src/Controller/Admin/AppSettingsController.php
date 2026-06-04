@@ -192,6 +192,10 @@ class AppSettingsController extends AbstractController
                 continue;
             }
 
+            if ($_ENV['DEMO_MODE'] ?? false) {
+                return $this->json(['errors' => [$formField => 'Logo/icon changes are disabled in demo mode.']], 403);
+            }
+
             $allowIco = ($formField === 'favicon');
             $error = $this->validateImageFile($file, $allowIco);
             if ($error !== null) {
