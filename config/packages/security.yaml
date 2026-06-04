@@ -45,6 +45,7 @@ security:
                 target: app_login
 
     access_control:
+        - { path: ^/webhook/rebuild-site, roles: PUBLIC_ACCESS }
         - { path: ^/api/docs, roles: PUBLIC_ACCESS }
         - { path: ^/favicon, roles: PUBLIC_ACCESS }
         - { path: ^/login, roles: PUBLIC_ACCESS }
