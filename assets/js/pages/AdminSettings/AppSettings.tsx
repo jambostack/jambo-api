@@ -1,5 +1,5 @@
 import { Head, usePage } from '@inertiajs/react';
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { CheckCircle2, Circle, Loader2, RefreshCw } from 'lucide-react';
 
 import type { BreadcrumbItem, SharedData, AiProviderStatus } from '@/types/index.d';
@@ -214,7 +214,18 @@ export default function AppSettingsPage() {
                 modelsError: e instanceof Error ? e.message : t('common.error'),
             });
         }
-    }, [providers]);
+    }, [patchProvider, t]);
+
+    // Charger automatiquement les modèles au montage pour les providers déjà configurés
+    useEffect(() => {
+        const names = Object.keys(providers) as ProviderName[];
+        names.forEach(name => {
+            if (providers[name].enabled && providers[name].configured) {
+                loadModels(name);
+            }
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // une seule fois au montage
 
     // ─── Composant carte provider ─────────────────────────────────────────
     const ProviderCard = ({
