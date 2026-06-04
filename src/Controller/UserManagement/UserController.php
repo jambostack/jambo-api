@@ -80,6 +80,10 @@ class UserController extends AbstractController
     #[IsGranted('users.manage')]
     public function bulkDelete(Request $request): JsonResponse
     {
+        if ($_ENV['DEMO_MODE'] ?? false) {
+            return $this->json(['error' => 'User deletion is disabled in demo mode.'], 403);
+        }
+
         $data     = $request->toArray();
         $ids      = $data['ids'] ?? [];
         $password = (string) ($data['password'] ?? '');
@@ -197,6 +201,10 @@ class UserController extends AbstractController
     #[IsGranted('users.manage')]
     public function delete(int $id): JsonResponse
     {
+        if ($_ENV['DEMO_MODE'] ?? false) {
+            return $this->json(['error' => 'User deletion is disabled in demo mode.'], 403);
+        }
+
         $user = $this->userRepository->find($id);
         if ($user === null) {
             return $this->json(['error' => 'User not found'], 404);
