@@ -13,118 +13,119 @@
 [![Symfony](https://img.shields.io/badge/Symfony-8.0-000000?logo=symfony&logoColor=white)](https://symfony.com)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![Database](https://img.shields.io/badge/Doctrine%20ORM-MySQL%20%7C%20PostgreSQL%20%7C%20SQLite-4479A1)](https://www.doctrine-project.org)
-[![Website](https://img.shields.io/badge/jambostack.site-2fcf8f?logo=globe)](https://jambostack.site)
 
-[Website](https://jambostack.site) · [Documentation](#) · [Demo](#) · [Roadmap](#)
+[Website](https://jambostack.site) · [Documentation](https://docs.jambostack.site) · [Changelog](CHANGELOG.md)
 
 </div>
 
 ---
 
-## What is Jambo API?
+## Two capabilities your current CMS doesn't have
 
-**Jambo API** is a fully open-source, self-hosted headless CMS built on **Symfony 8** and **PHP 8.4**. It exposes your content via **REST** and **GraphQL** APIs, ships with an **AI-powered Studio** to design schemas by chat, native **End User authentication**, a built-in **MCP server** for AI agent integration, and a complete admin panel — all in a single deployable PHP application.
+### 🔌 Native MCP Server — AI agents read and write your content directly
 
-> Part of the **[Jambostack](https://jambostack.site)** ecosystem alongside [jambo-workbench](https://github.com/jambostack/jambo-workbench) (AI site builder, Node.js).
+Connect Claude, Cursor, or any MCP-compatible agent to Jambo API. No custom API glue code. No integration layer. The agent talks to your CMS the same way a developer would — and acts autonomously.
+
+```
+# Your .cursor/mcp.json (or Claude Desktop config)
+{
+  "jambo": {
+    "url": "https://your-jambo.com/mcp",
+    "token": "your-api-token"
+  }
+}
+```
+
+**What your agent can do out of the box:**
+- Browse collections, read and filter entries
+- Create, update, delete content
+- Manage schema (add fields, create collections)
+- Upload and query media assets
+- Translate entries into any configured locale
+- Manage front-end users
+
+> *"Connect your AI to update product sheets without writing a single line of API integration code."*
 
 ---
 
-## Why Jambo API?
+### 🤖 AI Studio — design your entire schema in a single conversation
+
+Open the Studio, describe your project in plain language, and the AI scaffolds all your collections and fields — names, types, relations, required flags. Change your mind? Just say so.
+
+Supported providers: **OpenAI · Claude · Gemini · Mistral · Groq · DeepSeek · xAI · Perplexity · Qwen · Ollama**
+
+The AI also works **inside entries**: generate content, translate to 4 languages, suggest improvements — without leaving the admin.
+
+---
+
+## One install. Unlimited projects.
+
+Most headless CMS tools give you one project per deployment. Jambo API gives you **unlimited projects on a single instance** — each with its own collections, API tokens, locales, and end users. No extra containers. No extra SSL certificates. No extra pipelines.
 
 | | Jambo API | Strapi v5 | Directus | Payload v3 |
 |---|---|---|---|---|
-| **Backend stack** | **Symfony 8 / PHP 8.4** | Node.js | Node.js | Next.js / TS |
-| **Multi-project** (single install) | ✅ native | ❌ one instance = one project | ❌ | ❌ |
-| **AI Schema Studio** (chat-based) | ✅ native | ❌ | ❌ | ❌ |
+| **Multi-project** (single install) | ✅ native | ❌ | ❌ | ❌ |
+| **AI Schema Studio** | ✅ native | ❌ | ❌ | ❌ |
 | **MCP Server** (AI agents) | ✅ v2.0 native | ❌ | ✅ extension | ✅ plugin |
-| **End Users** (dedicated front-end auth) | ✅ separate table + JWT | ✅ Users & Permissions | ⚠️ same user table | ✅ per-collection auth |
-| **Content Versioning** | ✅ open source | ❌ Enterprise only | ✅ open source | ✅ open source |
-| **Multi-locale** | ✅ native | ✅ native (v5) | ✅ native | ✅ native |
-| **GraphQL** | ✅ native | ✅ free plugin | ✅ native | ✅ native |
-| **Full-text Search** | ✅ Meilisearch | ❌ no native | ❌ no native | ❌ no native |
-| **Webhooks** | ✅ native | ✅ | ✅ | ✅ |
-| **Audit logs** | ✅ open source | ❌ Enterprise only | ✅ open source | ❌ Enterprise only |
+| **End Users** (front-end auth) | ✅ separate table + JWT | ✅ | ⚠️ | ✅ |
+| **Content Versioning** | ✅ open source | ❌ Enterprise | ✅ | ✅ |
+| **Multi-locale** | ✅ native | ✅ | ✅ | ✅ |
+| **GraphQL** | ✅ native | ✅ | ✅ | ✅ |
+| **Full-text Search** | ✅ Meilisearch | ❌ | ❌ | ❌ |
+| **Audit logs** | ✅ open source | ❌ Enterprise | ✅ | ❌ |
 | **PDF export** | ✅ native | ❌ | ❌ | ❌ |
 | **License** | **AGPL v3** | MIT | Apache 2.0 | MIT |
 
 ---
 
-## Feature Overview
+## Everything else you need
 
-### Content Management
-- 📋 **Collections** — flexible EAV model, 15+ field types: `text`, `longtext`, `richtext` (Lexical editor), `slug`, `email`, `password`, `number`, `decimal`, `boolean`, `date`, `datetime`, `time`, `color`, `json`, `enumeration`, `media`, `relation`
-- 🌍 **Multi-locale** — native i18n on every collection (en, fr, es, ar built-in)
-- 📜 **Content Versioning** — full history of every entry, diff & restore
-- 🗂 **Collection Templates** — reusable schema blueprints
-- 📊 **Column Settings** — customizable list views per collection
-- 🔍 **Full-text Search** — Meilisearch integration with real-time indexing
+### Content
+- **17 field types** — text, longtext, richtext (Lexical editor), slug, email, number, decimal, boolean, date, datetime, color, json, enumeration, media, relation
+- **Singleton collections** — for hero sections, site config, about pages
+- **Content Versioning** — full history, diff & restore on every entry
+- **Collection Templates** — reusable schema blueprints across projects
+- **Full-text Search** — Meilisearch, real-time indexing
 
 ### API
-- ⚡ **REST API** — paginated, filterable, locale-aware endpoints
-- 🔗 **GraphQL** — full schema with query, cache invalidation
-- 📖 **OpenAPI / Swagger** — auto-generated docs (Nelmio + Swagger UI)
-- 🔑 **API Tokens** — per-project token management, role-based permissions
-
-### AI & Automation
-- 🤖 **AI Studio** — design and modify your content schema by chatting with an AI (OpenAI, Claude/Anthropic, DeepSeek, Ollama — via Symfony AI Bundle)
-- 🔌 **MCP Server v2.0** — connect any AI agent (Claude, Cursor…) directly to your CMS via Model Context Protocol: exploration, content CRUD, schema management, media, end users, AI tools
-- 🧠 **AI Content Service** — AI-assisted content generation within entries
+- **REST** — paginated, filterable, locale-aware, status-aware
+- **GraphQL** — auto-generated schema, queries & mutations
+- **OpenAPI / Swagger UI** — auto-generated interactive docs
+- **Export / Import** — zip-based project snapshots (structure + content + media)
 
 ### Users & Security
-- 👤 **Admin Users** — roles, permissions, project members, invitations
-- 👥 **End Users** — front-end user authentication with custom fields, JWT (`lcobucci/jwt`), registration, password reset
-- 🛡 **Rate Limiter** — API protection against abuse
-- 🔒 **Captcha** — bot protection on public forms
-
-### Media & Assets
-- 🖼 **Media Library** — file upload, metadata, VichUploader
-- 🎨 **Image Transform** — resize, crop, format conversion (Intervention Image v4)
-- 📄 **PDF Export** — generate PDFs from content (DomPDF)
-
-### DevOps & Integrations
-- 📬 **Webhooks** — event-driven triggers on content changes (per-collection)
-- 📧 **Email / Mailer** — SMTP configuration per project, email logs
-- 📦 **Messenger** — async jobs via Symfony Messenger (Doctrine transport)
-- 🚀 **Deployments** — deployment tracking and management
-- 📊 **Audit Logs** — complete history of every admin action
-- 🏗 **Project Templates** — bootstrap new projects from templates
+- **Admin users** — roles, project membership, invitations
+- **End Users** — separate front-end auth table, JWT, custom fields, password reset, cross-project IDOR protection
+- **Rate limiter**, CSRF protection, HMAC-signed API tokens
 
 ### Admin Panel
-- 🎨 Built with **React 19** + **Inertia.js** + **Tailwind CSS 4** + **shadcn/ui**
-- Rich text editor: **Lexical** (bold, italic, lists, links, code blocks, markdown)
-- Drag & drop fields: **@hello-pangea/dnd**
-- Charts: **Recharts**
-- **Dark mode** — emerald-based design system
+- React 19 + Inertia.js + Tailwind CSS 4 + shadcn/ui
+- Lexical rich text (bold, italic, tables, code, links)
+- Dark mode · emerald design system
+
+### DevOps
+- **Webhooks** — per-collection event triggers
+- **Audit logs** — every admin action tracked
+- **Mailer** — per-project SMTP + email log
+- **Messenger** — async jobs (Doctrine transport)
 
 ---
 
 ## Tech Stack
 
-### Backend
 | | |
 |---|---|
-| Language | **PHP 8.4** |
-| Framework | **Symfony 8.0** |
+| Backend | **PHP 8.4** + **Symfony 8** |
 | ORM | **Doctrine ORM 3** + Migrations |
-| Database | **MySQL, PostgreSQL, SQLite** (via Doctrine ORM) |
+| Database | MySQL 8 · PostgreSQL 14 · SQLite |
 | Search | **Meilisearch** |
-| AI | **Symfony AI Bundle** (OpenAI, Anthropic, DeepSeek, Ollama) |
+| AI | **Symfony AI Bundle** — 10 providers |
 | Auth | Symfony Security + **lcobucci/jwt 5.5** |
 | Media | **VichUploader** + **Intervention Image 4** |
-| Queue | **Symfony Messenger** (Doctrine transport) |
-| PDF | **DomPDF 3** |
+| Queue | **Symfony Messenger** |
 | GraphQL | **webonyx/graphql-php 15** |
-| API Docs | **Nelmio API Doc** + **Swagger PHP** |
-
-### Frontend
-| | |
-|---|---|
-| Framework | **React 19** + **Inertia.js 3** |
-| Build | **Webpack Encore** + TypeScript 5.9 |
+| Frontend | **React 19** + **Inertia.js 3** + **Webpack Encore** |
 | Styles | **Tailwind CSS 4** + **shadcn/ui** + **Radix UI** |
-| Rich text | **Lexical** |
-| Charts | **Recharts** |
-| UI extras | Stimulus 3, Hotwire Turbo, nanostores, sonner |
 
 ---
 
@@ -132,173 +133,80 @@
 
 ### Requirements
 
-- **PHP 8.4+** with extensions: `ctype`, `iconv`
-- **Composer**
-- **MySQL 8+**, PostgreSQL 14+, or SQLite (via Doctrine ORM)
-- **Node.js 18+** + npm (for assets)
-- Optional: **Meilisearch** (for full-text search), **Symfony CLI**
+- **PHP 8.4+** · **Composer** · **Node.js 18+** + npm
+- **MySQL 8+**, PostgreSQL 14+, or SQLite
+- Optional: Meilisearch, Symfony CLI
 
 ### Installation
 
 ```bash
-# 1. Clone
 git clone https://github.com/jambostack/jambo-api.git
 cd jambo-api
-
-# 2. PHP dependencies
 composer install
-
-# 3. JS dependencies & build
-npm install
-npm run build
-
-# 4. Environment
+npm install && npm run build
 cp .env .env.local
 ```
 
 Edit `.env.local`:
 ```env
-APP_ENV=prod
-APP_SECRET=your-secret-here
+APP_SECRET=change-this-to-a-strong-random-value
 DATABASE_URL="mysql://user:password@127.0.0.1:3306/jambo?serverVersion=8.0.32&charset=utf8mb4"
-MAILER_DSN=smtp://user:pass@smtp.example.com:587
-MEILISEARCH_HOST=http://localhost:7700
-MEILISEARCH_KEY=your-meilisearch-key
 APP_HOSTNAME=yourdomain.com
 ```
 
 ```bash
-# 5. Database
 php bin/console doctrine:database:create
 php bin/console doctrine:migrations:migrate
-
-# 6. Create the first admin user and configure permissions
-php bin/console app:setup
-# Prompts for email and password — use strong credentials.
-# Alternatively, load demo fixtures (NOT for production):
-#   php bin/console doctrine:fixtures:load --append
-#   Default fixture credentials: admin@jambostack.site / admin1234
-#   ⚠️  Change the password immediately after first login.
-
-# 7. Start
+php bin/console app:setup   # creates your admin account
 symfony serve
-# or: php -S localhost:8000 -t public/
 ```
 
-Open `http://localhost:8000` and log in. If you used `app:setup`, enter the credentials you chose. If you loaded fixtures, the defaults are `admin@jambostack.site` / `admin1234` — **change them immediately**.
+Open `http://localhost:8000`. See the full [installation guide](https://docs.jambostack.site/installation/).
 
-> **Security note:** The fixture credentials are public knowledge. Never use them in a production environment without changing them first. See [SECURITY.md](SECURITY.md) for deployment best practices.
-
-### Docker (coming soon)
-
-```bash
-docker compose up -d
-```
+> ⚠️ **Security:** Never use the demo fixture credentials (`admin@jambostack.site` / `admin1234`) in production. See [SECURITY.md](SECURITY.md).
 
 ---
 
-## API Reference
+## API Quick Reference
 
 ```bash
 # List published entries
-GET /api/{project-uuid}/{collection}?locale=en&limit=20&offset=0
+GET /api/{project-uuid}/{collection}?locale=en&page=1&per_page=20
 
-# Get single entry
+# Single entry
 GET /api/{project-uuid}/{collection}/{entry-uuid}
 
-# Authentication
+# Authorization
 Authorization: Bearer YOUR_API_TOKEN
-```
 
-GraphQL endpoint: `GET/POST /api/{project-uuid}/graphql`
-
-OpenAPI docs: `/api/docs`
-
-Example response:
-```json
-{
-  "data": [
-    {
-      "uuid": "a1b2c3d4-e5f6-...",
-      "locale": "en",
-      "status": "published",
-      "title": "Hello World",
-      "slug": "hello-world",
-      "created_at": "2026-01-01T00:00:00+00:00",
-      "updated_at": "2026-01-15T12:00:00+00:00"
-    }
-  ],
-  "meta": { "total": 42, "page": 1, "limit": 20 }
-}
+# GraphQL
+POST /api/{project-uuid}/graphql
 ```
 
 ---
 
-## MCP Server (AI Agent Integration)
-
-Connect any AI agent directly to your Jambo API via **Model Context Protocol**:
+## MCP Server
 
 ```
-MCP endpoint: https://your-jambo.com/mcp
-Version: 2.0.0 — JamboApi CMS
+Endpoint : https://your-jambo.com/mcp
+Version  : 2.0.0
 ```
 
-Available tool categories:
-- **Exploration** — browse projects, collections, schema
-- **Content** — list, create, update, delete entries
-- **Schema** — manage collections and fields
-- **Media** — upload, query assets
-- **End Users** — manage front-end users
-- **AI Tools** — content generation, search, versioning, image processing
+Tool categories: **Exploration · Content · Schema · Media · End Users · AI Tools**
 
----
-
-## Project Structure
-
-```
-jambo-api/
-├─ assets/js/            # React 19 frontend (Inertia.js)
-│  ├─ components/        # UI components (shadcn/ui, Radix)
-│  ├─ layouts/           # App shell
-│  └─ pages/             # Inertia pages (Content, Media, Studio…)
-├─ config/               # Symfony configuration
-├─ migrations/           # 32 Doctrine migrations
-├─ src/
-│  ├─ Controller/        # 24 controllers (API, pages, MCP…)
-│  ├─ Entity/            # 28 Doctrine entities
-│  ├─ Mcp/               # MCP Server v2.0
-│  ├─ Repository/        # Data access layer
-│  ├─ Service/           # 16 business services
-│  └─ EventSubscriber/   # 6 subscribers (webhooks, audit, search…)
-├─ templates/            # Twig base templates
-└─ translations/         # i18n — en, fr, es, ar
-```
-
----
-
-## Ecosystem
-
-```
-jambostack/
-├─ jambo-api          ← You are here · Symfony 8 / PHP 8.4 · AGPL v3
-├─ jambo-workbench    ← AI site builder · Node.js / Vite / React · MIT
-└─ jambo-mobileapp    ← Mobile app (coming soon)
-```
+Full reference → [docs.jambostack.site/api/introduction](https://docs.jambostack.site/api/introduction/)
 
 ---
 
 ## Roadmap
 
 - [x] REST API + GraphQL + OpenAPI/Swagger
-- [x] AI Schema Studio (multi-provider via Symfony AI Bundle)
+- [x] AI Schema Studio (10 providers)
 - [x] MCP Server v2.0
-- [x] End Users + JWT authentication
-- [x] Content versioning
-- [x] Webhooks + Audit logs
-- [x] Meilisearch full-text search
-- [x] Multi-locale (en, fr, es, ar)
-- [x] PDF export, Image transform
-- [x] Project templates, Collection templates
+- [x] End Users + JWT
+- [x] Content versioning · Webhooks · Audit logs
+- [x] Meilisearch · Multi-locale · PDF export
+- [x] Project & Collection templates · Export/Import
 - [ ] Docker one-click install
 - [ ] Jambo Cloud (managed hosting)
 - [ ] Plugin/extension system
@@ -307,32 +215,10 @@ jambostack/
 
 ## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
-
-```bash
-git clone https://github.com/jambostack/jambo-api.git
-cd jambo-api
-git checkout -b feat/your-feature
-composer install && npm install && npm run dev
-# Make your changes, write tests, then:
-git commit -m "feat: description"
-# Open a Pull Request on GitHub
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues → jprud67@gmail.com ([SECURITY.md](SECURITY.md)).
 
 ---
 
 ## License
 
-Jambo API is open source under the **[GNU AGPL v3 License](LICENSE)**.
-
-You can use, modify and distribute Jambo API freely. If you run a modified version as a public SaaS, you must publish your source code under AGPL v3.
-
-For a commercial license (closed-source, white-label): [contact@jambostack.site](mailto:contact@jambostack.site)
-
----
-
-<div align="center">
-
-Built with ❤️ · [jambostack.site](https://jambostack.site)
-
-</div>
+**[GNU AGPL v3](LICENSE)** — free to use, modify, and self-host.
