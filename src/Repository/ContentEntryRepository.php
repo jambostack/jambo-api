@@ -119,18 +119,37 @@ class ContentEntryRepository extends ServiceEntityRepository
             return [];
         }
 
-        $uidObjects = array_map(fn ($u) => \Symfony\Component\Uid\Uuid::fromString($u), $uuids);
+        // Convert UUID strings to binary form for native SQL comparison.
+        // Doctrine QueryBuilder cannot bind an array of UUID objects in IN(:uuids)
+        // without explicit type conversion; native DBAL avoids the issue entirely.
+        $binaries = [];
+        $rfc4122Map = [];
+        foreach ($uuids as $u) {
+            try {
+                $uuid = \Symfony\Component\Uid\Uuid::fromString((string) $u);
+                $bin  = $uuid->toBinary();
+                $binaries[]        = $bin;
+                $rfc4122Map[$bin] = $uuid->toRfc4122();
+            } catch (\Exception) {
+                // Skip malformed UUIDs
+            }
+        }
 
-        $rows = $this->createQueryBuilder('e')
-            ->select('e.uuid')
-            ->where('e.project = :project')
-            ->andWhere('e.uuid IN (:uuids)')
-            ->andWhere('e.deletedAt IS NULL')
-            ->setParameter('project', $project)
-            ->setParameter('uuids', $uidObjects)
-            ->getQuery()
-            ->getResult();
+        if ($binaries === []) {
+            return [];
+        }
 
-        return array_map(fn ($row) => $row['uuid']->toRfc4122(), $rows);
+        $conn = $this->getEntityManager()->getConnection();
+        $placeholders = implode(',', array_fill(0, \count($binaries), '?'));
+
+        $rows = $conn->executeQuery(
+            "SELECT uuid FROM content_entry WHERE project_id = ? AND deleted_at IS NULL AND uuid IN ({$placeholders})",
+            [$project->id, ...$binaries],
+        )->fetchAllAssociative();
+
+        return array_map(
+            fn ($row) => \Symfony\Component\Uid\Uuid::fromBinary($row['uuid'])->toRfc4122(),
+            $rows,
+        );
     }
 }
