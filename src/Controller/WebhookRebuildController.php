@@ -53,6 +53,6 @@ class WebhookRebuildController extends AbstractController
         // Lance le build en arrière-plan, redirige stdout/stderr dans un log
         $logFile = sys_get_temp_dir() . '/jambo-site-rebuild.log';
         $cmd = sprintf('%s >> %s 2>&1 &', $this->rebuildCommand, escapeshellarg($logFile));
-        exec($cmd);
+        \exec($cmd);
     }
 }
