@@ -50,9 +50,9 @@ class WebhookRebuildController extends AbstractController
             return;
         }
 
-        // Lance le build en arrière-plan, redirige stdout/stderr dans un log
-        $logFile = sys_get_temp_dir() . '/jambo-site-rebuild.log';
-        $cmd = sprintf('%s >> %s 2>&1 &', $this->rebuildCommand, escapeshellarg($logFile));
-        \exec($cmd);
+        // Écrit un fichier flag lu par un cron toutes les minutes.
+        // exec() étant désactivé en PHP-FPM, on ne peut pas lancer directement le build.
+        $flagFile = sys_get_temp_dir() . '/jambo-site-rebuild.flag';
+        file_put_contents($flagFile, time() . "\n");
     }
 }
