@@ -28,4 +28,38 @@ class EndUserRepository extends ServiceEntityRepository
         }
         return $this->findBy($criteria, ['createdAt' => 'DESC']);
     }
+
+    /** @return string[] — UUIDs RFC4122 des end-users appartenant au projet dont l'UUID est dans $uuids */
+    public function findProjectEndUserUuids(Project $project, array $uuids): array
+    {
+        if ($uuids === []) {
+            return [];
+        }
+
+        $binaries = [];
+        foreach ($uuids as $u) {
+            try {
+                $binaries[] = \Symfony\Component\Uid\Uuid::fromString((string) $u)->toBinary();
+            } catch (\Exception) {
+                // ignore malformed UUIDs
+            }
+        }
+
+        if ($binaries === []) {
+            return [];
+        }
+
+        $conn         = $this->getEntityManager()->getConnection();
+        $placeholders = implode(',', array_fill(0, \count($binaries), '?'));
+
+        $rows = $conn->executeQuery(
+            "SELECT uuid FROM end_user WHERE project_id = ? AND uuid IN ({$placeholders})",
+            [$project->id, ...$binaries],
+        )->fetchAllAssociative();
+
+        return array_map(
+            fn ($row) => \Symfony\Component\Uid\Uuid::fromBinary($row['uuid'])->toRfc4122(),
+            $rows,
+        );
+    }
 }
