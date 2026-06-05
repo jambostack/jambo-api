@@ -8,6 +8,7 @@ use App\Entity\Project;
 use App\Repository\CollectionRepository;
 use App\Repository\ContentEntryRepository;
 use App\Repository\FieldRepository;
+use App\Repository\EndUserRepository;
 use App\Repository\MediaRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
@@ -30,6 +31,7 @@ class ContentController extends AbstractController
         private ContentEntryRepository $entryRepository,
         private FieldRepository $fieldRepository,
         private MediaRepository $mediaRepository,
+        private EndUserRepository $endUserRepository,
         private EavDataFormatterService $formatter,
         private EntityManagerInterface $em,
     ) {}
@@ -323,7 +325,7 @@ class ContentController extends AbstractController
                 'datetime'                       => $fieldValue->datetimeValue = $value ? new \DateTime($value) : null,
                 'time'                           => $fieldValue->textValue     = $value !== null ? (string) $value : null,
                 'json', 'array', 'repeater'      => $fieldValue->jsonValue     = is_array($value) ? $value : json_decode($value, true),
-                'media', 'relation', 'enumeration' => $fieldValue->jsonValue   = $this->normalizeAndValidateIds($value, $field->type, $project),
+                'media', 'relation', 'enumeration' => $fieldValue->jsonValue   = $this->normalizeAndValidateIds($value, $field->type, $project, $field),
                 default                          => $fieldValue->textValue     = $value !== null ? (string) $value : null,
             };
         }
@@ -337,8 +339,11 @@ class ContentController extends AbstractController
      * Pour les champs media : valide que chaque UUID appartient bien au même
      * projet (prévention IDOR cross-project). Les UUIDs orphelins ou d'un
      * autre projet sont silencieusement écartés.
+     *
+     * Pour les champs relation : si targetCollection === 'end_users', valide
+     * dans la table end_user ; sinon valide dans content_entry.
      */
-    private function normalizeAndValidateIds(mixed $value, string $fieldType, Project $project): ?array
+    private function normalizeAndValidateIds(mixed $value, string $fieldType, Project $project, ?\App\Entity\Field $field = null): ?array
     {
         if (is_array($value)) {
             $ids = $value;
@@ -351,10 +356,12 @@ class ContentController extends AbstractController
 
         // Validation IDOR : chaque UUID doit appartenir au même projet
         if ($ids !== []) {
-            $validUuids = match ($fieldType) {
-                'media'    => $this->mediaRepository->findProjectMediaUuids($project, $ids),
-                'relation' => $this->entryRepository->findProjectEntryUuids($project, $ids),
-                default    => $ids,
+            $targetCollection = $field?->options['targetCollection'] ?? '';
+            $validUuids = match (true) {
+                $fieldType === 'media'                                         => $this->mediaRepository->findProjectMediaUuids($project, $ids),
+                $fieldType === 'relation' && $targetCollection === 'end_users' => $this->endUserRepository->findProjectEndUserUuids($project, $ids),
+                $fieldType === 'relation'                                      => $this->entryRepository->findProjectEntryUuids($project, $ids),
+                default                                                        => $ids,
             };
             $ids = array_values(array_intersect($ids, $validUuids));
         }
