@@ -1171,6 +1171,34 @@ return [
     // رسائل خطأ API
 
     // Email/SMTP
+    'projects.settings.mailer'            => 'SMTP البريد',
+    'projects.settings.nav_mailer'        => 'SMTP البريد',
+    'projects.settings.mailer.title'      => 'تكوين SMTP',
+    'projects.settings.mailer.desc'       => 'يمكن لكل مشروع أن يكون له خادم SMTP خاص به. يتم تشفير كلمة المرور على الخادم.',
+    'projects.settings.mailer.enabled'    => 'البريد مفعل',
+    'projects.settings.mailer.enable_desc' => 'تفعيل أو تعطيل إرسال البريد لهذا المشروع.',
+    'projects.settings.mailer.host'       => 'مضيف SMTP',
+    'projects.settings.mailer.port'       => 'المنفذ',
+    'projects.settings.mailer.username'   => 'اسم المستخدم',
+    'projects.settings.mailer.password'   => 'كلمة المرور / مفتاح API (اتركه فارغاً للإبقاء)',
+    'projects.settings.mailer.encryption' => 'التشفير',
+    'projects.settings.mailer.from_email' => 'بريد المرسل',
+    'projects.settings.mailer.from_name'  => 'اسم المرسل',
+    'projects.settings.mailer.test'       => 'إرسال بريد تجريبي',
+    'projects.settings.mailer.testing'    => 'جاري الإرسال...',
+    'projects.settings.mailer.test_ok'    => 'تم إرسال البريد التجريبي! تحقق من صندوق الوارد.',
+    'projects.settings.mailer.saving'     => 'جاري الحفظ...',
+    'projects.settings.mailer.saved'      => 'تم حفظ تكوين SMTP.',
+    'projects.settings.mailer.loading'    => 'جاري التحميل...',
+    'projects.settings.mailer.not_configured' => 'SMTP غير مكون لهذا المشروع.',
+
+    // JWT TTL
+    'projects.settings.jwt_title'         => 'JWT مدة صلاحية',
+    'projects.settings.jwt_desc'          => 'مدة انتهاء صلاحية الرموز. اتركه فارغاً لاستخدام القيم الافتراضية (15 دقيقة / 30 يوماً).',
+    'projects.settings.jwt_access_ttl'    => 'Access Token TTL (ثواني)',
+    'projects.settings.jwt_access_ttl_hint' => 'الافتراضي: 900 ثانية = 15 دقيقة',
+    'projects.settings.jwt_refresh_ttl'   => 'Refresh Token TTL (ثواني)',
+    'projects.settings.jwt_refresh_ttl_hint' => 'الافتراضي: 2,592,000 ثانية = 30 يوماً',
 
     // Captcha
 

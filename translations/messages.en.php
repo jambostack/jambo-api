@@ -1193,6 +1193,34 @@ return [
     // API error messages
 
     // Email/SMTP
+    'projects.settings.mailer'            => 'SMTP Mailer',
+    'projects.settings.nav_mailer'        => 'SMTP Mailer',
+    'projects.settings.mailer.title'      => 'SMTP Configuration',
+    'projects.settings.mailer.desc'       => 'Each project can have its own SMTP server for sending emails. The password is encrypted server-side.',
+    'projects.settings.mailer.enabled'    => 'Mailer enabled',
+    'projects.settings.mailer.enable_desc' => 'Enable or disable email sending for this project.',
+    'projects.settings.mailer.host'       => 'SMTP Host',
+    'projects.settings.mailer.port'       => 'Port',
+    'projects.settings.mailer.username'   => 'Username',
+    'projects.settings.mailer.password'   => 'Password / API key (leave blank to keep current)',
+    'projects.settings.mailer.encryption' => 'Encryption',
+    'projects.settings.mailer.from_email' => 'From Email',
+    'projects.settings.mailer.from_name'  => 'From Name',
+    'projects.settings.mailer.test'       => 'Send test email',
+    'projects.settings.mailer.testing'    => 'Sending test...',
+    'projects.settings.mailer.test_ok'    => 'Test email sent! Check your inbox.',
+    'projects.settings.mailer.saving'     => 'Saving...',
+    'projects.settings.mailer.saved'      => 'SMTP configuration saved.',
+    'projects.settings.mailer.loading'    => 'Loading...',
+    'projects.settings.mailer.not_configured' => 'SMTP not configured for this project.',
+
+    // JWT TTL
+    'projects.settings.jwt_title'         => 'JWT Token TTL',
+    'projects.settings.jwt_desc'          => 'Token expiration times for end-user authentication. Leave empty to use defaults (15 min / 30 days).',
+    'projects.settings.jwt_access_ttl'    => 'Access Token TTL (seconds)',
+    'projects.settings.jwt_access_ttl_hint' => 'Default: 900s = 15 min',
+    'projects.settings.jwt_refresh_ttl'   => 'Refresh Token TTL (seconds)',
+    'projects.settings.jwt_refresh_ttl_hint' => 'Default: 2592000s = 30 days',
 
     // Captcha
 

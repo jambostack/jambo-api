@@ -1171,6 +1171,34 @@ return [
     // Mensajes de error de la API
 
     // Email/SMTP
+    'projects.settings.mailer'            => 'SMTP Mailer',
+    'projects.settings.nav_mailer'        => 'SMTP Mailer',
+    'projects.settings.mailer.title'      => 'Configuración SMTP',
+    'projects.settings.mailer.desc'       => 'Cada proyecto puede tener su propio servidor SMTP. La contraseña se cifra en el servidor.',
+    'projects.settings.mailer.enabled'    => 'Mailer activado',
+    'projects.settings.mailer.enable_desc' => 'Activar o desactivar el envío de correos para este proyecto.',
+    'projects.settings.mailer.host'       => 'Host SMTP',
+    'projects.settings.mailer.port'       => 'Puerto',
+    'projects.settings.mailer.username'   => 'Usuario',
+    'projects.settings.mailer.password'   => 'Contraseña / clave API (dejar vacío para conservar)',
+    'projects.settings.mailer.encryption' => 'Cifrado',
+    'projects.settings.mailer.from_email' => 'Email remitente',
+    'projects.settings.mailer.from_name'  => 'Nombre remitente',
+    'projects.settings.mailer.test'       => 'Enviar correo de prueba',
+    'projects.settings.mailer.testing'    => 'Enviando...',
+    'projects.settings.mailer.test_ok'    => '¡Correo de prueba enviado! Revise su bandeja.',
+    'projects.settings.mailer.saving'     => 'Guardando...',
+    'projects.settings.mailer.saved'      => 'Configuración SMTP guardada.',
+    'projects.settings.mailer.loading'    => 'Cargando...',
+    'projects.settings.mailer.not_configured' => 'SMTP no configurado para este proyecto.',
+
+    // JWT TTL
+    'projects.settings.jwt_title'         => 'JWT Token TTL',
+    'projects.settings.jwt_desc'          => 'Tiempo de expiración de tokens. Dejar vacío para usar valores por defecto (15 min / 30 días).',
+    'projects.settings.jwt_access_ttl'    => 'Access Token TTL (segundos)',
+    'projects.settings.jwt_access_ttl_hint' => 'Defecto: 900s = 15 min',
+    'projects.settings.jwt_refresh_ttl'   => 'Refresh Token TTL (segundos)',
+    'projects.settings.jwt_refresh_ttl_hint' => 'Defecto: 2.592.000s = 30 días',
 
     // Captcha
 
