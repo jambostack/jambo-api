@@ -5,13 +5,20 @@ import { useTranslation } from '@/lib/i18n';
 export default function EnumerationField({ field, value, onChange, processing, errors }: FieldProps) {
     const t = useTranslation();
     // Get options for the select component
+    // Supports both storage formats:
+    //   Format A (API/public-API): { values: ["FR", "BE"] }
+    //   Format B (admin UI):       { enumeration: { list: ["FR", "BE"] } }
     const getOptions = () => {
         try {
-            if (field.options?.enumeration && 
-                typeof field.options.enumeration === 'object' &&
-                field.options.enumeration.list && 
-                Array.isArray(field.options.enumeration.list)) {
-                
+            // Format A: options.values (canonical, used by API-created fields)
+            if (Array.isArray(field.options?.values)) {
+                return field.options.values.map((value: string) => ({
+                    value,
+                    label: value
+                }));
+            }
+            // Format B: options.enumeration.list (legacy/admin UI format)
+            if (Array.isArray(field.options?.enumeration?.list)) {
                 return field.options.enumeration.list.map((value: string) => ({
                     value,
                     label: value
