@@ -11,11 +11,11 @@ use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
 use App\Service\ProjectMailerService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use JsonException;
 
 #[Route('/api/projects/{projectUuid}/settings', name: 'api_project_settings_')]
 class ProjectSettingsController extends AbstractController
@@ -28,6 +28,7 @@ class ProjectSettingsController extends AbstractController
         private ProjectMailerService $mailerService,
         private EntityManagerInterface $em,
         private ApiTokenChecker $tokenChecker,
+        private LoggerInterface $logger,
         private string $appSecret = '',
     ) {}
 
@@ -428,8 +429,20 @@ class ProjectSettingsController extends AbstractController
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
-        if (isset($body['host']))        $settings->host = (string) $body['host'];
-        if (isset($body['port']))        $settings->port = (int) $body['port'];
+        if (isset($body['host'])) {
+            $host = (string) $body['host'];
+            if (!filter_var(gethostbyname($host), FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $this->json(['error' => 'Invalid host: private/internal IPs are not allowed.'], 400);
+            }
+            $settings->host = $host;
+        }
+        if (isset($body['port'])) {
+            $port = (int) $body['port'];
+            if (!in_array($port, [25, 465, 587, 2525], true)) {
+                return $this->json(['error' => 'Invalid port: only SMTP ports allowed (25, 465, 587, 2525).'], 400);
+            }
+            $settings->port = $port;
+        }
         if (isset($body['username']))    $settings->username = (string) $body['username'];
         if (isset($body['encryption']))  $settings->encryption = (string) $body['encryption'];
         if (isset($body['from_email']))  $settings->fromEmail = (string) $body['from_email'];
@@ -475,7 +488,8 @@ class ProjectSettingsController extends AbstractController
                 "Bonjour,\n\nCeci est un email de test envoyé depuis Jambo.\n\nSi vous recevez cet email, votre configuration SMTP est correcte.\n\n— L'équipe Jambo",
             );
         } catch (\RuntimeException $e) {
-            return $this->json(['error' => $e->getMessage()], 422);
+            $this->logger->error('Mailer test failed', ['project' => $projectUuid, 'exception' => $e]);
+            return $this->json(['error' => 'Failed to send test email. Check your SMTP configuration and try again.'], 422);
         }
 
         return $this->json(['sent' => true]);
