@@ -1219,6 +1219,34 @@ return [
     // Messages d'erreur API Workbench
 
     // Email/SMTP
+    'projects.settings.mailer'            => 'SMTP Mailer',
+    'projects.settings.nav_mailer'        => 'SMTP Mailer',
+    'projects.settings.mailer.title'      => 'Configuration SMTP',
+    'projects.settings.mailer.desc'       => 'Chaque projet peut avoir son propre serveur SMTP pour envoyer des emails. Le mot de passe est chiffré côté serveur.',
+    'projects.settings.mailer.enabled'    => 'Mailer activé',
+    'projects.settings.mailer.enable_desc' => 'Activer ou désactiver l\'envoi d\'emails pour ce projet.',
+    'projects.settings.mailer.host'       => 'Hôte SMTP',
+    'projects.settings.mailer.port'       => 'Port',
+    'projects.settings.mailer.username'   => 'Nom d\'utilisateur',
+    'projects.settings.mailer.password'   => 'Mot de passe / clé API (laisser vide pour conserver)',
+    'projects.settings.mailer.encryption' => 'Chiffrement',
+    'projects.settings.mailer.from_email' => 'Email expéditeur',
+    'projects.settings.mailer.from_name'  => 'Nom expéditeur',
+    'projects.settings.mailer.test'       => 'Envoyer un email de test',
+    'projects.settings.mailer.testing'    => 'Envoi du test...',
+    'projects.settings.mailer.test_ok'    => 'Email de test envoyé ! Vérifiez votre boîte de réception.',
+    'projects.settings.mailer.saving'     => 'Enregistrement...',
+    'projects.settings.mailer.saved'      => 'Configuration SMTP enregistrée.',
+    'projects.settings.mailer.loading'    => 'Chargement...',
+    'projects.settings.mailer.not_configured' => 'SMTP non configuré pour ce projet.',
+
+    // JWT TTL
+    'projects.settings.jwt_title'         => 'JWT Token TTL',
+    'projects.settings.jwt_desc'          => 'Durée d\'expiration des tokens d\'authentification. Laisser vide pour utiliser les valeurs par défaut (15 min / 30 jours).',
+    'projects.settings.jwt_access_ttl'    => 'Access Token TTL (secondes)',
+    'projects.settings.jwt_access_ttl_hint' => 'Défaut : 900s = 15 min',
+    'projects.settings.jwt_refresh_ttl'   => 'Refresh Token TTL (secondes)',
+    'projects.settings.jwt_refresh_ttl_hint' => 'Défaut : 2 592 000s = 30 jours',
 
     // Captcha
 

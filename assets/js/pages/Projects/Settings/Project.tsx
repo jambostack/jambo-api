@@ -107,11 +107,11 @@ export default function ProjectSettingsPage({ project }: Props) {
 
                         <Separator />
 
-                        <HeadingSmall title="JWT Token TTL" description="Token expiration times for end-user authentication. Leave empty to use defaults (15 min / 30 days)." />
+                        <HeadingSmall title={t('projects.settings.jwt_title')} description={t('projects.settings.jwt_desc')} />
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="jwt_access_ttl">Access Token TTL (seconds)</Label>
+                                <Label htmlFor="jwt_access_ttl">{t('projects.settings.jwt_access_ttl')}</Label>
                                 <Input
                                     id="jwt_access_ttl"
                                     type="number"
@@ -127,7 +127,7 @@ export default function ProjectSettingsPage({ project }: Props) {
                                 </p>
                             </div>
                             <div className="grid gap-2">
-                                <Label htmlFor="jwt_refresh_ttl">Refresh Token TTL (seconds)</Label>
+                                <Label htmlFor="jwt_refresh_ttl">{t('projects.settings.jwt_refresh_ttl')}</Label>
                                 <Input
                                     id="jwt_refresh_ttl"
                                     type="number"
