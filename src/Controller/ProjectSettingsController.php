@@ -6,6 +6,7 @@ use App\Entity\ApiToken;
 use App\Repository\ApiTokenRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
+use App\Service\ApiTokenChecker;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -20,6 +21,7 @@ class ProjectSettingsController extends AbstractController
         private ApiTokenRepository $apiTokenRepository,
         private ProjectMemberRepository $memberRepo,
         private EntityManagerInterface $em,
+        private ApiTokenChecker $tokenChecker,
         private string $appSecret = '',
     ) {}
 
@@ -285,10 +287,35 @@ class ProjectSettingsController extends AbstractController
 
     // ─── JWT TTL ──────────────────────────────────────────────────────────
 
-    #[Route('/jwt-ttl', name: 'jwt_ttl_get', methods: ['GET'])]
-    public function getJwtTtl(string $projectUuid): JsonResponse
+    /** Resolve project via session user OR ApiToken (both accepted). */
+    private function resolveProjectForJwtTtl(string $projectUuid, Request $request): \App\Entity\Project|JsonResponse
     {
-        $project = $this->resolveProject($projectUuid);
+        // Try session auth first (admin UI)
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        if ($project === null) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        $user = $this->getUser();
+        if ($user !== null) {
+            if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true) || $project->hasMember($user)) {
+                return $project;
+            }
+        }
+
+        // Fallback: ApiToken auth
+        $token = $this->tokenChecker->resolve($request);
+        if ($token !== null && $token->project->uuid?->toString() === $projectUuid && $token->can('create')) {
+            return $project;
+        }
+
+        return $this->json(['error' => 'Access denied'], 403);
+    }
+
+    #[Route('/jwt-ttl', name: 'jwt_ttl_get', methods: ['GET'])]
+    public function getJwtTtl(string $projectUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProjectForJwtTtl($projectUuid, $request);
         if ($project instanceof JsonResponse) {
             return $project;
         }
@@ -306,7 +333,7 @@ class ProjectSettingsController extends AbstractController
     #[Route('/jwt-ttl', name: 'jwt_ttl_update', methods: ['PATCH'])]
     public function updateJwtTtl(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->resolveProject($projectUuid);
+        $project = $this->resolveProjectForJwtTtl($projectUuid, $request);
         if ($project instanceof JsonResponse) {
             return $project;
         }
