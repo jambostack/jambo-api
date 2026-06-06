@@ -71,6 +71,12 @@
         "icon": "Calendar",
         "bg": "bg-indigo-600"
     },
+    "datetime": {
+        "label": "Date & Time",
+        "desc": "Date and time picker",
+        "icon": "Clock",
+        "bg": "bg-purple-500"
+    },
     "time": {
         "label": "Time",
         "desc": "Time picker",

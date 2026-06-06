@@ -50,6 +50,7 @@ export function renderField(props: FieldRendererProps) {
         case 'color':
             return <ColorField {...props} />;
         case 'date':
+        case 'datetime':
             return <DateField {...props} />;
         case 'time':
             return <TimeField {...props} />;

@@ -37,9 +37,9 @@ function buildInitialFormData(fields: Field[]): Record<string, any> {
     fields.forEach(field => {
         if (field.options?.repeatable) {
             data[field.slug] = [{ value: null }];
-        } else if (field.type === 'enumeration' && field.options?.multiple) {
+        } else if ((field.type === 'enumeration' || field.type === 'enum') && field.options?.multiple) {
             data[field.slug] = [];
-        } else if (field.type === 'boolean') {
+        } else if (field.type === 'boolean' || field.type === 'checkbox') {
             data[field.slug] = false;
         } else if (field.type === 'media' || field.type === 'relation') {
             data[field.slug] = [];
