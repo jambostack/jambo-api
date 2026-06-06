@@ -6,16 +6,17 @@ use App\Entity\EndUser;
 use App\Repository\EndUserRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
+use App\Service\ApiTokenChecker;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Admin CRUD for EndUsers — JSON API used by the React frontend via axios.
+ * Admin CRUD for EndUsers — JSON API used by admin UI (Inertia) AND CRM apps via ApiToken.
  */
 #[Route('/api/projects/{uuid}/end-users', name: 'api_admin_end_users_')]
 class EndUserAdminController extends AbstractController
@@ -26,15 +27,199 @@ class EndUserAdminController extends AbstractController
         private ProjectMemberRepository $memberRepo,
         private EntityManagerInterface $em,
         private Security $security,
+        private ApiTokenChecker $tokenChecker,
+        private UserPasswordHasherInterface $hasher,
     ) {}
 
-    #[Route('/{endUserUuid}', name: 'destroy', requirements: ['endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['DELETE'])]
-    public function destroy(string $uuid, string $endUserUuid): JsonResponse
+    /** Resolve project + check access (session member OR ApiToken with write ability). */
+    private function resolveProject(string $uuid, Request $request): \App\Entity\Project|JsonResponse
     {
         $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
-        if (!$project) return $this->json(['error' => 'Project not found'], 404);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
 
-        if (!$this->isMember($project)) return $this->json(['error' => 'Forbidden'], 403);
+        // Session auth (admin UI)
+        $user = $this->security->getUser();
+        if ($user instanceof \App\Entity\User) {
+            if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+                return $project;
+            }
+            if ($this->memberRepo->findActiveByUserAndProject($user, $project) !== null) {
+                return $project;
+            }
+        }
+
+        // ApiToken auth (CRM apps)
+        $token = $this->tokenChecker->resolve($request);
+        if ($token !== null && $token->project->uuid?->toString() === $uuid && $token->can('write')) {
+            return $project;
+        }
+
+        return $this->json(['error' => 'Forbidden'], 403);
+    }
+
+    // ─── LIST ────────────────────────────────────────────────────────────────
+
+    #[Route('', name: 'index', methods: ['GET'])]
+    public function index(string $uuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($uuid, $request);
+        if ($project instanceof JsonResponse) return $project;
+
+        $status  = $request->query->get('status', '');
+        $search  = $request->query->get('search', '');
+        $page    = max(1, (int) $request->query->get('page', 1));
+        $perPage = min(100, max(1, (int) $request->query->get('per_page', 20)));
+
+        $qb = $this->em->createQueryBuilder()
+            ->select('eu')
+            ->from(EndUser::class, 'eu')
+            ->where('eu.project = :project')
+            ->setParameter('project', $project)
+            ->orderBy('eu.createdAt', 'DESC');
+
+        if ($status !== '' && in_array($status, ['active', 'banned', 'pending'], true)) {
+            $qb->andWhere('eu.status = :status')->setParameter('status', $status);
+        }
+        if ($search !== '') {
+            $qb->andWhere('eu.email LIKE :search OR eu.name LIKE :search')
+                ->setParameter('search', '%' . $search . '%');
+        }
+
+        $totalQb = clone $qb;
+        $total = (int) $totalQb->select('COUNT(eu.id)')->getQuery()->getSingleScalarResult();
+
+        $qb->setMaxResults($perPage)->setFirstResult(($page - 1) * $perPage);
+        $endUsers = $qb->getQuery()->getResult();
+
+        return $this->json([
+            'data' => array_map(fn (EndUser $eu) => $this->serializeUser($eu), $endUsers),
+            'meta' => [
+                'total'     => $total,
+                'page'      => $page,
+                'per_page'  => $perPage,
+                'pages'     => max(1, (int) ceil($total / $perPage)),
+            ],
+        ]);
+    }
+
+    // ─── SHOW ────────────────────────────────────────────────────────────────
+
+    #[Route('/{endUserUuid}', name: 'show', requirements: ['endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['GET'])]
+    public function show(string $uuid, string $endUserUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($uuid, $request);
+        if ($project instanceof JsonResponse) return $project;
+
+        $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
+        if (!$endUser) return $this->json(['error' => 'Not found'], 404);
+
+        return $this->json(['data' => $this->serializeUser($endUser)]);
+    }
+
+    // ─── CREATE ──────────────────────────────────────────────────────────────
+
+    #[Route('', name: 'create', methods: ['POST'])]
+    public function create(string $uuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($uuid, $request);
+        if ($project instanceof JsonResponse) return $project;
+
+        $data = $request->toArray();
+        $email    = trim($data['email'] ?? '');
+        $password = $data['password'] ?? '';
+        $name     = trim($data['name'] ?? '');
+        $status   = $data['status'] ?? 'active';
+        $customFields = $data['custom_fields'] ?? null;
+
+        if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->json(['error' => 'Valid email is required'], 422);
+        }
+        if (strlen($password) < 6) {
+            return $this->json(['error' => 'Password must be at least 6 characters'], 422);
+        }
+        if (!in_array($status, ['active', 'banned', 'pending'], true)) {
+            return $this->json(['error' => 'Invalid status'], 422);
+        }
+
+        $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $email);
+        if ($existing) {
+            return $this->json(['error' => 'Email already registered'], 409);
+        }
+
+        $endUser = new EndUser($project, $email);
+        $endUser->name = $name !== '' ? $name : null;
+        $endUser->status = $status;
+        $endUser->password = $this->hasher->hashPassword($endUser, $password);
+        if ($customFields !== null) {
+            $endUser->customFields = (array) $customFields;
+        }
+
+        $this->em->persist($endUser);
+        $this->em->flush();
+
+        return $this->json(['data' => $this->serializeUser($endUser)], 201);
+    }
+
+    // ─── UPDATE ──────────────────────────────────────────────────────────────
+
+    #[Route('/{endUserUuid}', name: 'update', requirements: ['endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['PATCH'])]
+    public function update(string $uuid, string $endUserUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($uuid, $request);
+        if ($project instanceof JsonResponse) return $project;
+
+        $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
+        if (!$endUser) return $this->json(['error' => 'Not found'], 404);
+
+        $data = $request->toArray();
+
+        if (isset($data['email'])) {
+            $email = trim($data['email']);
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return $this->json(['error' => 'Invalid email'], 422);
+            }
+            $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $email);
+            if ($existing && $existing->uuid->toString() !== $endUserUuid) {
+                return $this->json(['error' => 'Email already taken'], 409);
+            }
+            $endUser->email = $email;
+        }
+        if (isset($data['name'])) {
+            $endUser->name = trim($data['name']) ?: null;
+        }
+        if (isset($data['status'])) {
+            if (!in_array($data['status'], ['active', 'banned', 'pending'], true)) {
+                return $this->json(['error' => 'Invalid status'], 422);
+            }
+            $endUser->status = $data['status'];
+            if ($data['status'] === 'banned') $endUser->tokenVersion++;
+        }
+        if (isset($data['custom_fields'])) {
+            $endUser->customFields = (array) $data['custom_fields'];
+        }
+        // Reset password (admin-initiated)
+        if (!empty($data['password'] ?? '')) {
+            if (strlen($data['password']) < 6) {
+                return $this->json(['error' => 'Password must be at least 6 characters'], 422);
+            }
+            $endUser->password = $this->hasher->hashPassword($endUser, $data['password']);
+            $endUser->tokenVersion++;
+        }
+
+        $this->em->flush();
+
+        return $this->json(['data' => $this->serializeUser($endUser)]);
+    }
+
+    // ─── DELETE ──────────────────────────────────────────────────────────────
+
+    #[Route('/{endUserUuid}', name: 'destroy', requirements: ['endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['DELETE'])]
+    public function destroy(string $uuid, string $endUserUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($uuid, $request);
+        if ($project instanceof JsonResponse) return $project;
 
         $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
         if (!$endUser) return $this->json(['error' => 'Not found'], 404);
@@ -45,13 +230,13 @@ class EndUserAdminController extends AbstractController
         return $this->json(['success' => true, 'deleted' => $endUserUuid]);
     }
 
+    // ─── STATUS ──────────────────────────────────────────────────────────────
+
     #[Route('/{endUserUuid}/status', name: 'status', requirements: ['endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['PATCH'])]
     public function status(string $uuid, string $endUserUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
-        if (!$project) return $this->json(['error' => 'Project not found'], 404);
-
-        if (!$this->isMember($project)) return $this->json(['error' => 'Forbidden'], 403);
+        $project = $this->resolveProject($uuid, $request);
+        if ($project instanceof JsonResponse) return $project;
 
         $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
         if (!$endUser) return $this->json(['error' => 'Not found'], 404);
@@ -63,19 +248,25 @@ class EndUserAdminController extends AbstractController
         }
 
         $endUser->status = $newStatus;
-        if ($newStatus === 'banned') {
-            $endUser->tokenVersion++;
-        }
+        if ($newStatus === 'banned') $endUser->tokenVersion++;
         $this->em->flush();
 
         return $this->json(['success' => true, 'status' => $newStatus]);
     }
 
-    private function isMember(\App\Entity\Project $project): bool
+    // ─── Serializer ──────────────────────────────────────────────────────────
+
+    private function serializeUser(EndUser $eu): array
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof \App\Entity\User) return false;
-        if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) return true;
-        return $this->memberRepo->findActiveByUserAndProject($user, $project) !== null;
+        return [
+            'uuid'          => $eu->uuid?->toString(),
+            'email'         => $eu->email,
+            'name'          => $eu->name,
+            'status'        => $eu->status,
+            'avatar_url'    => $eu->avatarUrl,
+            'custom_fields' => $eu->customFields,
+            'created_at'    => $eu->createdAt?->format(\DateTimeInterface::ATOM),
+            'updated_at'    => $eu->updatedAt?->format(\DateTimeInterface::ATOM),
+        ];
     }
 }
