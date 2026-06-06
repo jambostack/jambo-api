@@ -174,7 +174,7 @@ export default function ProjectSettingsPage({ project }: Props) {
                                     min="0"
                                     value={data.jwt_access_ttl}
                                     onChange={(e) => setData('jwt_access_ttl', e.target.value)}
-                                    placeholder="900 (default: 15 min)"
+                                    placeholder={t('projects.settings.jwt_access_ttl_hint')}
                                 />
                                 <p className="text-xs text-muted-foreground">
                                     {data.jwt_access_ttl && Number(data.jwt_access_ttl) > 0
