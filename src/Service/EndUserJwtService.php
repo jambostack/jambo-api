@@ -24,9 +24,14 @@ class EndUserJwtService
         );
     }
 
-    /** Generate access token (15 min) */
+    /** Default TTLs when project has no custom value configured */
+    private const DEFAULT_ACCESS_TTL = 900;      // 15 minutes
+    private const DEFAULT_REFRESH_TTL = 2592000; // 30 days
+
+    /** Generate access token. TTL from project settings, falls back to 15 min. */
     public function createAccessToken(EndUser $endUser): string
     {
+        $ttl = $endUser->project->jwtAccessTtl ?? self::DEFAULT_ACCESS_TTL;
         $now = $this->clock->now();
         return $this->config->builder()
             ->issuedBy('jamboapi')
@@ -34,7 +39,7 @@ class EndUserJwtService
             ->identifiedBy(bin2hex(random_bytes(16)))
             ->issuedAt($now)
             ->canOnlyBeUsedAfter($now)
-            ->expiresAt($now->modify('+15 minutes'))
+            ->expiresAt($now->modify("+{$ttl} seconds"))
             ->withClaim('euid', $endUser->uuid?->toString())
             ->withClaim('pid', $endUser->project->uuid?->toString())
             ->withClaim('tkn', $endUser->tokenVersion)
@@ -42,9 +47,10 @@ class EndUserJwtService
             ->toString();
     }
 
-    /** Generate refresh token (30 days) */
+    /** Generate refresh token. TTL from project settings, falls back to 30 days. */
     public function createRefreshToken(EndUser $endUser): string
     {
+        $ttl = $endUser->project->jwtRefreshTtl ?? self::DEFAULT_REFRESH_TTL;
         $now = $this->clock->now();
         return $this->config->builder()
             ->issuedBy('jamboapi')
@@ -52,7 +58,7 @@ class EndUserJwtService
             ->identifiedBy(bin2hex(random_bytes(16)))
             ->issuedAt($now)
             ->canOnlyBeUsedAfter($now)
-            ->expiresAt($now->modify('+30 days'))
+            ->expiresAt($now->modify("+{$ttl} seconds"))
             ->withClaim('euid', $endUser->uuid?->toString())
             ->withClaim('pid', $endUser->project->uuid?->toString())
             ->withClaim('tkn', $endUser->tokenVersion)

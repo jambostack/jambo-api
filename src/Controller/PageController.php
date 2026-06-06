@@ -745,7 +745,9 @@ class PageController extends InertiaController
             'default_locale'  => $project->defaultLocale,
             'locales'         => $project->locales,
             'settings'        => null,
-            'public_api'      => $project->publicApi,
+            'public_api'       => $project->publicApi,
+            'jwt_access_ttl'   => $project->jwtAccessTtl,
+            'jwt_refresh_ttl'  => $project->jwtRefreshTtl,
             'created_at'      => null,
             'updated_at'      => null,
         ];

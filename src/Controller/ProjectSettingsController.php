@@ -283,6 +283,70 @@ class ProjectSettingsController extends AbstractController
         return $this->json(null, 204);
     }
 
+    // ─── JWT TTL ──────────────────────────────────────────────────────────
+
+    #[Route('/jwt-ttl', name: 'jwt_ttl_get', methods: ['GET'])]
+    public function getJwtTtl(string $projectUuid): JsonResponse
+    {
+        $project = $this->resolveProject($projectUuid);
+        if ($project instanceof JsonResponse) {
+            return $project;
+        }
+
+        return $this->json([
+            'jwt_access_ttl'  => $project->jwtAccessTtl,
+            'jwt_refresh_ttl' => $project->jwtRefreshTtl,
+            'defaults' => [
+                'access_ttl'  => 900,
+                'refresh_ttl' => 2592000,
+            ],
+        ]);
+    }
+
+    #[Route('/jwt-ttl', name: 'jwt_ttl_update', methods: ['PATCH'])]
+    public function updateJwtTtl(string $projectUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($projectUuid);
+        if ($project instanceof JsonResponse) {
+            return $project;
+        }
+
+        $data = $request->toArray();
+
+        if (array_key_exists('jwt_access_ttl', $data)) {
+            $val = $data['jwt_access_ttl'];
+            if ($val === null || $val === '' || $val === 0) {
+                $project->jwtAccessTtl = null; // reset to default
+            } else {
+                $ttl = (int) $val;
+                if ($ttl < 60) {
+                    return $this->json(['error' => 'jwt_access_ttl must be at least 60 seconds.'], 422);
+                }
+                $project->jwtAccessTtl = $ttl;
+            }
+        }
+
+        if (array_key_exists('jwt_refresh_ttl', $data)) {
+            $val = $data['jwt_refresh_ttl'];
+            if ($val === null || $val === '' || $val === 0) {
+                $project->jwtRefreshTtl = null; // reset to default
+            } else {
+                $ttl = (int) $val;
+                if ($ttl < 60) {
+                    return $this->json(['error' => 'jwt_refresh_ttl must be at least 60 seconds.'], 422);
+                }
+                $project->jwtRefreshTtl = $ttl;
+            }
+        }
+
+        $this->em->flush();
+
+        return $this->json([
+            'jwt_access_ttl'  => $project->jwtAccessTtl,
+            'jwt_refresh_ttl' => $project->jwtRefreshTtl,
+        ]);
+    }
+
     private function resolveProject(string $projectUuid): \App\Entity\Project|JsonResponse
     {
         $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
