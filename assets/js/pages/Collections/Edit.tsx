@@ -37,6 +37,13 @@ export default function Edit({ project, collection }: Props) {
     const [templateModalOpen, setTemplateModalOpen] = useState(false);
     const [templateName, setTemplateName] = useState(collection.name);
 
+    // Injecte EndUsers comme collection virtuelle pour le sélecteur de relation.
+    // end_users n'est pas une Collection entity mais une entité système EndUser.
+    const allCollections = [
+        { id: -1, name: 'EndUsers (système)', slug: 'end_users' },
+        ...project.collections.filter((c: any) => (c.slug || c.name) !== 'end_users'),
+    ];
+
     const copyToClipboard = async (text: string) => {
         await navigator.clipboard.writeText(text);
         setCopied(true);
@@ -88,7 +95,7 @@ export default function Edit({ project, collection }: Props) {
                                 collectionSlug={collection.slug}
                                 initialFields={collection.fields}
                                 onAddFieldClick={() => setIsAddFieldModalOpen(true)}
-                                collections={project.collections}
+                                collections={allCollections}
                                 can={can}
                             />
                             <Card className="w-full lg:w-[240px]">
@@ -151,7 +158,7 @@ export default function Edit({ project, collection }: Props) {
                 projectId={project.id}
                 projectUuid={project.uuid}
                 collectionSlug={collection.slug}
-                collections={project.collections}
+                collections={allCollections}
                 collectionFields={collection.fields}
                 can={can}
             />
