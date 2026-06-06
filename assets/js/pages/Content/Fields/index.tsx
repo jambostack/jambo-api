@@ -43,7 +43,6 @@ export function renderField(props: FieldRendererProps) {
         case 'number':
             return <NumberField {...props} />;
         case 'enumeration':
-        case 'enum':
             return <EnumerationField {...props} />;
         case 'boolean':
             return <BooleanField {...props} />;

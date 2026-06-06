@@ -309,7 +309,7 @@ class ContentController extends AbstractController
                 'datetime'                       => $fv->datetimeValue = $value ? new \DateTime($value) : null,
                 'time'                           => $fv->textValue     = $value !== null ? (string) $value : null,
                 'json', 'array', 'repeater'      => $fv->jsonValue     = $this->normalizeJsonObject($value),
-                'media', 'relation', 'enumeration', 'enum' => $fv->jsonValue   = $this->normalizeArrayOfIds($value),
+                'media', 'relation', 'enumeration' => $fv->jsonValue   = $this->normalizeArrayOfIds($value),
                 default                          => $fv->textValue     = $value !== null ? (string) $value : null,
             };
 
