@@ -301,7 +301,7 @@ class ProjectSettingsController extends AbstractController
     #[Route('/api/projects/{projectUuid}', name: 'api_project_update', methods: ['PUT', 'PATCH'])]
     public function updateProject(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->resolveProject($projectUuid);
+        $project = $this->resolveWithTokenFallback($projectUuid, $request);
         if ($project instanceof JsonResponse) {
             return $project;
         }
