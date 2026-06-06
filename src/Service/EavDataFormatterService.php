@@ -69,7 +69,7 @@ class EavDataFormatterService
                 'date'                                                   => $fieldValue->dateValue?->format('Y-m-d'),
                 'datetime'                                               => $fieldValue->datetimeValue?->format(\DateTimeInterface::ATOM),
                 'json', 'array', 'repeater',
-                'media', 'relation', 'enumeration', 'enum'               => $fieldValue->jsonValue,
+                'media', 'relation', 'enumeration'                       => $fieldValue->jsonValue,
                 default                                                  => $fieldValue->textValue,
             };
 

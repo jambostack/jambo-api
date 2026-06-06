@@ -31,7 +31,7 @@ const FIELD_TYPES = Object.entries(fieldsDef).map(([k, v]) => ({ type: k, label:
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   text: Type, longtext: AlignLeft, richtext: FileText, slug: Link,
   email: AtSign, password: Lock, number: Hash, enumeration: List,
-  enum: List, boolean: ToggleLeft, color: Palette, date: Calendar,
+  boolean: ToggleLeft, color: Palette, date: Calendar,
   datetime: Clock, time: Clock, media: Image, relation: GitBranch, json: Code2,
 };
 
