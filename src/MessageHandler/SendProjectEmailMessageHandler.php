@@ -11,6 +11,7 @@ use Symfony\Component\Mailer\Mailer;
 use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Component\Mime\Email;
+use Symfony\Component\Mime\Part\DataPart;
 
 #[AsMessageHandler]
 class SendProjectEmailMessageHandler
@@ -25,13 +26,11 @@ class SendProjectEmailMessageHandler
     {
         $project = $this->em->getRepository(Project::class)->find($message->projectId);
         if (!$project) {
-            return; // projet supprimé entre-temps
+            return;
         }
 
-        // Déchiffrer le mot de passe SMTP (arrive chiffré du ProjectMailerService).
         $password = $this->decrypt($message->encryptedPassword);
 
-        // Construire le DSN dynamiquement — urlencode sur toutes les parties sensibles
         $dsn = sprintf(
             'smtp://%s:%s@%s:%d?encryption=%s',
             urlencode($message->username),
@@ -44,36 +43,61 @@ class SendProjectEmailMessageHandler
         $email = (new Email())
             ->from(sprintf('%s <%s>', $message->fromName, $message->fromEmail))
             ->to($message->to)
-            ->subject($message->subject)
-            ->text($message->body);
+            ->subject($message->subject);
 
-        if ($message->replyTo) {
+        // Body texte (toujours présent, fallback pour clients sans HTML)
+        $email->text($message->body);
+
+        // Body HTML (optionnel)
+        if ($message->htmlBody !== null && $message->htmlBody !== '') {
+            $email->html($message->htmlBody);
+        }
+
+        // Reply-To
+        if ($message->replyTo !== null && $message->replyTo !== '') {
             $email->replyTo($message->replyTo);
+        }
+
+        // CC
+        foreach ($message->cc as $cc) {
+            if (filter_var($cc, FILTER_VALIDATE_EMAIL)) {
+                $email->addCc($cc);
+            }
+        }
+
+        // BCC
+        foreach ($message->bcc as $bcc) {
+            if (filter_var($bcc, FILTER_VALIDATE_EMAIL)) {
+                $email->addBcc($bcc);
+            }
+        }
+
+        // Pièces jointes
+        foreach ($message->attachments as $attachment) {
+            $email->addPart(new DataPart(
+                $attachment->content,
+                $attachment->filename,
+                $attachment->mimeType,
+            ));
         }
 
         $log = new EmailLog($project, $message->to, $message->subject);
 
         try {
-            // Transport dynamique : on crée un transport SMTP à la volée
             $transport = Transport::fromDsn($dsn);
             $mailer = new Mailer($transport);
             $mailer->send($email);
         } catch (\Throwable $e) {
-            // Logguer l'erreur pour audit
             $log->error = $e->getMessage();
             $this->em->persist($log);
             $this->em->flush();
-
-            // Rethrow pour activer le retry Messenger (max_retries: 3)
             throw $e;
         }
 
-        // Succès : log sans erreur
         $this->em->persist($log);
         $this->em->flush();
     }
 
-    /** Déchiffre le mot de passe SMTP (même algorithme que ProjectMailerService). */
     private function decrypt(string $encrypted): string
     {
         if ($encrypted === '') {

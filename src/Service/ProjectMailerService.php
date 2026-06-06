@@ -4,6 +4,7 @@ namespace App\Service;
 
 use App\Entity\Project;
 use App\Entity\ProjectMailerSettings;
+use App\Message\Attachment;
 use App\Message\SendProjectEmailMessage;
 use App\Repository\ProjectMailerSettingsRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -21,10 +22,23 @@ class ProjectMailerService
     /**
      * Envoie un email via le SMTP configuré pour le projet, de manière asynchrone.
      *
+     * @param string[]      $cc          Adresses en copie
+     * @param string[]      $bcc         Adresses en copie cachée
+     * @param Attachment[]  $attachments Pièces jointes
+     *
      * @throws \RuntimeException si le mailer n'est pas configuré ou désactivé
      */
-    public function send(Project $project, string $to, string $subject, string $body, ?string $replyTo = null): void
-    {
+    public function send(
+        Project $project,
+        string $to,
+        string $subject,
+        string $body,
+        ?string $htmlBody = null,
+        ?string $replyTo = null,
+        array $cc = [],
+        array $bcc = [],
+        array $attachments = [],
+    ): void {
         $settings = $this->getSettings($project);
         if ($settings === null || !$settings->enabled) {
             throw new \RuntimeException('Mailer not configured or disabled for this project.');
@@ -41,7 +55,11 @@ class ProjectMailerService
             to: $to,
             subject: $subject,
             body: $body,
+            htmlBody: $htmlBody,
             replyTo: $replyTo,
+            cc: $cc,
+            bcc: $bcc,
+            attachments: $attachments,
             projectId: $project->id,
         ));
     }
