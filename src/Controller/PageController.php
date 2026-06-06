@@ -484,10 +484,13 @@ class PageController extends InertiaController
             throw $this->createNotFoundException();
         }
 
+        $fields = $this->endUserFieldRepository->findByProject($project);
+
         return $this->inertia($request, 'Projects/Settings/EndUsers/Show', [
-            'project'  => $this->serializeProject($project, true),
-            'userCan'  => $this->buildUserCan($project),
-            'endUser'  => $this->serializeEndUser($endUser),
+            'project'       => $this->serializeProject($project, true),
+            'userCan'       => $this->buildUserCan($project),
+            'endUser'       => $this->serializeEndUser($endUser),
+            'endUserFields' => array_map(fn (EndUserField $f) => $this->serializeEndUserField($f), $fields),
         ]);
     }
 
