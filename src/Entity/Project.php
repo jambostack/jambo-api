@@ -57,6 +57,24 @@ class Project
         set { $this->publicApi = $value; }
     }
 
+    /**
+     * JWT access token TTL in seconds. Null = use default (900s = 15 min).
+     */
+    #[ORM\Column(type: 'integer', nullable: true)]
+    public ?int $jwtAccessTtl = null {
+        get => $this->jwtAccessTtl;
+        set { $this->jwtAccessTtl = $value; }
+    }
+
+    /**
+     * JWT refresh token TTL in seconds. Null = use default (2592000s = 30 days).
+     */
+    #[ORM\Column(type: 'integer', nullable: true)]
+    public ?int $jwtRefreshTtl = null {
+        get => $this->jwtRefreshTtl;
+        set { $this->jwtRefreshTtl = $value; }
+    }
+
     #[ORM\OneToMany(targetEntity: Collection::class, mappedBy: 'project', cascade: ['persist', 'remove'])]
     public DoctrineCollection $collections;
 
