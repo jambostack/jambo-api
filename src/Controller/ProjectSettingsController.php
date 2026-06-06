@@ -292,6 +292,71 @@ class ProjectSettingsController extends AbstractController
         return $this->json(null, 204);
     }
 
+    // ─── Project Update (Inertia form handler) ─────────────────────────────
+
+    /**
+     * Handles the project settings form from the admin UI.
+     * Accepts: name, description, default_locale, disk, jwt_access_ttl, jwt_refresh_ttl
+     */
+    #[Route('/api/projects/{projectUuid}', name: 'api_project_update', methods: ['PUT', 'PATCH'])]
+    public function updateProject(string $projectUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($projectUuid);
+        if ($project instanceof JsonResponse) {
+            return $project;
+        }
+
+        $data = $request->toArray();
+
+        if (isset($data['name'])) {
+            $project->name = (string) $data['name'];
+        }
+        if (isset($data['description'])) {
+            $project->description = $data['description'] !== '' ? (string) $data['description'] : null;
+        }
+        if (isset($data['default_locale'])) {
+            $project->defaultLocale = (string) $data['default_locale'];
+        }
+        if (isset($data['disk'])) {
+            $project->disk = (string) $data['disk'];
+        }
+        if (array_key_exists('jwt_access_ttl', $data)) {
+            $val = $data['jwt_access_ttl'];
+            if ($val === '' || $val === null || $val === '0' || $val === 0) {
+                $project->jwtAccessTtl = null;
+            } else {
+                $ttl = (int) $val;
+                if ($ttl < 60) {
+                    return $this->json(['error' => 'jwt_access_ttl must be at least 60 seconds.'], 422);
+                }
+                $project->jwtAccessTtl = $ttl;
+            }
+        }
+        if (array_key_exists('jwt_refresh_ttl', $data)) {
+            $val = $data['jwt_refresh_ttl'];
+            if ($val === '' || $val === null || $val === '0' || $val === 0) {
+                $project->jwtRefreshTtl = null;
+            } else {
+                $ttl = (int) $val;
+                if ($ttl < 60) {
+                    return $this->json(['error' => 'jwt_refresh_ttl must be at least 60 seconds.'], 422);
+                }
+                $project->jwtRefreshTtl = $ttl;
+            }
+        }
+
+        $this->em->flush();
+
+        return $this->json([
+            'name'            => $project->name,
+            'description'     => $project->description,
+            'default_locale'  => $project->defaultLocale,
+            'disk'            => $project->disk,
+            'jwt_access_ttl'  => $project->jwtAccessTtl,
+            'jwt_refresh_ttl' => $project->jwtRefreshTtl,
+        ]);
+    }
+
     // ─── Token-aware resolver (shared by JWT TTL + Mailer) ─────────────────
 
     /** Resolve project via session user OR ApiToken (both accepted). */

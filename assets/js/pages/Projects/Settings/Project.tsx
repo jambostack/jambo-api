@@ -38,6 +38,8 @@ export default function ProjectSettingsPage({ project }: Props) {
         description: project.description || '',
         default_locale: project.default_locale || '',
         disk: project.disk || 'public',
+        jwt_access_ttl: project.jwt_access_ttl ?? '',
+        jwt_refresh_ttl: project.jwt_refresh_ttl ?? '',
     });
 
     const can = usePage().props.userCan as UserCan;
@@ -101,6 +103,45 @@ export default function ProjectSettingsPage({ project }: Props) {
                                     <Label htmlFor="disk-s3">{t('projects.settings.s3')}</Label>
                                 </div>
                             </RadioGroup>
+                        </div>
+
+                        <Separator />
+
+                        <HeadingSmall title="JWT Token TTL" description="Token expiration times for end-user authentication. Leave empty to use defaults (15 min / 30 days)." />
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="jwt_access_ttl">Access Token TTL (seconds)</Label>
+                                <Input
+                                    id="jwt_access_ttl"
+                                    type="number"
+                                    min="0"
+                                    value={data.jwt_access_ttl}
+                                    onChange={(e) => setData('jwt_access_ttl', e.target.value)}
+                                    placeholder="900 (default: 15 min)"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    {data.jwt_access_ttl && Number(data.jwt_access_ttl) > 0
+                                        ? `= ${Math.round(Number(data.jwt_access_ttl) / 60)} min`
+                                        : 'Default: 900s = 15 min'}
+                                </p>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="jwt_refresh_ttl">Refresh Token TTL (seconds)</Label>
+                                <Input
+                                    id="jwt_refresh_ttl"
+                                    type="number"
+                                    min="0"
+                                    value={data.jwt_refresh_ttl}
+                                    onChange={(e) => setData('jwt_refresh_ttl', e.target.value)}
+                                    placeholder="2592000 (default: 30 days)"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    {data.jwt_refresh_ttl && Number(data.jwt_refresh_ttl) > 0
+                                        ? `= ${Math.round(Number(data.jwt_refresh_ttl) / 86400)} days`
+                                        : 'Default: 2592000s = 30 days'}
+                                </p>
+                            </div>
                         </div>
 
                         <div className="flex items-center gap-4">
