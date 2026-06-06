@@ -47,6 +47,12 @@
         "icon": "ListOrdered",
         "bg": "bg-green-600"
     },
+    "enum": {
+        "label": "Enumeration",
+        "desc": "List of values (enum)",
+        "icon": "ListOrdered",
+        "bg": "bg-green-600"
+    },
     "boolean": {
         "label": "Boolean",
         "desc": "True or false",
