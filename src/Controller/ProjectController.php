@@ -10,6 +10,7 @@ use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\RoleRepository;
 use App\Repository\UserRepository;
+use App\Service\ApiTokenChecker;
 use App\Service\EndUserSchemaSeeder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -27,6 +28,7 @@ class ProjectController extends AbstractController
         private ProjectMemberRepository $memberRepo,
         private RoleRepository $roleRepository,
         private EndUserSchemaSeeder $endUserSchemaSeeder,
+        private ApiTokenChecker $tokenChecker,
     ) {}
 
     private ?ProjectMember $currentMember = null;
@@ -91,7 +93,7 @@ class ProjectController extends AbstractController
     #[Route('/{uuid}', name: 'update', methods: ['PUT', 'PATCH'])]
     public function update(string $uuid, Request $request): \Symfony\Component\HttpFoundation\Response
     {
-        $project = $this->resolveProject($uuid);
+        $project = $this->resolveProject($uuid, $request);
         if ($project instanceof JsonResponse) {
             return $project;
         }
@@ -118,6 +120,30 @@ class ProjectController extends AbstractController
         }
         if (isset($data['public_api'])) {
             $project->publicApi = (bool) $data['public_api'];
+        }
+        if (array_key_exists('jwt_access_ttl', $data)) {
+            $val = $data['jwt_access_ttl'];
+            if ($val === '' || $val === null || $val === '0' || $val === 0) {
+                $project->jwtAccessTtl = null;
+            } else {
+                $ttl = (int) $val;
+                if ($ttl < 60) {
+                    return $this->json(['error' => 'jwt_access_ttl must be at least 60 seconds.'], 422);
+                }
+                $project->jwtAccessTtl = $ttl;
+            }
+        }
+        if (array_key_exists('jwt_refresh_ttl', $data)) {
+            $val = $data['jwt_refresh_ttl'];
+            if ($val === '' || $val === null || $val === '0' || $val === 0) {
+                $project->jwtRefreshTtl = null;
+            } else {
+                $ttl = (int) $val;
+                if ($ttl < 60) {
+                    return $this->json(['error' => 'jwt_refresh_ttl must be at least 60 seconds.'], 422);
+                }
+                $project->jwtRefreshTtl = $ttl;
+            }
         }
 
         $this->em->flush();
@@ -393,23 +419,35 @@ class ProjectController extends AbstractController
         ];
     }
 
-    private function resolveProject(string $uuid): Project|JsonResponse
+    private function resolveProject(string $uuid, ?Request $request = null): Project|JsonResponse
     {
         $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
         if ($project === null) {
             return $this->json(['error' => 'Project not found'], 404);
         }
 
+        // Session auth (admin UI)
         $user = $this->getUser();
-        if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
-            $member = $this->memberRepo->findActiveByUserAndProject($user, $project);
-            if ($member === null) {
-                return $this->json(['error' => 'Access denied'], 403);
+        if ($user !== null) {
+            if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+                $member = $this->memberRepo->findActiveByUserAndProject($user, $project);
+                if ($member === null) {
+                    return $this->json(['error' => 'Access denied'], 403);
+                }
+                $this->currentMember = $member;
             }
-            $this->currentMember = $member;
+            return $project;
         }
 
-        return $project;
+        // ApiToken auth (CRM apps)
+        if ($request !== null) {
+            $token = $this->tokenChecker->resolve($request);
+            if ($token !== null && $token->project->uuid?->toString() === $uuid && $token->can('create')) {
+                return $project;
+            }
+        }
+
+        return $this->json(['error' => 'Access denied'], 403);
     }
 
 
@@ -423,6 +461,8 @@ class ProjectController extends AbstractController
             'locales'          => $project->locales,
             'disk'             => $project->disk,
             'publicApi'        => $project->publicApi,
+            'jwt_access_ttl'   => $project->jwtAccessTtl,
+            'jwt_refresh_ttl'  => $project->jwtRefreshTtl,
             'collectionsCount' => $project->collections->count(),
             'membersCount'     => $project->projectMembers->count(),
         ];
