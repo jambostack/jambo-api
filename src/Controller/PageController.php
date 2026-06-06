@@ -793,10 +793,23 @@ class PageController extends InertiaController
 
         // Enrich relation options with the target collection's slug so the
         // frontend can build API URLs without resolving integer IDs itself.
-        if ($field->type === 'relation' && isset($options['relation']['collection'])) {
-            $targetColl = $this->collectionRepository->find((int) $options['relation']['collection']);
-            if ($targetColl) {
-                $options['relation']['collection_slug'] = $targetColl->slug;
+        // Supports both formats:
+        //   - relation.collection (int ID) → resolve slug from DB
+        //   - targetCollection (string slug) → use directly (for end_users, etc.)
+        if ($field->type === 'relation') {
+            if (isset($options['relation']['collection'])) {
+                $targetColl = $this->collectionRepository->find((int) $options['relation']['collection']);
+                if ($targetColl) {
+                    $options['relation']['collection_slug'] = $targetColl->slug;
+                }
+            } elseif (isset($options['targetCollection'])) {
+                // Le format targetCollection stocke le slug directement
+                $options['relation'] = [
+                    'collection'      => $options['targetCollection'],
+                    'collection_slug' => $options['targetCollection'],
+                    'type'            => $options['relation']['type'] ?? 1,
+                ];
+                unset($options['targetCollection']);
             }
         }
 

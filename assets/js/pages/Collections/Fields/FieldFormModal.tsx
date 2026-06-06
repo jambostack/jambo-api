@@ -204,6 +204,13 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
             if (Array.isArray(normalizedOptions.values) && !normalizedOptions.enumeration) {
                 normalizedOptions.enumeration = { list: normalizedOptions.values };
             }
+            // Normalise le format relation DB targetCollection (string slug)
+            // vers le format interne relation.collection (numeric id).
+            // id=-1 correspond à end_users (entité système, pas une Collection entity).
+            if (normalizedOptions.targetCollection && !normalizedOptions.relation?.collection) {
+                const collectionId = normalizedOptions.targetCollection === 'end_users' ? -1 : null;
+                normalizedOptions.relation = { collection: collectionId, type: 1 };
+            }
             setData({
                 type: editField.type,
                 label: editField.label,
@@ -252,14 +259,28 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
         setProcessing(true);
         setErrors({});
 
+        // Construit les options à envoyer. Convertit relation.collection=-1
+        // (end_users virtuel) vers le format canonique targetCollection.
+        const submitData = { ...data };
+        if (submitData.options?.relation?.collection === -1) {
+            submitData.options = {
+                ...submitData.options,
+                targetCollection: 'end_users',
+            };
+            // Nettoie relation.collection pour ne pas polluer le stockage
+            if (submitData.options.relation) {
+                delete submitData.options.relation.collection;
+            }
+        }
+
         const base = apiBasePath ?? `/api/projects/${projectUuid}/collections/${collectionSlug}/fields`;
 
         try {
             if (editField) {
-                await axios.patch(`${base}/${editField.slug}`, data);
+                await axios.patch(`${base}/${editField.slug}`, submitData);
                 toast.success(t('fields.save_success'));
             } else {
-                await axios.post(base, data);
+                await axios.post(base, submitData);
                 toast.success(t('fields.save_success'));
             }
             reset();
