@@ -3,15 +3,19 @@
 namespace App\Controller;
 
 use App\Entity\ApiToken;
+use App\Entity\ProjectMailerSettings;
 use App\Repository\ApiTokenRepository;
+use App\Repository\ProjectMailerSettingsRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\ProjectMailerService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
+use JsonException;
 
 #[Route('/api/projects/{projectUuid}/settings', name: 'api_project_settings_')]
 class ProjectSettingsController extends AbstractController
@@ -20,6 +24,8 @@ class ProjectSettingsController extends AbstractController
         private ProjectRepository $projectRepository,
         private ApiTokenRepository $apiTokenRepository,
         private ProjectMemberRepository $memberRepo,
+        private ProjectMailerSettingsRepository $mailerSettingsRepo,
+        private ProjectMailerService $mailerService,
         private EntityManagerInterface $em,
         private ApiTokenChecker $tokenChecker,
         private string $appSecret = '',
@@ -285,12 +291,11 @@ class ProjectSettingsController extends AbstractController
         return $this->json(null, 204);
     }
 
-    // ─── JWT TTL ──────────────────────────────────────────────────────────
+    // ─── Token-aware resolver (shared by JWT TTL + Mailer) ─────────────────
 
     /** Resolve project via session user OR ApiToken (both accepted). */
-    private function resolveProjectForJwtTtl(string $projectUuid, Request $request): \App\Entity\Project|JsonResponse
+    private function resolveWithTokenFallback(string $projectUuid, Request $request): \App\Entity\Project|JsonResponse
     {
-        // Try session auth first (admin UI)
         $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if ($project === null) {
             return $this->json(['error' => 'Project not found'], 404);
@@ -312,10 +317,12 @@ class ProjectSettingsController extends AbstractController
         return $this->json(['error' => 'Access denied'], 403);
     }
 
+    // ─── JWT TTL ──────────────────────────────────────────────────────────
+
     #[Route('/jwt-ttl', name: 'jwt_ttl_get', methods: ['GET'])]
     public function getJwtTtl(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->resolveProjectForJwtTtl($projectUuid, $request);
+        $project = $this->resolveWithTokenFallback($projectUuid, $request);
         if ($project instanceof JsonResponse) {
             return $project;
         }
@@ -333,7 +340,7 @@ class ProjectSettingsController extends AbstractController
     #[Route('/jwt-ttl', name: 'jwt_ttl_update', methods: ['PATCH'])]
     public function updateJwtTtl(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->resolveProjectForJwtTtl($projectUuid, $request);
+        $project = $this->resolveWithTokenFallback($projectUuid, $request);
         if ($project instanceof JsonResponse) {
             return $project;
         }
@@ -343,7 +350,7 @@ class ProjectSettingsController extends AbstractController
         if (array_key_exists('jwt_access_ttl', $data)) {
             $val = $data['jwt_access_ttl'];
             if ($val === null || $val === '' || $val === 0) {
-                $project->jwtAccessTtl = null; // reset to default
+                $project->jwtAccessTtl = null;
             } else {
                 $ttl = (int) $val;
                 if ($ttl < 60) {
@@ -356,7 +363,7 @@ class ProjectSettingsController extends AbstractController
         if (array_key_exists('jwt_refresh_ttl', $data)) {
             $val = $data['jwt_refresh_ttl'];
             if ($val === null || $val === '' || $val === 0) {
-                $project->jwtRefreshTtl = null; // reset to default
+                $project->jwtRefreshTtl = null;
             } else {
                 $ttl = (int) $val;
                 if ($ttl < 60) {
@@ -372,6 +379,106 @@ class ProjectSettingsController extends AbstractController
             'jwt_access_ttl'  => $project->jwtAccessTtl,
             'jwt_refresh_ttl' => $project->jwtRefreshTtl,
         ]);
+    }
+
+    // ─── Mailer (SMTP) ────────────────────────────────────────────────────
+
+    #[Route('/mailer', name: 'mailer_get', methods: ['GET'])]
+    public function getMailer(string $projectUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveWithTokenFallback($projectUuid, $request);
+        if ($project instanceof JsonResponse) {
+            return $project;
+        }
+
+        $settings = $this->mailerSettingsRepo->findByProject($project);
+        if ($settings === null) {
+            return $this->json(['data' => null]);
+        }
+
+        return $this->json(['data' => [
+            'host'       => $settings->host,
+            'port'       => $settings->port,
+            'username'   => $settings->username,
+            'encryption' => $settings->encryption,
+            'from_email' => $settings->fromEmail,
+            'from_name'  => $settings->fromName,
+            'enabled'    => $settings->enabled,
+        ]]);
+    }
+
+    #[Route('/mailer', name: 'mailer_update', methods: ['PUT'])]
+    public function updateMailer(string $projectUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveWithTokenFallback($projectUuid, $request);
+        if ($project instanceof JsonResponse) {
+            return $project;
+        }
+
+        $settings = $this->mailerSettingsRepo->findByProject($project);
+        if ($settings === null) {
+            $settings = new ProjectMailerSettings();
+            $settings->project = $project;
+            $this->em->persist($settings);
+        }
+
+        try {
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
+        if (isset($body['host']))        $settings->host = (string) $body['host'];
+        if (isset($body['port']))        $settings->port = (int) $body['port'];
+        if (isset($body['username']))    $settings->username = (string) $body['username'];
+        if (isset($body['encryption']))  $settings->encryption = (string) $body['encryption'];
+        if (isset($body['from_email']))  $settings->fromEmail = (string) $body['from_email'];
+        if (isset($body['from_name']))   $settings->fromName = (string) $body['from_name'];
+        if (isset($body['enabled']))     $settings->enabled = (bool) $body['enabled'];
+
+        // Ne mettre à jour le password que s'il est fourni (non vide)
+        if (!empty($body['password'] ?? '')) {
+            $settings->encryptedPassword = $this->mailerService->encryptPassword((string) $body['password']);
+        }
+
+        $this->em->flush();
+
+        return $this->json(['data' => [
+            'host'       => $settings->host,
+            'port'       => $settings->port,
+            'username'   => $settings->username,
+            'encryption' => $settings->encryption,
+            'from_email' => $settings->fromEmail,
+            'from_name'  => $settings->fromName,
+            'enabled'    => $settings->enabled,
+        ]]);
+    }
+
+    #[Route('/mailer/test', name: 'mailer_test', methods: ['POST'])]
+    public function testMailer(string $projectUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveWithTokenFallback($projectUuid, $request);
+        if ($project instanceof JsonResponse) {
+            return $project;
+        }
+
+        $settings = $this->mailerSettingsRepo->findByProject($project);
+        if ($settings === null || !$settings->enabled) {
+            return $this->json(['error' => 'Mailer not configured or disabled'], 422);
+        }
+
+        try {
+            $this->mailerService->send(
+                $project,
+                $settings->fromEmail,
+                'Jambo — Email de test',
+                "Bonjour,\n\nCeci est un email de test envoyé depuis Jambo.\n\nSi vous recevez cet email, votre configuration SMTP est correcte.\n\n— L'équipe Jambo",
+            );
+        } catch (\RuntimeException $e) {
+            return $this->json(['error' => $e->getMessage()], 422);
+        }
+
+        return $this->json(['sent' => true]);
     }
 
     private function resolveProject(string $projectUuid): \App\Entity\Project|JsonResponse
