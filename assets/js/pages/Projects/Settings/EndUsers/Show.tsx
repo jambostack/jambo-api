@@ -4,7 +4,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { ArrowLeft, Pencil, Ban, CheckCircle, Trash2 } from 'lucide-react';
 
-import type { Project, BreadcrumbItem, UserCan, EndUser } from '@/types';
+import type { Project, BreadcrumbItem, UserCan, EndUser, Field } from '@/types';
 
 import AppLayout from '@/layouts/app-layout';
 import ProjectsLayout from '@/pages/Projects/layout';
@@ -19,10 +19,11 @@ import { useTranslation } from '@/lib/i18n';
 interface Props {
     project: Project;
     endUser: EndUser;
+    endUserFields?: Field[];
     userCan: UserCan;
 }
 
-export default function EndUsersShow({ project, endUser }: Props) {
+export default function EndUsersShow({ project, endUser, endUserFields = [] }: Props) {
     const t = useTranslation();
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [statusLoading, setStatusLoading] = useState(false);
@@ -148,7 +149,35 @@ export default function EndUsersShow({ project, endUser }: Props) {
                             <p className="text-xs text-muted-foreground uppercase tracking-wider">{t('end_users.updated_at')}</p>
                             <p className="text-sm mt-1">{new Date(endUser.updated_at).toLocaleString()}</p>
                         </div>
-                        {endUser.custom_fields && Object.keys(endUser.custom_fields).length > 0 && (
+                        {endUserFields.length > 0 && (
+                            <div className="col-span-2 border-t pt-4 mt-2">
+                                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">{t('end_users.custom_fields')}</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {endUserFields
+                                        .filter(f => !f.is_system)
+                                        .map(field => {
+                                            const raw = endUser.custom_fields?.[field.slug];
+                                            let display: string;
+                                            if (raw === null || raw === undefined || raw === '') {
+                                                display = '—';
+                                            } else if (Array.isArray(raw)) {
+                                                display = raw.join(', ');
+                                            } else if (typeof raw === 'object') {
+                                                display = JSON.stringify(raw);
+                                            } else {
+                                                display = String(raw);
+                                            }
+                                            return (
+                                                <div key={field.id}>
+                                                    <p className="text-xs text-muted-foreground">{field.label}</p>
+                                                    <p className="text-sm mt-0.5">{display}</p>
+                                                </div>
+                                            );
+                                        })}
+                                </div>
+                            </div>
+                        )}
+                        {endUserFields.length === 0 && endUser.custom_fields && Object.keys(endUser.custom_fields).length > 0 && (
                             <div className="col-span-2">
                                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">{t('end_users.custom_fields')}</p>
                                 <pre className="text-sm bg-muted p-3 rounded-md overflow-auto">{JSON.stringify(endUser.custom_fields, null, 2)}</pre>
