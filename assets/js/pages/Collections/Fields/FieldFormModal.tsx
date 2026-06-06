@@ -197,6 +197,13 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
 
     useEffect(() => {
         if (editField) {
+            // Normalise les options : convertit le format API {values:[...]} vers
+            // le format interne {enumeration:{list:[...]}} pour que l'UI affiche
+            // les valeurs existantes.
+            const normalizedOptions = { ...editField.options };
+            if (Array.isArray(normalizedOptions.values) && !normalizedOptions.enumeration) {
+                normalizedOptions.enumeration = { list: normalizedOptions.values };
+            }
             setData({
                 type: editField.type,
                 label: editField.label,
@@ -204,7 +211,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                 description: editField.description,
                 placeholder: editField.placeholder,
                 validations: editField.validations,
-                options: editField.options
+                options: normalizedOptions
             });
         }
     }, [editField]);
