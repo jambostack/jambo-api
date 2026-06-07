@@ -72,9 +72,16 @@ export default function ProjectSettingsPage({ project }: Props) {
     const [mailerTestResult, setMailerTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
     useEffect(() => {
+        const initMailer = {
+            host: '', port: 587, username: '', encryption: 'tls',
+            from_email: '', from_name: '', enabled: false,
+        };
         axios.get(`/api/admin/projects/${project.uuid}/mailer`)
-            .then(r => { if (r.data.data) setMailer(r.data.data); setMailerLoading(false) })
-            .catch(() => setMailerLoading(false))
+            .then(r => {
+                setMailer(r.data.data ? { ...initMailer, ...r.data.data } : { ...initMailer });
+                setMailerLoading(false)
+            })
+            .catch(() => { setMailer({ ...initMailer }); setMailerLoading(false) })
     }, [project.uuid])
 
     function showMailerToast(type: 'ok' | 'err', msg: string) {
@@ -291,7 +298,7 @@ export default function ProjectSettingsPage({ project }: Props) {
                                 </div>
                                 <div className="grid gap-2">
                                     <Label htmlFor="mailer-from-name">{t('projects.settings.mailer.from_name')}</Label>
-                                    <Input id="mailer-from-name" value={mailer?.from_name ?? ''} onChange={e => setMailer(s => s ? { ...s, from_name: e.target.value } : null)} placeholder="Eureka Energy Consulting" />
+                                    <Input id="mailer-from-name" value={mailer?.from_name ?? ''} onChange={e => setMailer(s => s ? { ...s, from_name: e.target.value } : null)} placeholder={t('projects.settings.mailer.from_name')} />
                                 </div>
                             </div>
 

@@ -40,13 +40,18 @@ export default function MailerSettingsPage({ project }: Props) {
     { title: t('projects.settings.nav_mailer'), href: route('projects.settings.mailer', project.id) },
   ]
 
+  const defaultSettings: MailerSettings = {
+    host: '', port: 587, username: '', encryption: 'tls',
+    from_email: '', from_name: '', enabled: false,
+  }
+
   useEffect(() => {
     axios.get(`/api/admin/projects/${project.uuid}/mailer`)
       .then(r => {
-        if (r.data.data) setSettings(r.data.data)
+        setSettings(r.data.data ? { ...defaultSettings, ...r.data.data } : { ...defaultSettings })
         setLoading(false)
       })
-      .catch(() => setLoading(false))
+      .catch(() => { setSettings({ ...defaultSettings }); setLoading(false) })
   }, [project.uuid])
 
   function showToast(type: 'ok' | 'err', msg: string) {
@@ -170,7 +175,7 @@ export default function MailerSettingsPage({ project }: Props) {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="from_name">{t('projects.settings.mailer.from_name')}</Label>
-                  <Input id="from_name" value={settings?.from_name ?? ''} onChange={e => setSettings(s => s ? { ...s, from_name: e.target.value } : null)} placeholder="Eureka Energy Consulting" />
+                  <Input id="from_name" value={settings?.from_name ?? ''} onChange={e => setSettings(s => s ? { ...s, from_name: e.target.value } : null)} placeholder={t('projects.settings.mailer.from_name')} />
                 </div>
               </div>
 
