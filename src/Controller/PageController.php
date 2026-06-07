@@ -351,7 +351,7 @@ class PageController extends InertiaController
     // End Users Management
     // -------------------------------------------------------------------------
 
-    #[Route('/projects/{project}/settings/end-users', name: 'projects_settings_end_users', requirements: ['project' => '\d+'], priority: 10)]
+    #[Route('/projects/{project}/settings/end-users', name: 'projects_settings_end_users', requirements: ['project' => '\d+'], methods: ['GET'], priority: 10)]
     public function settingsEndUsers(int $project, Request $request): Response
     {
         $project = $this->projectRepository->find($project);
@@ -485,7 +485,7 @@ class PageController extends InertiaController
         return $this->redirectToRoute('projects_settings_end_users', ['project' => $project->id], 303);
     }
 
-    #[Route('/projects/{project}/settings/end-users/{endUserUuid}', name: 'projects_settings_end_users_show', requirements: ['project' => '\d+', 'endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], priority: 10)]
+    #[Route('/projects/{project}/settings/end-users/{endUserUuid}', name: 'projects_settings_end_users_show', requirements: ['project' => '\d+', 'endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['GET'], priority: 10)]
     public function settingsEndUsersShow(int $project, string $endUserUuid, Request $request): Response
     {
         $project = $this->projectRepository->find($project);
