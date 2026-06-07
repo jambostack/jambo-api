@@ -1,15 +1,22 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Copy, Check, Download, KeyRound, Database, Link2, Sparkles, Terminal, ListTree } from 'lucide-react';
+import { Copy, Check, Download, KeyRound, Database, Link2, Sparkles, Terminal, ListTree, UserCog, ShieldCheck } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 import type { Project, Collection } from '@/types/index.d';
 
-// Forme réelle renvoyée par l'API /studio/collections (camelCase), distincte du
-// type Collection déclaré côté front. On l'aligne ici pour un typage correct.
 type AiField = { slug: string; type: string; isRequired?: boolean };
 type AiCol = { name: string; slug: string; description?: string; isSingleton?: boolean; fields?: AiField[] };
+
+interface EndUserField {
+  slug: string; name: string; type: string; isRequired?: boolean;
+}
+
+interface EndUserInfo {
+  fields: EndUserField[];
+  total?: number;
+}
 
 export default function AiGuide({ project, collections: rawCollections }: { project: Project; collections: Collection[] }) {
   const t = useTranslation();
@@ -18,16 +25,54 @@ export default function AiGuide({ project, collections: rawCollections }: { proj
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const apiBase = `${origin}/api/${project.uuid}`;
+  const authBase = `${origin}/api/${project.uuid}/auth`;
+  const adminEndUsersBase = `${origin}/api/projects/${project.uuid}/end-users`;
   const locale = (project as unknown as { defaultLocale?: string }).defaultLocale ?? 'en';
+
+  const [endUsers, setEndUsers] = useState<EndUserInfo>({ fields: [] });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // Fetch end-user schema (custom fields)
+        const schemaRes = await fetch(`/api/projects/${project.uuid}/end-users/fields`);
+        if (schemaRes.ok) {
+          const schemaData = await schemaRes.json() as { data?: EndUserField[] };
+          if (!cancelled && Array.isArray(schemaData.data)) {
+            setEndUsers({ fields: schemaData.data });
+          }
+        }
+        // Count end-users
+        const listRes = await fetch(`${adminEndUsersBase}?per_page=1`);
+        if (listRes.ok) {
+          const listData = await listRes.json() as { meta?: { total: number } };
+          if (!cancelled && listData.meta?.total) {
+            setEndUsers(prev => ({ ...prev, total: listData.meta.total }));
+          }
+        }
+      } catch { /* garde les valeurs par défaut */ }
+    })();
+    return () => { cancelled = true; };
+  }, [project.uuid, adminEndUsersBase]);
 
   const totalFields = useMemo(
     () => collections.reduce((n, c) => n + (c.fields?.length ?? 0), 0),
     [collections],
   );
 
+  const euSystemFields: EndUserField[] = [
+    { slug: 'email', name: 'Email', type: 'email', isRequired: true },
+    { slug: 'password', name: 'Password', type: 'password', isRequired: true },
+    { slug: 'name', name: 'Name', type: 'text', isRequired: false },
+    { slug: 'status', name: 'Status', type: 'enumeration', isRequired: true },
+  ];
+
+  const allEuFields = [...euSystemFields, ...(endUsers.fields ?? [])];
+
   const doc = useMemo(
-    () => buildContextDoc(project, collections, apiBase, locale, t),
-    [project, collections, apiBase, locale, t],
+    () => buildContextDoc(project, collections, apiBase, authBase, adminEndUsersBase, locale, t, allEuFields, endUsers.total ?? 0),
+    [project, collections, apiBase, authBase, adminEndUsersBase, locale, t, allEuFields, endUsers],
   );
 
   async function copy() {
@@ -46,6 +91,7 @@ export default function AiGuide({ project, collections: rawCollections }: { proj
     { icon: Link2, label: t('studio.aiguide.fact_uuid'), value: project.uuid, mono: true },
     { icon: Terminal, label: t('studio.aiguide.fact_api'), value: apiBase, mono: true },
     { icon: ListTree, label: t('studio.aiguide.fact_collections'), value: `${collections.length} · ${totalFields} ${t('studio.aiguide.fields')}` },
+    { icon: UserCog, label: 'End Users', value: `${endUsers.total ?? '?'} users · ${endUsers.fields?.length ?? 0} custom fields` },
   ];
 
   return (
@@ -61,6 +107,8 @@ export default function AiGuide({ project, collections: rawCollections }: { proj
         .aig-step .n{ flex:0 0 auto; width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
           background:rgba(47,207,143,.12); color:#2fcf8f; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; }
         .aig-chip{ font-family:'JetBrains Mono',monospace; }
+        .aig-endpoint-group { margin-bottom: 14px; }
+        .aig-endpoint-group h4 { font-size: 11px; font-weight: 700; color: #2fcf8f; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
       `}</style>
 
       {/* Header */}
@@ -98,10 +146,37 @@ export default function AiGuide({ project, collections: rawCollections }: { proj
                 <p className="text-xs text-muted-foreground mb-1.5">{t('studio.aiguide.auth_desc')}</p>
                 <code className="block aig-chip text-[11px] bg-muted rounded-md px-2 py-1.5">Authorization: Bearer &lt;API_TOKEN&gt;</code>
               </div>
+
+              {/* Content API */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold">{t('studio.aiguide.endpoints_title')}</p>
+                <p className="text-xs font-semibold">{t('studio.aiguide.endpoints_title')} — Content</p>
                 <EndpointRow method="GET" path={`/{collection}?locale=${locale}`} desc={t('studio.aiguide.ep_list')} />
                 <EndpointRow method="GET" path="/{collection}/{uuid}" desc={t('studio.aiguide.ep_get')} />
+              </div>
+
+              {/* End-User Auth API */}
+              <div className="space-y-1.5 aig-endpoint-group">
+                <p className="text-xs font-semibold">End-User Auth — JWT</p>
+                <EndpointRow method="POST" path="/auth/register" desc="Register new end-user (email, password, name)" />
+                <EndpointRow method="POST" path="/auth/login" desc="Login → returns access_token + refresh_token + user" />
+                <EndpointRow method="GET" path="/auth/me" desc="Get current user profile (JWT required)" />
+                <EndpointRow method="PATCH" path="/auth/me" desc="Update profile (name, custom_fields, password)" />
+                <EndpointRow method="POST" path="/auth/refresh" desc="Refresh token pair" />
+                <EndpointRow method="POST" path="/auth/logout" desc="Invalidate all tokens" />
+                <EndpointRow method="POST" path="/auth/forgot-password" desc="Request password reset link" />
+                <EndpointRow method="POST" path="/auth/reset-password" desc="Reset password with token" />
+              </div>
+
+              {/* End-User Admin CRUD */}
+              <div className="space-y-1.5 aig-endpoint-group">
+                <p className="text-xs font-semibold">End-User Admin — CRUD</p>
+                <span className="aig-chip text-[10px] text-muted-foreground">(requires API token with write ability)</span>
+                <EndpointRow method="GET" path="/end-users" desc="List users (pagination, search, status filter)" />
+                <EndpointRow method="GET" path="/end-users/{uuid}" desc="Get one user" />
+                <EndpointRow method="POST" path="/end-users" desc="Create user (email, password, name, status, custom_fields)" />
+                <EndpointRow method="PATCH" path="/end-users/{uuid}" desc="Update user (email, name, status, custom_fields, password)" />
+                <EndpointRow method="PATCH" path="/end-users/{uuid}/status" desc="Change status (active | banned | pending)" />
+                <EndpointRow method="DELETE" path="/end-users/{uuid}" desc="Delete user" />
               </div>
             </CardContent>
           </Card>
@@ -146,9 +221,9 @@ export default function AiGuide({ project, collections: rawCollections }: { proj
         </div>
       </div>
 
-      {/* Schema overview (dynamic) */}
+      {/* ═══ Collections Overview ═══ */}
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><ListTree className="w-4 h-4" />{t('studio.aiguide.schema_title')}</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><ListTree className="w-4 h-4" />{t('studio.aiguide.schema_title')} — Collections</CardTitle></CardHeader>
         <CardContent>
           {collections.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">{t('studio.aiguide.empty')}</p>
@@ -175,14 +250,59 @@ export default function AiGuide({ project, collections: rawCollections }: { proj
           )}
         </CardContent>
       </Card>
+
+      {/* ═══ End Users Schema ═══ */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4" />
+            End-User Schema — JWT Authentication
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {allEuFields.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">No end-user fields configured.</p>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {allEuFields.map(f => (
+                <div key={f.slug} className="rounded-lg border border-border bg-muted/20 p-2.5 flex items-center gap-2.5">
+                  <span className="text-[10px] aig-chip px-1.5 py-0.5 rounded bg-background border border-border text-muted-foreground" title={`${f.type}${f.isRequired ? ' · required' : ''}`}>
+                    {f.slug}<span className="opacity-40">:{f.type}</span>
+                  </span>
+                  <span className="text-[11px] text-muted-foreground truncate">{f.name || f.slug}</span>
+                  {f.isRequired && (
+                    <Badge variant="secondary" className="text-[9px] shrink-0 ml-auto">required</Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 function EndpointRow({ method, path, desc }: { method: string; path: string; desc: string }) {
+  const methodColors: Record<string, string> = {
+    GET: 'rgba(47,207,143,.12)',
+    POST: 'rgba(97,175,239,.15)',
+    PATCH: 'rgba(247,185,85,.18)',
+    PUT: 'rgba(247,185,85,.18)',
+    DELETE: 'rgba(239,68,68,.15)',
+  };
+  const methodTextColors: Record<string, string> = {
+    GET: '#2fcf8f',
+    POST: '#61afef',
+    PATCH: '#f7b955',
+    PUT: '#f7b955',
+    DELETE: '#ef4444',
+  };
+  const bg = methodColors[method] || 'rgba(47,207,143,.12)';
+  const color = methodTextColors[method] || '#2fcf8f';
   return (
     <div className="flex items-start gap-2 text-xs">
-      <span className="aig-chip text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: 'rgba(47,207,143,.12)', color: '#2fcf8f' }}>{method}</span>
+      <span className="aig-chip text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ background: bg, color }}>{method}</span>
       <div className="min-w-0">
         <code className="aig-chip text-[11px] break-all">{path}</code>
         <p className="text-muted-foreground">{desc}</p>
@@ -195,8 +315,12 @@ function buildContextDoc(
   project: Project,
   collections: AiCol[],
   apiBase: string,
+  authBase: string,
+  adminEndUsersBase: string,
   locale: string,
   t: (k: string) => string,
+  euFields: EndUserField[],
+  euTotal: number,
 ): string {
   const L: string[] = [];
   L.push(`# Jambo Project Context — ${project.name}`, '');
@@ -205,15 +329,67 @@ function buildContextDoc(
   L.push(`- Name: ${project.name}`);
   L.push(`- Project ID (UUID): ${project.uuid}`);
   L.push(`- API base URL: ${apiBase}`);
-  L.push(`- Default locale: ${locale}`, '');
+  L.push(`- Default locale: ${locale}`);
+  L.push(`- End Users: ${euTotal} registered`, '');
+
   L.push('## Authentication');
-  L.push('All requests require a Bearer token (create one in Project Settings → API Access):');
-  L.push('```', 'Authorization: Bearer <API_TOKEN>', '```', '');
-  L.push('## Content API');
+  L.push('### Admin / API Token');
+  L.push('All content API requests require a Bearer token (create one in Project Settings → API Access):');
+  L.push('```', 'Authorization: Bearer <API_TOKEN>', '```');
+  L.push('');
+  L.push('### End-User JWT');
+  L.push(`End-users authenticate via POST ${authBase}/login with email + password.`);
+  L.push('The response contains an access_token (valid 15 min by default, configurable per project) and a refresh_token (30 days).');
+  L.push('Include the JWT in the Authorization header for user-specific endpoints:', '');
+  L.push('```', 'Authorization: Bearer <JWT_ACCESS_TOKEN>', '```', '');
+
+  L.push('## End-User API');
+  L.push('');
+  L.push('### Auth Endpoints');
+  L.push('| Method | Path | Description |');
+  L.push('|---|---|---|');
+  L.push('| POST | /auth/register | Register (email, password, name) |');
+  L.push('| POST | /auth/login | Login → access_token + refresh_token |');
+  L.push('| GET  | /auth/me | Get current user profile |');
+  L.push('| PATCH | /auth/me | Update profile (name, custom_fields, password) |');
+  L.push('| POST | /auth/refresh | Refresh token pair |');
+  L.push('| POST | /auth/logout | Invalidate all tokens |');
+  L.push('| POST | /auth/forgot-password | Request password reset |');
+  L.push('| POST | /auth/reset-password | Reset password with token |');
+
+  L.push('', '### Admin CRUD Endpoints');
+  L.push('Requires API token with write/create ability:', '');
+  L.push('| Method | Path | Description |');
+  L.push('|---|---|---|');
+  L.push('| GET    | /end-users | List users (pagination, search, status filter) |');
+  L.push('| GET    | /end-users/{uuid} | Get one user |');
+  L.push('| POST   | /end-users | Create user |');
+  L.push('| PATCH  | /end-users/{uuid} | Update user |');
+  L.push('| PATCH  | /end-users/{uuid}/status | Change status |');
+  L.push('| DELETE | /end-users/{uuid} | Delete user |');
+
+  L.push('', '### JWT Token TTL');
+  L.push('Access and refresh token expiration can be configured per project:');
+  L.push(`- GET  ${apiBase.replace(`/${project.uuid}`, '')}/projects/${project.uuid}/settings/jwt-ttl`);
+  L.push(`- PATCH  ${apiBase.replace(`/${project.uuid}`, '')}/projects/${project.uuid}/settings/jwt-ttl`);
+  L.push('Set `jwt_access_ttl` and `jwt_refresh_ttl` in seconds. Minimum: 60s. Set to 0 to reset to defaults.', '');
+
+  L.push('### End-User Schema');
+  if (euFields.length === 0) {
+    L.push('_No custom fields configured._');
+  } else {
+    L.push('', '| field | type | required |', '|---|---|---|');
+    for (const f of euFields) {
+      L.push(`| \`${f.slug}\` | ${f.type} | ${f.isRequired ? 'yes' : 'no'} |`);
+    }
+  }
+
+  L.push('', '## Content API');
   L.push(`- List entries:   GET ${apiBase}/{collection}?locale=${locale}&limit=20&offset=0`);
   L.push(`- Get one entry:  GET ${apiBase}/{collection}/{uuid}`);
   L.push('- Add ?locale=xx for localization. Responses are JSON.');
   L.push('- Every entry includes: uuid, locale, status ("draft" | "published"), created_at, updated_at, plus the fields below.', '');
+
   L.push('## Collections');
   if (collections.length === 0) {
     L.push('_No collections defined yet._');
@@ -231,7 +407,8 @@ function buildContextDoc(
   L.push('', '## How to build');
   L.push('1. Get a Bearer token from API Access.');
   L.push('2. Fetch the collections you need from the Content API.');
-  L.push('3. Render them in any framework (React, Vue, Astro, Next, server-side Twig…).');
-  L.push('4. Filter by status="published" for live content and respect locales.');
+  L.push('3. Authenticate end-users via the Auth API (JWT).');
+  L.push('4. Render them in any framework (React, Vue, Astro, Next, server-side Twig…).');
+  L.push('5. Filter by status="published" for live content and respect locales.');
   return L.join('\n');
 }
