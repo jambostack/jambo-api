@@ -34,9 +34,9 @@ final class Version20260608092322 extends AbstractMigration
         // 1 profil local hérité par projet existant
         $this->addSql("
             INSERT INTO project_storage_profile
-                (project_id, uuid, name, driver, priority, enabled, is_default, root_path, created_at, updated_at)
+                (project_id, uuid, name, driver, priority, enabled, is_default, s3_use_path_style, root_path, created_at, updated_at)
             SELECT
-                id, UUID_TO_BIN(UUID()), 'Local (hérité)', 'local', 0, 1, 1,
+                id, UUID_TO_BIN(UUID()), 'Local (hérité)', 'local', 0, 1, 1, 0,
                 CONCAT('public/uploads/media/', id),
                 NOW(), NOW()
             FROM project
