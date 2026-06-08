@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ import { Sparkles, Wand2, Languages, FileText, Globe, Loader2, ArrowRight } from
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
+import type { Field } from '@/types';
+
 interface Props {
   projectUuid: string;
   collectionSlug: string;
@@ -18,6 +20,8 @@ interface Props {
   onContentGenerated: (data: Record<string, any>) => void;
   locales?: string[];
   defaultLocale?: string;
+  /** Liste des champs de la collection pour le sélecteur de champ cible */
+  fields?: Field[];
 }
 
 type ActionId = 'generate' | 'translate' | 'seo' | 'summarize';
@@ -27,7 +31,6 @@ interface ActionConfig {
   icon: typeof Wand2;
   titleKey: string;
   descKey: string;
-  /** classes du tuile d'icône : texte + fond tinté */
   tile: string;
 }
 
@@ -38,13 +41,36 @@ const ACTIONS: ActionConfig[] = [
   { id: 'summarize', icon: FileText,  titleKey: 'studio.ai.summarize_btn', descKey: 'studio.ai.summarize_hint_short', tile: 'text-amber-500 bg-amber-500/10 group-hover:bg-amber-500/20' },
 ];
 
-export default function AiToolbar({ projectUuid, collectionSlug, formData, onContentGenerated, locales = [], defaultLocale = 'fr' }: Props) {
+/** Champs éligibles pour les actions AI : texte, richtext, textarea, string */
+function getTextFields(fields: Field[]): Field[] {
+  return fields.filter(f => ['text', 'richtext', 'textarea', 'string'].includes(f.type));
+}
+
+export default function AiToolbar({ projectUuid, collectionSlug, formData, onContentGenerated, locales = [], defaultLocale = 'fr', fields = [] }: Props) {
   const t = useTranslation();
   const [loading, setLoading] = useState<ActionId | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
   const [showTranslate, setShowTranslate] = useState(false);
   const [brief, setBrief] = useState('');
-  const [targetLocale, setTargetLocale] = useState('en');
+  const [targetLocale, setTargetLocale] = useState('');
+  const [targetField, setTargetField] = useState('');
+  const [summarizeField, setSummarizeField] = useState('');
+
+  const textFields = useMemo(() => getTextFields(fields), [fields]);
+
+  // Initialiser targetLocale au premier locale ≠ defaultLocale au montage du dialog
+  function openTranslate() {
+    const available = (locales.length > 0 ? locales : ['en', 'fr', 'es', 'ar']).filter(l => l !== defaultLocale);
+    setTargetLocale(available[0] || 'en');
+    setTargetField(textFields[0]?.slug || '');
+    setShowTranslate(true);
+  }
+
+  function openGenerate() {
+    setBrief('');
+    setTargetField(textFields[0]?.slug || '');
+    setShowGenerate(true);
+  }
 
   async function callAi(endpoint: ActionId, body: Record<string, any>) {
     setLoading(endpoint);
@@ -59,49 +85,104 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
 
   async function handleGenerate() {
     const result = await callAi('generate', { brief, collection: collectionSlug, locale: defaultLocale });
-    if (result && !result.error) { onContentGenerated(result); setShowGenerate(false); setBrief(''); toast.success(t('studio.api.schema_applied')); }
+    if (result && !result.error) {
+      // Appliquer uniquement au champ cible si défini
+      if (targetField && result[targetField] !== undefined) {
+        onContentGenerated({ [targetField]: result[targetField] });
+      } else {
+        onContentGenerated(result);
+      }
+      setShowGenerate(false); setBrief('');
+      toast.success(t('studio.api.schema_applied'));
+    }
   }
 
   async function handleTranslate() {
-    const result = await callAi('translate', { content: formData, locale: targetLocale });
-    if (result?.translated && !result.translated.error) { onContentGenerated(result.translated); setShowTranslate(false); toast.success(t('studio.api.schema_applied')); }
+    // N'envoyer que le champ cible (pas tout formData)
+    const content = targetField && formData[targetField] !== undefined
+      ? { [targetField]: formData[targetField] }
+      : formData;
+    const result = await callAi('translate', { content, locale: targetLocale });
+    if (result?.error) {
+      toast.error(result.error);
+      return;
+    }
+    if (result?.translated && !result.translated.error) {
+      if (targetField && result.translated[targetField] !== undefined) {
+        onContentGenerated({ [targetField]: result.translated[targetField] });
+      } else {
+        onContentGenerated(result.translated);
+      }
+      setShowTranslate(false);
+      toast.success(t('studio.api.schema_applied'));
+    }
   }
 
   async function handleSeo() {
     const result = await callAi('seo', { content: formData });
+    if (result?.error) {
+      toast.error(result.error);
+      return;
+    }
     if (result && !result.error) {
+      // SEO produit plusieurs champs — on merge dans formData via les slugs existants
       const seoData: Record<string, any> = {};
-      if (result.metaTitle) seoData.meta_title = result.metaTitle;
-      if (result.metaDescription) seoData.meta_description = result.metaDescription;
-      if (result.slug) seoData.slug = result.slug;
-      if (result.keywords) seoData.keywords = result.keywords;
+      const seoMapping: Record<string, string> = {
+        metaTitle: 'meta_title',
+        metaDescription: 'meta_description',
+        slug: 'slug',
+        keywords: 'keywords',
+      };
+      for (const [apiKey, fieldSlug] of Object.entries(seoMapping)) {
+        if (result[apiKey] && formData[fieldSlug] !== undefined) {
+          seoData[fieldSlug] = result[apiKey];
+        }
+      }
       onContentGenerated(seoData);
       toast.success(t('studio.ai.seo_success'));
     }
   }
 
   async function handleSummarize() {
-    const textContent = Object.values(formData).filter(v => typeof v === 'string' && v.length > 50).join('\n\n');
-    if (!textContent) { toast.error(t('studio.ai.no_text')); return; }
-    const result = await callAi('summarize', { text: textContent, maxWords: 80 });
-    if (result?.summary) { onContentGenerated({ summary: result.summary }); toast.success(t('studio.ai.summary_success')); }
+    const fieldValue = summarizeField && formData[summarizeField] !== undefined
+      ? formData[summarizeField]
+      : Object.values(formData).filter(v => typeof v === 'string' && v.length > 10).join('\n\n');
+    if (!fieldValue || (typeof fieldValue === 'string' && fieldValue.trim().length === 0)) {
+      toast.error(t('studio.ai.no_text'));
+      return;
+    }
+    const result = await callAi('summarize', { text: fieldValue, maxWords: 80 });
+    if (result?.error) {
+      toast.error(result.error);
+      return;
+    }
+    if (result?.summary) {
+      if (summarizeField) {
+        onContentGenerated({ [summarizeField]: result.summary });
+      } else {
+        onContentGenerated({ summary: result.summary });
+      }
+      toast.success(t('studio.ai.summary_success'));
+    }
   }
 
   const onAction = (id: ActionId) => {
-    if (id === 'generate')  return setShowGenerate(true);
-    if (id === 'translate') return setShowTranslate(true);
+    if (id === 'generate')  return openGenerate();
+    if (id === 'translate') return openTranslate();
     if (id === 'seo')       return handleSeo();
-    if (id === 'summarize') return handleSummarize();
+    if (id === 'summarize') {
+      setSummarizeField(textFields[0]?.slug || '');
+      return handleSummarize();
+    }
   };
 
   const isLoading = loading !== null;
 
   return (
     <>
-      {/* Bord dégradé premium — signale la « couche IA » */}
+      {/* Bord dégradé premium */}
       <div className="jambo-rise relative rounded-xl bg-gradient-to-br from-violet-500/40 via-fuchsia-500/25 to-transparent p-px shadow-sm">
         <div className="rounded-[calc(0.75rem-1px)] bg-card">
-          {/* En-tête */}
           <div className="flex items-center gap-3 px-4 pt-4 pb-3">
             <div className="jambo-aurora flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 via-fuchsia-500 to-violet-600 text-white shadow-md shadow-fuchsia-500/30">
               <Sparkles className="h-[18px] w-[18px]" />
@@ -112,7 +193,6 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
             </div>
           </div>
 
-          {/* Actions */}
           <div className="space-y-1 px-2 pb-2">
             {ACTIONS.map((action, i) => {
               const Icon = action.icon;
@@ -158,6 +238,19 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
               <Label>{t('studio.ai.generate_desc')}</Label>
               <Textarea value={brief} onChange={e => setBrief(e.target.value)} placeholder={t('studio.ai.generate_ph')} rows={5} />
             </div>
+            {textFields.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>{t('studio.ai.target_field')}</Label>
+                <Select value={targetField} onValueChange={setTargetField}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {textFields.map(f => (
+                      <SelectItem key={f.slug} value={f.slug}>{f.slug}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
               {t('studio.ai.collection_label')} <Badge variant="secondary">{collectionSlug}</Badge> ·
               {t('studio.ai.locale_label')} <Badge variant="secondary">{defaultLocale}</Badge>
@@ -187,9 +280,26 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
               <Label>{t('studio.ai.target_lang')}</Label>
               <Select value={targetLocale} onValueChange={setTargetLocale}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{(locales.length > 0 ? locales : ['en', 'fr', 'es', 'ar']).filter(l => l !== defaultLocale).map(l => (<SelectItem key={l} value={l}>{l.toUpperCase()}</SelectItem>))}</SelectContent>
+                <SelectContent>
+                  {(locales.length > 0 ? locales : ['en', 'fr', 'es', 'ar']).filter(l => l !== defaultLocale).map(l => (
+                    <SelectItem key={l} value={l}>{l.toUpperCase()}</SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
+            {textFields.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>{t('studio.ai.target_field')}</Label>
+                <Select value={targetField} onValueChange={setTargetField}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {textFields.map(f => (
+                      <SelectItem key={f.slug} value={f.slug}>{f.slug}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">{t('studio.ai.translate_hint')}</p>
           </div>
           <DialogFooter>

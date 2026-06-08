@@ -226,7 +226,7 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
     );
 }
 
-const escAttr = (str: string) => str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const escAttr = (str: string) => str.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&/g, '&amp;');
 
 // Plugin: insert image HTML at cursor
 function ImageInsertPlugin({ asset, onDone }: { asset: Asset | null; onDone: () => void }) {
@@ -246,7 +246,7 @@ function ImageInsertPlugin({ asset, onDone }: { asset: Asset | null; onDone: () 
                 nodes.forEach(node => selection.insertNodes([node]));
             }
         }, { onUpdate: onDone });
-    }, [asset]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [asset, onDone]);
 
     return null;
 }
