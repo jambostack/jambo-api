@@ -8,7 +8,11 @@ use App\Entity\User;
 use App\Repository\MediaRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
+use App\Repository\ProjectStorageProfileRepository;
+use App\Repository\StorageRuleRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\StorageDriverFactory;
+use App\Service\StorageManager;
 use Doctrine\ORM\EntityManagerInterface;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -29,6 +33,9 @@ class AssetController extends AbstractController
         private ApiTokenChecker $tokenChecker,
         private ProjectMemberRepository $memberRepo,
         private Security $security,
+        private ProjectStorageProfileRepository $profileRepo,
+        private StorageRuleRepository $ruleRepo,
+        private StorageDriverFactory $driverFactory,
     ) {}
 
     #[OA\Get(
@@ -164,6 +171,27 @@ class AssetController extends AbstractController
         $media->setFile($uploadedFile);
 
         $this->em->persist($media);
+        $this->em->flush();
+
+        // ── Écrire sur le(s) storage(s) via StorageManager ──
+        $storageManager = new StorageManager($project, $this->profileRepo, $this->ruleRepo, $this->driverFactory);
+        $stream = fopen($uploadedFile->getRealPath(), 'r');
+        $basePath = 'projects/' . $project->uuid->toRfc4122() . '/' . $media->fileName;
+
+        $storageOpts = [
+            'mime_type' => $media->mimeType,
+            'filename'  => $media->fileName,
+            'size'      => $media->fileSize,
+        ];
+
+        $paths = $storageManager->write($basePath, $stream, $storageOpts);
+        fclose($stream);
+
+        $media->storagePaths = $paths;
+        $primaryUuid = array_key_first($paths);
+        $primaryProfile = $this->profileRepo->findOneBy(['uuid' => $primaryUuid, 'project' => $project]);
+        $media->storageProfile = $primaryProfile;
+
         $this->em->flush();
 
         return $this->corsResponse($this->json(['data' => $this->serializeMedia($media)], 201));

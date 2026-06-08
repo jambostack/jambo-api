@@ -3,11 +3,20 @@
 namespace App\Service;
 
 use App\Entity\Media;
+use App\Repository\ProjectStorageProfileRepository;
+use App\Repository\StorageRuleRepository;
+use App\Service\StorageDriverFactory;
+use App\Service\StorageManager;
 use Vich\UploaderBundle\Storage\StorageInterface;
 
 class MediaSerializer
 {
-    public function __construct(private StorageInterface $storage) {}
+    public function __construct(
+        private StorageInterface $storage,
+        private ProjectStorageProfileRepository $profileRepo,
+        private StorageRuleRepository $ruleRepo,
+        private StorageDriverFactory $driverFactory,
+    ) {}
 
     public function serialize(Media $media): array
     {
@@ -20,7 +29,13 @@ class MediaSerializer
             default               => $size . ' B',
         };
 
-        $url = $this->storage->resolveUri($media, 'file');
+        // ── Résolution du stockage ──
+        $storage = new StorageManager($media->project, $this->profileRepo, $this->ruleRepo, $this->driverFactory);
+        $disk = $media->storageProfile?->driver === 's3' ? 's3' : 'public';
+        $primaryUuid = $media->storageProfile?->uuid?->toRfc4122();
+        $url = $media->storagePaths !== null
+            ? $storage->getUrl($media->storagePaths, $primaryUuid)
+            : ($this->storage->resolveUri($media, 'file') ?? '');
 
         return [
             'id'                => $media->id,
@@ -30,7 +45,7 @@ class MediaSerializer
             'mime_type'         => $media->mimeType,
             'extension'         => $extension,
             'size'              => $size,
-            'disk'              => 'public',
+            'disk'              => $disk,
             'path'              => $url,
             'url'               => $url,
             'full_url'          => $url,
