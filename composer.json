@@ -25,6 +25,8 @@
         "intervention/image": "^4.1",
         "knplabs/knp-paginator-bundle": "^6.10",
         "lcobucci/jwt": "5.5",
+        "league/flysystem-aws-s3-v3": "^3.0",
+        "league/flysystem-bundle": "^3.0",
         "meilisearch/meilisearch-php": "*",
         "nelmio/api-doc-bundle": "*",
         "phpdocumentor/reflection-docblock": "^6.0",
