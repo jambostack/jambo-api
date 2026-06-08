@@ -339,6 +339,7 @@ return [
     'content.form.delete_btn'         => 'Supprimer',
     'content.form.duplicate_btn'      => 'Dupliquer',
     'content.form.locale_label'       => 'Langue',
+    'content.form.locale_mismatch_warning' => 'Attention : vous avez changé la langue. Les données affichées peuvent correspondre à une autre locale.',
     'content.form.details_heading'    => 'Détails du contenu',
     'content.form.id_label'           => 'ID :',
     'content.form.uuid_label'         => 'UUID :',
@@ -1116,6 +1117,7 @@ return [
     'studio.ai.target_lang'      => 'Langue cible',
     'studio.ai.translate_hint'   => 'Le contenu actuel sera traduit dans la langue sélectionnée.',
     'studio.ai.translate_action' => 'Traduire',
+    'studio.ai.target_field'     => 'Champ cible',
     'studio.ai.seo_success'      => 'SEO généré',
     'studio.ai.no_text'          => 'Aucun contenu texte à résumer',
     'studio.ai.summary_success'  => 'Résumé généré',
@@ -1283,7 +1285,6 @@ return [
     'projects.settings.jwt_ttl_min'       => 'Minimum 60 secondes.',
     'projects.settings.jwt_access_ttl'    => 'Access Token TTL (secondes)',
     'projects.settings.jwt_access_ttl_hint' => 'Défaut : 900s = 15 min',
-    'projects.settings.jwt_ttl_min'         => '(min. 60s, max. 1 an). Mettre 0 pour réinitialiser.',
     'projects.settings.jwt_refresh_ttl'   => 'Refresh Token TTL (secondes)',
     'projects.settings.jwt_refresh_ttl_hint' => 'Défaut : 2 592 000s = 30 jours',
 

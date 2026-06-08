@@ -72,7 +72,9 @@ export default function ContentForm({ project, collection, contentEntry, formDat
     // Locale state
     const projLocales = (project as any).locales as string[] | undefined;
     const availableLocales = Array.isArray(projLocales) && projLocales.length ? projLocales : [project.default_locale || 'en'];
-    const [locale, setLocale] = useState<string>(contentEntry?.locale || project.default_locale || availableLocales[0]);
+    const entryLocale = contentEntry?.locale;
+    const [locale, setLocale] = useState<string>(entryLocale || project.default_locale || availableLocales[0]);
+    const localeMismatch = isEditMode && entryLocale && locale !== entryLocale;
 
     useEffect(() => {
         // If we have initial form data (for editing), normalise it first (e.g. media fields should be arrays of UUIDs)
@@ -514,10 +516,15 @@ export default function ContentForm({ project, collection, contentEntry, formDat
                                         <Select
                                             isMulti={false}
                                             value={{ value: locale, label: locale.toUpperCase() }}
-                                            onChange={(option: any) => setLocale(option?.value || project.default_locale)}
+                                            onChange={(option: any) => setLocale(option?.value || locale)}
                                             options={availableLocales.map(l => ({ value: l, label: l.toUpperCase() }))}
                                             isDisabled={processing}
                                         />
+                                        {localeMismatch && (
+                                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                                {t('content.form.locale_mismatch_warning')}
+                                            </p>
+                                        )}
                                     </div>
                                 </CardContent>
                             </Card>
@@ -529,6 +536,7 @@ export default function ContentForm({ project, collection, contentEntry, formDat
                                 onContentGenerated={(data) => setFormData(prev => ({ ...prev, ...data }))}
                                 locales={availableLocales}
                                 defaultLocale={locale}
+                                fields={collection.fields as Field[]}
                             />
 
                             {isEditMode && contentEntry && (
