@@ -292,6 +292,21 @@ class PageController extends InertiaController
         ]);
     }
 
+    #[Route('/projects/{project}/settings/jwt-ttl', name: 'projects_settings_jwt_ttl', requirements: ['project' => '\d+'], priority: 10)]
+    public function settingsJwtTtl(int $project, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        return $this->inertia($request, 'Projects/Settings/JwtTtl', [
+            'project' => $this->serializeProject($project, true),
+            'userCan' => $this->buildUserCan($project),
+        ]);
+    }
+
     #[Route('/projects/{project}/settings/storage', name: 'projects_settings_storage', requirements: ['project' => '\d+'], priority: 10)]
     public function settingsStorage(int $project, Request $request): Response
     {

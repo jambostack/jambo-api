@@ -1249,8 +1249,12 @@ return [
     'projects.settings.storage.delete_rule'  => 'Delete rule',
 
     // JWT TTL
+    'projects.settings.nav_jwt_ttl'       => 'JWT Token TTL',
     'projects.settings.jwt_title'         => 'JWT Token TTL',
     'projects.settings.jwt_desc'          => 'Token expiration times for end-user authentication. Leave empty to use defaults (15 min / 30 days).',
+    'projects.settings.jwt_defaults'      => 'Server defaults',
+    'projects.settings.jwt_reset_defaults' => 'Reset to defaults',
+    'projects.settings.jwt_ttl_min'       => 'Minimum 60 seconds.',
     'projects.settings.jwt_access_ttl'    => 'Access Token TTL (seconds)',
     'projects.settings.jwt_access_ttl_hint' => 'Default: 900s = 15 min',
     'projects.settings.jwt_ttl_min'         => '(min 60s, max 1 year). Set to 0 to reset.',

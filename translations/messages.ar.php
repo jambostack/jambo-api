@@ -1227,8 +1227,12 @@ return [
     'projects.settings.storage.delete_rule'  => 'حذف القاعدة',
 
     // JWT TTL
+    'projects.settings.nav_jwt_ttl'       => 'JWT مدة صلاحية',
     'projects.settings.jwt_title'         => 'JWT مدة صلاحية',
     'projects.settings.jwt_desc'          => 'مدة انتهاء صلاحية الرموز. اتركه فارغاً لاستخدام القيم الافتراضية (15 دقيقة / 30 يوماً).',
+    'projects.settings.jwt_defaults'      => 'القيم الافتراضية للخادم',
+    'projects.settings.jwt_reset_defaults' => 'إعادة التعيين إلى الافتراضي',
+    'projects.settings.jwt_ttl_min'       => 'الحد الأدنى 60 ثانية.',
     'projects.settings.jwt_access_ttl'    => 'Access Token TTL (ثواني)',
     'projects.settings.jwt_access_ttl_hint' => 'الافتراضي: 900 ثانية = 15 دقيقة',
     'projects.settings.jwt_ttl_min'         => '(الحد الأدنى 60 ثانية، الأقصى سنة). اضبط 0 لإعادة التعيين.',
