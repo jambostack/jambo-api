@@ -45,9 +45,23 @@ class Project
         set { $this->locales = $value; }
     }
 
-    #[ORM\Column(length: 50)]
-    public string $disk = 'public' {
-        get => $this->disk;
+    /**
+     * @deprecated Use storageProfiles + storageStrategy instead.
+     */
+    #[ORM\Column(length: 50, nullable: true)]
+    public ?string $disk = 'public' {
+        get {
+            if (!isset($this->storageProfiles)) {
+                return $this->disk;
+            }
+            $default = $this->storageProfiles
+                ->filter(fn (ProjectStorageProfile $p) => $p->isDefault)
+                ->first();
+            if (!$default) {
+                return 'public';
+            }
+            return $default->driver === 's3' ? 's3' : 'public';
+        }
         set { $this->disk = $value; }
     }
 
@@ -56,6 +70,18 @@ class Project
         get => $this->publicApi;
         set { $this->publicApi = $value; }
     }
+
+    #[ORM\Column(length: 20)]
+    public string $storageStrategy = 'default_only' {
+        get => $this->storageStrategy;
+        set { $this->storageStrategy = $value; }
+    }
+
+    #[ORM\OneToMany(targetEntity: ProjectStorageProfile::class, mappedBy: 'project', cascade: ['persist', 'remove'], orphanRemoval: true)]
+    public DoctrineCollection $storageProfiles;
+
+    #[ORM\OneToMany(targetEntity: StorageRule::class, mappedBy: 'project', cascade: ['persist', 'remove'], orphanRemoval: true)]
+    public DoctrineCollection $storageRules;
 
     /**
      * JWT access token TTL in seconds. Null = use default (900s = 15 min).
@@ -83,8 +109,10 @@ class Project
 
     public function __construct()
     {
-        $this->collections    = new ArrayCollection();
-        $this->projectMembers = new ArrayCollection();
+        $this->collections     = new ArrayCollection();
+        $this->projectMembers  = new ArrayCollection();
+        $this->storageProfiles = new ArrayCollection();
+        $this->storageRules    = new ArrayCollection();
     }
 
     public function hasMember(User $user): bool
