@@ -176,7 +176,7 @@ class AssetController extends AbstractController
         // ── Écrire sur le(s) storage(s) via StorageManager ──
         $storageManager = new StorageManager($project, $this->profileRepo, $this->ruleRepo, $this->driverFactory);
         $stream = fopen($uploadedFile->getRealPath(), 'r');
-        $basePath = 'projects/' . $project->uuid->toRfc4122() . '/' . $media->fileName;
+        $basePath = 'projects/' . $project->uuid->toRfc4122() . '/' . basename($media->fileName);
 
         $storageOpts = [
             'mime_type' => $media->mimeType,
