@@ -6,9 +6,11 @@ use App\Entity\EndUser;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
+use Lcobucci\JWT\Validation\Constraint\Leeway;
 use Lcobucci\JWT\Validation\Constraint\StrictValidAt;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
 use Psr\Clock\ClockInterface;
+use Psr\Log\LoggerInterface;
 
 class EndUserJwtService
 {
@@ -17,6 +19,7 @@ class EndUserJwtService
     public function __construct(
         private string $appSecret,
         private ClockInterface $clock,
+        private ?LoggerInterface $logger = null,
     ) {
         $this->config = Configuration::forSymmetricSigner(
             new Sha256(),
@@ -30,11 +33,6 @@ class EndUserJwtService
 
     /** Maximum allowed TTL: 1 year (security ceiling) */
     public const MAX_TTL = 31536000; // 365 days
-
-    /** Thresholds for human-readable formatting (frontend) */
-    public const HOUR = 3600;
-    public const DAY  = 86400;
-    public const YEAR = 31536000;
 
     /** Generate access token. TTL from project settings, falls back to 15 min. */
     public function createAccessToken(EndUser $endUser): string
@@ -57,7 +55,7 @@ class EndUserJwtService
             $token = $this->config->parser()->parse($jwt);
             $constraints = [
                 new SignedWith($this->config->signer(), $this->config->signingKey()),
-                new StrictValidAt($this->clock),
+                new StrictValidAt($this->clock, new Leeway(30)),
             ];
             $this->config->validator()->assert($token, ...$constraints);
             return [
@@ -66,7 +64,11 @@ class EndUserJwtService
                 'tkn'  => $token->claims()->get('tkn'),
                 'ref'  => $token->claims()->get('ref') ?? false,
             ];
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            $this->logger?->warning('JWT validation failed: {message}', [
+                'message' => $e->getMessage(),
+                'exception' => $e::class,
+            ]);
             return null;
         }
     }

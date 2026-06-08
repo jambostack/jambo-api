@@ -33,8 +33,15 @@ class StorageDriverFactory
             ?? $this->projectDir . '/public/uploads/media/' . $profile->project->uuid;
 
         $allowedBase = $this->projectDir . '/public/uploads/media/';
-        $resolved = realpath($rootPath) ?: $rootPath;
-        if (!str_starts_with($resolved, $allowedBase)) {
+        $resolved = realpath($rootPath);
+        if ($resolved === false) {
+            // Dossier n'existe pas encore — on vérifie que le chemin normalisé
+            // ne sort pas du répertoire autorisé
+            $normalized = str_replace('\\', '/', $rootPath);
+            if (str_contains($normalized, '..') || !str_starts_with($normalized, $allowedBase)) {
+                throw new \RuntimeException('Local storage rootPath must be within the allowed uploads directory.');
+            }
+        } elseif (!str_starts_with($resolved, $allowedBase)) {
             throw new \RuntimeException('Local storage rootPath must be within the allowed uploads directory.');
         }
 
@@ -46,12 +53,14 @@ class StorageDriverFactory
      */
     private function validateS3Endpoint(string $endpoint): void
     {
-        // Extraire l'hôte depuis l'URL (ex: "https://xxx.r2.cloudflarestorage.com" → "xxx.r2.cloudflarestorage.com")
-        $host = parse_url($endpoint, PHP_URL_HOST) ?: $endpoint;
+        $host = parse_url($endpoint, PHP_URL_HOST);
+        if ($host === null || $host === false) {
+            throw new \RuntimeException("Invalid S3 endpoint URL: could not parse host from \"$endpoint\". Use a valid URL like \"https://xxx.r2.cloudflarestorage.com\".");
+        }
         $ip = gethostbyname($host);
 
         if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-            throw new \RuntimeException('S3 endpoint resolves to a private/internal IP — rejected for security.');
+            throw new \RuntimeException("S3 endpoint \"$endpoint\" resolves to a private/internal IP — rejected for security.");
         }
     }
 
@@ -94,10 +103,17 @@ class StorageDriverFactory
             throw new \RuntimeException('S3 secret not configured.');
         }
         $decoded = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL);
+        if ($decoded === '') {
+            throw new \RuntimeException('Failed to decode S3 secret — ciphertext may be corrupted.');
+        }
         $nonce   = mb_substr($decoded, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES, '8bit');
         $cipher  = mb_substr($decoded, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES, null, '8bit');
         $key     = sodium_crypto_generichash($this->appSecret, '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
-        return sodium_crypto_secretbox_open($cipher, $nonce, $key);
+        $plaintext = sodium_crypto_secretbox_open($cipher, $nonce, $key);
+        if ($plaintext === false) {
+            throw new \RuntimeException('Failed to decrypt S3 secret — ciphertext may be corrupted or APP_SECRET changed.');
+        }
+        return $plaintext;
     }
 
     public function encrypt(string $plaintext): string

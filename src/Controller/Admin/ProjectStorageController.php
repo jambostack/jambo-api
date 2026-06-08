@@ -63,7 +63,12 @@ class ProjectStorageController extends AbstractController
             return $project;
         }
 
-        $body = $request->toArray();
+        try {
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return new JsonResponse(['error' => 'Invalid JSON'], 400);
+        }
+
         if (isset($body['strategy'])) {
             $strategy = (string) $body['strategy'];
             if (!in_array($strategy, ['default_only', 'mirror_all', 'rules'], true)) {
@@ -141,6 +146,10 @@ class ProjectStorageController extends AbstractController
             return new JsonResponse(['error' => 'Profile not found.'], 404);
         }
 
+        if ($profile->isDefault) {
+            return new JsonResponse(['error' => 'Cannot delete the default profile. Set another profile as default first.'], 422);
+        }
+
         $this->em->remove($profile);
         $this->em->flush();
 
@@ -159,6 +168,9 @@ class ProjectStorageController extends AbstractController
 
         $body = $request->toArray();
         $rule = $this->hydrateRule(new StorageRule(), $body, $project);
+        if ($rule instanceof JsonResponse) {
+            return $rule;
+        }
 
         $this->em->persist($rule);
         $this->em->flush();
@@ -179,7 +191,10 @@ class ProjectStorageController extends AbstractController
             return new JsonResponse(['error' => 'Rule not found.'], 404);
         }
 
-        $this->hydrateRule($rule, $request->toArray(), $project);
+        $result = $this->hydrateRule($rule, $request->toArray(), $project);
+        if ($result instanceof JsonResponse) {
+            return $result;
+        }
         $this->em->flush();
 
         return new JsonResponse($this->serializeRule($rule));
@@ -232,7 +247,11 @@ class ProjectStorageController extends AbstractController
             $p->name = (string) $body['name'];
         }
         if (isset($body['driver'])) {
-            $p->driver = (string) $body['driver'];
+            $driver = (string) $body['driver'];
+            if (!in_array($driver, ['local', 's3'], true)) {
+                throw new \InvalidArgumentException("Invalid storage driver: $driver");
+            }
+            $p->driver = $driver;
         }
         if (isset($body['priority'])) {
             $p->priority = (int) $body['priority'];
@@ -274,7 +293,7 @@ class ProjectStorageController extends AbstractController
         return $p;
     }
 
-    private function hydrateRule(StorageRule $r, array $body, Project $project): StorageRule
+    private function hydrateRule(StorageRule $r, array $body, Project $project): StorageRule|JsonResponse
     {
         if (isset($body['mime_type_pattern'])) {
             $r->mimeTypePattern = (string) $body['mime_type_pattern'] ?: null;
@@ -294,9 +313,10 @@ class ProjectStorageController extends AbstractController
                 'uuid'    => $body['profile_uuid'],
                 'project' => $project,
             ]);
-            if ($profile !== null) {
-                $r->storageProfile = $profile;
+            if ($profile === null) {
+                return new JsonResponse(['error' => 'Storage profile not found for this project.'], 422);
             }
+            $r->storageProfile = $profile;
         }
 
         $r->project = $project;

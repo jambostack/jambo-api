@@ -13,6 +13,9 @@ class StorageManager
     /** @var array<string, FilesystemOperator> */
     private array $filesystemCache = [];
 
+    /** @var array<string, ProjectStorageProfile> */
+    private array $profileCache = [];
+
     public function __construct(
         private readonly Project $project,
         private readonly ProjectStorageProfileRepository $profileRepo,
@@ -38,6 +41,7 @@ class StorageManager
         $filesystems = [];
         foreach ($profiles as $profile) {
             $uuid = $profile->uuid->toRfc4122();
+            $this->profileCache[$uuid] = $profile;
             $filesystems[$uuid] = $this->getOrCreateFilesystem($profile);
         }
 
@@ -60,13 +64,24 @@ class StorageManager
     {
         $filesystems = $this->getFilesystems($options);
         $paths = [];
+        $rewindable = is_resource($stream);
 
         foreach ($filesystems as $uuid => $fs) {
-            $fs->writeStream($path, $stream);
-            if (is_resource($stream)) {
-                rewind($stream);
+            try {
+                $fs->writeStream($path, $stream);
+                $paths[$uuid] = $path;
+            } catch (\Throwable $e) {
+                // Logger l'erreur mais ne pas bloquer les autres storages
+                trigger_error("StorageManager::write() failed on $uuid: " . $e->getMessage(), E_USER_WARNING);
             }
-            $paths[$uuid] = $path;
+
+            // Rewind pour le prochain filesystem
+            if ($rewindable) {
+                @rewind($stream);
+                if (ftell($stream) !== 0) {
+                    @fseek($stream, 0);
+                }
+            }
         }
 
         return $paths;
@@ -163,7 +178,9 @@ class StorageManager
 
     private function buildUrl(string $profileUuid, string $path): string
     {
-        $profile = $this->profileRepo->findOneBy(['uuid' => $profileUuid]);
+        $profile = $this->profileCache[$profileUuid]
+            ?? $this->profileRepo->findOneBy(['uuid' => $profileUuid]);
+
         if ($profile === null) {
             return '/uploads/media/' . ltrim($path, '/');
         }
@@ -176,7 +193,13 @@ class StorageManager
             return rtrim($profile->baseUrl, '/') . '/' . ltrim($path, '/');
         }
 
-        $endpoint = $profile->s3Endpoint ?: 'https://s3.amazonaws.com';
-        return rtrim($endpoint, '/') . '/' . $profile->s3Bucket . '/' . $path;
+        // S3 : virtual hosted-style (compatible toutes régions sauf us-east-1 path-style)
+        if ($profile->s3Endpoint !== null && $profile->s3Endpoint !== '') {
+            // S3-compatible (R2, MinIO, ...) — path-style
+            return rtrim($profile->s3Endpoint, '/') . '/' . $profile->s3Bucket . '/' . $path;
+        }
+
+        // AWS natif : virtual hosted-style
+        return "https://{$profile->s3Bucket}.s3.{$profile->s3Region}.amazonaws.com/" . $path;
     }
 }
