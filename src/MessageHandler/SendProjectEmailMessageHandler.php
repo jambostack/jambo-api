@@ -32,7 +32,7 @@ class SendProjectEmailMessageHandler
         $password = $this->decrypt($message->encryptedPassword);
 
         $dsn = sprintf(
-            'smtp://%s:%s@%s:%d?encryption=%s',
+            'smtp://%s:%s@%s:%d?encryption=%s&timeout=10&verify_peer=false',
             urlencode($message->username),
             urlencode($password),
             urlencode($message->host),

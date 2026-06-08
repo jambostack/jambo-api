@@ -1204,6 +1204,7 @@ return [
     'projects.settings.mailer.username'   => 'Username',
     'projects.settings.mailer.password'   => 'Password / API key (leave blank to keep current)',
     'projects.settings.mailer.encryption' => 'Encryption',
+    'projects.settings.mailer.encryption_none' => 'None',
     'projects.settings.mailer.from_email' => 'From Email',
     'projects.settings.mailer.from_name'  => 'From Name',
     'projects.settings.mailer.test'       => 'Send test email',

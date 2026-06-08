@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react'
-import { useState, useEffect, type FormEventHandler } from 'react'
+import { useState, useEffect, useRef, type FormEventHandler } from 'react'
 import axios from 'axios'
 
 import type { Project, BreadcrumbItem } from '@/types/index.d'
@@ -23,16 +23,22 @@ interface MailerSettings {
   enabled: boolean
 }
 
+const DEFAULTS: MailerSettings = {
+  host: '', port: 587, username: '', encryption: 'tls',
+  from_email: '', from_name: '', enabled: false,
+}
+
 export default function MailerSettingsPage({ project }: Props) {
   const t = useTranslation()
 
-  const [settings, setSettings] = useState<MailerSettings | null>(null)
+  const [settings, setSettings] = useState<MailerSettings>({ ...DEFAULTS })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [password, setPassword] = useState('')
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>()
 
   const breadcrumbs: BreadcrumbItem[] = [
     { title: project.name, href: route('projects.show', project.id) },
@@ -40,34 +46,35 @@ export default function MailerSettingsPage({ project }: Props) {
     { title: t('projects.settings.nav_mailer'), href: route('projects.settings.mailer', project.id) },
   ]
 
-  const defaultSettings: MailerSettings = {
-    host: '', port: 587, username: '', encryption: 'tls',
-    from_email: '', from_name: '', enabled: false,
-  }
-
   useEffect(() => {
     axios.get(`/api/admin/projects/${project.uuid}/mailer`)
       .then(r => {
-        setSettings(r.data.data ? { ...defaultSettings, ...r.data.data } : { ...defaultSettings })
+        setSettings(r.data.data ? { ...DEFAULTS, ...r.data.data } : { ...DEFAULTS })
         setLoading(false)
       })
-      .catch(() => { setSettings({ ...defaultSettings }); setLoading(false) })
+      .catch(() => { setSettings({ ...DEFAULTS }); setLoading(false) })
   }, [project.uuid])
+
+  // Nettoyage du timer de toast au démontage
+  useEffect(() => {
+    return () => { if (toastTimer.current) clearTimeout(toastTimer.current) }
+  }, [])
 
   function showToast(type: 'ok' | 'err', msg: string) {
     setToast({ type, msg })
-    setTimeout(() => setToast(null), 4000)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 4000)
   }
 
   const submit: FormEventHandler = async (e) => {
     e.preventDefault()
-    if (!settings) return
     setSaving(true)
     try {
       const body: any = { ...settings }
       if (password) body.password = password
       const r = await axios.put(`/api/admin/projects/${project.uuid}/mailer`, body)
-      setSettings(r.data.data)
+      // merge plutôt qu'écraser : protège contre un champ omis par l'API
+      setSettings(s => ({ ...s, ...r.data.data }))
       setPassword('')
       showToast('ok', t('projects.settings.mailer.saved'))
     } catch (err: any) {
@@ -76,7 +83,7 @@ export default function MailerSettingsPage({ project }: Props) {
   }
 
   async function handleTest() {
-    if (!settings?.enabled) { showToast('err', t('projects.settings.mailer.not_configured')); return }
+    if (!settings.enabled) { showToast('err', t('projects.settings.mailer.not_configured')); return }
     setTesting(true); setTestResult(null)
     try {
       await axios.post(`/api/admin/projects/${project.uuid}/mailer/test`)
@@ -121,19 +128,19 @@ export default function MailerSettingsPage({ project }: Props) {
                 </div>
                 <Switch
                   id="enabled"
-                  checked={settings?.enabled ?? false}
-                  onCheckedChange={(checked) => setSettings(s => s ? { ...s, enabled: checked } : null)}
+                  checked={settings.enabled}
+                  onCheckedChange={(checked) => setSettings(s => ({ ...s, enabled: checked }))}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="host">{t('projects.settings.mailer.host')}</Label>
-                  <Input id="host" value={settings?.host ?? ''} onChange={e => setSettings(s => s ? { ...s, host: e.target.value } : null)} required placeholder="smtp.gmail.com" />
+                  <Input id="host" value={settings.host} onChange={e => setSettings(s => ({ ...s, host: e.target.value }))} required placeholder="smtp.gmail.com" />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="port">{t('projects.settings.mailer.port')}</Label>
-                  <Select value={String(settings?.port ?? 587)} onValueChange={v => setSettings(s => s ? { ...s, port: parseInt(v) } : null)}>
+                  <Select value={String(settings.port)} onValueChange={v => setSettings(s => ({ ...s, port: parseInt(v) }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="587">587 (TLS)</SelectItem>
@@ -148,7 +155,7 @@ export default function MailerSettingsPage({ project }: Props) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="username">{t('projects.settings.mailer.username')}</Label>
-                  <Input id="username" value={settings?.username ?? ''} onChange={e => setSettings(s => s ? { ...s, username: e.target.value } : null)} placeholder="apikey" />
+                  <Input id="username" value={settings.username} onChange={e => setSettings(s => ({ ...s, username: e.target.value }))} placeholder="apikey" />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="password">{t('projects.settings.mailer.password')}</Label>
@@ -158,12 +165,12 @@ export default function MailerSettingsPage({ project }: Props) {
 
               <div className="grid gap-2">
                 <Label htmlFor="encryption">{t('projects.settings.mailer.encryption')}</Label>
-                <Select value={settings?.encryption ?? 'tls'} onValueChange={v => setSettings(s => s ? { ...s, encryption: v } : null)}>
+                <Select value={settings.encryption} onValueChange={v => setSettings(s => ({ ...s, encryption: v }))}>
                   <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="tls">TLS</SelectItem>
                     <SelectItem value="ssl">SSL</SelectItem>
-                    <SelectItem value="none">{t('common.cancel')}</SelectItem>
+                    <SelectItem value="none">{t('projects.settings.mailer.encryption_none')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -171,11 +178,11 @@ export default function MailerSettingsPage({ project }: Props) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="from_email">{t('projects.settings.mailer.from_email')}</Label>
-                  <Input id="from_email" type="email" value={settings?.from_email ?? ''} onChange={e => setSettings(s => s ? { ...s, from_email: e.target.value } : null)} required placeholder="noreply@example.com" />
+                  <Input id="from_email" type="email" value={settings.from_email} onChange={e => setSettings(s => ({ ...s, from_email: e.target.value }))} required placeholder="noreply@example.com" />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="from_name">{t('projects.settings.mailer.from_name')}</Label>
-                  <Input id="from_name" value={settings?.from_name ?? ''} onChange={e => setSettings(s => s ? { ...s, from_name: e.target.value } : null)} placeholder={t('projects.settings.mailer.from_name')} />
+                  <Input id="from_name" value={settings.from_name} onChange={e => setSettings(s => ({ ...s, from_name: e.target.value }))} placeholder={t('projects.settings.mailer.from_name')} />
                 </div>
               </div>
 
@@ -184,7 +191,7 @@ export default function MailerSettingsPage({ project }: Props) {
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {saving ? t('projects.settings.mailer.saving') : t('common.save')}
                 </Button>
-                <Button type="button" variant="outline" onClick={handleTest} disabled={testing || !settings?.enabled}>
+                <Button type="button" variant="outline" onClick={handleTest} disabled={testing || !settings.enabled}>
                   {testing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {testing ? t('projects.settings.mailer.testing') : t('projects.settings.mailer.test')}
                 </Button>

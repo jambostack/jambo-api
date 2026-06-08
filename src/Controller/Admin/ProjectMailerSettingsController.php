@@ -70,10 +70,18 @@ class ProjectMailerSettingsController extends AbstractController
         }
 
         if (isset($body['host'])) {
-            $settings->host = (string) $body['host'];
+            $host = (string) $body['host'];
+            if (!filter_var(gethostbyname($host), FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return new JsonResponse(['error' => 'Invalid host: private/internal IPs are not allowed.'], 400);
+            }
+            $settings->host = $host;
         }
         if (isset($body['port'])) {
-            $settings->port = (int) $body['port'];
+            $port = (int) $body['port'];
+            if (!in_array($port, [25, 465, 587, 2525], true)) {
+                return new JsonResponse(['error' => 'Invalid port: only SMTP ports allowed (25, 465, 587, 2525).'], 400);
+            }
+            $settings->port = $port;
         }
         if (isset($body['username'])) {
             $settings->username = (string) $body['username'];
@@ -83,7 +91,11 @@ class ProjectMailerSettingsController extends AbstractController
             $settings->encryptedPassword = $this->mailerService->encryptPassword((string) $body['password']);
         }
         if (isset($body['encryption'])) {
-            $settings->encryption = (string) $body['encryption'];
+            $enc = (string) $body['encryption'];
+            if (!in_array($enc, ['tls', 'ssl', 'none'], true)) {
+                return new JsonResponse(['error' => 'Invalid encryption: must be tls, ssl, or none.'], 400);
+            }
+            $settings->encryption = $enc;
         }
         if (isset($body['from_email'])) {
             $settings->fromEmail = (string) $body['from_email'];

@@ -1230,6 +1230,7 @@ return [
     'projects.settings.mailer.username'   => 'Nom d\'utilisateur',
     'projects.settings.mailer.password'   => 'Mot de passe / clé API (laisser vide pour conserver)',
     'projects.settings.mailer.encryption' => 'Chiffrement',
+    'projects.settings.mailer.encryption_none' => 'Aucun',
     'projects.settings.mailer.from_email' => 'Email expéditeur',
     'projects.settings.mailer.from_name'  => 'Nom expéditeur',
     'projects.settings.mailer.test'       => 'Envoyer un email de test',

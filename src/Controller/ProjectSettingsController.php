@@ -444,7 +444,13 @@ class ProjectSettingsController extends AbstractController
             $settings->port = $port;
         }
         if (isset($body['username']))    $settings->username = (string) $body['username'];
-        if (isset($body['encryption']))  $settings->encryption = (string) $body['encryption'];
+        if (isset($body['encryption'])) {
+            $enc = (string) $body['encryption'];
+            if (!in_array($enc, ['tls', 'ssl', 'none'], true)) {
+                return $this->json(['error' => 'Invalid encryption: must be tls, ssl, or none.'], 400);
+            }
+            $settings->encryption = $enc;
+        }
         if (isset($body['from_email']))  $settings->fromEmail = (string) $body['from_email'];
         if (isset($body['from_name']))   $settings->fromName = (string) $body['from_name'];
         if (isset($body['enabled']))     $settings->enabled = (bool) $body['enabled'];
