@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react'
-import { useState, useEffect, type FormEventHandler } from 'react'
+import { useState, useEffect, useRef, type FormEventHandler } from 'react'
 import axios from 'axios'
 
 import type { Project, BreadcrumbItem } from '@/types/index.d'
@@ -43,6 +43,7 @@ export default function JwtTtlSettingsPage({ project }: Props) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>()
 
   const breadcrumbs: BreadcrumbItem[] = [
     { title: project.name, href: route('projects.show', project.id) },
@@ -67,9 +68,14 @@ export default function JwtTtlSettingsPage({ project }: Props) {
       .catch(() => setLoading(false))
   }, [project.uuid])
 
+  useEffect(() => {
+    return () => { if (toastTimer.current) clearTimeout(toastTimer.current) }
+  }, [])
+
   function showToast(type: 'ok' | 'err', msg: string) {
     setToast({ type, msg })
-    setTimeout(() => setToast(null), 4000)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 4000)
   }
 
   const submit: FormEventHandler = async (e) => {

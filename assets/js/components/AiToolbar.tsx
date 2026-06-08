@@ -20,7 +20,6 @@ interface Props {
   onContentGenerated: (data: Record<string, any>) => void;
   locales?: string[];
   defaultLocale?: string;
-  /** Liste des champs de la collection pour le sélecteur de champ cible */
   fields?: Field[];
 }
 
@@ -34,6 +33,17 @@ interface ActionConfig {
   tile: string;
 }
 
+interface AiResponse {
+  error?: string;
+  translated?: AiResponse;
+  summary?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  slug?: string;
+  keywords?: string;
+  [key: string]: any;
+}
+
 const ACTIONS: ActionConfig[] = [
   { id: 'generate',  icon: Wand2,     titleKey: 'studio.ai.generate_btn',  descKey: 'studio.ai.generate_hint_short',  tile: 'text-violet-500 bg-violet-500/10 group-hover:bg-violet-500/20' },
   { id: 'translate', icon: Languages, titleKey: 'studio.ai.translate_btn', descKey: 'studio.ai.translate_hint_short', tile: 'text-sky-500 bg-sky-500/10 group-hover:bg-sky-500/20' },
@@ -41,9 +51,22 @@ const ACTIONS: ActionConfig[] = [
   { id: 'summarize', icon: FileText,  titleKey: 'studio.ai.summarize_btn', descKey: 'studio.ai.summarize_hint_short', tile: 'text-amber-500 bg-amber-500/10 group-hover:bg-amber-500/20' },
 ];
 
-/** Champs éligibles pour les actions AI : texte, richtext, textarea, string */
 function getTextFields(fields: Field[]): Field[] {
   return fields.filter(f => ['text', 'richtext', 'textarea', 'string'].includes(f.type));
+}
+
+/** Si un sélecteur de champ est défini et que le résultat ne contient pas ce champ,
+ *  c'est une erreur — on ne doit pas écraser tout le formulaire par défaut. */
+function extractFieldData(result: Record<string, any>, targetField: string, onContentGenerated: (d: Record<string, any>) => void): boolean {
+  if (targetField && result[targetField] !== undefined) {
+    onContentGenerated({ [targetField]: result[targetField] });
+    return true;
+  }
+  if (!targetField) {
+    onContentGenerated(result);
+    return true;
+  }
+  return false;
 }
 
 export default function AiToolbar({ projectUuid, collectionSlug, formData, onContentGenerated, locales = [], defaultLocale = 'fr', fields = [] }: Props) {
@@ -51,14 +74,14 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
   const [loading, setLoading] = useState<ActionId | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
   const [showTranslate, setShowTranslate] = useState(false);
+  const [showSummarize, setShowSummarize] = useState(false);
   const [brief, setBrief] = useState('');
   const [targetLocale, setTargetLocale] = useState('');
   const [targetField, setTargetField] = useState('');
-  const [summarizeField, setSummarizeField] = useState('');
+  const [summarizeTarget, setSummarizeTarget] = useState('');
 
   const textFields = useMemo(() => getTextFields(fields), [fields]);
 
-  // Initialiser targetLocale au premier locale ≠ defaultLocale au montage du dialog
   function openTranslate() {
     const available = (locales.length > 0 ? locales : ['en', 'fr', 'es', 'ar']).filter(l => l !== defaultLocale);
     setTargetLocale(available[0] || 'en');
@@ -72,10 +95,15 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
     setShowGenerate(true);
   }
 
-  async function callAi(endpoint: ActionId, body: Record<string, any>) {
+  function openSummarize() {
+    setSummarizeTarget(textFields[0]?.slug || '');
+    setShowSummarize(true);
+  }
+
+  async function callAi(endpoint: ActionId, body: Record<string, any>): Promise<AiResponse | null> {
     setLoading(endpoint);
     try {
-      const { data } = await axios.post(`/api/projects/${projectUuid}/ai/${endpoint}`, body);
+      const { data } = await axios.post<AiResponse>(`/api/projects/${projectUuid}/ai/${endpoint}`, body);
       return data;
     } catch (e: any) {
       toast.error(e?.response?.data?.error || t('common.error'));
@@ -85,83 +113,67 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
 
   async function handleGenerate() {
     const result = await callAi('generate', { brief, collection: collectionSlug, locale: defaultLocale });
-    if (result && !result.error) {
-      // Appliquer uniquement au champ cible si défini
-      if (targetField && result[targetField] !== undefined) {
-        onContentGenerated({ [targetField]: result[targetField] });
-      } else {
-        onContentGenerated(result);
-      }
-      setShowGenerate(false); setBrief('');
-      toast.success(t('studio.api.schema_applied'));
+    if (!result || result.error) return;
+    if (!extractFieldData(result, targetField, onContentGenerated)) {
+      toast.error(t('studio.ai.field_not_in_result'));
+      return;
     }
+    setShowGenerate(false); setBrief('');
+    toast.success(t('studio.api.schema_applied'));
   }
 
   async function handleTranslate() {
-    // N'envoyer que le champ cible (pas tout formData)
     const content = targetField && formData[targetField] !== undefined
       ? { [targetField]: formData[targetField] }
       : formData;
     const result = await callAi('translate', { content, locale: targetLocale });
-    if (result?.error) {
-      toast.error(result.error);
+    if (!result || result.error) return;
+    const data = result.translated;
+    if (!data || data.error) return;
+    if (!extractFieldData(data, targetField, onContentGenerated)) {
+      toast.error(t('studio.ai.field_not_in_result'));
       return;
     }
-    if (result?.translated && !result.translated.error) {
-      if (targetField && result.translated[targetField] !== undefined) {
-        onContentGenerated({ [targetField]: result.translated[targetField] });
-      } else {
-        onContentGenerated(result.translated);
-      }
-      setShowTranslate(false);
-      toast.success(t('studio.api.schema_applied'));
-    }
+    setShowTranslate(false);
+    toast.success(t('studio.api.schema_applied'));
   }
 
   async function handleSeo() {
     const result = await callAi('seo', { content: formData });
-    if (result?.error) {
-      toast.error(result.error);
-      return;
-    }
-    if (result && !result.error) {
-      // SEO produit plusieurs champs — on merge dans formData via les slugs existants
-      const seoData: Record<string, any> = {};
-      const seoMapping: Record<string, string> = {
-        metaTitle: 'meta_title',
-        metaDescription: 'meta_description',
-        slug: 'slug',
-        keywords: 'keywords',
-      };
-      for (const [apiKey, fieldSlug] of Object.entries(seoMapping)) {
-        if (result[apiKey] && formData[fieldSlug] !== undefined) {
-          seoData[fieldSlug] = result[apiKey];
-        }
+    if (!result || result.error) return;
+    const seoData: Record<string, any> = {};
+    const seoMapping: Record<string, string> = {
+      metaTitle: 'meta_title',
+      metaDescription: 'meta_description',
+      slug: 'slug',
+      keywords: 'keywords',
+    };
+    for (const [apiKey, fieldSlug] of Object.entries(seoMapping)) {
+      if (result[apiKey] && formData[fieldSlug] !== undefined) {
+        seoData[fieldSlug] = result[apiKey];
       }
-      onContentGenerated(seoData);
-      toast.success(t('studio.ai.seo_success'));
     }
+    onContentGenerated(seoData);
+    toast.success(t('studio.ai.seo_success'));
   }
 
   async function handleSummarize() {
-    const fieldValue = summarizeField && formData[summarizeField] !== undefined
-      ? formData[summarizeField]
+    const fieldValue = summarizeTarget && formData[summarizeTarget] !== undefined
+      ? formData[summarizeTarget]
       : Object.values(formData).filter(v => typeof v === 'string' && v.length > 10).join('\n\n');
     if (!fieldValue || (typeof fieldValue === 'string' && fieldValue.trim().length === 0)) {
       toast.error(t('studio.ai.no_text'));
       return;
     }
     const result = await callAi('summarize', { text: fieldValue, maxWords: 80 });
-    if (result?.error) {
-      toast.error(result.error);
-      return;
-    }
-    if (result?.summary) {
-      if (summarizeField) {
-        onContentGenerated({ [summarizeField]: result.summary });
+    if (!result || result.error) return;
+    if (result.summary) {
+      if (summarizeTarget) {
+        onContentGenerated({ [summarizeTarget]: result.summary });
       } else {
         onContentGenerated({ summary: result.summary });
       }
+      setShowSummarize(false);
       toast.success(t('studio.ai.summary_success'));
     }
   }
@@ -170,17 +182,13 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
     if (id === 'generate')  return openGenerate();
     if (id === 'translate') return openTranslate();
     if (id === 'seo')       return handleSeo();
-    if (id === 'summarize') {
-      setSummarizeField(textFields[0]?.slug || '');
-      return handleSummarize();
-    }
+    if (id === 'summarize') return openSummarize();
   };
 
   const isLoading = loading !== null;
 
   return (
     <>
-      {/* Bord dégradé premium */}
       <div className="jambo-rise relative rounded-xl bg-gradient-to-br from-violet-500/40 via-fuchsia-500/25 to-transparent p-px shadow-sm">
         <div className="rounded-[calc(0.75rem-1px)] bg-card">
           <div className="flex items-center gap-3 px-4 pt-4 pb-3">
@@ -224,7 +232,7 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
         </div>
       </div>
 
-      {/* ── Dialog Génération ── */}
+      {/* Dialog Génération */}
       <Dialog open={showGenerate} onOpenChange={setShowGenerate}>
         <DialogContent>
           <DialogHeader>
@@ -244,9 +252,7 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
                 <Select value={targetField} onValueChange={setTargetField}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {textFields.map(f => (
-                      <SelectItem key={f.slug} value={f.slug}>{f.slug}</SelectItem>
-                    ))}
+                    {textFields.map(f => (<SelectItem key={f.slug} value={f.slug}>{f.slug}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
@@ -266,7 +272,7 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog Traduction ── */}
+      {/* Dialog Traduction */}
       <Dialog open={showTranslate} onOpenChange={setShowTranslate}>
         <DialogContent>
           <DialogHeader>
@@ -293,9 +299,7 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
                 <Select value={targetField} onValueChange={setTargetField}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {textFields.map(f => (
-                      <SelectItem key={f.slug} value={f.slug}>{f.slug}</SelectItem>
-                    ))}
+                    {textFields.map(f => (<SelectItem key={f.slug} value={f.slug}>{f.slug}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
@@ -307,6 +311,41 @@ export default function AiToolbar({ projectUuid, collectionSlug, formData, onCon
             <Button onClick={handleTranslate} disabled={isLoading} className="bg-gradient-to-br from-sky-500 to-blue-500 text-white hover:opacity-90">
               {loading === 'translate' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Languages className="mr-2 h-4 w-4" />}
               {t('studio.ai.translate_action')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Summarize */}
+      <Dialog open={showSummarize} onOpenChange={setShowSummarize}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-500/15 text-amber-500"><FileText className="h-4 w-4" /></span>
+              {t('studio.ai.summarize_btn')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {textFields.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>{t('studio.ai.target_field')}</Label>
+                <Select value={summarizeTarget} onValueChange={setSummarizeTarget}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {textFields.map(f => (<SelectItem key={f.slug} value={f.slug}>{f.slug}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {textFields.length === 0 && (
+              <p className="text-xs text-muted-foreground">{t('studio.ai.summarize_hint_short')}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSummarize(false)}>{t('common.cancel')}</Button>
+            <Button onClick={handleSummarize} disabled={isLoading} className="bg-gradient-to-br from-amber-500 to-orange-500 text-white hover:opacity-90">
+              {loading === 'summarize' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+              {t('studio.ai.summarize_btn')}
             </Button>
           </DialogFooter>
         </DialogContent>
