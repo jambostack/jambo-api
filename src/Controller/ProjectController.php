@@ -11,6 +11,7 @@ use App\Repository\ProjectRepository;
 use App\Repository\RoleRepository;
 use App\Repository\UserRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\EndUserJwtService;
 use App\Service\EndUserSchemaSeeder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -130,6 +131,9 @@ class ProjectController extends AbstractController
                 if ($ttl < 60) {
                     return $this->json(['error' => 'jwt_access_ttl must be at least 60 seconds.'], 422);
                 }
+                if ($ttl > EndUserJwtService::MAX_TTL) {
+                    return $this->json(['error' => sprintf('jwt_access_ttl must not exceed %d seconds (1 year).', EndUserJwtService::MAX_TTL)], 422);
+                }
                 $project->jwtAccessTtl = $ttl;
             }
         }
@@ -142,8 +146,23 @@ class ProjectController extends AbstractController
                 if ($ttl < 60) {
                     return $this->json(['error' => 'jwt_refresh_ttl must be at least 60 seconds.'], 422);
                 }
+                if ($ttl > EndUserJwtService::MAX_TTL) {
+                    return $this->json(['error' => sprintf('jwt_refresh_ttl must not exceed %d seconds (1 year).', EndUserJwtService::MAX_TTL)], 422);
+                }
                 $project->jwtRefreshTtl = $ttl;
             }
+        }
+
+        // Cross-check: refresh TTL must be >= access TTL
+        $finalAccess  = EndUserJwtService::resolveTtl($project->jwtAccessTtl, EndUserJwtService::DEFAULT_ACCESS_TTL);
+        $finalRefresh = EndUserJwtService::resolveTtl($project->jwtRefreshTtl, EndUserJwtService::DEFAULT_REFRESH_TTL);
+        if ($finalRefresh < $finalAccess) {
+            return $this->json([
+                'error' => sprintf(
+                    'jwt_refresh_ttl (%d s) must be >= jwt_access_ttl (%d s).',
+                    $finalRefresh, $finalAccess,
+                ),
+            ], 422);
         }
 
         $this->em->flush();

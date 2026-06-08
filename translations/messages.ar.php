@@ -1198,6 +1198,7 @@ return [
     'projects.settings.jwt_desc'          => 'مدة انتهاء صلاحية الرموز. اتركه فارغاً لاستخدام القيم الافتراضية (15 دقيقة / 30 يوماً).',
     'projects.settings.jwt_access_ttl'    => 'Access Token TTL (ثواني)',
     'projects.settings.jwt_access_ttl_hint' => 'الافتراضي: 900 ثانية = 15 دقيقة',
+    'projects.settings.jwt_ttl_min'         => '(الحد الأدنى 60 ثانية، الأقصى سنة). اضبط 0 لإعادة التعيين.',
     'projects.settings.jwt_refresh_ttl'   => 'Refresh Token TTL (ثواني)',
     'projects.settings.jwt_refresh_ttl_hint' => 'الافتراضي: 2,592,000 ثانية = 30 يوماً',
 

@@ -19,6 +19,29 @@ interface Props {
     project: Project;
 }
 
+/** Format seconds as a human-readable duration. */
+function formatTtl(seconds: number): string {
+    if (seconds >= 86400) {
+        const d = Math.round(seconds / 86400)
+        return seconds % 86400 === 0
+            ? `= ${d} day${d > 1 ? 's' : ''}`
+            : `= ${d} day${d > 1 ? 's' : ''} (${seconds}s)`
+    }
+    if (seconds >= 3600) {
+        const h = Math.round(seconds / 3600)
+        return seconds % 3600 === 0
+            ? `= ${h} hour${h > 1 ? 's' : ''}`
+            : `= ${h} hour${h > 1 ? 's' : ''} (${seconds}s)`
+    }
+    if (seconds >= 60) {
+        const m = Math.round(seconds / 60)
+        return seconds % 60 === 0
+            ? `= ${m} min`
+            : `= ${m} min (${seconds}s)`
+    }
+    return `= ${seconds} seconds`
+}
+
 export default function ProjectSettingsPage({ project }: Props) {
     const t = useTranslation();
 
@@ -115,15 +138,16 @@ export default function ProjectSettingsPage({ project }: Props) {
                                 <Input
                                     id="jwt_access_ttl"
                                     type="number"
-                                    min="0"
+                                    min={60}
                                     value={data.jwt_access_ttl}
                                     onChange={(e) => setData('jwt_access_ttl', e.target.value)}
                                     placeholder={t('projects.settings.jwt_access_ttl_hint')}
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                    {data.jwt_access_ttl && Number(data.jwt_access_ttl) > 0
-                                        ? `= ${Math.round(Number(data.jwt_access_ttl) / 60)} min`
-                                        : t('projects.settings.jwt_access_ttl_hint')}
+                                    {data.jwt_access_ttl && Number(data.jwt_access_ttl) >= 60
+                                        ? formatTtl(Number(data.jwt_access_ttl))
+                                        : data.jwt_access_ttl && Number(data.jwt_access_ttl) > 0
+                                            ? t('projects.settings.jwt_ttl_min') : t('projects.settings.jwt_access_ttl_hint')}
                                 </p>
                             </div>
                             <div className="grid gap-2">
@@ -131,15 +155,16 @@ export default function ProjectSettingsPage({ project }: Props) {
                                 <Input
                                     id="jwt_refresh_ttl"
                                     type="number"
-                                    min="0"
+                                    min={60}
                                     value={data.jwt_refresh_ttl}
                                     onChange={(e) => setData('jwt_refresh_ttl', e.target.value)}
                                     placeholder={t('projects.settings.jwt_refresh_ttl_hint')}
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                    {data.jwt_refresh_ttl && Number(data.jwt_refresh_ttl) > 0
-                                        ? `= ${Math.round(Number(data.jwt_refresh_ttl) / 86400)} days`
-                                        : t('projects.settings.jwt_refresh_ttl_hint')}
+                                    {data.jwt_refresh_ttl && Number(data.jwt_refresh_ttl) >= 60
+                                        ? formatTtl(Number(data.jwt_refresh_ttl))
+                                        : data.jwt_refresh_ttl && Number(data.jwt_refresh_ttl) > 0
+                                            ? t('projects.settings.jwt_ttl_min') : t('projects.settings.jwt_refresh_ttl_hint')}
                                 </p>
                             </div>
                         </div>

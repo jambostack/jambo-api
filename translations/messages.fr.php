@@ -1246,6 +1246,7 @@ return [
     'projects.settings.jwt_desc'          => 'Durée d\'expiration des tokens d\'authentification. Laisser vide pour utiliser les valeurs par défaut (15 min / 30 jours).',
     'projects.settings.jwt_access_ttl'    => 'Access Token TTL (secondes)',
     'projects.settings.jwt_access_ttl_hint' => 'Défaut : 900s = 15 min',
+    'projects.settings.jwt_ttl_min'         => '(min. 60s, max. 1 an). Mettre 0 pour réinitialiser.',
     'projects.settings.jwt_refresh_ttl'   => 'Refresh Token TTL (secondes)',
     'projects.settings.jwt_refresh_ttl_hint' => 'Défaut : 2 592 000s = 30 jours',
 
