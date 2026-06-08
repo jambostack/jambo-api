@@ -1182,6 +1182,7 @@ return [
     'projects.settings.mailer.username'   => 'اسم المستخدم',
     'projects.settings.mailer.password'   => 'كلمة المرور / مفتاح API (اتركه فارغاً للإبقاء)',
     'projects.settings.mailer.encryption' => 'التشفير',
+    'projects.settings.mailer.encryption_none' => 'بدون',
     'projects.settings.mailer.from_email' => 'بريد المرسل',
     'projects.settings.mailer.from_name'  => 'اسم المرسل',
     'projects.settings.mailer.test'       => 'إرسال بريد تجريبي',

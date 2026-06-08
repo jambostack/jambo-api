@@ -1182,6 +1182,7 @@ return [
     'projects.settings.mailer.username'   => 'Usuario',
     'projects.settings.mailer.password'   => 'Contraseña / clave API (dejar vacío para conservar)',
     'projects.settings.mailer.encryption' => 'Cifrado',
+    'projects.settings.mailer.encryption_none' => 'Ninguno',
     'projects.settings.mailer.from_email' => 'Email remitente',
     'projects.settings.mailer.from_name'  => 'Nombre remitente',
     'projects.settings.mailer.test'       => 'Enviar correo de prueba',
