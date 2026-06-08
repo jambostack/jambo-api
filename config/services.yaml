@@ -79,3 +79,15 @@ services:
     App\Service\ProjectMailerService:
         arguments:
             $appSecret: '%kernel.secret%'
+
+    # ── Storage / Multi-stockage ───────────────────────────────────────────────
+    App\Service\StorageDriverFactory:
+        arguments:
+            $appSecret: '%kernel.secret%'
+            $projectDir: '%kernel.project_dir%'
+
+    App\Service\MediaSerializer:
+        arguments:
+            $profileRepo: '@App\Repository\ProjectStorageProfileRepository'
+            $ruleRepo: '@App\Repository\StorageRuleRepository'
+            $driverFactory: '@App\Service\StorageDriverFactory'
