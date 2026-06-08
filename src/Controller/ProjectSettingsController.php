@@ -9,6 +9,7 @@ use App\Repository\ProjectMailerSettingsRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\EndUserJwtService;
 use App\Service\ProjectMailerService;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -332,8 +333,9 @@ class ProjectSettingsController extends AbstractController
             'jwt_access_ttl'  => $project->jwtAccessTtl,
             'jwt_refresh_ttl' => $project->jwtRefreshTtl,
             'defaults' => [
-                'access_ttl'  => 900,
-                'refresh_ttl' => 2592000,
+                'access_ttl'  => EndUserJwtService::DEFAULT_ACCESS_TTL,
+                'refresh_ttl' => EndUserJwtService::DEFAULT_REFRESH_TTL,
+                'max_ttl'     => EndUserJwtService::MAX_TTL,
             ],
         ]);
     }
@@ -347,31 +349,35 @@ class ProjectSettingsController extends AbstractController
         }
 
         $data = $request->toArray();
+        $accessVal  = $data['jwt_access_ttl'] ?? null;
+        $refreshVal = $data['jwt_refresh_ttl'] ?? null;
 
-        if (array_key_exists('jwt_access_ttl', $data)) {
-            $val = $data['jwt_access_ttl'];
-            if ($val === null || $val === '' || $val === 0) {
-                $project->jwtAccessTtl = null;
-            } else {
-                $ttl = (int) $val;
-                if ($ttl < 60) {
-                    return $this->json(['error' => 'jwt_access_ttl must be at least 60 seconds.'], 422);
-                }
-                $project->jwtAccessTtl = $ttl;
+        // Accept null, '', "0", 0 as "reset to default"
+        if ($accessVal !== null) {
+            $result = $this->validateAndApplyTtl($accessVal, 'access');
+            if ($result instanceof JsonResponse) {
+                return $result;
             }
+            $project->jwtAccessTtl = $result;
+        }
+        if ($refreshVal !== null) {
+            $result = $this->validateAndApplyTtl($refreshVal, 'refresh');
+            if ($result instanceof JsonResponse) {
+                return $result;
+            }
+            $project->jwtRefreshTtl = $result;
         }
 
-        if (array_key_exists('jwt_refresh_ttl', $data)) {
-            $val = $data['jwt_refresh_ttl'];
-            if ($val === null || $val === '' || $val === 0) {
-                $project->jwtRefreshTtl = null;
-            } else {
-                $ttl = (int) $val;
-                if ($ttl < 60) {
-                    return $this->json(['error' => 'jwt_refresh_ttl must be at least 60 seconds.'], 422);
-                }
-                $project->jwtRefreshTtl = $ttl;
-            }
+        // Cross-check: refresh TTL must be >= access TTL
+        $finalAccess  = $project->jwtAccessTtl ?? EndUserJwtService::DEFAULT_ACCESS_TTL;
+        $finalRefresh = $project->jwtRefreshTtl ?? EndUserJwtService::DEFAULT_REFRESH_TTL;
+        if ($finalRefresh < $finalAccess) {
+            return $this->json([
+                'error' => sprintf(
+                    'jwt_refresh_ttl (%d s) must be >= jwt_access_ttl (%d s).',
+                    $finalRefresh, $finalAccess,
+                ),
+            ], 422);
         }
 
         $this->em->flush();
@@ -380,6 +386,40 @@ class ProjectSettingsController extends AbstractController
             'jwt_access_ttl'  => $project->jwtAccessTtl,
             'jwt_refresh_ttl' => $project->jwtRefreshTtl,
         ]);
+    }
+
+    /**
+     * Validate and normalize a TTL value.
+     * Returns ?int (null = reset to default) or JsonResponse on error.
+     */
+    private function validateAndApplyTtl(mixed $val, string $label): JsonResponse|int|null
+    {
+        // Reset to default: null, empty string, "0", 0
+        if ($val === null || $val === '' || $val === '0' || $val === 0) {
+            return null;
+        }
+
+        $ttl = (int) $val;
+        if ($ttl === 0) {
+            return null;
+        }
+
+        if ($ttl < 60) {
+            return $this->json([
+                'error' => sprintf('jwt_%s_ttl must be at least 60 seconds.', $label),
+            ], 422);
+        }
+
+        if ($ttl > EndUserJwtService::MAX_TTL) {
+            return $this->json([
+                'error' => sprintf(
+                    'jwt_%s_ttl must not exceed %d seconds (1 year).',
+                    $label, EndUserJwtService::MAX_TTL,
+                ),
+            ], 422);
+        }
+
+        return $ttl;
     }
 
     // ─── Mailer (SMTP) ────────────────────────────────────────────────────

@@ -25,49 +25,32 @@ class EndUserJwtService
     }
 
     /** Default TTLs when project has no custom value configured */
-    private const DEFAULT_ACCESS_TTL = 900;      // 15 minutes
-    private const DEFAULT_REFRESH_TTL = 2592000; // 30 days
+    public const DEFAULT_ACCESS_TTL  = 900;      // 15 minutes
+    public const DEFAULT_REFRESH_TTL = 2592000;   // 30 days
+
+    /** Maximum allowed TTL: 1 year (security ceiling) */
+    public const MAX_TTL = 31536000; // 365 days
+
+    /** Thresholds for human-readable formatting (frontend) */
+    public const HOUR = 3600;
+    public const DAY  = 86400;
+    public const YEAR = 31536000;
 
     /** Generate access token. TTL from project settings, falls back to 15 min. */
     public function createAccessToken(EndUser $endUser): string
     {
-        $ttl = $endUser->project->jwtAccessTtl ?? self::DEFAULT_ACCESS_TTL;
-        $now = $this->clock->now();
-        return $this->config->builder()
-            ->issuedBy('jamboapi')
-            ->permittedFor('jamboapi')
-            ->identifiedBy(bin2hex(random_bytes(16)))
-            ->issuedAt($now)
-            ->canOnlyBeUsedAfter($now)
-            ->expiresAt($now->modify("+{$ttl} seconds"))
-            ->withClaim('euid', $endUser->uuid?->toString())
-            ->withClaim('pid', $endUser->project->uuid?->toString())
-            ->withClaim('tkn', $endUser->tokenVersion)
-            ->getToken($this->config->signer(), $this->config->signingKey())
-            ->toString();
+        return $this->createToken($endUser, false);
     }
 
     /** Generate refresh token. TTL from project settings, falls back to 30 days. */
     public function createRefreshToken(EndUser $endUser): string
     {
-        $ttl = $endUser->project->jwtRefreshTtl ?? self::DEFAULT_REFRESH_TTL;
-        $now = $this->clock->now();
-        return $this->config->builder()
-            ->issuedBy('jamboapi')
-            ->permittedFor('jamboapi')
-            ->identifiedBy(bin2hex(random_bytes(16)))
-            ->issuedAt($now)
-            ->canOnlyBeUsedAfter($now)
-            ->expiresAt($now->modify("+{$ttl} seconds"))
-            ->withClaim('euid', $endUser->uuid?->toString())
-            ->withClaim('pid', $endUser->project->uuid?->toString())
-            ->withClaim('tkn', $endUser->tokenVersion)
-            ->withClaim('ref', true)
-            ->getToken($this->config->signer(), $this->config->signingKey())
-            ->toString();
+        return $this->createToken($endUser, true);
     }
 
-    /** Validate and parse a token. Returns claims or null on failure. */
+    /**
+     * Validate and parse a token. Returns claims or null on failure.
+     */
     public function validateToken(string $jwt): ?array
     {
         try {
@@ -92,5 +75,47 @@ class EndUserJwtService
     public function isRefreshToken(array $claims): bool
     {
         return ($claims['ref'] ?? false) === true;
+    }
+
+    /** Resolve effective TTL: use project value if &gt; 0, else fallback to default. */
+    public static function resolveTtl(?int $projectTtl, int $default): int
+    {
+        return ($projectTtl !== null && $projectTtl > 0) ? $projectTtl : $default;
+    }
+
+    // ─── Private ───────────────────────────────────────────────────────────
+
+    private function createToken(EndUser $endUser, bool $isRefresh): string
+    {
+        if ($endUser->uuid === null) {
+            throw new \RuntimeException('Cannot generate JWT: EndUser has no UUID.');
+        }
+        if ($endUser->project->uuid === null) {
+            throw new \RuntimeException('Cannot generate JWT: Project has no UUID.');
+        }
+
+        $ttl = $isRefresh
+            ? self::resolveTtl($endUser->project->jwtRefreshTtl, self::DEFAULT_REFRESH_TTL)
+            : self::resolveTtl($endUser->project->jwtAccessTtl, self::DEFAULT_ACCESS_TTL);
+
+        $now = $this->clock->now();
+        $builder = $this->config->builder()
+            ->issuedBy('jamboapi')
+            ->permittedFor('jamboapi')
+            ->identifiedBy(bin2hex(random_bytes(16)))
+            ->issuedAt($now)
+            ->canOnlyBeUsedAfter($now)
+            ->expiresAt($now->modify("+{$ttl} seconds"))
+            ->withClaim('euid', $endUser->uuid->toString())
+            ->withClaim('pid', $endUser->project->uuid->toString())
+            ->withClaim('tkn', $endUser->tokenVersion);
+
+        if ($isRefresh) {
+            $builder = $builder->withClaim('ref', true);
+        }
+
+        return $builder
+            ->getToken($this->config->signer(), $this->config->signingKey())
+            ->toString();
     }
 }
