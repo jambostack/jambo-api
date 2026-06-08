@@ -66,6 +66,14 @@ class Media
     #[ORM\Column(nullable: true)]
     public ?\DateTimeImmutable $deletedAt = null;
 
+    #[ORM\ManyToOne(targetEntity: ProjectStorageProfile::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    public ?ProjectStorageProfile $storageProfile = null;
+
+    /** Mapping {"<profile_uuid>": "<relative_path>", …}. Ex: {"a1b2c3": "projects/f99cb038/photo.jpg"} */
+    #[ORM\Column(type: 'json', nullable: true)]
+    public ?array $storagePaths = null;
+
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable();
