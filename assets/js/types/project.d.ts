@@ -3,7 +3,8 @@ export interface Project {
     uuid: string;
     name: string;
     description: string | null;
-    disk: 'public' | 's3';
+    disk?: string;
+    storage_strategy?: 'default_only' | 'mirror_all' | 'rules';
     default_locale: string;
     locales?: string[];
     settings: Record<string, any> | null;

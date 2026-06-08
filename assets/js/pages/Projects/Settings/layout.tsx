@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { NavItem, Project, UserCan } from '@/types/index.d';
-import { Settings as SettingsIcon, Globe, Users, Key, Share2, UserCog, FileText, Wand2, Plug, Mail } from 'lucide-react';
+import { Settings as SettingsIcon, Globe, Users, Key, Share2, UserCog, FileText, Wand2, Plug, Mail, HardDrive } from 'lucide-react';
 import { PropsWithChildren } from 'react';
 import { useTranslation } from '@/lib/i18n';
 
@@ -28,6 +28,7 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
 
     const sidebarNavItems: SidebarItem[] = [
         { title: t('projects.settings.nav_project'), href: `${basePath}/project`, icon: SettingsIcon, permission: 'access_project_settings' },
+        { title: t('projects.settings.nav_storage'), href: `${basePath}/storage`, icon: HardDrive, permission: 'access_project_settings' },
         { title: t('projects.settings.nav_localization'), href: `${basePath}/localization`, icon: Globe, permission: 'access_localization_settings' },
         { title: t('projects.settings.nav_user_access'), href: `${basePath}/user-access`, icon: Users, permission: 'access_user_access_settings' },
         { title: t('projects.settings.nav_api_access'), href: `${basePath}/api-access`, icon: Key, permission: 'access_api_access_settings' },
