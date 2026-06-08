@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { router, usePage } from '@inertiajs/react';
@@ -67,7 +67,8 @@ export default function ContentForm({ project, collection, contentEntry, formDat
     const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
 
     const can = usePage().props.userCan as UserCan;
-    const is_singleton = collection.is_singleton;
+    const isSingleton = collection.isSingleton;
+    const [localStatus, setLocalStatus] = useState<string | null>(null);
 
     // Locale state
     const projLocales = (project as any).locales as string[] | undefined;
@@ -76,47 +77,43 @@ export default function ContentForm({ project, collection, contentEntry, formDat
     const [locale, setLocale] = useState<string>(entryLocale || project.default_locale || availableLocales[0]);
     const localeMismatch = isEditMode && entryLocale && locale !== entryLocale;
 
-    useEffect(() => {
-        // If we have initial form data (for editing), normalise it first (e.g. media fields should be arrays of UUIDs)
-        if (initialFormData && Object.keys(initialFormData).length > 0) {
-            const normalisedData: Record<string, any> = { ...initialFormData };
+// B5: stabiliser initialFormData pour éviter reset du formulaire quand le parent recrée l'objet
+const initialFormDataKey = useRef<string | null>(null);
+useEffect(() => {
+    const key = JSON.stringify(initialFormData ?? null);
+    if (key === initialFormDataKey.current) return;
+    initialFormDataKey.current = key;
 
-            // Iterate over collection fields to apply any type-specific normalisation rules
-            collection.fields.forEach(field => {
-                if (field.type === 'media') {
-                    const rawValue = initialFormData[field.slug];
+    // If we have initial form data (for editing), normalise it first
+    if (initialFormData && Object.keys(initialFormData).length > 0) {
+        const normalisedData: Record<string, any> = { ...initialFormData };
 
-                    // Helper to pull the UUID off either an object or primitive
-                    const extractUuid = (val: any) => (val && typeof val === 'object' ? val.uuid ?? null : val ?? null);
+        collection.fields.forEach(field => {
+            if (field.type === 'media') {
+                const rawValue = initialFormData[field.slug];
+                const extractUuid = (val: any) => (val && typeof val === 'object' ? val.uuid ?? null : val ?? null);
+                const allowsMultiple =
+                    Boolean(field.options?.multiple) ||
+                    (field.options?.media?.type === 2) ||
+                    Array.isArray(rawValue);
 
-                    // Determine if this media field actually supports multiple files
-                    const allowsMultiple =
-                        Boolean(field.options?.multiple) ||
-                        (field.options?.media?.type === 2) ||
-                        Array.isArray(rawValue);
-
-                    if (allowsMultiple) {
-                        // Ensure we end up with an array of UUIDs (empty when none)
-                        normalisedData[field.slug] = Array.isArray(rawValue)
-                            ? rawValue.map(extractUuid).filter((id: any) => id !== null)
-                            : [];
-                    } else {
-                        // Single media: reduce to a single UUID (or null) stored as array for consistency
-                        const id = Array.isArray(rawValue) ? extractUuid(rawValue[0]) : extractUuid(rawValue);
-                        normalisedData[field.slug] = id !== null ? [id] : [];
-                    }
+                if (allowsMultiple) {
+                    normalisedData[field.slug] = Array.isArray(rawValue)
+                        ? rawValue.map(extractUuid).filter((id: any) => id !== null)
+                        : [];
+                } else {
+                    const id = Array.isArray(rawValue) ? extractUuid(rawValue[0]) : extractUuid(rawValue);
+                    normalisedData[field.slug] = id !== null ? [id] : [];
                 }
-            });
+            }
+        });
 
-            setFormData(normalisedData);
-            return;
-        }
+        setFormData(normalisedData);
+        return;
+    }
 
-        // Otherwise initialize form data for each field
-        setFormData(buildInitialFormData(collection.fields));
-    // Depend on stable primitives, not the collection object reference,
-    // to avoid resetting user-edited form data on parent re-renders.
-    }, [collection.id, initialFormData]);
+    setFormData(buildInitialFormData(collection.fields));
+}, [collection.id, initialFormData]);
 
     const handleSubmit = async (action: SaveAction, status: SaveStatus) => {
         setProcessing(true);
@@ -162,8 +159,10 @@ export default function ContentForm({ project, collection, contentEntry, formDat
                     contentEntry: response.data.data.id,
                 }));
             } else if (action === 'stay' && isEditMode) {
-                // Refresh the page to reflect the updated status
-                router.reload();
+                // B6 : mettre à jour le statut localement au lieu de recharger la page
+                if (response.data.data?.status) {
+                    setLocalStatus(response.data.data.status);
+                }
             }
         } catch (error: any) {
             if (error.response?.data?.errors) {
@@ -265,13 +264,15 @@ export default function ContentForm({ project, collection, contentEntry, formDat
             newData[field.slug] = value;
         }
 
-        // If this field is referenced by a slug field, update the slug
-        const slugField = collection.fields.find(f =>
-            f.type === 'slug' &&
-            f.options?.slug?.field === field.slug
-        );
-        if (slugField && !field.options?.repeatable) {
-            newData[slugField.slug] = slugify(value);
+        // B4: ne générer le slug que si la valeur est une string
+        if (typeof value === 'string') {
+            const slugField = collection.fields.find(f =>
+                f.type === 'slug' &&
+                f.options?.slug?.field === field.slug
+            );
+            if (slugField && !field.options?.repeatable) {
+                newData[slugField.slug] = slugify(value);
+            }
         }
 
         setFormData(newData);
@@ -288,7 +289,7 @@ export default function ContentForm({ project, collection, contentEntry, formDat
             <div className="space-y-6">
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8 xl:grid-cols-[minmax(0,1fr)_340px]">
                     <div className="min-w-0 space-y-4">
-                        {is_singleton && (
+                        {isSingleton && (
                             <div className="mb-3">
                                 <h1 className="text-xl font-bold">{collection.name}
                                     <span className="text-sm font-normal text-muted-foreground ml-2">
@@ -315,7 +316,7 @@ export default function ContentForm({ project, collection, contentEntry, formDat
 
                     <div>
                         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-                            {!is_singleton && (
+                            {!isSingleton && (
                                 <>
                                 {/* Primary save actions */}
                                 <div className="space-y-2.5 rounded-xl border border-border bg-card/60 p-3 shadow-sm">
@@ -487,7 +488,7 @@ export default function ContentForm({ project, collection, contentEntry, formDat
                                 </>
                             )}
 
-                            {is_singleton && (
+                            {isSingleton && (
                                 <Button
                                     onClick={() => handleSubmit('stay', 'published')}
                                     disabled={processing}
@@ -498,7 +499,7 @@ export default function ContentForm({ project, collection, contentEntry, formDat
                                 </Button>
                             )}
 
-                            {is_singleton && (
+                            {isSingleton && (
                                 <div className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
                                     {t('content.form.singleton_desc')}
                                 </div>
