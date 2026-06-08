@@ -32,7 +32,27 @@ class StorageDriverFactory
         $rootPath = $profile->rootPath
             ?? $this->projectDir . '/public/uploads/media/' . $profile->project->uuid;
 
+        $allowedBase = $this->projectDir . '/public/uploads/media/';
+        $resolved = realpath($rootPath) ?: $rootPath;
+        if (!str_starts_with($resolved, $allowedBase)) {
+            throw new \RuntimeException('Local storage rootPath must be within the allowed uploads directory.');
+        }
+
         return new Filesystem(new LocalFilesystemAdapter($rootPath));
+    }
+
+    /**
+     * Valide qu'un endpoint S3 ne pointe pas vers une IP privée/interne (SSRF).
+     */
+    private function validateS3Endpoint(string $endpoint): void
+    {
+        // Extraire l'hôte depuis l'URL (ex: "https://xxx.r2.cloudflarestorage.com" → "xxx.r2.cloudflarestorage.com")
+        $host = parse_url($endpoint, PHP_URL_HOST) ?: $endpoint;
+        $ip = gethostbyname($host);
+
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            throw new \RuntimeException('S3 endpoint resolves to a private/internal IP — rejected for security.');
+        }
     }
 
     private function createS3(ProjectStorageProfile $profile): FilesystemOperator
@@ -49,6 +69,7 @@ class StorageDriverFactory
         ];
 
         if ($profile->s3Endpoint !== null && $profile->s3Endpoint !== '') {
+            $this->validateS3Endpoint($profile->s3Endpoint);
             $clientConfig['endpoint'] = $profile->s3Endpoint;
         }
 
