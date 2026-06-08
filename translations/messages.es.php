@@ -1227,8 +1227,12 @@ return [
     'projects.settings.storage.delete_rule'  => 'Eliminar regla',
 
     // JWT TTL
+    'projects.settings.nav_jwt_ttl'       => 'JWT Token TTL',
     'projects.settings.jwt_title'         => 'JWT Token TTL',
     'projects.settings.jwt_desc'          => 'Tiempo de expiración de tokens. Dejar vacío para usar valores por defecto (15 min / 30 días).',
+    'projects.settings.jwt_defaults'      => 'Valores por defecto del servidor',
+    'projects.settings.jwt_reset_defaults' => 'Restablecer por defecto',
+    'projects.settings.jwt_ttl_min'       => 'Mínimo 60 segundos.',
     'projects.settings.jwt_access_ttl'    => 'Access Token TTL (segundos)',
     'projects.settings.jwt_access_ttl_hint' => 'Defecto: 900s = 15 min',
     'projects.settings.jwt_ttl_min'         => '(mín. 60s, máx. 1 año). Pon 0 para restablecer.',

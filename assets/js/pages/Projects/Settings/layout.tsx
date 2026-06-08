@@ -29,6 +29,7 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
     const sidebarNavItems: SidebarItem[] = [
         { title: t('projects.settings.nav_project'), href: `${basePath}/project`, icon: SettingsIcon, permission: 'access_project_settings' },
         { title: t('projects.settings.nav_storage'), href: `${basePath}/storage`, icon: HardDrive, permission: 'access_project_settings' },
+        { title: t('projects.settings.nav_jwt_ttl'), href: `${basePath}/jwt-ttl`, icon: Key, permission: 'access_project_settings' },
         { title: t('projects.settings.nav_localization'), href: `${basePath}/localization`, icon: Globe, permission: 'access_localization_settings' },
         { title: t('projects.settings.nav_user_access'), href: `${basePath}/user-access`, icon: Users, permission: 'access_user_access_settings' },
         { title: t('projects.settings.nav_api_access'), href: `${basePath}/api-access`, icon: Key, permission: 'access_api_access_settings' },
