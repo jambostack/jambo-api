@@ -211,6 +211,20 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                 const collectionId = normalizedOptions.targetCollection === 'end_users' ? -1 : null;
                 normalizedOptions.relation = { collection: collectionId, type: 1 };
             }
+            // Rétrocompatibilité : si relation.collection est un slug string
+            // (données antérieures au correctif de serializeField), convertir en id.
+            if (typeof normalizedOptions.relation?.collection === 'string') {
+                const slug = normalizedOptions.relation.collection;
+                if (slug === 'end_users') {
+                    normalizedOptions.relation = { ...normalizedOptions.relation, collection: -1 };
+                } else {
+                    // Chercher l'ID de la collection correspondant au slug
+                    const matched = collections?.find((c: any) => c.slug === slug || c.id === slug);
+                    if (matched) {
+                        normalizedOptions.relation = { ...normalizedOptions.relation, collection: matched.id };
+                    }
+                }
+            }
             setData({
                 type: editField.type,
                 label: editField.label,
@@ -260,9 +274,10 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
         setErrors({});
 
         // Construit les options à envoyer. Convertit relation.collection=-1
-        // (end_users virtuel) vers le format canonique targetCollection.
+        // (end_users virtuel) ou relation.collection='end_users' (slug rétrocompatibilité)
+        // vers le format canonique targetCollection.
         const submitData = { ...data, options: { ...data.options, relation: { ...data.options.relation } } };
-        if (submitData.options?.relation?.collection === -1) {
+        if (submitData.options?.relation?.collection === -1 || submitData.options?.relation?.collection === 'end_users') {
             submitData.options = {
                 ...submitData.options,
                 targetCollection: 'end_users',
@@ -686,7 +701,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                     <div className="space-y-2">
                                         <Label htmlFor="relationCollection">Relation Collection</Label>
                                         <MultiSelect
-                                            value={data.options.relation?.collection ? { value: data.options.relation.collection, label: data.options.relation.collection === -1 ? 'End Users (system)' : (collections.find(c => c.id === data.options.relation!.collection)?.name ?? '') } : null}
+                                            value={data.options.relation?.collection ? { value: data.options.relation.collection, label: (data.options.relation.collection === -1 || data.options.relation.collection === 'end_users') ? 'End Users (system)' : (collections.find(c => c.id === data.options.relation!.collection)?.name ?? '') } : null}
                                             onChange={(selected) => {
                                                 const val = (selected as any)?.value ?? null;
                                                 setData('options', {

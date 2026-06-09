@@ -53,7 +53,9 @@ class MediaImportHandler implements ImportHandlerInterface
             $media = new Media();
             $media->project = $project;
 
-            if ($options->strategy === 'new_uuids' || !$oldUuid) {
+            // Always generate fresh UUIDs for a brand-new project (same reasoning
+            // as ContentImportHandler — global unique constraint on media.uuid).
+            if ($options->strategy === 'new_uuids' || $options->createNewProject || !$oldUuid) {
                 $media->uuid = Uuid::v4();
             } else {
                 $media->uuid = Uuid::fromString($oldUuid);

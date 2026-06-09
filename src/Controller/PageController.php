@@ -843,21 +843,34 @@ class PageController extends InertiaController
         // frontend can build API URLs without resolving integer IDs itself.
         // Supports both formats:
         //   - relation.collection (int ID) → resolve slug from DB
-        //   - targetCollection (string slug) → use directly (for end_users, etc.)
+        //   - targetCollection (string slug) → add collection_slug, keep targetCollection
+        //     (end_users, etc.). Do NOT replace targetCollection with relation.collection:
+        //     FieldFormModal expects targetCollection for non-Collection entities.
         if ($field->type === 'relation') {
-            if (isset($options['relation']['collection'])) {
-                $targetColl = $this->collectionRepository->find((int) $options['relation']['collection']);
+            if (isset($options['relation']['collection']) && is_int($options['relation']['collection'])) {
+                $targetColl = $this->collectionRepository->find($options['relation']['collection']);
                 if ($targetColl) {
                     $options['relation']['collection_slug'] = $targetColl->slug;
                 }
             } elseif (isset($options['targetCollection'])) {
-                // Le format targetCollection stocke le slug directement
-                $options['relation'] = [
-                    'collection'      => $options['targetCollection'],
-                    'collection_slug' => $options['targetCollection'],
-                    'type'            => $options['relation']['type'] ?? 1,
-                ];
-                unset($options['targetCollection']);
+                // Enrichir avec collection_slug pour RelationField/RelationModal,
+                // mais préserver targetCollection pour FieldFormModal.
+                if (!isset($options['relation']) || !is_array($options['relation'])) {
+                    $options['relation'] = ['type' => 1];
+                }
+                $options['relation']['collection_slug'] = $options['targetCollection'];
+            }
+            // Rétrocompatibilité : si relation.collection est un slug string
+            // (données antérieures à ce correctif), le convertir.
+            if (isset($options['relation']['collection']) && is_string($options['relation']['collection'])) {
+                $slug = $options['relation']['collection'];
+                if (!isset($options['targetCollection'])) {
+                    $options['targetCollection'] = $slug;
+                }
+                $options['relation']['collection_slug'] = $slug;
+                // Ne pas laisser le slug dans relation.collection (casse le contrat frontend)
+                // mais garder une trace pour que FieldFormModal sache quelle entité est ciblée
+                unset($options['relation']['collection']);
             }
         }
 

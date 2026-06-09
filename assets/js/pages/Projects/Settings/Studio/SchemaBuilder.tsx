@@ -37,7 +37,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 
 interface SchemaField { key: string; name: string; slug: string; type: string; isRequired: boolean; options?: Record<string, any>; }
 interface SchemaCollection {
-  key: string; uuid?: string; name: string; slug: string; description: string;
+  id?: number; key: string; uuid?: string; name: string; slug: string; description: string;
   isSingleton: boolean; fields: SchemaField[];
 }
 interface ServerCollection {
@@ -947,7 +947,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
       if (!res.ok) throw new Error('Failed');
       const data = await res.json() as { data: ServerCollection[] };
       const loaded = (data.data ?? []).map((c): SchemaCollection => ({
-        key: `col_${c.id}`, uuid: c.uuid, name: c.name, slug: c.slug, description: c.description ?? '', isSingleton: c.isSingleton,
+        id: c.id, key: `col_${c.id}`, uuid: c.uuid, name: c.name, slug: c.slug, description: c.description ?? '', isSingleton: c.isSingleton,
         fields: (c.fields ?? []).map((f, fi): SchemaField => ({ key: `fld_${c.id}_${fi}`, name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired, options: f.options })),
       }));
       setCollections(loaded);
@@ -1341,6 +1341,8 @@ interface FieldOptions {
   values?: string[];
   mediaTypes?: ('image'|'video'|'document')[]; multiple?: boolean;
   targetCollection?: string;
+  relationType?: number;        // 1 = One to One, 2 = One to Many
+  includeDraft?: boolean;
   toolbar?: ('bold'|'italic'|'link'|'image'|'list'|'heading')[];
   helpText?: string; hideInList?: boolean; readOnly?: boolean;
 }
@@ -1350,10 +1352,30 @@ const FIELD_OPTION_DEFAULTS: Record<string, Partial<FieldOptions>> = {
   number: { min: undefined, max: undefined, step: undefined, defaultValue: '' },
   enumeration: { values: [] },
   media: { mediaTypes: ['image'], multiple: false },
-  relation: { targetCollection: '' },
+  relation: { targetCollection: '', relationType: 1, includeDraft: false },
 };
 function parseFieldOptions(field: SchemaField): FieldOptions {
-  try { return typeof field.options === 'object' && field.options ? field.options as FieldOptions : {}; } catch { return {}; }
+  try {
+    if (!field.options || typeof field.options !== 'object') return {};
+    const raw = field.options as Record<string, any>;
+
+    // Normalise les deux formats de stockage :
+    //   Format FieldFormModal → { relation: { collection, type }, targetCollection, includeDraft }
+    //   Format SchemaBuilder → { targetCollection, relationType, includeDraft }
+    const result: FieldOptions = { ...raw };
+
+    // Récupère le type de relation depuis relation.type (format FieldFormModal)
+    if (result.relationType === undefined && raw.relation?.type !== undefined) {
+      result.relationType = raw.relation.type;
+    }
+
+    // Récupère includeDraft depuis le top-level (les deux formats l'utilisent)
+    if (result.includeDraft === undefined && raw.includeDraft !== undefined) {
+      result.includeDraft = raw.includeDraft;
+    }
+
+    return result;
+  } catch { return {}; }
 }
 function FieldOptionsEditor({ field, allCollections, onChange }: { field: SchemaField; allCollections: SchemaCollection[]; onChange: (opts: FieldOptions) => void; }) {
   const opts = parseFieldOptions(field);
@@ -1422,13 +1444,34 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
       { key: '__end_users__', name: 'EndUsers (système)', slug: 'end_users' },
       ...allCollections.filter(c => c.slug && c.slug !== 'end_users'),
     ];
+    const relType = opts.relationType ?? (defaults.relationType ?? 1);
+    const includeDraft = opts.includeDraft ?? (defaults.includeDraft ?? false);
     return (
-      <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)' }}>
-        <span style={S.label}>Collection liée</span>
-        <select value={opts.targetCollection ?? ''} onChange={e => onChange({ ...opts, targetCollection: e.target.value })} style={{ ...S.input, width:'100%', marginTop:'4px' }}>
-          <option value="">— Sélectionner —</option>
-          {relationTargets.map(c => (<option key={c.key} value={c.slug}>{c.name || c.slug}</option>))}
-        </select>
+      <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'flex', flexDirection:'column', gap:'8px' }}>
+        <div>
+          <span style={S.label}>Collection liée</span>
+          <select value={opts.targetCollection ?? ''} onChange={e => onChange({ ...opts, targetCollection: e.target.value })} style={{ ...S.input, width:'100%', marginTop:'4px' }}>
+            <option value="">— Sélectionner —</option>
+            {relationTargets.map(c => (<option key={c.key} value={c.slug}>{c.name || c.slug}</option>))}
+          </select>
+        </div>
+        <div>
+          <span style={S.label}>Type de relation</span>
+          <div style={{ display:'flex', gap:'12px', marginTop:'4px' }}>
+            <label style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'10px', cursor:'pointer' }}>
+              <input type="radio" name={`relType_${field.key}`} value="1" checked={relType === 1} onChange={() => onChange({ ...opts, relationType: 1 })} />
+              One to One
+            </label>
+            <label style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'10px', cursor:'pointer' }}>
+              <input type="radio" name={`relType_${field.key}`} value="2" checked={relType === 2} onChange={() => onChange({ ...opts, relationType: 2 })} />
+              One to Many
+            </label>
+          </div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+          <Switch checked={includeDraft} onCheckedChange={v => onChange({ ...opts, includeDraft: v })} />
+          <span style={S.label}>Inclure les brouillons (draft)</span>
+        </div>
       </div>
     );
   }
@@ -1527,6 +1570,34 @@ function FieldRow({
     || field.type === 'longtext' || field.type === 'media' || field.type === 'relation';
 
   function handleOptionsChange(opts: FieldOptions) {
+    // Normalise les options relation au format canonique (identique à FieldFormModal) :
+    //   { relation: { collection: <id|null>, type: <1|2> }, targetCollection?: <slug>, includeDraft?: <bool> }
+    if (field.type === 'relation') {
+      const targetSlug = (opts.targetCollection ?? '').trim();
+      const normalized: Record<string, any> = {
+        relation: {
+          collection: null as number | null,
+          type: opts.relationType ?? 1,
+        },
+        includeDraft: opts.includeDraft ?? false,
+      };
+
+      if (targetSlug === 'end_users') {
+        // EndUsers : pas de relation.collection numérique, on met targetCollection à la place
+        normalized.targetCollection = 'end_users';
+        normalized.relation.collection = null;
+      } else if (targetSlug !== '') {
+        // Collection régulière : chercher l'ID numérique dans allCollections
+        const target = allCollections.find(c => c.slug === targetSlug);
+        if (target?.id != null) {
+          normalized.relation.collection = target.id;
+        }
+        // Pas de targetCollection pour les collections régulières
+      }
+
+      updateField(selectedIdx, field.key, { options: normalized });
+      return;
+    }
     updateField(selectedIdx, field.key, { options: opts as any });
   }
 

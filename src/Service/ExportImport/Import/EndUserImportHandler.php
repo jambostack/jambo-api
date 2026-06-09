@@ -56,7 +56,9 @@ class EndUserImportHandler implements ImportHandlerInterface
                 $newUuid = $existing->uuid?->toString() ?? $oldUuid;
             } else {
                 $user = new EndUser($project, $userData['email']);
-                $newUuid = ($options->strategy === 'new_uuids' || !$oldUuid)
+                // Always generate fresh UUIDs for a brand-new project (same reasoning
+                // as ContentImportHandler — global unique constraint on end_user.uuid).
+                $newUuid = ($options->strategy === 'new_uuids' || $options->createNewProject || !$oldUuid)
                     ? Uuid::v4()->toString()
                     : $oldUuid;
                 $user->uuid = Uuid::fromString($newUuid);
