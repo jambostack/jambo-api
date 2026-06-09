@@ -9,6 +9,7 @@ use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use App\Controller\Api\ProjectAwareControllerTrait;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -21,6 +22,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/projects/{uuid}/end-users', name: 'api_admin_end_users_')]
 class EndUserAdminController extends AbstractController
 {
+    use ProjectAwareControllerTrait;
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private EndUserRepository $endUserRepository,
@@ -30,34 +33,6 @@ class EndUserAdminController extends AbstractController
         private ApiTokenChecker $tokenChecker,
         private UserPasswordHasherInterface $hasher,
     ) {}
-
-    /** Resolve project + check access (session member OR ApiToken with write ability). */
-    private function resolveProject(string $uuid, Request $request): \App\Entity\Project|JsonResponse
-    {
-        $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
-        if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
-        }
-
-        // Session auth (admin UI)
-        $user = $this->security->getUser();
-        if ($user instanceof \App\Entity\User) {
-            if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
-                return $project;
-            }
-            if ($this->memberRepo->findActiveByUserAndProject($user, $project) !== null) {
-                return $project;
-            }
-        }
-
-        // ApiToken auth (CRM apps)
-        $token = $this->tokenChecker->resolve($request);
-        if ($token !== null && $token->project->uuid?->toString() === $uuid && $token->can('write')) {
-            return $project;
-        }
-
-        return $this->json(['error' => 'Forbidden'], 403);
-    }
 
     // ─── LIST ────────────────────────────────────────────────────────────────
 
