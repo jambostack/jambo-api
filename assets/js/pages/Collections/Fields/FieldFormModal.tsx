@@ -261,7 +261,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
 
         // Construit les options à envoyer. Convertit relation.collection=-1
         // (end_users virtuel) vers le format canonique targetCollection.
-        const submitData = { ...data };
+        const submitData = { ...data, options: { ...data.options, relation: { ...data.options.relation } } };
         if (submitData.options?.relation?.collection === -1) {
             submitData.options = {
                 ...submitData.options,
@@ -686,7 +686,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                     <div className="space-y-2">
                                         <Label htmlFor="relationCollection">Relation Collection</Label>
                                         <MultiSelect
-                                            value={data.options.relation?.collection ? { value: data.options.relation.collection, label: collections.find(c => c.id === data.options.relation!.collection)?.name ?? '' } : null}
+                                            value={data.options.relation?.collection ? { value: data.options.relation.collection, label: data.options.relation.collection === -1 ? 'End Users (system)' : (collections.find(c => c.id === data.options.relation!.collection)?.name ?? '') } : null}
                                             onChange={(selected) => {
                                                 const val = (selected as any)?.value ?? null;
                                                 setData('options', {
