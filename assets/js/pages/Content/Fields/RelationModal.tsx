@@ -17,12 +17,28 @@ export default function RelationModal({ isOpen, onClose, field, value, onSelect 
     const [searchRoute, setSearchRoute] = useState<string | null>(null);
     const [selectedItems, setSelectedItems] = useState<ContentEntry[]>([]);
     
+    const isEndUsers = field.options?.targetCollection === 'end_users';
+
     // Fetch the relation collection with its fields from db
     const getRelationCollection = async () => {
         const projectUuid = field.project_uuid;
         const collSlug = field.options?.relation?.collection_slug;
-        if (!projectUuid || !collSlug) return;
+        if (!projectUuid) return;
 
+        if (isEndUsers) {
+            // EndUsers → utiliser l'API admin end-users
+            setSearchRoute(`/api/projects/${projectUuid}/end-users?per_page=50`);
+            // Fake collection-shaped object avec les colonnes EndUser
+            setRelationCollection({ fields: [
+                { name: 'email', label: 'Email', type: 'email' },
+                { name: 'name', label: 'Name', type: 'text' },
+                { name: 'status', label: 'Status', type: 'text' },
+                { name: 'created_at', label: 'Created', type: 'datetime' },
+            ] } as any);
+            return;
+        }
+
+        if (!collSlug) return;
         const response = await axios.get(`/api/projects/${projectUuid}/collections/${collSlug}/fields`);
         const statusParam = field.options?.includeDraft ? '' : '&status=published';
         setSearchRoute(`/api/projects/${projectUuid}/collections/${collSlug}/entries?per_page=50${statusParam}`);
@@ -43,6 +59,55 @@ export default function RelationModal({ isOpen, onClose, field, value, onSelect 
 
     // Generate dynamic columns based on collection fields
     const generateColumns = (): ColumnDef[] => {
+        // EndUsers → colonnes spécifiques
+        if (isEndUsers) {
+            return [
+                {
+                    header: "Status",
+                    accessorKey: "status",
+                    sortable: true,
+                    filter: {
+                        type: 'select',
+                        options: [
+                            { label: 'Active', value: 'active' },
+                            { label: 'Banned', value: 'banned' },
+                            { label: 'Pending', value: 'pending' },
+                        ]
+                    },
+                    cell: (item: any) => (
+                        <Badge variant={item.status === 'active' ? 'default' : 'outline'} className={
+                            item.status === 'active'
+                                ? 'bg-green-600 hover:bg-green-700'
+                                : item.status === 'banned'
+                                ? 'bg-red-600 hover:bg-red-700'
+                                : 'text-amber-600 border-amber-300'
+                        }>
+                            {item.status === 'active' ? 'Active' : item.status === 'banned' ? 'Banned' : 'Pending'}
+                        </Badge>
+                    ),
+                },
+                {
+                    header: "Email",
+                    accessorKey: "email",
+                    sortable: true,
+                    cell: (item: any) => <span>{item.email || '-'}</span>,
+                },
+                {
+                    header: "Name",
+                    accessorKey: "name",
+                    sortable: true,
+                    cell: (item: any) => <span>{item.name || '-'}</span>,
+                },
+                {
+                    header: "Created",
+                    accessorKey: "created_at",
+                    sortable: true,
+                    cell: (item: any) => (
+                        <span>{item.created_at ? new Date(item.created_at).toLocaleString() : '-'}</span>
+                    ),
+                },
+            ];
+        }
         const columns: ColumnDef[] = [
             {
                 header: "Status",
@@ -212,24 +277,28 @@ export default function RelationModal({ isOpen, onClose, field, value, onSelect 
                             searchRoute={searchRoute ?? ''}
                             pageName={`relation_${relationCollection?.project_id}_${relationCollection?.id}`}
                             onRowClick={(item) => {
+                                const itemId = isEndUsers ? item.uuid : item.id;
                                 if (field.options?.relation?.type === 1) {
                                     onSelect(item as unknown as ContentEntry, relationCollection?.fields || []);
                                     onClose();
                                 } else {
                                     const isSelected = selectedItems.some(selectedItem => {
                                         if (typeof selectedItem === 'object') {
-                                            return (selectedItem as ContentEntry).id === item.id;
+                                            return isEndUsers
+                                                ? (selectedItem as any).uuid === item.uuid
+                                                : (selectedItem as ContentEntry).id === item.id;
                                         }
-                                        // selectedItem is a primitive ID
-                                        return selectedItem === item.id;
+                                        return isEndUsers ? selectedItem === item.uuid : selectedItem === item.id;
                                     });
 
                                     if (isSelected) {
                                         setSelectedItems(selectedItems.filter(selectedItem => {
                                             if (typeof selectedItem === 'object') {
-                                                return (selectedItem as ContentEntry).id !== item.id;
+                                                return isEndUsers
+                                                    ? (selectedItem as any).uuid !== item.uuid
+                                                    : (selectedItem as ContentEntry).id !== item.id;
                                             }
-                                            return selectedItem !== item.id;
+                                            return isEndUsers ? selectedItem !== item.uuid : selectedItem !== item.id;
                                         }));
                                     } else {
                                         setSelectedItems([...selectedItems, item]);

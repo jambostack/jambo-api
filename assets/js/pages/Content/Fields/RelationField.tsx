@@ -14,25 +14,28 @@ export default function RelationField({ field, value, onChange, processing, erro
     const [selectedEntries, setSelectedEntries] = useState<ContentEntry[]>([]);
     const [displayFields, setDisplayFields] = useState<CollectionField[]>([]);
 
+    const isEndUsers = field.options?.targetCollection === 'end_users';
+    const getItemId = (item: any) => isEndUsers ? item.uuid : item.id;
+    const getItemIdRaw = (item: any) => isEndUsers ? item.uuid ?? item : item.id ?? item;
+
     const handleSelectedItems = (
         items: ContentEntry | ContentEntry[] | number | number[],
         fields: CollectionField[]
     ) => {
         if (field.options?.relation?.type === 1) {
-            const id = typeof items === 'object' ? (items as ContentEntry).id : items as number;
+            const id = typeof items === 'object' ? getItemId(items) : items;
             onChange(field, id);
             if (typeof items === 'object') {
                 setSelectedEntries([items as ContentEntry]);
             }
         } else {
-            let ids: number[] = [];
+            let ids: (number|string)[] = [];
             if (Array.isArray(items)) {
-                ids = items.map((item: any) => (typeof item === 'object' ? item.id : item));
-                // Replace table data with the received objects (filter out primitives)
+                ids = items.map((item: any) => getItemIdRaw(item));
                 const objs = items.filter((i: any) => typeof i === 'object') as ContentEntry[];
                 setSelectedEntries(objs);
             } else {
-                ids = [typeof items === 'object' ? (items as ContentEntry).id : (items as number)];
+                ids = [typeof items === 'object' ? getItemId(items) : items as any];
                 if (typeof items === 'object') {
                     setSelectedEntries([items as ContentEntry]);
                 }
@@ -49,17 +52,19 @@ export default function RelationField({ field, value, onChange, processing, erro
     useEffect(() => {
         if (!value || selectedEntries.length > 0) return;
 
+        const isEndUsers = field.options?.targetCollection === 'end_users';
+        const projectUuid = field.project_uuid;
+
         // Normalise value to an array of numeric IDs regardless of how it was stored
-        const toIds = (v: any): number[] => {
-            if (Array.isArray(v)) return v.map(Number).filter(n => !isNaN(n));
-            if (typeof v === 'number') return [v];
+        const toIds = (v: any): string[] => {
+            if (Array.isArray(v)) return v.map(String).filter(s => s.length > 0);
+            if (typeof v === 'number') return [String(v)];
             if (typeof v === 'string') {
                 try {
                     const parsed = JSON.parse(v);
-                    if (Array.isArray(parsed)) return parsed.map(Number).filter(n => !isNaN(n));
+                    if (Array.isArray(parsed)) return parsed.map(String).filter(s => s.length > 0);
                 } catch {}
-                const n = Number(v);
-                return isNaN(n) ? [] : [n];
+                return [v];
             }
             return [];
         };
@@ -67,10 +72,28 @@ export default function RelationField({ field, value, onChange, processing, erro
         const ids = toIds(value);
         if (ids.length === 0) return;
 
+        if (isEndUsers) {
+            // EndUsers: fetch depuis l'API admin
+            const params = new URLSearchParams();
+            ids.forEach(id => params.append('uuids[]', id));
+            const euUrl = `/api/projects/${projectUuid}/end-users?${params.toString()}`;
+            axios.get(euUrl)
+                .then(res => {
+                    const users = res.data.data ?? res.data ?? [];
+                    setSelectedEntries(users);
+                    setDisplayFields([
+                        { name: 'email', label: 'Email', type: 'email' } as CollectionField,
+                        { name: 'name', label: 'Name', type: 'text' } as CollectionField,
+                        { name: 'status', label: 'Status', type: 'text' } as CollectionField,
+                    ] as CollectionField[]);
+                })
+                .catch(() => {});
+            return;
+        }
+
         const collSlug = field.options?.relation?.collection_slug;
         if (!collSlug) return;
 
-        const projectUuid = field.project_uuid;
         const entriesUrl = `/api/projects/${projectUuid}/collections/${collSlug}/entries`;
         const fieldsUrl  = `/api/projects/${projectUuid}/collections/${collSlug}/fields`;
 
