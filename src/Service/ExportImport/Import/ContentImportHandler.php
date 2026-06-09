@@ -84,7 +84,10 @@ class ContentImportHandler implements ImportHandlerInterface
                 $entry->project = $project;
                 $entry->collection = $collection;
 
-                if ($options->strategy === 'new_uuids' || !$oldUuid) {
+                // Always generate fresh UUIDs for a brand-new project to avoid
+                // global unique-constraint collisions with the source project
+                // or with previous imports of the same archive.
+                if ($options->strategy === 'new_uuids' || $options->createNewProject || !$oldUuid) {
                     $entry->uuid = Uuid::v4();
                     $newUuid = $entry->uuid->toString();
                 } else {
@@ -125,8 +128,8 @@ class ContentImportHandler implements ImportHandlerInterface
             'text', 'longtext', 'richtext', 'email', 'slug', 'color', 'password' => $cfv->textValue = $value,
             'number' => $cfv->numberValue = $value !== null ? (string) $value : null,
             'boolean' => $cfv->booleanValue = (bool) $value,
-            'date' => $cfv->dateValue = $value ? new \DateTimeImmutable($value) : null,
-            'datetime' => $cfv->datetimeValue = $value ? new \DateTimeImmutable($value) : null,
+            'date' => $cfv->dateValue = $value ? new \DateTime($value) : null,
+            'datetime' => $cfv->datetimeValue = $value ? new \DateTime($value) : null,
             'json', 'enumeration', 'repeater' => $cfv->jsonValue = $value,
             'media' => null,
             'relation' => null,
