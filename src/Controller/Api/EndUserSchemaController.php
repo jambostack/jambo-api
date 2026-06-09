@@ -3,13 +3,14 @@
 namespace App\Controller\Api;
 
 use App\Entity\EndUserField;
-use App\Entity\ProjectMember;
 use App\Repository\EndUserFieldRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
+use App\Service\ApiTokenChecker;
 use Doctrine\ORM\EntityManagerInterface;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
@@ -20,11 +21,15 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[Route('/api/projects/{uuid}/end-users/fields', name: 'api_end_users_fields_')]
 class EndUserSchemaController extends AbstractController
 {
+    use ProjectAwareControllerTrait;
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private ProjectMemberRepository $memberRepo,
         private EndUserFieldRepository $fieldRepository,
         private EntityManagerInterface $em,
+        private Security $security,
+        private ApiTokenChecker $tokenChecker,
     ) {}
 
     #[OA\Get(
@@ -41,9 +46,9 @@ class EndUserSchemaController extends AbstractController
         ]
     )]
     #[Route('', name: 'index', methods: ['GET'])]
-    public function index(string $uuid): JsonResponse
+    public function index(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->resolveProject($uuid);
+        $project = $this->resolveProject($uuid, $request);
         if ($project instanceof JsonResponse) {
             return $project;
         }
@@ -74,7 +79,7 @@ class EndUserSchemaController extends AbstractController
     #[Route('/reorder', name: 'reorder', methods: ['POST'], priority: 10)]
     public function reorder(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->resolveProject($uuid, requireManage: true);
+        $project = $this->resolveProject($uuid, $request, requireManage: true);
         if ($project instanceof JsonResponse) {
             return $project;
         }
@@ -118,7 +123,7 @@ class EndUserSchemaController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->resolveProject($uuid, requireManage: true);
+        $project = $this->resolveProject($uuid, $request, requireManage: true);
         if ($project instanceof JsonResponse) {
             return $project;
         }
@@ -181,7 +186,7 @@ class EndUserSchemaController extends AbstractController
     #[Route('/{slug}', name: 'update', methods: ['PATCH', 'PUT'])]
     public function update(string $uuid, string $slug, Request $request): JsonResponse
     {
-        $project = $this->resolveProject($uuid, requireManage: true);
+        $project = $this->resolveProject($uuid, $request, requireManage: true);
         if ($project instanceof JsonResponse) {
             return $project;
         }
@@ -230,9 +235,9 @@ class EndUserSchemaController extends AbstractController
         ]
     )]
     #[Route('/{slug}', name: 'delete', methods: ['DELETE'])]
-    public function delete(string $uuid, string $slug): JsonResponse
+    public function delete(string $uuid, string $slug, Request $request): JsonResponse
     {
-        $project = $this->resolveProject($uuid, requireManage: true);
+        $project = $this->resolveProject($uuid, $request, requireManage: true);
         if ($project instanceof JsonResponse) {
             return $project;
         }
@@ -250,27 +255,6 @@ class EndUserSchemaController extends AbstractController
         $this->em->flush();
 
         return $this->json(null, 204);
-    }
-
-    private function resolveProject(string $uuid, bool $requireManage = false): \App\Entity\Project|JsonResponse
-    {
-        $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
-        if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
-        }
-
-        $user = $this->getUser();
-        if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
-            $member = $this->memberRepo->findActiveByUserAndProject($user, $project);
-            if (!$member) {
-                return $this->json(['error' => 'Access denied'], 403);
-            }
-            if ($requireManage && $member->role?->hasPermission('project.manage') !== true) {
-                return $this->json(['error' => 'You do not have permission to manage end-user fields.'], 403);
-            }
-        }
-
-        return $project;
     }
 
     private function serialize(EndUserField $field): array

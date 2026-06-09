@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\Request;
 
 trait ProjectAwareControllerTrait
 {
-    private function resolveProject(string $uuid, Request $request): Project|JsonResponse
+    private function resolveProject(string $uuid, Request $request, bool $requireManage = false): Project|JsonResponse
     {
         $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
         if (!$project) {
@@ -25,7 +25,11 @@ trait ProjectAwareControllerTrait
             if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
                 return $project;
             }
-            if ($this->memberRepo->findActiveByUserAndProject($user, $project) !== null) {
+            $member = $this->memberRepo->findActiveByUserAndProject($user, $project);
+            if ($member !== null) {
+                if ($requireManage && $member->role?->hasPermission('project.manage') !== true) {
+                    return $this->json(['error' => 'You do not have permission to manage end-user fields.'], 403);
+                }
                 return $project;
             }
         }
