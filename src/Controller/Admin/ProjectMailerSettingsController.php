@@ -135,13 +135,13 @@ class ProjectMailerSettingsController extends AbstractController
         }
 
         try {
-            $this->mailerService->send(
+            $this->mailerService->sendSync(
                 $project,
                 $settings->fromEmail,
                 'Jambo — Email de test',
                 "Bonjour,\n\nCeci est un email de test envoye depuis Jambo.\n\nSi vous recevez cet email, votre configuration SMTP est correcte.\n\n— L'equipe Jambo",
             );
-        } catch (\RuntimeException $e) {
+        } catch (\Throwable $e) {
             return new JsonResponse(['error' => $e->getMessage()], 422);
         }
 

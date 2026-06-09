@@ -8,7 +8,11 @@ use App\Message\Attachment;
 use App\Message\SendProjectEmailMessage;
 use App\Repository\ProjectMailerSettingsRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Mailer\Mailer;
+use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\Mime\Email;
+use Symfony\Component\Mime\Part\DataPart;
 
 class ProjectMailerService
 {
@@ -62,6 +66,88 @@ class ProjectMailerService
             attachments: $attachments,
             projectId: $project->id,
         ));
+    }
+
+    /**
+     * Envoie un email de manière synchrone — utilisé par le endpoint de test
+     * pour valider la configuration SMTP en temps réel.
+     *
+     * @param string[]      $cc          Adresses en copie
+     * @param string[]      $bcc         Adresses en copie cachée
+     * @param Attachment[]  $attachments Pièces jointes
+     *
+     * @throws \RuntimeException si le mailer n'est pas configuré, désactivé,
+     *                           ou si l'envoi SMTP échoue
+     */
+    public function sendSync(
+        Project $project,
+        string $to,
+        string $subject,
+        string $body,
+        ?string $htmlBody = null,
+        ?string $replyTo = null,
+        array $cc = [],
+        array $bcc = [],
+        array $attachments = [],
+    ): void {
+        $settings = $this->getSettings($project);
+        if ($settings === null || !$settings->enabled) {
+            throw new \RuntimeException('Mailer not configured or disabled for this project.');
+        }
+
+        $password = $this->decrypt($settings->encryptedPassword);
+
+        $dsn = sprintf(
+            'smtp://%s:%s@%s:%d?encryption=%s&timeout=10',
+            urlencode($settings->username),
+            urlencode($password),
+            urlencode($settings->host),
+            $settings->port,
+            $settings->encryption,
+        );
+
+        $email = (new Email())
+            ->from(sprintf('%s <%s>', $settings->fromName, $settings->fromEmail))
+            ->to($to)
+            ->subject($subject);
+
+        $email->text($body);
+
+        if ($htmlBody !== null && $htmlBody !== '') {
+            $email->html($htmlBody);
+        }
+
+        if ($replyTo !== null && $replyTo !== '') {
+            $email->replyTo($replyTo);
+        }
+
+        foreach ($cc as $c) {
+            if (filter_var($c, FILTER_VALIDATE_EMAIL)) {
+                $email->addCc($c);
+            }
+        }
+
+        foreach ($bcc as $b) {
+            if (filter_var($b, FILTER_VALIDATE_EMAIL)) {
+                $email->addBcc($b);
+            }
+        }
+
+        foreach ($attachments as $attachment) {
+            $email->addPart(new DataPart(
+                $attachment->content,
+                $attachment->filename,
+                $attachment->mimeType,
+            ));
+        }
+
+        try {
+            $transport = Transport::fromDsn($dsn);
+            $mailer = new Mailer($transport);
+            $mailer->send($email);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('SMTP connection failed: ' . $e->getMessage(), 0, $e);
+        }
     }
 
     /**
