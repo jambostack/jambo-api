@@ -76,7 +76,7 @@ export default function StorageProfileForm({ open, onClose, onSaved, projectUuid
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>
             {isEdit ? t('projects.settings.storage.edit_profile') : t('projects.settings.storage.add_profile')}
