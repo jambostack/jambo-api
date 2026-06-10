@@ -35,8 +35,14 @@ trait ProjectAwareControllerTrait
         }
 
         // ApiToken auth (CRM apps)
+        // Note: l'UI de création de jeton expose les capacités granulaires (create/read/update/delete).
+        // 'write' (héritage) est considéré satisfait par n'importe quelle capacité d'écriture granulaire,
+        // afin que les jetons créés via l'UI puissent gérer les end-users.
         $token = $this->tokenChecker->resolve($request);
-        if ($token !== null && $token->project->uuid?->toString() === $uuid && $token->can('write')) {
+        $canWrite = $token !== null && (
+            $token->can('write') || $token->can('create') || $token->can('update') || $token->can('delete')
+        );
+        if ($token !== null && $token->project->uuid?->toString() === $uuid && $canWrite) {
             return $project;
         }
 
