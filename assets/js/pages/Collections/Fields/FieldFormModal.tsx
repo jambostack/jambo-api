@@ -712,10 +712,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                     },
                                                 });
                                             }}
-                                            options={[
-                                                { value: -1, label: 'End Users (system)' },
-                                                ...collections.map(c => ({ value: c.id, label: c.name }))
-                                            ]}
+                                            options={collections.map(c => ({ value: c.id, label: c.name }))}
                                             placeholder="Select a collection"
                                             isClearable
                                             classNamePrefix="react-select"
