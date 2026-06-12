@@ -207,9 +207,14 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
             // Normalise le format relation DB targetCollection (string slug)
             // vers le format interne relation.collection (numeric id).
             // id=-1 correspond à end_users (entité système, pas une Collection entity).
+            // Préserve relation.type existant (ne pas réinitialiser One-to-Many → One-to-One).
             if (normalizedOptions.targetCollection && !normalizedOptions.relation?.collection) {
                 const collectionId = normalizedOptions.targetCollection === 'end_users' ? -1 : null;
-                normalizedOptions.relation = { collection: collectionId, type: 1 };
+                normalizedOptions.relation = {
+                    ...(normalizedOptions.relation ?? {}),
+                    collection: collectionId,
+                    type: normalizedOptions.relation?.type ?? 1,
+                };
             }
             // Rétrocompatibilité : si relation.collection est un slug string
             // (données antérieures au correctif de serializeField), convertir en id.
@@ -219,7 +224,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                     normalizedOptions.relation = { ...normalizedOptions.relation, collection: -1 };
                 } else {
                     // Chercher l'ID de la collection correspondant au slug
-                    const matched = collections?.find((c: any) => c.slug === slug || c.id === slug);
+                    const matched = collections?.find((c: any) => c.slug === slug);
                     if (matched) {
                         normalizedOptions.relation = { ...normalizedOptions.relation, collection: matched.id };
                     }

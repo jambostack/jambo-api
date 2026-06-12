@@ -44,6 +44,7 @@ class EndUserAdminController extends AbstractController
 
         $status  = $request->query->get('status', '');
         $search  = $request->query->get('search', '');
+        $uuids   = $request->query->all('uuids');
         $page    = max(1, (int) $request->query->get('page', 1));
         $perPage = min(100, max(1, (int) $request->query->get('per_page', 20)));
 
@@ -53,6 +54,22 @@ class EndUserAdminController extends AbstractController
             ->where('eu.project = :project')
             ->setParameter('project', $project)
             ->orderBy('eu.createdAt', 'DESC');
+
+        // Résolution ciblée pour les champs relation : uuids[] court-circuite
+        // la pagination (le nombre d'uuids demandés borne le résultat).
+        if ($uuids !== []) {
+            $uuidObjects = [];
+            foreach (array_slice($uuids, 0, 100) as $u) {
+                try {
+                    $uuidObjects[] = \Symfony\Component\Uid\Uuid::fromString((string) $u)->toBinary();
+                } catch (\InvalidArgumentException) {
+                    // uuid mal formé → ignoré
+                }
+            }
+            $qb->andWhere('eu.uuid IN (:uuids)')->setParameter('uuids', $uuidObjects);
+            $perPage = max(count($uuidObjects), 1);
+            $page = 1;
+        }
 
         if ($status !== '' && in_array($status, ['active', 'banned', 'pending'], true)) {
             $qb->andWhere('eu.status = :status')->setParameter('status', $status);

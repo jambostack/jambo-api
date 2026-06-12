@@ -1063,8 +1063,9 @@ export default function SchemaBuilder({ project }: { project: Project }) {
     if (!current) return;
     const fieldLines = current.fields.map((f, i) => {
       let extra = '';
-      if (f.type === 'relation' && f.options?.targetCollection) {
-        extra = ' → ' + f.options.targetCollection;
+      if (f.type === 'relation') {
+        const target = parseFieldOptions(f, collections).targetCollection;
+        if (target) extra = ' → ' + target;
       } else if (f.type === 'enumeration' && f.options?.values?.length) {
         extra = ' [' + f.options.values.join(', ') + ']';
       }
@@ -1354,31 +1355,39 @@ const FIELD_OPTION_DEFAULTS: Record<string, Partial<FieldOptions>> = {
   media: { mediaTypes: ['image'], multiple: false },
   relation: { targetCollection: '', relationType: 1, includeDraft: false },
 };
-function parseFieldOptions(field: SchemaField): FieldOptions {
+function parseFieldOptions(field: SchemaField, allCollections?: SchemaCollection[]): FieldOptions {
   try {
     if (!field.options || typeof field.options !== 'object') return {};
     const raw = field.options as Record<string, any>;
 
-    // Normalise les deux formats de stockage :
-    //   Format FieldFormModal → { relation: { collection, type }, targetCollection, includeDraft }
-    //   Format SchemaBuilder → { targetCollection, relationType, includeDraft }
+    // Absorbe le format canonique serveur ({ relation: { collection: id, type } })
+    // et les formats legacy ({ targetCollection, relationType }, slug dans relation.collection).
     const result: FieldOptions = { ...raw };
 
-    // Récupère le type de relation depuis relation.type (format FieldFormModal)
+    // Récupère le type de relation depuis relation.type (format canonique)
     if (result.relationType === undefined && raw.relation?.type !== undefined) {
       result.relationType = raw.relation.type;
     }
 
-    // Récupère includeDraft depuis le top-level (les deux formats l'utilisent)
-    if (result.includeDraft === undefined && raw.includeDraft !== undefined) {
-      result.includeDraft = raw.includeDraft;
+    // Dérive targetCollection (slug affiché dans le dropdown) depuis la relation
+    // stockée : collection_slug dérivé, slug legacy, ou id résolu via allCollections.
+    if (!result.targetCollection && raw.relation) {
+      const rel = raw.relation as Record<string, any>;
+      if (typeof rel.collection_slug === 'string' && rel.collection_slug !== '') {
+        result.targetCollection = rel.collection_slug;
+      } else if (typeof rel.collection === 'string' && rel.collection !== '') {
+        result.targetCollection = rel.collection;
+      } else if (typeof rel.collection === 'number' && allCollections) {
+        const matched = allCollections.find(c => c.id === rel.collection);
+        if (matched) result.targetCollection = matched.slug;
+      }
     }
 
     return result;
   } catch { return {}; }
 }
 function FieldOptionsEditor({ field, allCollections, onChange }: { field: SchemaField; allCollections: SchemaCollection[]; onChange: (opts: FieldOptions) => void; }) {
-  const opts = parseFieldOptions(field);
+  const opts = parseFieldOptions(field, allCollections);
   const defaults = FIELD_OPTION_DEFAULTS[field.type] ?? {};
   const S = {
     input: { height:'28px', fontSize:'10px', background:'var(--studio-bg)', borderColor:'var(--studio-border)', color:'var(--studio-text)', borderRadius:'5px', padding:'0 6px', outline:'none' } as React.CSSProperties,
@@ -1570,31 +1579,22 @@ function FieldRow({
     || field.type === 'longtext' || field.type === 'media' || field.type === 'relation';
 
   function handleOptionsChange(opts: FieldOptions) {
-    // Normalise les options relation au format canonique (identique à FieldFormModal) :
-    //   { relation: { collection: <id|null>, type: <1|2> }, targetCollection?: <slug>, includeDraft?: <bool> }
+    // Relations : le client n'envoie que le slug cible (targetCollection) et le
+    // type ; la résolution slug→id est faite côté serveur à l'enregistrement
+    // (applySchema → FieldRelationOptionsNormalizer), ce qui couvre aussi les
+    // collections créées dans la même session (pas encore d'id).
+    // Les autres clés d'options (includeDraft, helpText…) sont préservées.
     if (field.type === 'relation') {
-      const targetSlug = (opts.targetCollection ?? '').trim();
+      const { relationType, targetCollection, ...rest } = opts;
+      const targetSlug = (targetCollection ?? '').trim();
       const normalized: Record<string, any> = {
-        relation: {
-          collection: null as number | null,
-          type: opts.relationType ?? 1,
-        },
+        ...rest,
+        relation: { type: relationType ?? 1 },
         includeDraft: opts.includeDraft ?? false,
       };
-
-      if (targetSlug === 'end_users') {
-        // EndUsers : pas de relation.collection numérique, on met targetCollection à la place
-        normalized.targetCollection = 'end_users';
-        normalized.relation.collection = null;
-      } else if (targetSlug !== '') {
-        // Collection régulière : chercher l'ID numérique dans allCollections
-        const target = allCollections.find(c => c.slug === targetSlug);
-        if (target?.id != null) {
-          normalized.relation.collection = target.id;
-        }
-        // Pas de targetCollection pour les collections régulières
+      if (targetSlug !== '') {
+        normalized.targetCollection = targetSlug;
       }
-
       updateField(selectedIdx, field.key, { options: normalized });
       return;
     }

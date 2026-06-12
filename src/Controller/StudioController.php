@@ -40,6 +40,7 @@ class StudioController extends InertiaController
         private readonly \Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface $passwordHasher,
         private readonly \App\Repository\MediaRepository $mediaRepository,
         private readonly \App\Service\AiContentService $aiService,
+        private readonly \App\Service\FieldRelationOptionsNormalizer $relationOptionsNormalizer,
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
 
@@ -1221,6 +1222,10 @@ PROMPT;
         $keptCollectionUuids = [];
         $keptCollectionSlugs = [];
 
+        // ── Passe 1 : upsert des collections (sans leurs champs) ──
+        // Un flush intermédiaire assigne les ids des nouvelles collections,
+        // indispensable pour résoudre les relations slug→id de la passe 2.
+        $collectionPairs = [];
         foreach ($collections as $colData) {
             if (empty($colData['name'])) continue;
 
@@ -1257,6 +1262,12 @@ PROMPT;
             $keptCollectionSlugs[] = $slug;
             $this->em->persist($collection);
 
+            $collectionPairs[] = [$collection, $colData];
+        }
+        $this->em->flush();
+
+        // ── Passe 2 : upsert des champs, options relation normalisées ──
+        foreach ($collectionPairs as [$collection, $colData]) {
             $existingSlugs = [];
             foreach ($collection->fields as $f) {
                 if (!$f->isDeleted()) $existingSlugs[$f->slug] = $f;
@@ -1280,7 +1291,7 @@ PROMPT;
                 $field->slug = $fSlug;
                 $field->type = $fieldData['type'] ?? 'text';
                 $field->isRequired = $fieldData['isRequired'] ?? false;
-                $field->options = $fieldData['options'] ?? null;
+                $field->options = $this->normalizeFieldOptions($field->type, $fieldData['options'] ?? null, $project);
                 $field->order = $order++;
 
                 $this->em->persist($field);
@@ -1449,6 +1460,16 @@ PROMPT;
 
     // ═══════════════ TOOL EXECUTORS ═══════════════
 
+    /** Normalise les options d'un champ avant persistance (format canonique relation). */
+    private function normalizeFieldOptions(string $type, ?array $options, Project $project): ?array
+    {
+        if ($type !== 'relation') {
+            return $options;
+        }
+
+        return $this->relationOptionsNormalizer->normalize($options ?? [], $project, forStorage: true);
+    }
+
     private function executeCreateCollections(Project $project, array $params): array
     {
         $collections = $params['collections'] ?? [];
@@ -1457,6 +1478,9 @@ PROMPT;
         $normalized = $this->normalizeSchema($collections);
         $created = 0;
 
+        // Passe 1 : persister les collections (flush pour assigner les ids,
+        // nécessaires à la résolution des relations slug→id de la passe 2).
+        $newPairs = [];
         foreach ($normalized as $colData) {
             if (empty($colData['name'])) continue;
             $slug = $colData['slug'];
@@ -1481,20 +1505,26 @@ PROMPT;
             $collection->isSingleton = $colData['isSingleton'] ?? false;
             $this->em->persist($collection);
 
+            $newPairs[] = [$collection, $colData];
+            $created++;
+        }
+        $this->em->flush();
+
+        // Passe 2 : champs avec options relation normalisées.
+        foreach ($newPairs as [$collection, $colData]) {
             $order = 0;
             foreach ($colData['fields'] ?? [] as $fData) {
                 if (empty($fData['name'])) continue;
                 $field = new Field();
                 $field->collection = $collection;
                 $field->name = $fData['name'];
-                $field->slug = $fData['slug'] ?: $slug . '_' . $order;
+                $field->slug = $fData['slug'] ?: $collection->slug . '_' . $order;
                 $field->type = $fData['type'] ?? 'text';
                 $field->isRequired = $fData['isRequired'] ?? false;
-                $field->options = $fData['options'] ?? null;
+                $field->options = $this->normalizeFieldOptions($field->type, $fData['options'] ?? null, $project);
                 $field->order = $order++;
                 $this->em->persist($field);
             }
-            $created++;
         }
         $this->em->flush();
         return ['created' => $created, 'collections' => array_column($normalized, 'slug')];

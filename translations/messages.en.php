@@ -676,6 +676,7 @@ return [
     'fields.relation.select_multi'   => 'Select Relation Entries',
     'fields.relation.clear'          => 'Clear Selected',
     'fields.relation.add_selected'   => 'Add Selected',
+    'fields.relation.load_error'     => 'Failed to load related items',
 
     // Media field buttons
     'fields.media.select_single'     => 'Select a file',

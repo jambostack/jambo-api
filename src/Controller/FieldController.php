@@ -8,6 +8,7 @@ use App\Entity\Project;
 use App\Repository\CollectionRepository;
 use App\Repository\FieldRepository;
 use App\Repository\ProjectRepository;
+use App\Service\FieldRelationOptionsNormalizer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -22,6 +23,7 @@ class FieldController extends AbstractController
         private FieldRepository $fieldRepository,
         private ProjectRepository $projectRepository,
         private CollectionRepository $collectionRepository,
+        private FieldRelationOptionsNormalizer $relationOptionsNormalizer,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -57,7 +59,7 @@ class FieldController extends AbstractController
         $field->name = $data['name'];
         $field->slug = $data['slug'] ?? strtolower(trim(preg_replace('/[^a-z0-9]+/i', '_', $data['name']), '_'));
         $field->type = $data['type'];
-        $field->options = $data['options'] ?? null;
+        $field->options = $this->normalizeOptions($field->type, $data['options'] ?? null, $collection);
         $field->order = $data['order'] ?? 0;
         $field->isRequired = $data['is_required'] ?? false;
         $field->collection = $collection;
@@ -99,7 +101,7 @@ class FieldController extends AbstractController
             $field->type = $data['type'];
         }
         if (array_key_exists('options', $data)) {
-            $field->options = $data['options'];
+            $field->options = $this->normalizeOptions($field->type, $data['options'], $field->collection);
         }
         if (isset($data['order'])) {
             $field->order = (int) $data['order'];
@@ -176,14 +178,30 @@ class FieldController extends AbstractController
         return $field;
     }
 
+    /** Normalise les options relation au format canonique avant persistance. */
+    private function normalizeOptions(string $type, ?array $options, Collection $collection): ?array
+    {
+        if ($type !== 'relation' || $options === null) {
+            return $options;
+        }
+
+        return $this->relationOptionsNormalizer->normalize($options, $collection->project, forStorage: true);
+    }
+
     private function serialize(Field $field): array
     {
+        $options = $field->options;
+        // Lecture : enrichit les options relation (collection_slug dérivé)
+        if ($field->type === 'relation' && $options !== null) {
+            $options = $this->relationOptionsNormalizer->normalize($options, $field->collection->project);
+        }
+
         return [
             'id' => $field->id,
             'name' => $field->name,
             'slug' => $field->slug,
             'type' => $field->type,
-            'options' => $field->options,
+            'options' => $options,
             'order' => $field->order,
             'is_required' => $field->isRequired,
         ];

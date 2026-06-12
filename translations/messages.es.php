@@ -402,6 +402,7 @@ return [
     'fields.relation.select_multi'   => 'Seleccionar entradas de relación',
     'fields.relation.clear'          => 'Limpiar selección',
     'fields.relation.add_selected'   => 'Agregar seleccionados',
+    'fields.relation.load_error'     => 'No se pudieron cargar los elementos relacionados',
 
     // Media field buttons
     'fields.media.select_single'     => 'Seleccionar un archivo',

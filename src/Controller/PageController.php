@@ -20,6 +20,7 @@ use App\Repository\PermissionRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\EavDataFormatterService;
+use App\Service\FieldRelationOptionsNormalizer;
 use App\Service\MediaSerializer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -49,6 +50,7 @@ class PageController extends InertiaController
         private ProjectMemberRepository $memberRepo,
         private UserPasswordHasherInterface $hasher,
         private PermissionRepository $permissionRepository,
+        private FieldRelationOptionsNormalizer $relationOptionsNormalizer,
     ) {}
 
     /** Cached ProjectMember resolved by denyProjectAccess() for reuse in buildUserCan(). */
@@ -839,39 +841,11 @@ class PageController extends InertiaController
     {
         $options = $field->options ?? [];
 
-        // Enrich relation options with the target collection's slug so the
-        // frontend can build API URLs without resolving integer IDs itself.
-        // Supports both formats:
-        //   - relation.collection (int ID) → resolve slug from DB
-        //   - targetCollection (string slug) → add collection_slug, keep targetCollection
-        //     (end_users, etc.). Do NOT replace targetCollection with relation.collection:
-        //     FieldFormModal expects targetCollection for non-Collection entities.
+        // Normalise les options relation au format canonique (relation.collection id,
+        // relation.type, collection_slug dérivé, targetCollection réservé à end_users),
+        // en absorbant tous les formats legacy.
         if ($field->type === 'relation') {
-            if (isset($options['relation']['collection']) && is_int($options['relation']['collection'])) {
-                $targetColl = $this->collectionRepository->find($options['relation']['collection']);
-                if ($targetColl) {
-                    $options['relation']['collection_slug'] = $targetColl->slug;
-                }
-            } elseif (isset($options['targetCollection'])) {
-                // Enrichir avec collection_slug pour RelationField/RelationModal,
-                // mais préserver targetCollection pour FieldFormModal.
-                if (!isset($options['relation']) || !is_array($options['relation'])) {
-                    $options['relation'] = ['type' => 1];
-                }
-                $options['relation']['collection_slug'] = $options['targetCollection'];
-            }
-            // Rétrocompatibilité : si relation.collection est un slug string
-            // (données antérieures à ce correctif), le convertir.
-            if (isset($options['relation']['collection']) && is_string($options['relation']['collection'])) {
-                $slug = $options['relation']['collection'];
-                if (!isset($options['targetCollection'])) {
-                    $options['targetCollection'] = $slug;
-                }
-                $options['relation']['collection_slug'] = $slug;
-                // Ne pas laisser le slug dans relation.collection (casse le contrat frontend)
-                // mais garder une trace pour que FieldFormModal sache quelle entité est ciblée
-                unset($options['relation']['collection']);
-            }
+            $options = $this->relationOptionsNormalizer->normalize($options, $collection->project) ?? [];
         }
 
         return [
