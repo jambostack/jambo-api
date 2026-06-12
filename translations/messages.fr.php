@@ -409,6 +409,7 @@ return [
     'fields.relation.select_multi'   => 'Sélectionner des entrées liées',
     'fields.relation.clear'          => 'Effacer la sélection',
     'fields.relation.add_selected'   => 'Ajouter la sélection',
+    'fields.relation.load_error'     => 'Impossible de charger les éléments liés',
 
     // Media field buttons
     'fields.media.select_single'     => 'Sélectionner un fichier',

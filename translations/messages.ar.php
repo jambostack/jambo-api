@@ -402,6 +402,7 @@ return [
     'fields.relation.select_multi'   => 'اختيار إدخالات العلاقة',
     'fields.relation.clear'          => 'مسح التحديد',
     'fields.relation.add_selected'   => 'إضافة المحدد',
+    'fields.relation.load_error'     => 'تعذّر تحميل العناصر المرتبطة',
 
     // Media field buttons
     'fields.media.select_single'     => 'اختيار ملف',

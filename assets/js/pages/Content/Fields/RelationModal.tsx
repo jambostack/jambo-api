@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { DataTable } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
 import { FileText } from 'lucide-react';
+import { toast } from 'sonner';
+import { END_USER_MODAL_FIELDS } from './endUserRelation';
 
 
 export default function RelationModal({ isOpen, onClose, field, value, onSelect }: { isOpen: boolean, onClose: () => void, field: Field, value: any, onSelect: (items: ContentEntry | ContentEntry[], fields: Field[]) => void }) {
@@ -29,22 +31,21 @@ export default function RelationModal({ isOpen, onClose, field, value, onSelect 
             // EndUsers → utiliser l'API admin end-users
             setSearchRoute(`/api/projects/${projectUuid}/end-users?per_page=50`);
             // Fake collection-shaped object avec les colonnes EndUser
-            setRelationCollection({ fields: [
-                { name: 'email', label: 'Email', type: 'email' },
-                { name: 'name', label: 'Name', type: 'text' },
-                { name: 'status', label: 'Status', type: 'text' },
-                { name: 'created_at', label: 'Created', type: 'datetime' },
-            ] } as any);
+            setRelationCollection({ fields: END_USER_MODAL_FIELDS } as any);
             return;
         }
 
         if (!collSlug) return;
-        const response = await axios.get(`/api/projects/${projectUuid}/collections/${collSlug}/fields`);
-        const statusParam = field.options?.includeDraft ? '' : '&status=published';
-        setSearchRoute(`/api/projects/${projectUuid}/collections/${collSlug}/entries?per_page=50${statusParam}`);
-        // Wrap fields array into a collection-shaped object expected by generateColumns
-        const fields = response.data.data ?? response.data ?? [];
-        setRelationCollection({ fields } as any);
+        try {
+            const response = await axios.get(`/api/projects/${projectUuid}/collections/${collSlug}/fields`);
+            const statusParam = field.options?.includeDraft ? '' : '&status=published';
+            setSearchRoute(`/api/projects/${projectUuid}/collections/${collSlug}/entries?per_page=50${statusParam}`);
+            // Wrap fields array into a collection-shaped object expected by generateColumns
+            const fields = response.data.data ?? response.data ?? [];
+            setRelationCollection({ fields } as any);
+        } catch {
+            toast.error(t('fields.relation.load_error'));
+        }
     };
 
     useEffect(() => {
@@ -275,9 +276,9 @@ export default function RelationModal({ isOpen, onClose, field, value, onSelect 
                         <DataTable
                             columns={generateColumns()}
                             searchRoute={searchRoute ?? ''}
-                            pageName={`relation_${relationCollection?.project_id}_${relationCollection?.id}`}
+                            itemKey={isEndUsers ? 'uuid' : 'id'}
+                            pageName={`relation_${field.project_uuid ?? ''}_${field.id ?? field.name}`}
                             onRowClick={(item) => {
-                                const itemId = isEndUsers ? item.uuid : item.id;
                                 if (field.options?.relation?.type === 1) {
                                     onSelect(item as unknown as ContentEntry, relationCollection?.fields || []);
                                     onClose();

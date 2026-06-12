@@ -6,7 +6,9 @@ import RelationEntriesTable from '@/components/ui/relation-entries-table';
 import { ContentEntry, Field as CollectionField } from '@/types';
 import { PlusIcon, TrashIcon } from 'lucide-react';
 import axios from 'axios';
+import { toast } from 'sonner';
 import { useTranslation } from '@/lib/i18n';
+import { END_USER_DISPLAY_FIELDS } from './endUserRelation';
 
 export default function RelationField({ field, value, onChange, processing, errors }: FieldProps) {
     const t = useTranslation();
@@ -73,7 +75,7 @@ export default function RelationField({ field, value, onChange, processing, erro
         if (ids.length === 0) return;
 
         if (isEndUsers) {
-            // EndUsers: fetch depuis l'API admin
+            // EndUsers: fetch depuis l'API admin (filtre uuids[] côté serveur)
             const params = new URLSearchParams();
             ids.forEach(id => params.append('uuids[]', id));
             const euUrl = `/api/projects/${projectUuid}/end-users?${params.toString()}`;
@@ -81,13 +83,9 @@ export default function RelationField({ field, value, onChange, processing, erro
                 .then(res => {
                     const users = res.data.data ?? res.data ?? [];
                     setSelectedEntries(users);
-                    setDisplayFields([
-                        { name: 'email', label: 'Email', type: 'email' } as CollectionField,
-                        { name: 'name', label: 'Name', type: 'text' } as CollectionField,
-                        { name: 'status', label: 'Status', type: 'text' } as CollectionField,
-                    ] as CollectionField[]);
+                    setDisplayFields(END_USER_DISPLAY_FIELDS);
                 })
-                .catch(() => {});
+                .catch(() => toast.error(t('fields.relation.load_error')));
             return;
         }
 
@@ -108,7 +106,7 @@ export default function RelationField({ field, value, onChange, processing, erro
                 const filtered = relFields.filter(f => !f.options?.hideInContentList && f.type !== 'password' && f.type !== 'json');
                 setDisplayFields(filtered);
             })
-            .catch(() => {});
+            .catch(() => toast.error(t('fields.relation.load_error')));
     }, [value]);
 
     return (
