@@ -7,6 +7,8 @@ use App\Repository\EndUserFieldRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\FieldRelationOptionsNormalizer;
+use App\Service\NamingConvention;
 use Doctrine\ORM\EntityManagerInterface;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -30,6 +32,7 @@ class EndUserSchemaController extends AbstractController
         private EntityManagerInterface $em,
         private Security $security,
         private ApiTokenChecker $tokenChecker,
+        private FieldRelationOptionsNormalizer $relationOptionsNormalizer,
     ) {}
 
     #[OA\Get(
@@ -130,14 +133,16 @@ class EndUserSchemaController extends AbstractController
 
         $data = $request->toArray();
 
-        $name = trim($data['name'] ?? '');
+        $rawName = trim($data['name'] ?? '');
         $type = trim($data['type'] ?? '');
 
-        if ($name === '' || $type === '') {
+        if ($rawName === '' || $type === '') {
             return $this->json(['errors' => ['name' => 'Name and type are required']], 422);
         }
 
-        $slug = $data['slug'] ?? $this->toSlug($name);
+        // Norme canonique Jambo : nom de champ camelCase, slug snake_case dérivé.
+        $name = NamingConvention::toCamelCase($rawName);
+        $slug = NamingConvention::toSnakeCase($data['slug'] ?? $rawName);
 
         if ($this->fieldRepository->findOneByProjectAndSlug($project, $slug) !== null) {
             return $this->json(['errors' => ['slug' => 'A field with this slug already exists']], 422);
@@ -150,7 +155,7 @@ class EndUserSchemaController extends AbstractController
         $field->name      = $name;
         $field->slug      = $slug;
         $field->type      = $type;
-        $field->options   = $data['options'] ?? null;
+        $field->options   = $this->normalizeOptions($type, $data['options'] ?? null, $project);
         $field->order     = $data['order'] ?? $count;
         $field->isRequired = (bool) ($data['is_required'] ?? false);
         $field->isSystem  = false;
@@ -203,10 +208,12 @@ class EndUserSchemaController extends AbstractController
         $data = $request->toArray();
 
         if (isset($data['name'])) {
-            $field->name = trim($data['name']);
+            // Norme canonique Jambo : nom de champ camelCase. Le slug reste stable
+            // (le renommer casserait les clés déjà stockées dans custom_fields).
+            $field->name = NamingConvention::toCamelCase($data['name']);
         }
         if (isset($data['options'])) {
-            $field->options = $data['options'];
+            $field->options = $this->normalizeOptions($field->type, $data['options'], $field->project);
         }
         if (isset($data['is_required'])) {
             $field->isRequired = (bool) $data['is_required'];
@@ -259,23 +266,37 @@ class EndUserSchemaController extends AbstractController
 
     private function serialize(EndUserField $field): array
     {
+        $options = $field->options;
+        // Lecture : enrichit les options de relation (collection_slug dérivé),
+        // à parité avec les champs de collection (cf. FieldController).
+        if ($field->type === 'relation' && $options !== null) {
+            $options = $this->relationOptionsNormalizer->normalize($options, $field->project);
+        }
+
         return [
             'id'          => $field->id,
             'name'        => $field->name,
             'label'       => $field->name,
             'slug'        => $field->slug,
             'type'        => $field->type,
-            'options'     => $field->options ?? [],
+            'options'     => $options ?? [],
             'order'       => $field->order,
             'required'    => $field->isRequired,
             'is_system'   => $field->isSystem,
         ];
     }
 
-    private function toSlug(string $name): string
+    /**
+     * Normalise les options avant stockage, à parité avec FieldController :
+     * les champs `relation` passent par le normalizer (validation cible +
+     * format canonique `targetCollection`) ; les autres types sont conservés.
+     */
+    private function normalizeOptions(string $type, ?array $options, \App\Entity\Project $project): ?array
     {
-        $slug = strtolower(trim($name));
-        $slug = preg_replace('/[^a-z0-9]+/', '_', $slug);
-        return trim($slug, '_');
+        if ($type !== 'relation' || $options === null) {
+            return $options;
+        }
+
+        return $this->relationOptionsNormalizer->normalize($options, $project, forStorage: true);
     }
 }

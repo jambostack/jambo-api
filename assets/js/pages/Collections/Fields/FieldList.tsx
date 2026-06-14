@@ -29,6 +29,13 @@ interface FieldListProps {
     apiBasePath?: string;
     /** Clé de prop Inertia à recharger après save/delete (défaut: 'collection') */
     reloadProp?: string;
+    /**
+     * Mode CONTRÔLÉ (opt-in). Si fourni, la liste se met à jour localement
+     * après create/edit/delete/reorder — SANS `router.reload` (pas d'aller-retour
+     * serveur, pas de réinitialisation de la page). Si absent, comportement
+     * historique : `router.reload({ only: [reloadProp] })`.
+     */
+    onFieldsChange?: (fields: Field[]) => void;
     initialFields: Field[];
     onAddFieldClick: () => void;
     collections: Array<{
@@ -42,9 +49,15 @@ interface FieldListProps {
     };
 }
 
-export default function FieldList({ projectId, projectUuid, collectionId, collectionSlug, apiBasePath, reloadProp = 'collection', initialFields, onAddFieldClick, collections, can }: FieldListProps) {
+export default function FieldList({ projectId, projectUuid, collectionId, collectionSlug, apiBasePath, reloadProp = 'collection', onFieldsChange, initialFields, onAddFieldClick, collections, can }: FieldListProps) {
     const t = useTranslation();
     const [fieldsList, setFieldsList] = useState([...initialFields].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+
+    // Met à jour l'état local et, en mode contrôlé, remonte au parent.
+    const commit = (next: Field[]) => {
+        setFieldsList(next);
+        onFieldsChange?.(next);
+    };
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [fieldToEdit, setFieldToEdit] = useState<Field | null>(null);
     const [fieldToDelete, setFieldToDelete] = useState<Field | null>(null);
@@ -63,7 +76,7 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
         items.splice(result.destination.index, 0, reorderedItem);
 
         // Update local state immediately for smooth UI
-        setFieldsList(items);
+        commit(items);
 
         // Update the order in the backend
         try {
@@ -75,7 +88,7 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
         } catch (error) {
             console.error('Failed to update field order:', error);
             // Revert to original order if the API call fails
-            setFieldsList(initialFields);
+            commit([...initialFields].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
         }
     };
 
@@ -89,9 +102,26 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
         setFieldToEdit(null);
     };
 
-    const handleFieldSaved = () => {
+    const handleFieldSaved = (savedField?: Field | null) => {
+        const editing = fieldToEdit;
         handleEditModalClose();
-        router.reload({ only: [reloadProp] });
+
+        // Mode historique (non contrôlé) : on recharge depuis le serveur.
+        if (!onFieldsChange) {
+            router.reload({ only: [reloadProp] });
+            return;
+        }
+
+        // Mode contrôlé : mise à jour locale, sans aller-retour serveur.
+        if (savedField) {
+            const exists = fieldsList.some(f => f.id === savedField.id);
+            commit(exists
+                ? fieldsList.map(f => (f.id === savedField.id ? { ...f, ...savedField } : f))
+                : [...fieldsList, savedField]);
+        } else if (editing) {
+            // savedField null = suppression depuis la modale d'édition
+            commit(fieldsList.filter(f => f.id !== editing.id));
+        }
     };
 
     const handleDeleteConfirm = async () => {
@@ -100,8 +130,14 @@ export default function FieldList({ projectId, projectUuid, collectionId, collec
         try {
             const deleteBase = apiBasePath ?? `/api/projects/${projectUuid}/collections/${collectionSlug}/fields`;
             await axios.delete(`${deleteBase}/${fieldToDelete.slug}`);
+            const deletedId = fieldToDelete.id;
             setFieldToDelete(null);
-            router.reload({ only: [reloadProp] });
+            setDeleting(false);
+            if (onFieldsChange) {
+                commit(fieldsList.filter(f => f.id !== deletedId));
+            } else {
+                router.reload({ only: [reloadProp] });
+            }
         } catch {
             setDeleting(false);
         }

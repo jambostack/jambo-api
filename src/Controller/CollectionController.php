@@ -6,6 +6,7 @@ use App\Entity\Collection;
 use App\Entity\Project;
 use App\Repository\CollectionRepository;
 use App\Repository\ProjectRepository;
+use App\Service\NamingConvention;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -51,8 +52,9 @@ class CollectionController extends AbstractController
         }
 
         $collection = new Collection();
-        $collection->name = $data['name'];
-        $collection->slug = $data['slug'] ?? strtolower(trim(preg_replace('/[^a-z0-9]+/i', '_', $data['name']), '_'));
+        // Norme canonique Jambo : nom PascalCase, slug snake_case dérivé.
+        $collection->name = NamingConvention::toPascalCase($data['name']);
+        $collection->slug = NamingConvention::toSnakeCase($data['slug'] ?? $data['name']);
         $collection->description = $data['description'] ?? null;
         $collection->isSingleton = $data['is_singleton'] ?? false;
         $collection->order = $data['order'] ?? 0;
@@ -109,10 +111,10 @@ class CollectionController extends AbstractController
         $data = $request->toArray();
 
         if (isset($data['name'])) {
-            $collection->name = $data['name'];
+            $collection->name = NamingConvention::toPascalCase($data['name']);
         }
         if (isset($data['slug'])) {
-            $collection->slug = $data['slug'];
+            $collection->slug = NamingConvention::toSnakeCase($data['slug']);
         }
         if (array_key_exists('description', $data)) {
             $collection->description = $data['description'];

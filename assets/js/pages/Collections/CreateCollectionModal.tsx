@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { slugify } from '@/lib/utils';
+import { toSnakeCase } from '@/lib/naming';
 import axios from 'axios';
 import { useTranslation } from '@/lib/i18n';
 
@@ -64,7 +64,7 @@ export default function CreateCollectionModal({ open, onOpenChange, projectId, p
     // Generate slug from name
     useEffect(() => {
         if (data.name) {
-            const generatedSlug = slugify(data.name);
+            const generatedSlug = toSnakeCase(data.name);
             setData('slug', generatedSlug);
         }
     }, [data.name]);

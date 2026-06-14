@@ -20,7 +20,7 @@ interface AddFieldModalProps {
     collectionSlug: string;
     /** Surcharge le chemin d'API par défaut */
     apiBasePath?: string;
-    onFieldCreated?: () => void;
+    onFieldCreated?: (createdField?: any) => void;
     collections: Array<{
         id: number;
         name: string;
@@ -46,10 +46,17 @@ export default function AddFieldModal({ isOpen, onClose, collectionId, projectId
         setSelectedFieldType(fieldType);
     };
 
+    // Fermeture simple (annulation) : ne déclenche PAS onFieldCreated.
     const handleFieldFormClose = () => {
         setSelectedFieldType(null);
         onClose();
-        onFieldCreated?.();
+    };
+
+    // Sauvegarde réussie : propage le champ créé au parent (mise à jour locale).
+    const handleFieldFormSaved = (createdField?: any) => {
+        setSelectedFieldType(null);
+        onClose();
+        onFieldCreated?.(createdField);
     };
 
     return (
@@ -112,7 +119,7 @@ export default function AddFieldModal({ isOpen, onClose, collectionId, projectId
                     projectUuid={projectUuid}
                     collectionSlug={collectionSlug}
                     apiBasePath={apiBasePath}
-                    onFieldSaved={onFieldCreated}
+                    onFieldSaved={handleFieldFormSaved}
                     collections={collections}
                     collectionFields={collectionFields}
                     can={can}

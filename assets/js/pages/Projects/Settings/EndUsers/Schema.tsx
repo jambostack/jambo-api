@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { UserCog } from 'lucide-react';
 
 import type { Project, BreadcrumbItem, UserCan, Field } from '@/types';
@@ -23,6 +23,11 @@ export default function EndUsersSchema({ project, userCan, endUserFields }: Prop
     const t = useTranslation();
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
+    // Source de vérité locale : évite un router.reload après chaque opération.
+    // Re-synchronisée si la prop Inertia change (navigation réelle).
+    const [fields, setFields] = useState<Field[]>(endUserFields);
+    useEffect(() => { setFields(endUserFields); }, [endUserFields]);
+
     const breadcrumbs: BreadcrumbItem[] = [
         { title: project.name, href: route('projects.show', project.id) },
         { title: t('end_users.heading'), href: route('projects.settings.end-users', project.id) },
@@ -37,9 +42,13 @@ export default function EndUsersSchema({ project, userCan, endUserFields }: Prop
         delete_field: userCan.access_end_users_settings,
     };
 
-    function handleFieldSaved() {
+    // Ajout d'un champ : on insère localement le champ créé (renvoyé par l'API),
+    // sans router.reload.
+    function handleFieldCreated(createdField?: Field) {
         setIsAddModalOpen(false);
-        router.reload({ only: ['endUserFields'] });
+        if (createdField) {
+            setFields(prev => (prev.some(f => f.id === createdField.id) ? prev : [...prev, createdField]));
+        }
     }
 
     return (
@@ -72,7 +81,8 @@ export default function EndUsersSchema({ project, userCan, endUserFields }: Prop
                         collectionSlug=""
                         apiBasePath={apiBasePath}
                         reloadProp="endUserFields"
-                        initialFields={endUserFields}
+                        onFieldsChange={setFields}
+                        initialFields={fields}
                         onAddFieldClick={() => setIsAddModalOpen(true)}
                         collections={(project.collections ?? []).map((c) => ({ id: c.id, name: c.name }))}
                         can={can}
@@ -86,9 +96,9 @@ export default function EndUsersSchema({ project, userCan, endUserFields }: Prop
                         projectUuid={project.uuid}
                         collectionSlug=""
                         apiBasePath={apiBasePath}
-                        onFieldCreated={handleFieldSaved}
+                        onFieldCreated={handleFieldCreated}
                         collections={(project.collections ?? []).map((c) => ({ id: c.id, name: c.name }))}
-                        collectionFields={endUserFields}
+                        collectionFields={fields}
                         can={can}
                     />
                 </div>
