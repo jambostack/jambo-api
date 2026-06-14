@@ -7,6 +7,7 @@ use App\Entity\Field;
 use App\Entity\Project;
 use App\Repository\CollectionRepository;
 use App\Repository\FieldRepository;
+use App\Service\NamingConvention;
 use App\Repository\ProjectRepository;
 use App\Service\FieldRelationOptionsNormalizer;
 use Doctrine\ORM\EntityManagerInterface;
@@ -56,8 +57,9 @@ class FieldController extends AbstractController
         }
 
         $field = new Field();
-        $field->name = $data['name'];
-        $field->slug = $data['slug'] ?? strtolower(trim(preg_replace('/[^a-z0-9]+/i', '_', $data['name']), '_'));
+        // Norme canonique Jambo : nom camelCase, slug snake_case dérivé.
+        $field->name = NamingConvention::toCamelCase($data['name']);
+        $field->slug = NamingConvention::toSnakeCase($data['slug'] ?? $data['name']);
         $field->type = $data['type'];
         $field->options = $this->normalizeOptions($field->type, $data['options'] ?? null, $collection);
         $field->order = $data['order'] ?? 0;
@@ -92,10 +94,10 @@ class FieldController extends AbstractController
         $data = $request->toArray();
 
         if (isset($data['name'])) {
-            $field->name = $data['name'];
+            $field->name = NamingConvention::toCamelCase($data['name']);
         }
         if (isset($data['slug'])) {
-            $field->slug = $data['slug'];
+            $field->slug = NamingConvention::toSnakeCase($data['slug']);
         }
         if (isset($data['type'])) {
             $field->type = $data['type'];

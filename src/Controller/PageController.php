@@ -897,6 +897,15 @@ class PageController extends InertiaController
 
     private function serializeEndUserField(EndUserField $field): array
     {
+        $options = $field->options ?? [];
+
+        // Parité avec serializeField : enrichit les options de relation
+        // (collection_slug dérivé) pour que l'édition d'options fonctionne aussi
+        // sur les champs end-user.
+        if ($field->type === 'relation') {
+            $options = $this->relationOptionsNormalizer->normalize($options, $field->project) ?? [];
+        }
+
         return [
             'id'           => $field->id,
             'project_id'   => $field->project->id,
@@ -906,7 +915,7 @@ class PageController extends InertiaController
             'label'        => $field->name,
             'slug'         => $field->slug,
             'type'         => $field->type,
-            'options'      => $field->options ?? [],
+            'options'      => $options,
             'order'        => $field->order,
             'required'     => $field->isRequired,
             'is_system'    => $field->isSystem,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
+import { toSnakeCase } from '@/lib/naming';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -54,7 +55,7 @@ interface ChatMessage {
   agentPlan?: AgentPlan;
   executionLog?: Array<{ tool: string; result: any }>;
 }
-interface EndUserFieldData { id: number; name: string; slug: string; type: string; required: boolean; order: number; is_system: boolean; }
+interface EndUserFieldData { id: number; name: string; slug: string; type: string; required: boolean; order: number; is_system: boolean; options?: Record<string, any>; }
 type StudioCommand = 'schema' | 'data' | 'all' | null;
 interface AgentPlan { plan: string; actions: Array<{ tool: string; params: any }>; }
 interface AttachmentFile {
@@ -68,7 +69,8 @@ interface AttachmentFile {
 }
 interface ExecLogEntry { tool: string; result: any; }
 
-function slugify(s: string) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
+// Slug canonique snake_case (conscient du camelCase), aligné back-end et agent IA.
+function slugify(s: string) { return toSnakeCase(s); }
 
 type MobileTab = 'collections' | 'editor' | 'chat';
 
@@ -822,16 +824,38 @@ function DesktopRightPanel({
 
 /* ══════════════════════════ END USER EDITOR ══════════════════════════ */
 function EndUserEditor({
-  fields, loading, onAdd, onUpdate, onDelete, newField, setNewField,
+  fields, loading, allCollections, onAdd, onUpdate, onDelete, newField, setNewField,
 }: {
   fields: EndUserFieldData[]; loading: boolean;
+  allCollections: SchemaCollection[];
   onAdd: () => void; onUpdate: (slug: string, data: Record<string, any>) => void;
   onDelete: (slug: string) => void;
   newField: { name: string; type: string; isRequired: boolean };
   setNewField: (f: { name: string; type: string; isRequired: boolean }) => void;
 }) {
+  const t = useTranslation();
   const systemFields = fields.filter(f => f.is_system);
   const customFields = fields.filter(f => !f.is_system);
+  const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
+
+  // Tous les types ont des options (au minimum les options générales).
+  const typeHasOptions = (_type: string) => true;
+
+  // Construit le SchemaField attendu par FieldOptionsEditor à partir d'un champ end-user.
+  const toSchemaField = (f: EndUserFieldData): SchemaField => ({ key: f.slug, name: f.name, slug: f.slug, type: f.type, isRequired: f.required, options: f.options });
+
+  // Normalisation des options à l'enregistrement (parité avec FieldRow.handleOptionsChange).
+  const handleOptionsChange = (f: EndUserFieldData, opts: FieldOptions) => {
+    if (f.type === 'relation') {
+      const { relationType, targetCollection, ...rest } = opts;
+      const targetSlug = (targetCollection ?? '').trim();
+      const normalized: Record<string, any> = { ...rest, relation: { type: relationType ?? 1 }, includeDraft: opts.includeDraft ?? false };
+      if (targetSlug !== '') normalized.targetCollection = targetSlug;
+      onUpdate(f.slug, { options: normalized });
+      return;
+    }
+    onUpdate(f.slug, { options: opts });
+  };
 
   if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:'40px' }}><Loader2 className="w-5 h-5 animate-spin" style={{ color:'var(--studio-accent)' }} /></div>;
 
@@ -856,28 +880,32 @@ function EndUserEditor({
 
       {/* System fields */}
       <div>
-        <h4 className="eue-section-title"><Shield className="w-3 h-3" style={{color:'var(--studio-amber)'}} />Champs système (protégés)</h4>
+        <h4 className="eue-section-title"><Shield className="w-3 h-3" style={{color:'var(--studio-amber)'}} />{t('studio.enduser.system_fields')}</h4>
         {systemFields.map(f => (
           <div key={f.slug} className="eue-field-row locked">
             <div className="eue-field-icon" style={{ background:'rgba(247,185,85,.10)', color:'var(--studio-amber)' }}><Lock className="w-3 h-3" /></div>
             <span className="eue-field-name">{f.name}</span>
             <span className="eue-field-type">[{f.type}]</span>
-            <span className="eue-field-badge" style={{ background:'var(--studio-border)', color:'var(--studio-text-muted)' }}>système</span>
+            <span className="eue-field-badge" style={{ background:'var(--studio-border)', color:'var(--studio-text-muted)' }}>{t('studio.enduser.system_badge')}</span>
           </div>
         ))}
       </div>
 
       {/* Custom fields */}
       <div>
-        <h4 className="eue-section-title"><FolderOpen className="w-3 h-3" />Champs personnalisés · {customFields.length}</h4>
-        {customFields.map(f => (
-          <div key={f.slug} className="eue-field-row" style={{ flexWrap:'wrap', gap:'6px', alignItems:'center' }}>
+        <h4 className="eue-section-title"><FolderOpen className="w-3 h-3" />{t('studio.enduser.custom_fields')} · {customFields.length}</h4>
+        {customFields.map(f => {
+          const canEditOptions = typeHasOptions(f.type);
+          const isExpanded = expandedSlug === f.slug;
+          return (
+          <div key={f.slug} style={{ border:'1px solid var(--studio-border)', borderRadius:'7px', marginBottom:'4px', overflow:'hidden' }}>
+            <div className="eue-field-row" style={{ flexWrap:'wrap', gap:'6px', alignItems:'center', marginBottom:0, border:'none', borderRadius:0 }}>
             <div className="eue-field-icon" style={{ background:'rgba(47,207,143,.10)', color:'var(--studio-accent)' }}><Pencil className="w-3 h-3" /></div>
             <input
               value={f.name}
               onChange={e => onUpdate(f.slug, { name: e.target.value })}
               style={{ flex:1, minWidth:'100px', height:'28px', fontSize:'11px', background:'var(--studio-bg)', border:'1px solid var(--studio-border)', borderRadius:'5px', color:'var(--studio-text)', padding:'0 6px', outline:'none' }}
-              placeholder="Nom"
+              placeholder={t('studio.enduser.name_ph')}
             />
             <select
               value={f.type}
@@ -888,26 +916,39 @@ function EndUserEditor({
             </select>
             <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
               <Switch checked={f.required} onCheckedChange={v => onUpdate(f.slug, { is_required: v })} />
-              <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>Requis</span>
+              <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>{t('studio.enduser.required')}</span>
             </div>
+            {canEditOptions && (
+              <button onClick={() => setExpandedSlug(isExpanded ? null : f.slug)} title={t('studio.enduser.field_options')}
+                style={{ background:'none',border:'none',cursor:'pointer',padding:'2px',color:'var(--studio-text-muted)',transition:'transform .15s',transform:isExpanded?'rotate(180deg)':'none',flexShrink:0 }}>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button onClick={() => onDelete(f.slug)} style={{ background:'none',border:'none',cursor:'pointer',padding:'4px',opacity:.5,flexShrink:0 }}>
               <Trash2 className="w-3.5 h-3.5" style={{color:'var(--studio-red)'}} />
             </button>
+            </div>
+            {canEditOptions && isExpanded && (
+              <div style={{ padding:'4px 10px 10px 38px', background:'var(--studio-surface)', borderTop:'1px solid var(--studio-border)' }}>
+                <FieldOptionsEditor field={toSchemaField(f)} allCollections={allCollections} onChange={opts => handleOptionsChange(f, opts)} />
+              </div>
+            )}
           </div>
-        ))}
-        {customFields.length === 0 && <p style={{ fontSize:'11px', color:'var(--studio-text-muted)', padding:'8px 0' }}>Aucun champ personnalisé.</p>}
+          );
+        })}
+        {customFields.length === 0 && <p style={{ fontSize:'11px', color:'var(--studio-text-muted)', padding:'8px 0' }}>{t('studio.enduser.no_custom')}</p>}
 
         {/* Add field */}
         <div className="eue-add-row">
-          <input placeholder="Nom du champ" value={newField.name} onChange={e => setNewField({...newField, name:e.target.value})} onKeyDown={e => e.key==='Enter' && onAdd()} />
+          <input placeholder={t('studio.enduser.field_name_ph')} value={newField.name} onChange={e => setNewField({...newField, name:e.target.value})} onKeyDown={e => e.key==='Enter' && onAdd()} />
           <select value={newField.type} onChange={e => setNewField({...newField, type:e.target.value})}>
             {FIELD_TYPES.map(ft => (<option key={ft.type} value={ft.type}>{ft.label}</option>))}
           </select>
           <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
             <Switch checked={newField.isRequired} onCheckedChange={v => setNewField({...newField, isRequired:v})} />
-            <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>Requis</span>
+            <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>{t('studio.enduser.required')}</span>
           </div>
-          <Button size="sm" onClick={onAdd} disabled={!newField.name.trim()} style={{ height:'30px', fontSize:'10px', background:'var(--studio-accent)', color:'#000', whiteSpace:'nowrap' }}><Plus className="w-3 h-3 mr-1" />Ajouter</Button>
+          <Button size="sm" onClick={onAdd} disabled={!newField.name.trim()} style={{ height:'30px', fontSize:'10px', background:'var(--studio-accent)', color:'#000', whiteSpace:'nowrap' }}><Plus className="w-3 h-3 mr-1" />{t('studio.enduser.add')}</Button>
         </div>
       </div>
     </div>
@@ -1022,13 +1063,21 @@ export default function SchemaBuilder({ project }: { project: Project }) {
       if (res.ok) { await loadEndUserFields(); setEndUserNew({ name: '', type: 'text', isRequired: false }); }
     } catch {}
   }
-  async function updateEndUserField(slug: string, data: Record<string, any>) {
-    try {
-      await fetch(`/api/projects/${project.uuid}/end-users/fields/${slug}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
-      });
-      await loadEndUserFields();
-    } catch {}
+  function updateEndUserField(slug: string, data: Record<string, any>) {
+    // MAJ locale optimiste (réactif, pas de reload qui casserait la saisie des options).
+    setEndUserFields(prev => prev.map(f => {
+      if (f.slug !== slug) return f;
+      const next = { ...f };
+      if ('name' in data) next.name = data.name;
+      if ('type' in data) next.type = data.type;
+      if ('is_required' in data) next.required = data.is_required;
+      if ('options' in data) next.options = data.options;
+      return next;
+    }));
+    // Persistance en arrière-plan (le serveur normalise nom/slug/options).
+    fetch(`/api/projects/${project.uuid}/end-users/fields/${slug}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    }).catch(() => {});
   }
   async function deleteEndUserField(slug: string) {
     try {
@@ -1243,7 +1292,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
         <div className="sb-editor desktop-editor">
           <style>{`@media(max-width:1024px){.desktop-editor{display:none!important}}`}</style>
           {isEndUsers ? (
-            <EndUserEditor fields={endUserFields} loading={endUserLoading} onAdd={addEndUserField} onUpdate={updateEndUserField} onDelete={deleteEndUserField} newField={endUserNew} setNewField={setEndUserNew} />
+            <EndUserEditor fields={endUserFields} loading={endUserLoading} allCollections={collections} onAdd={addEndUserField} onUpdate={updateEndUserField} onDelete={deleteEndUserField} newField={endUserNew} setNewField={setEndUserNew} />
           ) : (
             renderEditor(current, selectedIdx, collections, untitled, t, selectPrev, selectNext, addCollection, updateCollection, removeCollection, addField, updateField, removeField, duplicateField, generatePreview)
           )}
@@ -1271,7 +1320,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
         </div>
         <div style={{ display: mobileTab === 'editor' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           {isEndUsers ? (
-            <EndUserEditor fields={endUserFields} loading={endUserLoading} onAdd={addEndUserField} onUpdate={updateEndUserField} onDelete={deleteEndUserField} newField={endUserNew} setNewField={setEndUserNew} />
+            <EndUserEditor fields={endUserFields} loading={endUserLoading} allCollections={collections} onAdd={addEndUserField} onUpdate={updateEndUserField} onDelete={deleteEndUserField} newField={endUserNew} setNewField={setEndUserNew} />
           ) : (
             <MobileEditorView
               current={current} selectedIdx={selectedIdx} total={collections.length}
@@ -1345,6 +1394,9 @@ interface FieldOptions {
   relationType?: number;        // 1 = One to One, 2 = One to Many
   includeDraft?: boolean;
   toolbar?: ('bold'|'italic'|'link'|'image'|'list'|'heading')[];
+  jsonDefault?: string;         // valeur JSON par défaut (champs json)
+  defaultBool?: boolean;        // valeur par défaut (champs boolean)
+  minDate?: string; maxDate?: string; // bornes (champs date/datetime/time)
   helpText?: string; hideInList?: boolean; readOnly?: boolean;
 }
 const FIELD_OPTION_DEFAULTS: Record<string, Partial<FieldOptions>> = {
@@ -1354,6 +1406,7 @@ const FIELD_OPTION_DEFAULTS: Record<string, Partial<FieldOptions>> = {
   enumeration: { values: [] },
   media: { mediaTypes: ['image'], multiple: false },
   relation: { targetCollection: '', relationType: 1, includeDraft: false },
+  json: { jsonDefault: '' },
 };
 function parseFieldOptions(field: SchemaField, allCollections?: SchemaCollection[]): FieldOptions {
   try {
@@ -1387,70 +1440,138 @@ function parseFieldOptions(field: SchemaField, allCollections?: SchemaCollection
   } catch { return {}; }
 }
 function FieldOptionsEditor({ field, allCollections, onChange }: { field: SchemaField; allCollections: SchemaCollection[]; onChange: (opts: FieldOptions) => void; }) {
+  const t = useTranslation();
   const opts = parseFieldOptions(field, allCollections);
   const defaults = FIELD_OPTION_DEFAULTS[field.type] ?? {};
   const S = {
     input: { height:'28px', fontSize:'10px', background:'var(--studio-bg)', borderColor:'var(--studio-border)', color:'var(--studio-text)', borderRadius:'5px', padding:'0 6px', outline:'none' } as React.CSSProperties,
     label: { fontSize:'10px', color:'var(--studio-text-muted)', marginBottom:'3px', display:'block' as const },
   };
+  // Options générales communes à tous les types.
+  const general = (
+    <>
+      <div><span style={S.label}>{t('studio.fopts.help_text')}</span><input value={opts.helpText ?? ''} onChange={e => onChange({ ...opts, helpText: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.hideInList ?? false} onCheckedChange={v => onChange({ ...opts, hideInList: v })} /><span style={S.label}>{t('studio.fopts.hide_in_list')}</span></div>
+      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.readOnly ?? false} onCheckedChange={v => onChange({ ...opts, readOnly: v })} /><span style={S.label}>{t('studio.fopts.read_only')}</span></div>
+    </>
+  );
+  const panelStyle: React.CSSProperties = { marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'flex', flexDirection:'column', gap:'6px' };
+  if (field.type === 'email') {
+    return (
+      <div style={panelStyle}>
+        <div><span style={S.label}>{t('studio.fopts.placeholder')}</span><input value={opts.placeholder ?? ''} onChange={e => onChange({ ...opts, placeholder: e.target.value })} style={{ ...S.input, width:'100%' }} placeholder={t('studio.fopts.email_ph')} /></div>
+        <div><span style={S.label}>{t('studio.fopts.default')}</span><input type="email" value={opts.defaultValue ?? ''} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+        {general}
+      </div>
+    );
+  }
+  if (field.type === 'password') {
+    return (
+      <div style={{ ...panelStyle, display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+        <div><span style={S.label}>{t('studio.fopts.min_length')}</span><input type="number" value={opts.minLength ?? ''} onChange={e => onChange({ ...opts, minLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>{t('studio.fopts.max_length')}</span><input type="number" value={opts.maxLength ?? ''} onChange={e => onChange({ ...opts, maxLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', gap:'6px' }}>{general}</div>
+      </div>
+    );
+  }
+  if (field.type === 'slug') {
+    return (
+      <div style={panelStyle}>
+        <div><span style={S.label}>{t('studio.fopts.placeholder')}</span><input value={opts.placeholder ?? ''} onChange={e => onChange({ ...opts, placeholder: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+        {general}
+      </div>
+    );
+  }
+  if (field.type === 'boolean') {
+    return (
+      <div style={panelStyle}>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.defaultBool ?? false} onCheckedChange={v => onChange({ ...opts, defaultBool: v })} /><span style={S.label}>{t('studio.fopts.default_bool')}</span></div>
+        {general}
+      </div>
+    );
+  }
+  if (field.type === 'color') {
+    return (
+      <div style={panelStyle}>
+        <span style={S.label}>{t('studio.fopts.default_color')}</span>
+        <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+          <input type="color" value={opts.defaultValue || '#000000'} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} style={{ width:'36px', height:'28px', padding:0, background:'none', border:'1px solid var(--studio-border)', borderRadius:'5px', cursor:'pointer' }} />
+          <input value={opts.defaultValue ?? ''} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} placeholder="#000000" style={{ ...S.input, flex:1, fontFamily:'var(--studio-mono)' }} />
+        </div>
+        {general}
+      </div>
+    );
+  }
+  if (field.type === 'date' || field.type === 'datetime' || field.type === 'time') {
+    const inputType = field.type === 'time' ? 'time' : field.type === 'datetime' ? 'datetime-local' : 'date';
+    return (
+      <div style={{ ...panelStyle, display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+        <div><span style={S.label}>{t('studio.fopts.min')}</span><input type={inputType} value={opts.minDate ?? ''} onChange={e => onChange({ ...opts, minDate: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>{t('studio.fopts.max')}</span><input type={inputType} value={opts.maxDate ?? ''} onChange={e => onChange({ ...opts, maxDate: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+        <div style={{ gridColumn:'1/-1' }}><span style={S.label}>{t('studio.fopts.default')}</span><input type={inputType} value={opts.defaultValue ?? ''} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+        <div style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', gap:'6px' }}>{general}</div>
+      </div>
+    );
+  }
   if (field.type === 'enumeration') {
     const values = opts.values ?? (defaults.values ?? []);
     return (
       <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)' }}>
-        <span style={S.label}>Valeurs de l'énumération</span>
+        <span style={S.label}>{t('studio.fopts.enum_values')}</span>
         <div style={{ display:'flex', flexDirection:'column', gap:'3px', marginBottom:'6px' }}>
           {values.map((v: string, i: number) => (
             <div key={i} style={{ display:'flex', gap:'4px', alignItems:'center' }}>
-              <input value={v} onChange={e => { const nv = [...values]; nv[i] = e.target.value; onChange({ ...opts, values: nv }); }} style={{ ...S.input, flex:1 }} placeholder={`Valeur ${i+1}`} />
+              <input value={v} onChange={e => { const nv = [...values]; nv[i] = e.target.value; onChange({ ...opts, values: nv }); }} style={{ ...S.input, flex:1 }} placeholder={t('studio.fopts.enum_value_n', { n: String(i+1) })} />
               <button onClick={() => onChange({ ...opts, values: values.filter((_, j) => j !== i) })} style={{ background:'none',border:'none',cursor:'pointer',padding:'2px' }}><Trash2 className="w-3 h-3" style={{ color:'var(--studio-red)' }} /></button>
             </div>
           ))}
         </div>
-        <Button size="sm" variant="outline" onClick={() => onChange({ ...opts, values: [...values, ''] })} style={{ height:'22px', fontSize:'9px' }}><Plus className="w-2.5 h-2.5 mr-1" />Ajouter une valeur</Button>
+        <Button size="sm" variant="outline" onClick={() => onChange({ ...opts, values: [...values, ''] })} style={{ height:'22px', fontSize:'9px' }}><Plus className="w-2.5 h-2.5 mr-1" />{t('studio.fopts.enum_add')}</Button>
       </div>
     );
   }
   if (field.type === 'number') {
     return (
       <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-        <div><span style={S.label}>Min</span><input type="number" value={opts.min ?? ''} onChange={e => onChange({ ...opts, min: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
-        <div><span style={S.label}>Max</span><input type="number" value={opts.max ?? ''} onChange={e => onChange({ ...opts, max: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
-        <div><span style={S.label}>Pas</span><input type="number" value={opts.step ?? ''} onChange={e => onChange({ ...opts, step: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
-        <div><span style={S.label}>Défaut</span><input value={opts.defaultValue ?? ''} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>{t('studio.fopts.min')}</span><input type="number" value={opts.min ?? ''} onChange={e => onChange({ ...opts, min: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>{t('studio.fopts.max')}</span><input type="number" value={opts.max ?? ''} onChange={e => onChange({ ...opts, max: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>{t('studio.fopts.step')}</span><input type="number" value={opts.step ?? ''} onChange={e => onChange({ ...opts, step: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>{t('studio.fopts.default')}</span><input value={opts.defaultValue ?? ''} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
       </div>
     );
   }
   if (field.type === 'text' || field.type === 'longtext') {
     return (
       <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-        <div style={{ gridColumn:'1/-1' }}><span style={S.label}>Placeholder</span><input value={opts.placeholder ?? ''} onChange={e => onChange({ ...opts, placeholder: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
-        <div><span style={S.label}>Longueur min</span><input type="number" value={opts.minLength ?? ''} onChange={e => onChange({ ...opts, minLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
-        <div><span style={S.label}>Longueur max</span><input type="number" value={opts.maxLength ?? ''} onChange={e => onChange({ ...opts, maxLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
-        <div style={{ gridColumn:'1/-1' }}><span style={S.label}>Pattern regex</span><input value={opts.pattern ?? ''} onChange={e => onChange({ ...opts, pattern: e.target.value })} style={{ ...S.input, width:'100%', fontFamily:'var(--studio-mono)' }} /></div>
+        <div style={{ gridColumn:'1/-1' }}><span style={S.label}>{t('studio.fopts.placeholder')}</span><input value={opts.placeholder ?? ''} onChange={e => onChange({ ...opts, placeholder: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>{t('studio.fopts.min_length')}</span><input type="number" value={opts.minLength ?? ''} onChange={e => onChange({ ...opts, minLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div><span style={S.label}>{t('studio.fopts.max_length')}</span><input type="number" value={opts.maxLength ?? ''} onChange={e => onChange({ ...opts, maxLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
+        <div style={{ gridColumn:'1/-1' }}><span style={S.label}>{t('studio.fopts.pattern')}</span><input value={opts.pattern ?? ''} onChange={e => onChange({ ...opts, pattern: e.target.value })} style={{ ...S.input, width:'100%', fontFamily:'var(--studio-mono)' }} /></div>
       </div>
     );
   }
   if (field.type === 'media') {
     const types = opts.mediaTypes ?? (defaults.mediaTypes ?? ['image']);
-    const toggleType = (t: 'image'|'video'|'document') => { const next = types.includes(t) ? types.filter(x => x !== t) : [...types, t]; onChange({ ...opts, mediaTypes: next.length > 0 ? next : ['image'] }); };
+    const toggleType = (mt: 'image'|'video'|'document') => { const next = types.includes(mt) ? types.filter(x => x !== mt) : [...types, mt]; onChange({ ...opts, mediaTypes: next.length > 0 ? next : ['image'] }); };
+    const mediaLabel: Record<string, string> = { image: '🖼️ ' + t('studio.fopts.media_image'), video: '🎬 ' + t('studio.fopts.media_video'), document: '📄 ' + t('studio.fopts.media_document') };
     return (
       <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)' }}>
-        <span style={S.label}>Types de médias acceptés</span>
+        <span style={S.label}>{t('studio.fopts.media_types')}</span>
         <div style={{ display:'flex', gap:'6px', marginBottom:'8px' }}>
-          {(['image','video','document'] as const).map(t => (
-            <button key={t} onClick={() => toggleType(t)} style={{ padding:'4px 8px', borderRadius:'5px', fontSize:'10px', cursor:'pointer', border:'1px solid var(--studio-border)', background: types.includes(t) ? 'var(--studio-accent-dim)' : 'transparent', color: types.includes(t) ? 'var(--studio-accent)' : 'var(--studio-text-dim)' }}>
-              {t === 'image' ? '🖼️ Image' : t === 'video' ? '🎬 Vidéo' : '📄 Document'}
+          {(['image','video','document'] as const).map(mt => (
+            <button key={mt} onClick={() => toggleType(mt)} style={{ padding:'4px 8px', borderRadius:'5px', fontSize:'10px', cursor:'pointer', border:'1px solid var(--studio-border)', background: types.includes(mt) ? 'var(--studio-accent-dim)' : 'transparent', color: types.includes(mt) ? 'var(--studio-accent)' : 'var(--studio-text-dim)' }}>
+              {mediaLabel[mt]}
             </button>
           ))}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.multiple ?? defaults.multiple ?? false} onCheckedChange={v => onChange({ ...opts, multiple: v })} /><span style={S.label}>Fichiers multiples</span></div>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.multiple ?? defaults.multiple ?? false} onCheckedChange={v => onChange({ ...opts, multiple: v })} /><span style={S.label}>{t('studio.fopts.multiple_files')}</span></div>
       </div>
     );
   }
   if (field.type === 'relation') {
     // Merge EndUsers comme option système + allCollections
     const relationTargets = [
-      { key: '__end_users__', name: 'EndUsers (système)', slug: 'end_users' },
+      { key: '__end_users__', name: t('studio.fopts.end_users_system'), slug: 'end_users' },
       ...allCollections.filter(c => c.slug && c.slug !== 'end_users'),
     ];
     const relType = opts.relationType ?? (defaults.relationType ?? 1);
@@ -1458,37 +1579,53 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
     return (
       <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'flex', flexDirection:'column', gap:'8px' }}>
         <div>
-          <span style={S.label}>Collection liée</span>
+          <span style={S.label}>{t('studio.fopts.related_collection')}</span>
           <select value={opts.targetCollection ?? ''} onChange={e => onChange({ ...opts, targetCollection: e.target.value })} style={{ ...S.input, width:'100%', marginTop:'4px' }}>
-            <option value="">— Sélectionner —</option>
+            <option value="">{t('studio.fopts.select')}</option>
             {relationTargets.map(c => (<option key={c.key} value={c.slug}>{c.name || c.slug}</option>))}
           </select>
         </div>
         <div>
-          <span style={S.label}>Type de relation</span>
+          <span style={S.label}>{t('studio.fopts.relation_type')}</span>
           <div style={{ display:'flex', gap:'12px', marginTop:'4px' }}>
             <label style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'10px', cursor:'pointer' }}>
               <input type="radio" name={`relType_${field.key}`} value="1" checked={relType === 1} onChange={() => onChange({ ...opts, relationType: 1 })} />
-              One to One
+              {t('studio.fopts.one_to_one')}
             </label>
             <label style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'10px', cursor:'pointer' }}>
               <input type="radio" name={`relType_${field.key}`} value="2" checked={relType === 2} onChange={() => onChange({ ...opts, relationType: 2 })} />
-              One to Many
+              {t('studio.fopts.one_to_many')}
             </label>
           </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
           <Switch checked={includeDraft} onCheckedChange={v => onChange({ ...opts, includeDraft: v })} />
-          <span style={S.label}>Inclure les brouillons (draft)</span>
+          <span style={S.label}>{t('studio.fopts.include_draft')}</span>
         </div>
       </div>
     );
   }
+  if (field.type === 'json') {
+    const raw = opts.jsonDefault ?? '';
+    const jsonValid = raw.trim() === '' || (() => { try { JSON.parse(raw); return true; } catch { return false; } })();
+    return (
+      <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'flex', flexDirection:'column', gap:'6px' }}>
+        <span style={S.label}>{t('studio.fopts.json_default')}</span>
+        <textarea
+          value={raw}
+          onChange={e => onChange({ ...opts, jsonDefault: e.target.value })}
+          placeholder={'{\n  "key": "value"\n}'}
+          spellCheck={false}
+          style={{ ...S.input, height:'auto', minHeight:'72px', padding:'6px', fontFamily:'var(--studio-mono)', lineHeight:'1.4', resize:'vertical', borderColor: jsonValid ? 'var(--studio-border)' : 'var(--studio-red)' }}
+        />
+        {!jsonValid && <span style={{ fontSize:'9px', color:'var(--studio-red)' }}>{t('studio.fopts.json_invalid')}</span>}
+        {general}
+      </div>
+    );
+  }
   return (
-    <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'flex', flexDirection:'column', gap:'6px' }}>
-      <div><span style={S.label}>Texte d'aide</span><input value={opts.helpText ?? ''} onChange={e => onChange({ ...opts, helpText: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
-      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.hideInList ?? false} onCheckedChange={v => onChange({ ...opts, hideInList: v })} /><span style={S.label}>Masquer dans les listes</span></div>
-      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.readOnly ?? false} onCheckedChange={v => onChange({ ...opts, readOnly: v })} /><span style={S.label}>Lecture seule</span></div>
+    <div style={panelStyle}>
+      {general}
     </div>
   );
 }
@@ -1575,8 +1712,7 @@ function FieldRow({
   const [dragOver, setDragOver] = useState<number | null>(null);
   const Icon = ICON_MAP[field.type] || Type;
   const hasName = field.name.trim().length > 0;
-  const hasOptions = field.type === 'enumeration' || field.type === 'number' || field.type === 'text'
-    || field.type === 'longtext' || field.type === 'media' || field.type === 'relation';
+  const hasOptions = true; // tous les types ont des options (au minimum générales)
 
   function handleOptionsChange(opts: FieldOptions) {
     // Relations : le client n'envoie que le slug cible (targetCollection) et le

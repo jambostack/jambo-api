@@ -1,7 +1,8 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { cn, slugify } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { toCamelCase } from '@/lib/naming';
 import { toast } from 'sonner';
 import { useTranslation } from '@/lib/i18n';
 
@@ -30,7 +31,13 @@ export interface FieldFormModalProps {
     collectionSlug: string;
     /** Surcharge le chemin d'API par défaut (pour EndUsers, etc.) */
     apiBasePath?: string;
-    onFieldSaved?: () => void;
+    /**
+     * Appelé après une sauvegarde réussie.
+     * @param savedField le champ créé/modifié (depuis la réponse API), ou `null`
+     *   lors d'une suppression. Permet au parent de mettre à jour sa liste
+     *   localement, sans `router.reload`.
+     */
+    onFieldSaved?: (savedField?: any) => void;
     collections: Array<{
         id: number;
         name: string;
@@ -296,16 +303,14 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
         const base = apiBasePath ?? `/api/projects/${projectUuid}/collections/${collectionSlug}/fields`;
 
         try {
-            if (editField) {
-                await axios.patch(`${base}/${editField.slug}`, submitData);
-                toast.success(t('fields.save_success'));
-            } else {
-                await axios.post(base, submitData);
-                toast.success(t('fields.save_success'));
-            }
+            const res = editField
+                ? await axios.patch(`${base}/${editField.slug}`, submitData)
+                : await axios.post(base, submitData);
+            const savedField = res.data?.data ?? res.data;
+            toast.success(t('fields.save_success'));
             reset();
             onClose();
-            onFieldSaved?.();
+            onFieldSaved?.(savedField);
         } catch (err: any) {
             const errs = err.response?.data?.errors ?? {};
             setErrors(errs);
@@ -319,13 +324,17 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
         const { name, value } = e.target;
         
         if (name === 'label') {
-            // Generate slug from label
-            const slug = slugify(value);
-            
+            // Nom de champ canonique camelCase ; le back dérive le slug snake_case.
             setData(data => ({
                 ...data,
                 label: value,
-                name: slug,
+                name: toCamelCase(value),
+            }));
+        } else if (name === 'name') {
+            // L'identifiant édité manuellement reste canonique (camelCase).
+            setData(data => ({
+                ...data,
+                name: toCamelCase(value),
             }));
         } else {
             setData(data => ({
@@ -360,8 +369,10 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
             await axios.delete(`${base}/${editField.slug}`);
             toast.success(t('fields.delete_success'));
             reset();
+            // null = suppression : le parent retire l'élément de sa liste.
+            // Appelé avant onClose() pour que le parent connaisse encore le champ édité.
+            onFieldSaved?.(null);
             onClose();
-            onFieldSaved?.();
         } catch {
             toast.error(t('fields.delete_error'));
         } finally {
