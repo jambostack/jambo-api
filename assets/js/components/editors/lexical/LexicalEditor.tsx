@@ -13,7 +13,7 @@ import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 
 import {
     $getRoot, $getSelection, $isRangeSelection, $createParagraphNode, $isElementNode,
-    FORMAT_TEXT_COMMAND, UNDO_COMMAND, REDO_COMMAND, EditorState,
+    FORMAT_TEXT_COMMAND, FORMAT_ELEMENT_COMMAND, UNDO_COMMAND, REDO_COMMAND, EditorState,
 } from 'lexical';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import { HeadingNode, QuoteNode, $createHeadingNode } from '@lexical/rich-text';
@@ -24,6 +24,7 @@ import { CalloutNode } from './nodes/CalloutNode';
 import { $setBlocksType } from '@lexical/selection';
 import { $isListNode } from '@lexical/list';
 import { $isHeadingNode } from '@lexical/rich-text';
+import { HorizontalRuleNode, INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/react/LexicalHorizontalRuleNode';
 
 import type { Project, Asset } from '@/types';
 import { useAppearance } from '@/hooks/use-appearance';
@@ -35,6 +36,7 @@ import { Button } from '@/components/ui/button';
 import {
     Bold, Italic, Underline, Strikethrough, Link2, List, ListOrdered,
     Undo, Redo, Code, Image as ImageIcon, Heading1, Heading2, Heading3, X,
+    TextQuote, Code2, Minus,
 } from 'lucide-react';
 
 interface LexicalEditorProps {
@@ -134,6 +136,8 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
     const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
     const [blockType, setBlockType] = useState('paragraph');
     const [showLinkPopover, setShowLinkPopover] = useState(false);
+    const [isBlockquote, setIsBlockquote] = useState(false);
+    const [isCodeBlock, setIsCodeBlock] = useState(false);
 
     useEffect(() => {
         return editor.registerUpdateListener(({ editorState }) => {
@@ -153,6 +157,17 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
                 const element = anchorNode.getKey() === 'root'
                     ? anchorNode
                     : anchorNode.getTopLevelElementOrThrow();
+
+                // Blockquote detection: check parents for a quote node
+                setIsBlockquote(
+                    anchorNode.getParents().some(p => p.getType() === 'quote')
+                );
+
+                // Code block detection: check if the top-level element or its parents are CodeNode
+                const codeCheck =
+                    element.getType() === 'code' ||
+                    anchorNode.getParents().some(p => p.getType() === 'code');
+                setIsCodeBlock(codeCheck);
 
                 if ($isListNode(element)) {
                     setBlockType(element.getListType());
@@ -223,6 +238,34 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
                 )}
             </div>
             <button type="button" className={btn(false)} onClick={onAssetInsert} title="Insert image from library"><ImageIcon size={15} /></button>
+            <div className="w-px h-5 bg-border mx-1" />
+            {/* Blockquote */}
+            <button
+                type="button"
+                className={btn(isBlockquote)}
+                onClick={() => editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'quote')}
+                title="Quote"
+            >
+                <TextQuote size={15} />
+            </button>
+            {/* Code Block */}
+            <button
+                type="button"
+                className={btn(isCodeBlock)}
+                onClick={() => editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'code')}
+                title="Code Block"
+            >
+                <Code2 size={15} />
+            </button>
+            {/* Horizontal Rule */}
+            <button
+                type="button"
+                className={btn(false)}
+                onClick={() => editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined)}
+                title="Divider"
+            >
+                <Minus size={15} />
+            </button>
         </div>
     );
 }
@@ -293,7 +336,7 @@ export function LexicalEditor({ value = '', onChange }: LexicalEditorProps) {
             code: 'lexical-code-block',
             paragraph: 'lexical-paragraph',
         },
-        nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, CodeHighlightNode, CalloutNode],
+        nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, CodeHighlightNode, CalloutNode, HorizontalRuleNode],
         onError: (error: Error) => console.error('[LexicalEditor]', error),
     };
 
