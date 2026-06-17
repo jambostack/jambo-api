@@ -117,9 +117,13 @@ export default function ContentTrash({ collection, project }: Props) {
                         { label: t('content.trashed'), value: 'trashed' },
                     ]
                 },
-                cell: () => (
-                    <Badge variant="destructive" className="bg-red-600 hover:bg-red-700">
-                        {t('content.trashed')}
+                cell: (item: ContentEntry) => (
+                    <Badge variant={item.status === 'scheduled' ? 'secondary' : 'destructive'} className={
+                        item.status === 'scheduled'
+                            ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                            : 'bg-red-600 hover:bg-red-700'
+                    }>
+                        {item.status === 'scheduled' ? t('content.scheduled') : t('content.trashed')}
                     </Badge>
                 ),
             },
