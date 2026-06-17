@@ -370,6 +370,9 @@ return [
     'content.schedule_btn'            => 'Planifier',
     'content.publish_now'             => 'Publier maintenant',
     'content.reschedule'              => 'Replanifier',
+    'content.schedule_date'           => 'Date',
+    'content.schedule_time'           => 'Heure',
+    'content.schedule_confirm'        => 'Confirmer la planification',
 
     // Content Form
     'content.form.save_draft'         => 'Enregistrer comme brouillon',

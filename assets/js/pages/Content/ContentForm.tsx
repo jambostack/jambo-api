@@ -330,7 +330,7 @@ useEffect(() => {
                                 <>
                                 {/* Primary save actions */}
                                 <div className="space-y-2.5 rounded-xl border border-border bg-card/60 p-3 shadow-sm">
-                                    {isEditMode && contentEntry?.status === 'scheduled' && (
+                                    {isEditMode && contentEntry?.status === 'scheduled' && can.publish_content && (
                                         <>
                                             <Button
                                                 type="button"
@@ -340,7 +340,7 @@ useEffect(() => {
                                                 className="h-10 w-full rounded-lg bg-emerald-600 font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
                                             >
                                                 <Send className="me-2 h-4 w-4" />
-                                                Publier maintenant
+                                                {t('content.publish_now')}
                                             </Button>
                                             <Button
                                                 type="button"
@@ -350,7 +350,7 @@ useEffect(() => {
                                                 className="h-10 w-full rounded-lg font-medium"
                                             >
                                                 <Calendar className="w-4 h-4 mr-2" />
-                                                Replanifier
+                                                {t('content.reschedule')}
                                             </Button>
                                         </>
                                     )}
@@ -432,7 +432,7 @@ useEffect(() => {
                                         </div>
                                     )}
 
-                                    {!showSchedulePicker && (
+                                    {!showSchedulePicker && can.publish_content && (
                                         <Button
                                             type="button"
                                             variant="outline"
@@ -441,7 +441,7 @@ useEffect(() => {
                                             className="h-10 w-full rounded-lg font-medium"
                                         >
                                             <Calendar className="w-4 h-4 mr-2" />
-                                            Planifier
+                                            {t('content.schedule_btn')}
                                         </Button>
                                     )}
                                 </div>
@@ -449,7 +449,7 @@ useEffect(() => {
                                 {showSchedulePicker && (
                                     <div className="flex items-center gap-3 p-3 border rounded-md bg-muted/30">
                                         <div className="flex items-center gap-2">
-                                            <Label htmlFor="scheduled-date" className="text-sm">Date</Label>
+                                            <Label htmlFor="scheduled-date" className="text-sm">{t('content.schedule_date')}</Label>
                                             <Input
                                                 id="scheduled-date"
                                                 type="date"
@@ -460,7 +460,7 @@ useEffect(() => {
                                             />
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <Label htmlFor="scheduled-time" className="text-sm">Heure</Label>
+                                            <Label htmlFor="scheduled-time" className="text-sm">{t('content.schedule_time')}</Label>
                                             <Input
                                                 id="scheduled-time"
                                                 type="time"
@@ -480,7 +480,7 @@ useEffect(() => {
                                             }}
                                             disabled={processing || !scheduledDate}
                                         >
-                                            Confirmer la planification
+                                            {t('content.schedule_confirm')}
                                         </Button>
                                         <Button
                                             type="button"

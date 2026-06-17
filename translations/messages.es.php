@@ -363,6 +363,9 @@ return [
     'content.schedule_btn'            => 'Programar',
     'content.publish_now'             => 'Publicar ahora',
     'content.reschedule'              => 'Reprogramar',
+    'content.schedule_date'           => 'Fecha',
+    'content.schedule_time'           => 'Hora',
+    'content.schedule_confirm'        => 'Confirmar programación',
 
     // Content Form
     'content.form.save_draft'         => 'Guardar como borrador',
