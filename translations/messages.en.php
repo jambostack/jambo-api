@@ -633,6 +633,10 @@ return [
     'content.draft_btn'               => 'Set to Draft',
     'content.draft_success'           => '{count} content entries set to draft',
     'content.failed_draft'            => 'Failed to set entries to draft',
+    'content.scheduled'               => 'Scheduled',
+    'content.schedule_btn'            => 'Schedule',
+    'content.publish_now'             => 'Publish now',
+    'content.reschedule'              => 'Reschedule',
 
     // Content Form
     'content.form.save_draft'         => 'Save as draft',
