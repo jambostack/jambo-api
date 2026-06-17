@@ -168,7 +168,22 @@ class ContentController extends AbstractController
         $entry->project    = $token->project;
         $entry->collection = $collection;
         $entry->locale     = $locale;
-        $entry->status     = $data['status'] ?? 'draft';
+        $status = $data['status'] ?? $collection->getDefaultStatus();
+        $statuses = $collection->getWorkflowStatuses();
+        $validStatuses = array_column($statuses, 'slug');
+        $validStatuses[] = 'scheduled';
+        if (!in_array($status, $validStatuses, true)) {
+            return $this->json(['errors' => ['status' => 'Invalid status for this collection.']], 422);
+        }
+        $entry->status = $status;
+
+        // Handle assignment
+        if (isset($data['assigned_to_id'])) {
+            $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
+            if ($assignee !== null) {
+                $entry->assignedTo = $assignee;
+            }
+        }
 
         if ($entry->status === 'scheduled' && isset($data['scheduledAt'])) {
             $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
@@ -230,7 +245,14 @@ class ContentController extends AbstractController
 
         $data = $request->toArray();
         if (isset($data['status'])) {
-            $entry->status = $data['status'];
+            $status = $data['status'];
+            $statuses = $collection->getWorkflowStatuses();
+            $validStatuses = array_column($statuses, 'slug');
+            $validStatuses[] = 'scheduled';
+            if (!in_array($status, $validStatuses, true)) {
+                return $this->json(['errors' => ['status' => 'Invalid status for this collection.']], 422);
+            }
+            $entry->status = $status;
         }
         if ($entry->status === 'scheduled' && isset($data['scheduledAt'])) {
             $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
@@ -242,7 +264,16 @@ class ContentController extends AbstractController
             $entry->locale = $data['locale'];
         }
 
-        $this->hydrateFieldValues($entry, $data, $collection, $token->project);        $this->em->flush();
+        // Handle assignment
+        if (isset($data['assigned_to_id'])) {
+            $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
+            if ($assignee !== null) {
+                $entry->assignedTo = $assignee;
+            }
+        }
+
+        $this->hydrateFieldValues($entry, $data, $collection, $token->project);
+        $this->em->flush();
 
         return $this->json($this->formatter->formatEntry($entry));
     }
