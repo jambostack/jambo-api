@@ -125,12 +125,13 @@ class ContentImportHandler implements ImportHandlerInterface
     private function setValueOnField(ContentFieldValue $cfv, string $type, mixed $value): void
     {
         match ($type) {
-            'text', 'longtext', 'richtext', 'email', 'slug', 'color', 'password' => $cfv->textValue = $value,
-            'number' => $cfv->numberValue = $value !== null ? (string) $value : null,
-            'boolean' => $cfv->booleanValue = (bool) $value,
-            'date' => $cfv->dateValue = $value ? new \DateTime($value) : null,
-            'datetime' => $cfv->datetimeValue = $value ? new \DateTime($value) : null,
-            'json', 'enumeration', 'repeater' => $cfv->jsonValue = $value,
+            'text', 'longtext', 'richtext', 'email', 'slug', 'color', 'password',
+            'url', 'markdown', 'code', 'icon', 'uuid'        => $cfv->textValue = $value,
+            'number', 'rating'                               => $cfv->numberValue = $value !== null ? (string) $value : null,
+            'boolean'                                        => $cfv->booleanValue = (bool) $value,
+            'date'                                           => $cfv->dateValue = $value ? new \DateTime($value) : null,
+            'datetime'                                       => $cfv->datetimeValue = $value ? new \DateTime($value) : null,
+            'json', 'enumeration', 'repeater', 'tags'        => $cfv->jsonValue = $value,
             'media' => null,
             'relation' => null,
             default => $cfv->textValue = is_string($value) ? $value : json_encode($value),
