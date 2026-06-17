@@ -39,10 +39,25 @@ function buildInitialFormData(fields: Field[]): Record<string, any> {
     const data: Record<string, any> = {};
     fields.forEach(field => {
         if (field.type === 'repeater') {
-            const subFields = (field.options?.subFields as any[]) ?? [];
-            const defaultItem: Record<string, any> = {};
-            subFields.forEach((sf: any) => { defaultItem[sf.slug] = sf.type === 'boolean' ? false : null; });
-            data[field.slug] = subFields.length > 0 ? [defaultItem] : [];
+            const variants = (field.options?.variants as any[]) ?? [];
+            const legacySubFields = (field.options?.subFields as any[]) ?? [];
+            if (variants.length > 1) {
+                const defVariant = (field.options?.defaultVariant as string) ?? variants[0]?.slug;
+                const vdef = variants.find((v: any) => v.slug === defVariant);
+                const defaultItem: Record<string, any> = { _variant: defVariant };
+                vdef?.subFields?.forEach((sf: any) => { defaultItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+                data[field.slug] = [defaultItem];
+            } else if (variants.length === 1) {
+                const defaultItem: Record<string, any> = {};
+                variants[0].subFields?.forEach((sf: any) => { defaultItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+                data[field.slug] = [defaultItem];
+            } else if (legacySubFields.length > 0) {
+                const defaultItem: Record<string, any> = {};
+                legacySubFields.forEach((sf: any) => { defaultItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+                data[field.slug] = [defaultItem];
+            } else {
+                data[field.slug] = [];
+            }
         } else if (field.options?.repeatable) {
             data[field.slug] = [{ value: null }];
         } else if (field.type === 'enumeration' && field.options?.multiple) {
@@ -122,10 +137,25 @@ useEffect(() => {
                 if (Array.isArray(raw) && raw.length > 0) {
                     normalisedData[field.slug] = raw;
                 } else {
-                    const subFields = (field.options?.subFields as any[]) ?? [];
-                    const defaultItem: Record<string, any> = {};
-                    subFields.forEach((sf: any) => { defaultItem[sf.slug] = sf.type === 'boolean' ? false : null; });
-                    normalisedData[field.slug] = subFields.length > 0 ? [defaultItem] : [];
+                    const variants = (field.options?.variants as any[]) ?? [];
+                    const legacySubFields = (field.options?.subFields as any[]) ?? [];
+                    if (variants.length > 1) {
+                        const defVariant = (field.options?.defaultVariant as string) ?? variants[0]?.slug;
+                        const vdef = variants.find((v: any) => v.slug === defVariant);
+                        const defaultItem: Record<string, any> = { _variant: defVariant };
+                        vdef?.subFields?.forEach((sf: any) => { defaultItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+                        normalisedData[field.slug] = [defaultItem];
+                    } else if (variants.length === 1) {
+                        const defaultItem: Record<string, any> = {};
+                        variants[0].subFields?.forEach((sf: any) => { defaultItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+                        normalisedData[field.slug] = [defaultItem];
+                    } else if (legacySubFields.length > 0) {
+                        const defaultItem: Record<string, any> = {};
+                        legacySubFields.forEach((sf: any) => { defaultItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+                        normalisedData[field.slug] = [defaultItem];
+                    } else {
+                        normalisedData[field.slug] = [];
+                    }
                 }
             }
         });
