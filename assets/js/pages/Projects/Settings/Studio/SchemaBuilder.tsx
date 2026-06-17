@@ -43,6 +43,7 @@ interface SchemaField { key: string; name: string; slug: string; type: string; i
 interface SchemaCollection {
   id?: number; key: string; uuid?: string; name: string; slug: string; description: string;
   isSingleton: boolean; fields: SchemaField[];
+  settings?: Record<string, any> | null;
 }
 interface ServerCollection {
   id: number; uuid: string; name: string; slug: string;
@@ -1752,6 +1753,87 @@ function renderEditor(
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
       <Switch checked={current.isSingleton} onCheckedChange={v => updateCollection(selectedIdx!, { isSingleton: v })} />
       <Label style={{ fontSize: '12px', color: 'var(--studio-text-dim)' }}>{t('studio.schema.singleton_label')}</Label>
+    </div>
+    {/* Workflow editor */}
+    <div style={{ marginBottom: '14px' }}>
+        <Label style={{ fontSize: '10px', color: 'var(--studio-text-muted)', marginBottom: '6px', display: 'block' }}>
+            Workflow
+        </Label>
+        {(() => {
+            const wf = current.settings?.workflow;
+            const statuses = wf?.statuses ?? [
+                { slug: 'draft', label: 'Draft', color: '#6b7280', published: false },
+                { slug: 'published', label: 'Published', color: '#10b981', published: true },
+            ];
+            const defaultStatus = wf?.defaultStatus ?? 'draft';
+            const updateWorkflow = (s: typeof statuses, def: string) => {
+                const c = { ...current };
+                c.settings = { ...c.settings, workflow: { statuses: s, defaultStatus: def } };
+                updateCollection(selectedIdx!, { settings: c.settings } as any);
+            };
+            const addStatus = () => {
+                updateWorkflow([...statuses, { slug: '', label: '', color: '#6b7280', published: false }], defaultStatus);
+            };
+            const removeStatus = (idx: number) => {
+                updateWorkflow(statuses.filter((_, i) => i !== idx), defaultStatus);
+            };
+            return (
+                <div style={{ padding: '8px', border: '1px solid var(--studio-border)', borderRadius: '6px', background: 'var(--studio-surface)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {statuses.map((s, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <input
+                                value={s.label}
+                                onChange={e => {
+                                    const next = [...statuses];
+                                    next[i] = { ...s, label: e.target.value, slug: toSnakeCase(e.target.value) };
+                                    updateWorkflow(next, defaultStatus);
+                                }}
+                                placeholder="Label"
+                                style={{ flex: 1, height: '28px', fontSize: '10px', background: 'var(--studio-bg)', border: '1px solid var(--studio-border)', borderRadius: '5px', color: 'var(--studio-text)', padding: '0 6px', outline: 'none' }}
+                            />
+                            <input
+                                type="color"
+                                value={s.color}
+                                onChange={e => {
+                                    const next = [...statuses];
+                                    next[i] = { ...s, color: e.target.value };
+                                    updateWorkflow(next, defaultStatus);
+                                }}
+                                style={{ width: '32px', height: '28px', padding: 0, background: 'none', border: '1px solid var(--studio-border)', borderRadius: '5px', cursor: 'pointer' }}
+                            />
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '2px', fontSize: '9px', color: 'var(--studio-text-dim)', whiteSpace: 'nowrap' }}>
+                                <input type="checkbox" checked={s.published} onChange={e => {
+                                    const next = [...statuses];
+                                    next[i] = { ...s, published: e.target.checked };
+                                    updateWorkflow(next, defaultStatus);
+                                }} style={{ margin: 0 }} />
+                                Pub.
+                            </label>
+                            <button onClick={() => removeStatus(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', opacity: 0.5 }}>
+                                <Trash2 className="w-3 h-3" style={{ color: 'var(--studio-red)' }} />
+                            </button>
+                        </div>
+                    ))}
+                    <Button size="sm" variant="outline" onClick={addStatus} style={{ height: '22px', fontSize: '9px' }}>
+                        <Plus className="w-2.5 h-2.5 mr-1" />Add status
+                    </Button>
+                    {statuses.length > 0 && (
+                        <div style={{ marginTop: '4px' }}>
+                            <span style={{ fontSize: '9px', color: 'var(--studio-text-dim)' }}>Default: </span>
+                            <select
+                                value={defaultStatus}
+                                onChange={e => updateWorkflow(statuses, e.target.value)}
+                                style={{ height: '24px', fontSize: '9px', background: 'var(--studio-bg)', border: '1px solid var(--studio-border)', borderRadius: '5px', color: 'var(--studio-text)', padding: '0 4px' }}
+                            >
+                                {statuses.filter(s => s.slug).map(s => (
+                                    <option key={s.slug} value={s.slug}>{s.label || s.slug}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                </div>
+            );
+        })()}
     </div>
     <Separator style={{ marginBottom: '12px', borderColor: 'var(--studio-border)' }} />
 

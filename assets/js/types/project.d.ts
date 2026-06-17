@@ -26,6 +26,12 @@ export interface Collection {
     order: number | null;
     description?: string;
     is_singleton: boolean;
+    settings?: {
+        workflow?: {
+            statuses: Array<{ slug: string; label: string; color: string; published: boolean }>;
+            defaultStatus: string;
+        };
+    } | null;
     created_at: string;
     updated_at: string;
     fields?: Field[];
