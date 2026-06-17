@@ -34,6 +34,7 @@ class ContentController extends AbstractController
         private EndUserRepository $endUserRepository,
         private EavDataFormatterService $formatter,
         private EntityManagerInterface $em,
+        private \App\Repository\ProjectMemberRepository $memberRepo,
     ) {}
 
     #[OA\Get(
@@ -182,8 +183,10 @@ class ContentController extends AbstractController
         // Handle assignment
         if (isset($data['assigned_to_id'])) {
             $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
-            if ($assignee !== null) {
+            if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $token->project) !== null) {
                 $entry->assignedTo = $assignee;
+            } elseif ($assignee !== null) {
+                return $this->json(['errors' => ['assigned_to_id' => 'User is not a member of this project.']], 422);
             }
         }
 
@@ -269,8 +272,10 @@ class ContentController extends AbstractController
         // Handle assignment
         if (isset($data['assigned_to_id'])) {
             $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
-            if ($assignee !== null) {
+            if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $token->project) !== null) {
                 $entry->assignedTo = $assignee;
+            } elseif ($assignee !== null) {
+                return $this->json(['errors' => ['assigned_to_id' => 'User is not a member of this project.']], 422);
             }
         }
 
