@@ -38,6 +38,7 @@ class EavDataFormatterService
             'updated_at'   => $entry->updatedAt->format(\DateTimeInterface::ATOM),
             'deleted_at'   => $entry->deletedAt?->format(\DateTimeInterface::ATOM),
             'published_at' => $entry->publishedAt?->format(\DateTimeInterface::ATOM),
+            'scheduled_at' => $entry->scheduledAt?->format(\DateTimeInterface::ATOM),
             'creator'      => $entry->createdBy ? ['name' => $entry->createdBy->name ?: $entry->createdBy->email] : null,
             'updater'      => $entry->updatedBy ? ['name' => $entry->updatedBy->name ?: $entry->updatedBy->email] : null,
         ];

@@ -45,7 +45,7 @@ class ContentController extends AbstractController
             new OA\Parameter(name: 'page', in: 'query', schema: new OA\Schema(type: 'integer', default: 1)),
             new OA\Parameter(name: 'per_page', in: 'query', schema: new OA\Schema(type: 'integer', default: 15, maximum: 100)),
             new OA\Parameter(name: 'locale', in: 'query', schema: new OA\Schema(type: 'string', example: 'en')),
-            new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'string', enum: ['draft', 'published'])),
+            new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'string', enum: ['draft', 'published', 'scheduled'])),
         ],
         responses: [
             new OA\Response(response: 200, description: 'Paginated list of entries', content: new OA\JsonContent(properties: [
@@ -73,7 +73,7 @@ class ContentController extends AbstractController
         $page    = max(1, $request->query->getInt('page', 1));
         $perPage = min(100, max(1, $request->query->getInt('per_page', 15)));
         $status  = $request->query->getString('status', 'published');
-        $statusFilter = in_array($status, ['draft', 'published'], true) ? $status : null;
+        $statusFilter = in_array($status, ['draft', 'published', 'scheduled'], true) ? $status : null;
 
         $entries = $this->entryRepository->findByCollectionPaginated($collection, $page, $perPage, $locale, $statusFilter);
         $total   = $this->entryRepository->countByCollection($collection, $locale, $statusFilter);
@@ -130,7 +130,7 @@ class ContentController extends AbstractController
         security: [['ApiToken' => []]],
         requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(
             properties: [
-                new OA\Property(property: 'status', type: 'string', enum: ['draft', 'published'], default: 'draft'),
+                new OA\Property(property: 'status', type: 'string', enum: ['draft', 'published', 'scheduled'], default: 'draft'),
                 new OA\Property(property: 'locale', type: 'string', example: 'en'),
             ],
             additionalProperties: new OA\AdditionalProperties(description: 'Dynamic field values keyed by field slug')
@@ -183,7 +183,7 @@ class ContentController extends AbstractController
         security: [['ApiToken' => []]],
         requestBody: new OA\RequestBody(content: new OA\JsonContent(
             properties: [
-                new OA\Property(property: 'status', type: 'string', enum: ['draft', 'published']),
+                new OA\Property(property: 'status', type: 'string', enum: ['draft', 'published', 'scheduled']),
                 new OA\Property(property: 'locale', type: 'string'),
             ],
             additionalProperties: new OA\AdditionalProperties(description: 'Field values to update')
