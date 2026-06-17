@@ -293,6 +293,114 @@ class ContentControllerTest extends WebTestCase
     }
 
     // ----------------------------------------------------------------
+    // Workflow status validation
+    // ----------------------------------------------------------------
+
+    public function testCreateWithInvalidStatusReturns422(): void
+    {
+        $client = static::createClient();
+        $client->jsonRequest('POST', $this->url(), [
+            'title'  => 'Invalid status',
+            'status' => 'invalid_status',
+        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $this->plainToken]);
+
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('errors', $body);
+        $this->assertArrayHasKey('status', $body['errors']);
+    }
+
+    public function testUpdateWithInvalidStatusReturns422(): void
+    {
+        $client = static::createClient();
+        $auth   = ['HTTP_AUTHORIZATION' => 'Bearer ' . $this->plainToken];
+
+        // Create an entry first
+        $client->jsonRequest('POST', $this->url(), [
+            'title'  => 'Will update status',
+            'status' => 'draft',
+        ], $auth);
+        $uuid = json_decode($client->getResponse()->getContent(), true)['uuid'];
+
+        // Try updating with invalid status
+        $client->jsonRequest('PATCH', $this->url() . '/' . $uuid, [
+            'status' => 'nonexistent_status',
+        ], $auth);
+
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('errors', $body);
+        $this->assertArrayHasKey('status', $body['errors']);
+    }
+
+    // ----------------------------------------------------------------
+    // Assigned to
+    // ----------------------------------------------------------------
+
+    public function testAssignNonMemberReturns422(): void
+    {
+        $client = static::createClient();
+
+        // Create a user who is NOT a member of the project
+        $em       = static::getContainer()->get(EntityManagerInterface::class);
+        $hasher   = static::getContainer()->get(\Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface::class);
+        $nonMember = new \App\Entity\User();
+        $nonMember->name     = 'Non Member';
+        $nonMember->email    = 'nonmember_' . uniqid() . '@test.com';
+        $nonMember->password = $hasher->hashPassword($nonMember, 'password123');
+        $em->persist($nonMember);
+        $em->flush();
+        self::ensureKernelShutdown();
+
+        $client->jsonRequest('POST', $this->url(), [
+            'title'          => 'Assign to non-member',
+            'status'         => 'draft',
+            'assigned_to_id' => $nonMember->id,
+        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $this->plainToken]);
+
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('errors', $body);
+        $this->assertArrayHasKey('assigned_to_id', $body['errors']);
+    }
+
+    public function testAssignedToAppearsInResponse(): void
+    {
+        $client = static::createClient();
+
+        // Create a member user and add them to the project
+        $em       = static::getContainer()->get(EntityManagerInterface::class);
+        $hasher   = static::getContainer()->get(\Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface::class);
+        $member   = new \App\Entity\User();
+        $member->name     = 'Project Member';
+        $member->email    = 'member_' . uniqid() . '@test.com';
+        $member->password = $hasher->hashPassword($member, 'password123');
+        $em->persist($member);
+
+        $project = $em->getRepository(\App\Entity\Project::class)->findOneBy(['uuid' => $this->projectUuid]);
+        $projectMember = new \App\Entity\ProjectMember();
+        $projectMember->user    = $member;
+        $projectMember->project = $project;
+        $projectMember->status  = \App\Enum\ProjectMemberStatus::Active;
+        $em->persist($projectMember);
+        $em->flush();
+        self::ensureKernelShutdown();
+
+        $client->jsonRequest('POST', $this->url(), [
+            'title'          => 'Assigned entry',
+            'status'         => 'draft',
+            'assigned_to_id' => $member->id,
+        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $this->plainToken]);
+
+        $this->assertSame(201, $client->getResponse()->getStatusCode());
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('assigned_to', $body);
+        $this->assertNotNull($body['assigned_to']);
+        $this->assertSame($member->id, $body['assigned_to']['id']);
+        $this->assertSame($member->name, $body['assigned_to']['name']);
+    }
+
+    // ----------------------------------------------------------------
     // Status filter
     // ----------------------------------------------------------------
 
