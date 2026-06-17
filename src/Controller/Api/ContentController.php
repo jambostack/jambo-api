@@ -35,6 +35,7 @@ class ContentController extends AbstractController
         private EavDataFormatterService $formatter,
         private EntityManagerInterface $em,
         private \App\Repository\ProjectMemberRepository $memberRepo,
+        private \App\Service\FieldValueHydrator $fieldValueHydrator,
     ) {}
 
     #[OA\Get(
@@ -369,16 +370,14 @@ class ContentController extends AbstractController
             }
 
             $value = $data[$field->slug];
-            match ($field->type) {
-                'number', 'decimal'              => $fieldValue->numberValue   = $value !== null ? (string) $value : null,
-                'boolean', 'checkbox'            => $fieldValue->booleanValue  = $value !== null ? (bool) $value : null,
-                'date'                           => $fieldValue->dateValue     = ($value && !str_contains((string) $value, '/')) ? new \DateTime($value) : null,
-                'datetime'                       => $fieldValue->datetimeValue = $value ? new \DateTime($value) : null,
-                'time'                           => $fieldValue->textValue     = $value !== null ? (string) $value : null,
-                'json', 'array', 'repeater'      => $fieldValue->jsonValue     = is_array($value) ? $value : json_decode($value, true),
-                'media', 'relation', 'enumeration' => $fieldValue->jsonValue   = $this->normalizeAndValidateIds($value, $field->type, $project, $field),
-                default                          => $fieldValue->textValue     = $value !== null ? (string) $value : null,
-            };
+
+            // Les champs media/relation/enumeration nécessitent une validation IDOR
+            // (cross-project security check), on la fait avant l'hydratation.
+            if (in_array($field->type, ['media', 'relation', 'enumeration'], true)) {
+                $value = $this->normalizeAndValidateIds($value, $field->type, $project, $field);
+            }
+
+            $this->fieldValueHydrator->hydrate($fieldValue, $value, $field->type);
         }
     }
 

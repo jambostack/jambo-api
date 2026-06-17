@@ -5,9 +5,13 @@ namespace App\Service\ExportImport\Export;
 use App\Entity\ContentEntry;
 use App\Entity\Project;
 use App\Service\ExportImport\ExportHandlerInterface;
+use App\Service\FieldValueHydrator;
 
 class ContentExportHandler implements ExportHandlerInterface
 {
+    public function __construct(
+        private FieldValueHydrator $fieldValueHydrator,
+    ) {}
     public static function getOptionKey(): string
     {
         return 'content';
@@ -49,14 +53,15 @@ class ContentExportHandler implements ExportHandlerInterface
             $value = match ($fv->fieldType) {
                 'text', 'longtext', 'richtext', 'email', 'slug', 'color', 'password',
                 'url', 'markdown', 'code', 'icon', 'uuid'             => $fv->textValue,
-                'number', 'rating'                                   => $fv->numberValue,
-                'boolean'                                            => $fv->booleanValue,
+                'number', 'decimal', 'rating'                         => $fv->numberValue,
+                'boolean', 'checkbox'                                 => $fv->booleanValue,
                 'date'                                               => $fv->dateValue?->format('Y-m-d'),
                 'datetime'                                           => $fv->datetimeValue?->format(\DateTimeInterface::ATOM),
-                'json', 'enumeration', 'repeater', 'tags'            => $fv->jsonValue,
-                'media' => $this->serializeMediaRelations($fv),
-                'relation' => $this->serializeEntryRelations($fv),
-                default => $fv->textValue ?? $fv->jsonValue,
+                'time'                                               => $fv->textValue,
+                'json', 'array', 'enumeration', 'repeater', 'tags'    => $fv->jsonValue,
+                'media'                                              => $this->serializeMediaRelations($fv),
+                'relation'                                           => $this->serializeEntryRelations($fv),
+                default                                              => $fv->textValue ?? $fv->jsonValue,
             };
 
             $fieldValues[] = [

@@ -41,6 +41,7 @@ class StudioController extends InertiaController
         private readonly \App\Repository\MediaRepository $mediaRepository,
         private readonly \App\Service\AiContentService $aiService,
         private readonly \App\Service\FieldRelationOptionsNormalizer $relationOptionsNormalizer,
+        private \App\Service\FieldValueHydrator $fieldValueHydrator,
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
     ) {}
 
@@ -828,30 +829,11 @@ PROMPT;
             $fv = new \App\Entity\ContentFieldValue();
             $fv->contentEntry = $entry;
             $fv->field = $field;
-            $fv->fieldType = $field->type;
 
-            match ($field->type) {
-                'number', 'decimal'              => $fv->numberValue   = $value !== null ? (string) $value : null,
-                'boolean', 'checkbox'            => $fv->booleanValue  = $value !== null ? (bool) $value : null,
-                'date'                           => $fv->dateValue     = ($value && !str_contains((string) $value, '/')) ? new \DateTime($value) : null,
-                'datetime'                       => $fv->datetimeValue = $value ? new \DateTime($value) : null,
-                'time'                           => $fv->textValue     = $value !== null ? (string) $value : null,
-                'json', 'array', 'repeater'      => $fv->jsonValue     = is_array($value) ? $value : json_decode($value, true),
-                'media', 'relation', 'enumeration' => $fv->jsonValue   = $this->normalizeArrayOfIds($value),
-                default                          => $fv->textValue     = $value !== null ? (string) $value : null,
-            };
+            $this->fieldValueHydrator->hydrate($fv, $value, $field->type);
 
             $this->em->persist($fv);
         }
-    }
-
-    /** @see ContentController::normalizeArrayOfIds */
-    private function normalizeArrayOfIds(mixed $value): ?array
-    {
-        if (is_array($value)) return $value;
-        if ($value === null || $value === '') return null;
-        $decoded = json_decode((string) $value, true);
-        return is_array($decoded) ? $decoded : [$value];
     }
 
     /**
@@ -1651,22 +1633,11 @@ PROMPT;
                     $fv = new \App\Entity\ContentFieldValue();
                     $fv->contentEntry = $entry;
                     $fv->field = $field;
-                    $fv->fieldType = $field->type;
                     $entry->fieldValues->add($fv);
                     $this->em->persist($fv);
                 }
 
-                $fv->fieldType = $field->type;
-                match ($field->type) {
-                    'number', 'decimal'              => $fv->numberValue   = $value !== null ? (string) $value : null,
-                    'boolean', 'checkbox'            => $fv->booleanValue  = $value !== null ? (bool) $value : null,
-                    'date'                           => $fv->dateValue     = ($value && !str_contains((string) $value, '/')) ? new \DateTime($value) : null,
-                    'datetime'                       => $fv->datetimeValue = $value ? new \DateTime($value) : null,
-                    'time'                           => $fv->textValue     = $value !== null ? (string) $value : null,
-                    'json', 'array', 'repeater'      => $fv->jsonValue     = is_array($value) ? $value : json_decode($value, true),
-                    'media', 'relation', 'enumeration' => $fv->jsonValue   = $this->normalizeArrayOfIds($value),
-                    default                          => $fv->textValue     = $value !== null ? (string) $value : null,
-                };
+                $this->fieldValueHydrator->hydrate($fv, $value, $field->type);
             }
             $updated++;
         }

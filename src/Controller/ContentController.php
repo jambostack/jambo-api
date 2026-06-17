@@ -32,6 +32,7 @@ class ContentController extends AbstractController
         private EventDispatcherInterface $dispatcher,
         private \App\Service\VersioningService $versioning,
         private \App\Repository\ProjectMemberRepository $memberRepo,
+        private \App\Service\FieldValueHydrator $fieldValueHydrator,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -355,59 +356,14 @@ class ContentController extends AbstractController
             $fv = new ContentFieldValue();
             $fv->contentEntry = $entry;
             $fv->field        = $field;
-            $fv->fieldType    = $field->type;
 
-            match ($field->type) {
-                'number', 'decimal'              => $fv->numberValue   = $value !== null ? (string) $value : null,
-                'boolean', 'checkbox'            => $fv->booleanValue  = $value !== null ? (bool) $value : null,
-                'date'                           => $fv->dateValue     = ($value && !str_contains((string) $value, '/')) ? new \DateTime($value) : null,
-                'datetime'                       => $fv->datetimeValue = $value ? new \DateTime($value) : null,
-                'time'                           => $fv->textValue     = $value !== null ? (string) $value : null,
-                'json', 'array', 'repeater'      => $fv->jsonValue     = $this->normalizeJsonObject($value),
-                'media', 'relation', 'enumeration' => $fv->jsonValue   = $this->normalizeArrayOfIds($value),
-                default                          => $fv->textValue     = $value !== null ? (string) $value : null,
-            };
+            $this->fieldValueHydrator->hydrate($fv, $value, $field->type);
 
             $this->em->persist($fv);
         }
     }
 
-    /**
-     * Pour les types stockés tels quels en JSON (json/array/repeater) :
-     * accepte un array tel quel, décode une string JSON, sinon null.
-     */
-    private function normalizeJsonObject(mixed $value): ?array
-    {
-        if (is_array($value)) {
-            return $value;
-        }
-        if ($value === null || $value === '') {
-            return null;
-        }
-        $decoded = json_decode((string) $value, true);
-        return is_array($decoded) ? $decoded : null;
-    }
 
-    /**
-     * Pour les conteneurs d'identifiants (media/relation/enumeration) :
-     * accepte un array tel quel, décode une string JSON-array, sinon emballe
-     * un scalaire isolé (cas IA renvoyant un ID unique) dans un tableau.
-     */
-    private function normalizeArrayOfIds(mixed $value): ?array
-    {
-        if (is_array($value)) {
-            return $value;
-        }
-        if ($value === null || $value === '') {
-            return null;
-        }
-        $decoded = json_decode((string) $value, true);
-        if (is_array($decoded)) {
-            return $decoded;
-        }
-        // Scalaire (int, string) → tableau à un élément
-        return [$value];
-    }
 
     private function resolveCollection(string $projectUuid, string $collectionSlug): Collection|JsonResponse
     {
