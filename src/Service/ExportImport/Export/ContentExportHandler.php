@@ -47,12 +47,13 @@ class ContentExportHandler implements ExportHandlerInterface
         $fieldValues = [];
         foreach ($entry->fieldValues as $fv) {
             $value = match ($fv->fieldType) {
-                'text', 'longtext', 'richtext', 'email', 'slug', 'color', 'password' => $fv->textValue,
-                'number' => $fv->numberValue,
-                'boolean' => $fv->booleanValue,
-                'date' => $fv->dateValue?->format('Y-m-d'),
-                'datetime' => $fv->datetimeValue?->format(\DateTimeInterface::ATOM),
-                'json', 'enumeration', 'repeater' => $fv->jsonValue,
+                'text', 'longtext', 'richtext', 'email', 'slug', 'color', 'password',
+                'url', 'markdown', 'code', 'icon', 'uuid'             => $fv->textValue,
+                'number', 'rating'                                   => $fv->numberValue,
+                'boolean'                                            => $fv->booleanValue,
+                'date'                                               => $fv->dateValue?->format('Y-m-d'),
+                'datetime'                                           => $fv->datetimeValue?->format(\DateTimeInterface::ATOM),
+                'json', 'enumeration', 'repeater', 'tags'            => $fv->jsonValue,
                 'media' => $this->serializeMediaRelations($fv),
                 'relation' => $this->serializeEntryRelations($fv),
                 default => $fv->textValue ?? $fv->jsonValue,
