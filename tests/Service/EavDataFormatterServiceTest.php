@@ -164,6 +164,36 @@ class EavDataFormatterServiceTest extends TestCase
         $this->assertNull($result['scheduled_at']);
     }
 
+    // ----------------------------------------------------------------
+    // assigned_to
+    // ----------------------------------------------------------------
+
+    public function testAssignedToIsFormattedInOutput(): void
+    {
+        $entry = $this->makeEntry();
+
+        $user = new \App\Entity\User();
+        $user->name = 'Alice Johnson';
+        $entry->assignedTo = $user;
+
+        $result = $this->formatter->formatEntry($entry);
+
+        $this->assertArrayHasKey('assigned_to', $result);
+        $this->assertNotNull($result['assigned_to']);
+        $this->assertSame($user->name, $result['assigned_to']['name']);
+        $this->assertSame($user->id, $result['assigned_to']['id']);
+    }
+
+    public function testAssignedToIsNullWhenNotAssigned(): void
+    {
+        $entry = $this->makeEntry();
+
+        $result = $this->formatter->formatEntry($entry);
+
+        $this->assertArrayHasKey('assigned_to', $result);
+        $this->assertNull($result['assigned_to']);
+    }
+
     private function makeEntry(): ContentEntry
     {
         $project = new Project();
