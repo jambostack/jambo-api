@@ -145,6 +145,25 @@ class EavDataFormatterServiceTest extends TestCase
         $this->assertSame(4.0, $result['score']);
     }
 
+    public function testFormatEntryIncludesScheduledAtWhenSet(): void
+    {
+        $entry = $this->makeEntry();
+        $entry->scheduledAt = new \DateTimeImmutable('2026-07-01T12:00:00+00:00');
+
+        $result = $this->formatter->formatEntry($entry);
+
+        $this->assertSame('2026-07-01T12:00:00+00:00', $result['scheduled_at']);
+    }
+
+    public function testFormatEntryScheduledAtNullWhenNotSet(): void
+    {
+        $entry = $this->makeEntry();
+
+        $result = $this->formatter->formatEntry($entry);
+
+        $this->assertNull($result['scheduled_at']);
+    }
+
     private function makeEntry(): ContentEntry
     {
         $project = new Project();
