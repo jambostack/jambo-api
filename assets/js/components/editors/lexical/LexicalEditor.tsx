@@ -13,18 +13,20 @@ import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 
 import {
     $getRoot, $getSelection, $isRangeSelection, $createParagraphNode, $isElementNode,
-    FORMAT_TEXT_COMMAND, FORMAT_ELEMENT_COMMAND, UNDO_COMMAND, REDO_COMMAND, EditorState,
+    FORMAT_TEXT_COMMAND, FORMAT_ELEMENT_COMMAND, UNDO_COMMAND, REDO_COMMAND, $insertNodes, EditorState,
 } from 'lexical';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import { HeadingNode, QuoteNode, $createHeadingNode } from '@lexical/rich-text';
 import { ListNode, ListItemNode, INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND } from '@lexical/list';
 import { LinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link';
 import { CodeNode, CodeHighlightNode } from '@lexical/code';
-import { CalloutNode } from './nodes/CalloutNode';
+import { CalloutNode, $createCalloutNode } from './nodes/CalloutNode';
 import { $setBlocksType } from '@lexical/selection';
 import { $isListNode } from '@lexical/list';
 import { $isHeadingNode } from '@lexical/rich-text';
 import { HorizontalRuleNode, INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/react/LexicalHorizontalRuleNode';
+import { TableNode, TableCellNode, TableRowNode, INSERT_TABLE_COMMAND } from '@lexical/table';
+import { TablePlugin } from '@lexical/react/LexicalTablePlugin.js';
 
 import type { Project, Asset } from '@/types';
 import { useAppearance } from '@/hooks/use-appearance';
@@ -32,11 +34,12 @@ import { useTranslation } from '@/lib/i18n';
 import { MediaLibraryModal } from '@/pages/Assets/MediaFieldSelectModal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import {
     Bold, Italic, Underline, Strikethrough, Link2, List, ListOrdered,
     Undo, Redo, Code, Image as ImageIcon, Heading1, Heading2, Heading3, X,
-    TextQuote, Code2, Minus,
+    TextQuote, Code2, Minus, Table2, AlertTriangle,
 } from 'lucide-react';
 
 interface LexicalEditorProps {
@@ -266,6 +269,62 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
             >
                 <Minus size={15} />
             </button>
+            <div className="w-px h-5 bg-border mx-1" />
+            {/* Table grid picker */}
+            <Popover>
+                <PopoverTrigger asChild>
+                    <button type="button" className={btn(false)} title="Insert table">
+                        <Table2 className="h-4 w-4" />
+                    </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-2">
+                    <div className="grid grid-cols-3 gap-1">
+                        {Array.from({ length: 9 }, (_, i) => {
+                            const rows = Math.floor(i / 3) + 1;
+                            const cols = (i % 3) + 1;
+                            return (
+                                <button
+                                    key={i}
+                                    type="button"
+                                    className="w-12 h-10 border rounded hover:bg-accent flex items-center justify-center text-xs"
+                                    onClick={() => editor.dispatchCommand(INSERT_TABLE_COMMAND, { rows, columns: cols, includeHeaders: false })}
+                                >
+                                    {rows}x{cols}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </PopoverContent>
+            </Popover>
+            {/* Callout dropdown */}
+            <Popover>
+                <PopoverTrigger asChild>
+                    <button type="button" className={btn(false)} title="Insert callout">
+                        <AlertTriangle className="h-4 w-4" />
+                    </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-40 p-2">
+                    <div className="flex flex-col gap-1">
+                        {(['info', 'warning', 'success', 'danger'] as const).map(type => (
+                            <button
+                                key={type}
+                                type="button"
+                                className="text-xs px-3 py-1.5 rounded hover:bg-accent text-left"
+                                onClick={() => {
+                                    editor.update(() => {
+                                        const callout = $createCalloutNode(type);
+                                        const p = $createParagraphNode();
+                                        callout.append(p);
+                                        $insertNodes([callout]);
+                                    });
+                                }}
+                            >
+                                {type === 'info' ? 'ℹ️' : type === 'warning' ? '⚠️' : type === 'success' ? '✅' : '🚫'} {type.charAt(0).toUpperCase() + type.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                </PopoverContent>
+            </Popover>
         </div>
     );
 }
@@ -336,7 +395,7 @@ export function LexicalEditor({ value = '', onChange }: LexicalEditorProps) {
             code: 'lexical-code-block',
             paragraph: 'lexical-paragraph',
         },
-        nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, CodeHighlightNode, CalloutNode, HorizontalRuleNode],
+        nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, CodeHighlightNode, CalloutNode, HorizontalRuleNode, TableNode, TableCellNode, TableRowNode],
         onError: (error: Error) => console.error('[LexicalEditor]', error),
     };
 
@@ -357,6 +416,7 @@ export function LexicalEditor({ value = '', onChange }: LexicalEditorProps) {
                     <HistoryPlugin />
                     <ListPlugin />
                     <LinkPlugin />
+                    <TablePlugin hasCellMerge={false} />
                     <HtmlPlugin value={value} onChange={onChange} />
                     <ImageInsertPlugin asset={pendingAsset} onDone={() => setPendingAsset(null)} />
                 </div>
