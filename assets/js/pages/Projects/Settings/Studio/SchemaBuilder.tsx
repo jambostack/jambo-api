@@ -1405,6 +1405,7 @@ interface FieldOptions {
   minDate?: string; maxDate?: string; // bornes (champs date/datetime/time)
   helpText?: string; hideInList?: boolean; readOnly?: boolean;
   subFields?: RepeaterSubField[];
+  language?: string; // langue par défaut pour les champs 'code'
 }
 const FIELD_OPTION_DEFAULTS: Record<string, Partial<FieldOptions>> = {
   text: { placeholder: '', minLength: undefined, maxLength: undefined, pattern: '' },
@@ -1709,6 +1710,40 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
             No sub-fields defined. Add at least one sub-field to create a structured repeater.
           </p>
         )}
+        {general}
+      </div>
+    );
+  }
+  if (field.type === 'code') {
+    const languages = [
+      { value: 'javascript', label: 'JavaScript' },
+      { value: 'typescript', label: 'TypeScript' },
+      { value: 'json', label: 'JSON' },
+      { value: 'html', label: 'HTML' },
+      { value: 'css', label: 'CSS' },
+      { value: 'sql', label: 'SQL' },
+      { value: 'php', label: 'PHP' },
+      { value: 'python', label: 'Python' },
+      { value: 'markdown', label: 'Markdown' },
+      { value: 'xml', label: 'XML' },
+      { value: 'yaml', label: 'YAML' },
+      { value: 'shell', label: 'Shell / Bash' },
+      { value: 'plaintext', label: 'Plain Text' },
+    ];
+    return (
+      <div style={panelStyle}>
+        <div>
+          <span style={S.label}>Default Language</span>
+          <select
+            value={opts.language ?? 'plaintext'}
+            onChange={e => onChange({ ...opts, language: e.target.value })}
+            style={{ ...S.input, width: '100%', marginTop: '4px' }}
+          >
+            {languages.map(l => (
+              <option key={l.value} value={l.value}>{l.label}</option>
+            ))}
+          </select>
+        </div>
         {general}
       </div>
     );
