@@ -102,6 +102,10 @@ class CollectionController extends AbstractController
             'slug'        => $collection->slug,
             'description' => $collection->description,
             'isSingleton' => $collection->isSingleton,
+            'workflow'    => $collection->settings['workflow'] ?? [
+                'statuses'      => $collection->getWorkflowStatuses(),
+                'defaultStatus' => $collection->getDefaultStatus(),
+            ],
             'fields'      => array_map(fn ($f) => [
                 'name'       => $f->name,
                 'slug'       => $f->slug,
