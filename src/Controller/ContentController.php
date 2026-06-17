@@ -96,6 +96,15 @@ class ContentController extends AbstractController
         $data    = $request->toArray();
         $user    = $this->getUser();
 
+        // Validate status against workflow
+        $statuses = $collection->getWorkflowStatuses();
+        $validStatuses = array_column($statuses, 'slug');
+        $validStatuses[] = 'scheduled'; // scheduled is always allowed
+        $status = $data['status'] ?? 'draft';
+        if (!in_array($status, $validStatuses, true)) {
+            return $this->json(['errors' => ['status' => 'Invalid status for this collection.']], 422);
+        }
+
         $locale = $data['locale'] ?? $project->defaultLocale;
         $validLocales = array_unique(array_merge($project->locales ?? [], [$project->defaultLocale]));
         if (!in_array($locale, $validLocales, true)) {
@@ -110,12 +119,20 @@ class ContentController extends AbstractController
         $entry->collection = $collection;
         $entry->project    = $project;
         $entry->locale     = $locale;
-        $entry->status     = $data['status'] ?? 'draft';
+        $entry->status     = $data['status'] ?? $collection->getDefaultStatus();
         if ($entry->status === 'scheduled' && isset($data['scheduledAt'])) {
             $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
         }
         $entry->createdBy  = $user;
         $entry->updatedBy  = $user;
+
+        // Handle assignment
+        if (isset($data['assigned_to_id'])) {
+            $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
+            if ($assignee !== null) {
+                $entry->assignedTo = $assignee;
+            }
+        }
 
         $this->em->persist($entry);
         $this->saveFieldValues($entry, $collection, $data['fields'] ?? []);
@@ -147,6 +164,15 @@ class ContentController extends AbstractController
 
         $data = $request->toArray();
 
+        // Validate status against workflow
+        $statuses = $entry->collection->getWorkflowStatuses();
+        $validStatuses = array_column($statuses, 'slug');
+        $validStatuses[] = 'scheduled'; // scheduled is always allowed
+        $status = $data['status'] ?? 'draft';
+        if (!in_array($status, $validStatuses, true)) {
+            return $this->json(['errors' => ['status' => 'Invalid status for this collection.']], 422);
+        }
+
         if (isset($data['locale'])) {
             $validLocales = array_unique(array_merge($entry->project->locales ?? [], [$entry->project->defaultLocale]));
             if (!in_array($data['locale'], $validLocales, true)) {
@@ -161,6 +187,16 @@ class ContentController extends AbstractController
             $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
         }
         $entry->updatedBy = $this->getUser();
+
+        // Handle assignment
+        if (array_key_exists('assigned_to_id', $data)) {
+            if ($data['assigned_to_id'] !== null) {
+                $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
+                $entry->assignedTo = $assignee;
+            } else {
+                $entry->assignedTo = null;
+            }
+        }
 
         if (isset($data['fields'])) {
             // Capture l'état courant comme version AVANT d'écraser les champs (EAV)
