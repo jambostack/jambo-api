@@ -65,6 +65,10 @@ class ContentEntry
     #[ORM\JoinColumn(nullable: true)]
     public ?User $updatedBy = null;
 
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'assigned_to_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    public ?User $assignedTo = null;
+
     #[ORM\Column]
     public \DateTimeImmutable $createdAt;
 
