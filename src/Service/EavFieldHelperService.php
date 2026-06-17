@@ -14,11 +14,11 @@ class EavFieldHelperService
     public function setFieldValue(ContentFieldValue $cfv, string $type, mixed $value): void
     {
         match ($type) {
-            'number', 'decimal' => $cfv->numberValue = $value !== null ? (string) $value : null,
+            'number', 'decimal', 'rating' => $cfv->numberValue = $value !== null ? (string) $value : null,
             'boolean', 'checkbox' => $cfv->booleanValue = $value,
             'date' => $cfv->dateValue = $value ? new \DateTime($value) : null,
             'datetime' => $cfv->datetimeValue = $value ? new \DateTime($value) : null,
-            'json', 'array', 'repeater', 'enumeration', 'media', 'relation'
+            'json', 'array', 'repeater', 'enumeration', 'media', 'relation', 'tags'
                 => $cfv->jsonValue = is_string($value) ? json_decode($value, true) : $value,
             default => $cfv->textValue = $value !== null ? (string) $value : null,
         };
