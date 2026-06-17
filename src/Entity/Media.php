@@ -114,6 +114,16 @@ class Media
 
     public function getPublicUrl(): ?string
     {
-        return $this->fileName !== null ? '/uploads/media/' . $this->fileName : null;
+        if ($this->fileName === null) {
+            return null;
+        }
+
+        // Files are stored under a per-project directory (see ProjectDirNamer),
+        // so the public URL must include the project UUID to resolve correctly.
+        if ($this->project?->uuid !== null) {
+            return '/uploads/media/' . $this->project->uuid . '/' . $this->fileName;
+        }
+
+        return '/uploads/media/' . $this->fileName;
     }
 }

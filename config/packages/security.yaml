@@ -54,4 +54,5 @@ security:
         - { path: ^/public-api, roles: PUBLIC_ACCESS }
         - { path: '^/api/[\w-]{36}/auth/(register|login|forgot-password|reset-password)', roles: PUBLIC_ACCESS }
         - { path: ^/api, roles: PUBLIC_ACCESS }
+        - { path: ^/cdn, roles: PUBLIC_ACCESS }
         - { path: ^/, roles: ROLE_USER }

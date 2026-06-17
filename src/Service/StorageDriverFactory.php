@@ -32,7 +32,10 @@ class StorageDriverFactory
         $rootPath = $profile->rootPath
             ?? $this->projectDir . '/public/uploads/media/' . $profile->project->uuid;
 
-        $allowedBase = $this->projectDir . '/public/uploads/media/';
+        // Comparaison normalisée en slashes « / » : sur Windows, realpath() renvoie des
+        // antislashes alors que $allowedBase contient le littéral « /public/uploads/media/ »,
+        // ce qui ferait échouer str_starts_with() pour un chemin pourtant légitime.
+        $allowedBase = str_replace('\\', '/', $this->projectDir . '/public/uploads/media/');
         $resolved = realpath($rootPath);
         if ($resolved === false) {
             // Dossier n'existe pas encore — on vérifie que le chemin normalisé
@@ -41,7 +44,7 @@ class StorageDriverFactory
             if (str_contains($normalized, '..') || !str_starts_with($normalized, $allowedBase)) {
                 throw new \RuntimeException('Local storage rootPath must be within the allowed uploads directory.');
             }
-        } elseif (!str_starts_with($resolved, $allowedBase)) {
+        } elseif (!str_starts_with(str_replace('\\', '/', $resolved), $allowedBase)) {
             throw new \RuntimeException('Local storage rootPath must be within the allowed uploads directory.');
         }
 

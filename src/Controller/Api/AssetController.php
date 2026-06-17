@@ -174,8 +174,17 @@ class AssetController extends AbstractController
         $this->em->flush();
 
         // ── Écrire sur le(s) storage(s) via StorageManager ──
+        // Après le flush, VichUploader a déplacé le fichier temporaire vers son
+        // emplacement définitif ; $uploadedFile->getRealPath() renvoie alors false.
+        // On lit donc le flux depuis le fichier stocké (cf. ImageTransformController).
         $storageManager = new StorageManager($project, $this->profileRepo, $this->ruleRepo, $this->driverFactory);
-        $stream = fopen($uploadedFile->getRealPath(), 'r');
+        // Le mapping Vich « media_files » range le fichier sous un dossier par projet
+        // (ProjectDirNamer) : public/uploads/media/{projectUuid}/{fileName}.
+        $localPath = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . (string) $project->uuid . '/' . $media->fileName;
+        if (!is_file($localPath)) {
+            $localPath = $uploadedFile->getRealPath() ?: $uploadedFile->getPathname();
+        }
+        $stream = fopen($localPath, 'r');
         $basePath = 'projects/' . $project->uuid->toRfc4122() . '/' . basename($media->fileName);
 
         $storageOpts = [
@@ -195,6 +204,31 @@ class AssetController extends AbstractController
         $this->em->flush();
 
         return $this->corsResponse($this->json(['data' => $this->serializeMedia($media)], 201));
+    }
+
+    #[Route('/{uuid}', name: 'delete', methods: ['DELETE'])]
+    public function delete(Request $request, string $projectId, string $uuid): Response
+    {
+        $project = $this->resolvePublicProject($projectId);
+        if ($project instanceof JsonResponse) {
+            return $this->corsResponse($project);
+        }
+
+        // Suppression : ability « delete » requise (voie publique §4, comme le contenu).
+        $token = $this->tokenChecker->resolve($request);
+        if ($token === null || !$token->can('delete') || $token->project?->id !== $project->id) {
+            return $this->corsResponse($this->json(['error' => 'Unauthorized. Token requires delete ability.'], 401));
+        }
+
+        $media = $this->mediaRepository->findOneBy(['uuid' => $uuid, 'project' => $project, 'deletedAt' => null]);
+        if ($media === null) {
+            return $this->corsResponse($this->json(['error' => 'File not found.'], 404));
+        }
+
+        $media->deletedAt = new \DateTimeImmutable();
+        $this->em->flush();
+
+        return $this->corsResponse(new JsonResponse(null, 204));
     }
 
     private function isAuthorized(Request $request, Project $project): bool
