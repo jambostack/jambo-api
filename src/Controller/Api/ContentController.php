@@ -73,7 +73,9 @@ class ContentController extends AbstractController
         $page    = max(1, $request->query->getInt('page', 1));
         $perPage = min(100, max(1, $request->query->getInt('per_page', 15)));
         $status  = $request->query->getString('status', 'published');
-        $statusFilter = in_array($status, ['draft', 'published', 'scheduled'], true) ? $status : null;
+        $allStatuses = array_column($collection->getWorkflowStatuses(), 'slug');
+        $allStatuses[] = 'scheduled';
+        $statusFilter = in_array($status, $allStatuses, true) ? $status : null;
 
         $entries = $this->entryRepository->findByCollectionPaginated($collection, $page, $perPage, $locale, $statusFilter);
         $total   = $this->entryRepository->countByCollection($collection, $locale, $statusFilter);
