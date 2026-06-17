@@ -1513,7 +1513,7 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
       </div>
     );
   }
-  if (field.type === 'enumeration') {
+  if (field.type === 'enumeration' || field.type === 'tags') {
     const values = opts.values ?? (defaults.values ?? []);
     return (
       <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)' }}>
@@ -1530,7 +1530,7 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
       </div>
     );
   }
-  if (field.type === 'number') {
+  if (field.type === 'number' || field.type === 'rating') {
     return (
       <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
         <div><span style={S.label}>{t('studio.fopts.min')}</span><input type="number" value={opts.min ?? ''} onChange={e => onChange({ ...opts, min: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
@@ -1540,7 +1540,7 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
       </div>
     );
   }
-  if (field.type === 'text' || field.type === 'longtext') {
+  if (field.type === 'text' || field.type === 'longtext' || field.type === 'url' || field.type === 'markdown') {
     return (
       <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
         <div style={{ gridColumn:'1/-1' }}><span style={S.label}>{t('studio.fopts.placeholder')}</span><input value={opts.placeholder ?? ''} onChange={e => onChange({ ...opts, placeholder: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>

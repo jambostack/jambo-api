@@ -812,21 +812,22 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                         </div>
                                     </div>
 
-                                    {fieldType !== 'richtext' && 
-                                     fieldType !== 'password' && 
-                                     fieldType !== 'enumeration' && 
-                                     fieldType !== 'boolean' && 
-                                     fieldType !== 'color' && 
-                                     fieldType !== 'date' && 
-                                     fieldType !== 'time' && 
-                                     fieldType !== 'media' && 
-                                     fieldType !== 'relation' && 
-                                     fieldType !== 'json' && (
+                                    {fieldType !== 'richtext' &&
+                                     fieldType !== 'password' &&
+                                     fieldType !== 'enumeration' &&
+                                     fieldType !== 'boolean' &&
+                                     fieldType !== 'color' &&
+                                     fieldType !== 'date' &&
+                                     fieldType !== 'time' &&
+                                     fieldType !== 'media' &&
+                                     fieldType !== 'relation' &&
+                                     fieldType !== 'json' &&
+                                     fieldType !== 'tags' && (
                                         <div className="flex items-start space-x-2 p-4 rounded-md border border-dashed border-gray-600 dark:border-gray-400">
                                             <Checkbox
                                                 id="unique"
                                                 checked={data.validations.unique.status}
-                                                onCheckedChange={(checked) => 
+                                                onCheckedChange={(checked) =>
                                                     handleValidationChange('unique', 'status', checked)
                                                 }
                                                 disabled={data.options.repeatable}
@@ -835,7 +836,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                             <div className="space-y-1 w-full">
                                                 <Label htmlFor="unique" className="font-medium">Unique</Label>
                                                 <p className="text-sm text-muted-foreground">
-                                                    {data.options.repeatable 
+                                                    {data.options.repeatable
                                                         ? "Unique validation cannot be used with repeatable fields"
                                                         : "Prevents saving content if this field value is already used"}
                                                 </p>
@@ -851,31 +852,32 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                         </div>
                                     )}
 
-                                    {fieldType !== 'richtext' && 
-                                     fieldType !== 'enumeration' && 
-                                     fieldType !== 'boolean' && 
-                                     fieldType !== 'color' && 
-                                     fieldType !== 'date' && 
-                                     fieldType !== 'time' && 
-                                     fieldType !== 'media' && 
-                                     fieldType !== 'relation' && 
-                                     fieldType !== 'json' && (
+                                    {fieldType !== 'richtext' &&
+                                     fieldType !== 'enumeration' &&
+                                     fieldType !== 'boolean' &&
+                                     fieldType !== 'color' &&
+                                     fieldType !== 'date' &&
+                                     fieldType !== 'time' &&
+                                     fieldType !== 'media' &&
+                                     fieldType !== 'relation' &&
+                                     fieldType !== 'json' &&
+                                     fieldType !== 'tags' && (
                                         <div className="space-y-2 p-4 rounded-md border border-dashed border-gray-600 dark:border-gray-400">
                                             <div className="flex items-start space-x-2">
                                                 <Checkbox
                                                     id="charcount"
                                                     checked={data.validations.charcount.status}
-                                                    onCheckedChange={(checked) => 
+                                                    onCheckedChange={(checked) =>
                                                         handleValidationChange('charcount', 'status', checked)
                                                     }
                                                     className="mt-1"
                                                 />
                                                 <div className="space-y-1">
                                                     <Label htmlFor="charcount" className="font-medium">
-                                                        {fieldType === 'number' ? 'Integer limitations' : 'Character count'}
+                                                        {fieldType === 'number' || fieldType === 'rating' ? 'Integer limitations' : 'Character count'}
                                                     </Label>
                                                     <p className="text-sm text-muted-foreground">
-                                                        {fieldType === 'number' 
+                                                        {fieldType === 'number' || fieldType === 'rating'
                                                             ? 'Specifies a minimum and/or maximum allowed numbers'
                                                             : 'Specifies a minimum and/or maximum allowed number of characters'}
                                                     </p>
