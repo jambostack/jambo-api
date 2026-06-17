@@ -5,7 +5,7 @@ import { useTranslation } from '@/lib/i18n';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { TextCursor, AlignLeft, Link, AtSign, Lock, Hash, ListOrdered, CheckSquare, Droplet, Calendar, Clock, Image, GitBranch, Code } from 'lucide-react';
+import { TextCursor, AlignLeft, Link, AtSign, Lock, Hash, ListOrdered, CheckSquare, Droplet, Calendar, Clock, Image, GitBranch, Code, Globe, FileText, Smile, Fingerprint, Tags, Star } from 'lucide-react';
 
 import fields from '@/lib/fields.json';
 
@@ -93,7 +93,13 @@ export default function AddFieldModal({ isOpen, onClose, collectionId, projectId
                                                 CalendarCheck: Clock,
                                                 PhotoVideo: Image,
                                                 ExchangeAlt: GitBranch,
-                                                Code
+                                                Code,
+                                                Globe,
+                                                FileText,
+                                                Smile,
+                                                Fingerprint,
+                                                Tags,
+                                                Star
                                             }[field.icon] || TextCursor,
                                             { className: 'text-white' }
                                         )}

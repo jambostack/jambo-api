@@ -94,5 +94,47 @@
         "desc": "Data in JSON format",
         "icon": "Code",
         "bg": "bg-red-700"
+    },
+    "url": {
+        "label": "URL",
+        "desc": "Web link with validation",
+        "icon": "Globe",
+        "bg": "bg-sky-500"
+    },
+    "markdown": {
+        "label": "Markdown",
+        "desc": "Markdown formatted text",
+        "icon": "FileText",
+        "bg": "bg-yellow-700"
+    },
+    "code": {
+        "label": "Code",
+        "desc": "Code snippet (monospace)",
+        "icon": "Code",
+        "bg": "bg-slate-600"
+    },
+    "icon": {
+        "label": "Icon",
+        "desc": "Lucide icon name",
+        "icon": "Smile",
+        "bg": "bg-amber-500"
+    },
+    "uuid": {
+        "label": "UUID",
+        "desc": "Stable generated identifier",
+        "icon": "Fingerprint",
+        "bg": "bg-teal-600"
+    },
+    "tags": {
+        "label": "Tags",
+        "desc": "Multiple free-form values",
+        "icon": "Tags",
+        "bg": "bg-green-700"
+    },
+    "rating": {
+        "label": "Rating",
+        "desc": "Star score (1 to max)",
+        "icon": "Star",
+        "bg": "bg-orange-600"
     }
 }
