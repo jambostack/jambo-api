@@ -40,4 +40,32 @@ class EavFieldHelperServiceTest extends TestCase
         $this->assertSame('4', $cfv->numberValue);
         $this->assertNull($cfv->textValue);
     }
+
+    public function testValidateUrlAcceptsValidUrl(): void
+    {
+        $this->assertSame([], $this->helper->validateValue('url', 'https://example.com'));
+    }
+
+    public function testValidateUrlRejectsInvalidUrl(): void
+    {
+        $this->assertSame(['Format URL invalide'], $this->helper->validateValue('url', 'not a url'));
+    }
+
+    public function testValidateTagsRequiresArray(): void
+    {
+        $this->assertSame([], $this->helper->validateValue('tags', ['a', 'b']));
+        $this->assertSame(['Liste de valeurs attendue (tableau)'], $this->helper->validateValue('tags', 'a,b'));
+    }
+
+    public function testValidateRatingRequiresNumeric(): void
+    {
+        $this->assertSame([], $this->helper->validateValue('rating', 5));
+        $this->assertSame(['Note numérique attendue'], $this->helper->validateValue('rating', 'five'));
+    }
+
+    public function testValidateEmptyValueIsAlwaysValid(): void
+    {
+        $this->assertSame([], $this->helper->validateValue('url', ''));
+        $this->assertSame([], $this->helper->validateValue('rating', null));
+    }
 }
