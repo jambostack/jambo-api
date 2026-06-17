@@ -1087,17 +1087,6 @@ PROMPT;
         return $content !== false ? base64_encode($content) : null;
     }
 
-    /**
-     * Flush sécurisé : ne fait rien si l'EntityManager est fermé
-     * (par ex. après une exception réseau lors d'un appel API).
-     */
-    private function safeFlush(): void
-    {
-        if ($this->em->isOpen()) {
-            $this->em->flush();
-        }
-    }
-
     /** Schema basé sur des règles (fallback sans IA). */
     private function ruleBasedSchema(string $prompt): array
     {
@@ -1556,7 +1545,11 @@ PROMPT;
                     ]);
                 }
             }
-            $this->em->flush();
+            try {
+                $this->em->flush();
+            } catch (\Throwable $e) {
+                return ['error' => 'Failed to persist entries: ' . $e->getMessage()];
+            }
             return ['created' => $created, 'errors' => $errors, 'note' => 'Mot de passe aleatoire. Utilisateurs crees sans possibilite de connexion directe.'];
         }
 
@@ -1590,7 +1583,11 @@ PROMPT;
                 }
             }
         }
-        $this->em->flush();
+        try {
+            $this->em->flush();
+        } catch (\Throwable $e) {
+            return ['error' => 'Failed to persist entries: ' . $e->getMessage()];
+        }
         return ['created' => $created, 'errors' => $errors];
     }
 
@@ -1641,7 +1638,11 @@ PROMPT;
             }
             $updated++;
         }
-        $this->em->flush();
+        try {
+            $this->em->flush();
+        } catch (\Throwable $e) {
+            return ['error' => 'Failed to persist entries: ' . $e->getMessage()];
+        }
         return ['updated' => $updated];
     }
 
