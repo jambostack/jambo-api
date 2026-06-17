@@ -15,7 +15,7 @@ class EavDataFormatterService
      */
     private const RESERVED_KEYS = [
         'id', 'uuid', 'locale', 'status', 'collection',
-        'created_at', 'updated_at', 'deleted_at', 'published_at',
+        'created_at', 'updated_at', 'deleted_at', 'published_at', 'scheduled_at',
         'creator', 'updater',
     ];
 
