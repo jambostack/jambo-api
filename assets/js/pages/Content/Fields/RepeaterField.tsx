@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import InputError from '@/components/input-error';
 import { Plus, Trash2, GripVertical, Image } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -21,6 +22,12 @@ interface SubFieldDef {
     type: string;
     required: boolean;
     options?: Record<string, any>;
+}
+
+interface VariantDef {
+    slug: string;
+    label: string;
+    subFields: SubFieldDef[];
 }
 
 function subFieldErrorKey(parentSlug: string, index: number, subSlug: string): string {
@@ -196,10 +203,19 @@ function SubFieldInput({
 
 export default function RepeaterField({ field, value, onChange, processing, errors, project }: FieldProps) {
     const t = useTranslation();
-    const subFields: SubFieldDef[] = (field.options?.subFields as SubFieldDef[]) ?? [];
-    const items: Record<string, any>[] = Array.isArray(value) && value.length > 0 ? value : [{}];
+    const variants: VariantDef[] = (field.options?.variants as VariantDef[]) ?? [];
+    const legacySubFields: SubFieldDef[] = (field.options?.subFields as SubFieldDef[]) ?? [];
+    const hasVariants = variants.length > 1;
+    const hasLegacy = !hasVariants && legacySubFields.length > 0;
+    const uniformSubFields: SubFieldDef[] = hasLegacy
+        ? legacySubFields
+        : (variants.length === 1 ? variants[0].subFields : []);
+    const defaultVariant: string = (field.options?.defaultVariant as string) ?? (variants.length > 0 ? variants[0].slug : '');
 
-    if (subFields.length === 0) {
+    const items: Record<string, any>[] = Array.isArray(value) && value.length > 0 ? value : [{}];
+    const activeSubFieldsForUniform = hasVariants ? [] : uniformSubFields;
+
+    if (activeSubFieldsForUniform.length === 0 && !hasVariants) {
         return (
             <FieldBase field={field} value={value} onChange={onChange} processing={processing} errors={errors}>
                 <p className="text-xs text-muted-foreground py-4 text-center">
@@ -209,9 +225,15 @@ export default function RepeaterField({ field, value, onChange, processing, erro
         );
     }
 
-    const addItem = () => {
+    const addItem = (variantSlug?: string) => {
         const newItem: Record<string, any> = {};
-        subFields.forEach(sf => { newItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+        if (hasVariants && variantSlug) {
+            newItem._variant = variantSlug;
+            const vdef = variants.find(v => v.slug === variantSlug);
+            vdef?.subFields.forEach(sf => { newItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+        } else {
+            uniformSubFields.forEach(sf => { newItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+        }
         onChange(field, [...items, newItem]);
     };
 
@@ -246,59 +268,96 @@ export default function RepeaterField({ field, value, onChange, processing, erro
                 <Droppable droppableId={`repeater-${field.slug}`}>
                     {(provided) => (
                         <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-3">
-                            {items.map((item, idx) => (
-                                <Draggable key={`item-${idx}`} draggableId={`${field.slug}-item-${idx}`} index={idx} isDragDisabled={processing}>
-                                    {(dragProvided, snapshot) => (
-                                        <div
-                                            ref={dragProvided.innerRef}
-                                            {...dragProvided.draggableProps}
-                                            className={`border rounded-lg p-4 bg-muted/10 transition-shadow ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary/20' : ''}`}
-                                        >
-                                            {/* Item header */}
-                                            <div className="flex items-center justify-between mb-3">
-                                                <div className="flex items-center gap-2">
-                                                    <div {...dragProvided.dragHandleProps} className="cursor-grab text-muted-foreground hover:text-foreground transition-colors p-0.5 -ml-1">
-                                                        <GripVertical className="h-4 w-4" />
-                                                    </div>
-                                                    <span className="text-xs font-semibold text-muted-foreground">
-                                                        {t('repeater.item_n', { n: idx + 1 })}
-                                                    </span>
-                                                </div>
-                                                <Button type="button" variant="ghost" size="icon"
-                                                    disabled={items.length <= 1 || processing}
-                                                    onClick={() => removeItem(idx)}
-                                                    className="h-7 w-7 text-destructive hover:text-destructive">
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </div>
+                            {items.map((item, idx) => {
+                                const activeVariant = variants.find(v => v.slug === (item._variant ?? defaultVariant));
+                                const itemSubFields = hasVariants
+                                    ? (activeVariant?.subFields ?? [])
+                                    : uniformSubFields;
+                                const itemLabel = hasVariants && activeVariant
+                                    ? `${activeVariant.label} #${idx + 1}`
+                                    : t('repeater.item_n', { n: idx + 1 });
 
-                                            {/* Sub-fields */}
-                                            <div className="flex flex-col gap-3">
-                                                {subFields.map((sf) => {
-                                                    const subValue = item[sf.slug];
-                                                    const errorKey = subFieldErrorKey(field.slug, idx, sf.slug);
-                                                    return (
-                                                        <div key={sf.slug}>
-                                                            <Label className="text-xs mb-1.5 block">
-                                                                {sf.label}
-                                                                {sf.required && <span className="text-red-500 ml-0.5">*</span>}
-                                                            </Label>
-                                                            <SubFieldInput
-                                                                sf={sf}
-                                                                value={subValue}
-                                                                onChange={(val) => updateSubField(idx, sf.slug, val)}
-                                                                processing={processing}
-                                                                error={errors[errorKey]}
-                                                                project={project}
-                                                            />
+                                return (
+                                    <Draggable key={`item-${idx}`} draggableId={`${field.slug}-item-${idx}`} index={idx} isDragDisabled={processing}>
+                                        {(dragProvided, snapshot) => (
+                                            <div
+                                                ref={dragProvided.innerRef}
+                                                {...dragProvided.draggableProps}
+                                                className={`border rounded-lg p-4 bg-muted/10 transition-shadow ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary/20' : ''}`}
+                                            >
+                                                {/* Item header */}
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <div {...dragProvided.dragHandleProps} className="cursor-grab text-muted-foreground hover:text-foreground transition-colors p-0.5 -ml-1">
+                                                            <GripVertical className="h-4 w-4" />
                                                         </div>
-                                                    );
-                                                })}
+                                                        {hasVariants ? (
+                                                            <Select
+                                                                value={item._variant ?? defaultVariant}
+                                                                onValueChange={(newVariant) => {
+                                                                    const currentVariant = item._variant ?? defaultVariant;
+                                                                    if (newVariant === currentVariant) return;
+                                                                    const hasData = Object.keys(item).some(k => k !== '_variant' && item[k] !== null && item[k] !== '' && item[k] !== false);
+                                                                    if (hasData && !window.confirm(t('repeater.change_variant_confirm'))) return;
+                                                                    const newItem: Record<string, any> = { _variant: newVariant };
+                                                                    const vdef = variants.find(v => v.slug === newVariant);
+                                                                    vdef?.subFields.forEach(sf => { newItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+                                                                    const next = items.map((it, i) => i === idx ? newItem : it);
+                                                                    onChange(field, next);
+                                                                }}
+                                                                disabled={processing}
+                                                            >
+                                                                <SelectTrigger className="h-8 text-xs w-40">
+                                                                    <SelectValue />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {variants.map(v => (
+                                                                        <SelectItem key={v.slug} value={v.slug}>{v.label}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        ) : (
+                                                            <span className="text-xs font-semibold text-muted-foreground">
+                                                                {itemLabel}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <Button type="button" variant="ghost" size="icon"
+                                                        disabled={items.length <= 1 || processing}
+                                                        onClick={() => removeItem(idx)}
+                                                        className="h-7 w-7 text-destructive hover:text-destructive">
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </div>
+
+                                                {/* Sub-fields */}
+                                                <div className="flex flex-col gap-3">
+                                                    {itemSubFields.map((sf) => {
+                                                        const subValue = item[sf.slug];
+                                                        const errorKey = subFieldErrorKey(field.slug, idx, sf.slug);
+                                                        return (
+                                                            <div key={sf.slug}>
+                                                                <Label className="text-xs mb-1.5 block">
+                                                                    {sf.label}
+                                                                    {sf.required && <span className="text-red-500 ml-0.5">*</span>}
+                                                                </Label>
+                                                                <SubFieldInput
+                                                                    sf={sf}
+                                                                    value={subValue}
+                                                                    onChange={(val) => updateSubField(idx, sf.slug, val)}
+                                                                    processing={processing}
+                                                                    error={errors[errorKey]}
+                                                                    project={project}
+                                                                />
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
-                                </Draggable>
-                            ))}
+                                        )}
+                                    </Draggable>
+                                );
+                            })}
                             {provided.placeholder}
                         </div>
                     )}
@@ -307,11 +366,28 @@ export default function RepeaterField({ field, value, onChange, processing, erro
 
             {/* Add item button */}
             <div className="mt-3">
-                <Button type="button" variant="outline" size="sm"
-                    onClick={addItem} disabled={processing}
-                    className="w-full">
-                    <Plus className="h-4 w-4 mr-1" />{t('repeater.add_item')}
-                </Button>
+                {hasVariants ? (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button type="button" variant="outline" size="sm" disabled={processing} className="w-full">
+                                <Plus className="h-4 w-4 mr-1" />{t('repeater.add_item')}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="center">
+                            {variants.map(v => (
+                                <DropdownMenuItem key={v.slug} onClick={() => addItem(v.slug)}>
+                                    {v.label}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                ) : (
+                    <Button type="button" variant="outline" size="sm"
+                        onClick={() => addItem()} disabled={processing}
+                        className="w-full">
+                        <Plus className="h-4 w-4 mr-1" />{t('repeater.add_item')}
+                    </Button>
+                )}
             </div>
 
             {/* Top-level repeater error */}

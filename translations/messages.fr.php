@@ -1479,5 +1479,6 @@ return [
     'repeater.select'                  => 'Sélectionner...',
     'repeater.media_uuid_placeholder'  => 'UUID du média...',
     'repeater.no_subfields'            => 'Ce repeater n\'a pas de sous-champs configurés. Veuillez configurer des sous-champs dans le Schema Builder.',
+    'repeater.change_variant_confirm'  => 'Changer de variante effacera les données actuelles. Continuer ?',
 
 ];
