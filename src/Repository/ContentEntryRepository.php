@@ -23,6 +23,11 @@ class ContentEntryRepository extends ServiceEntityRepository
     public function findByCollectionPaginated(Collection $collection, int $page, int $perPage, ?string $locale = null, ?string $status = null, ?int $assignedToId = null): array
     {
         $qb = $this->createQueryBuilder('e')
+            ->addSelect('fv', 'cb', 'ub', 'at')
+            ->leftJoin('e.fieldValues', 'fv')
+            ->leftJoin('e.createdBy', 'cb')
+            ->leftJoin('e.updatedBy', 'ub')
+            ->leftJoin('e.assignedTo', 'at')
             ->where('e.collection = :collection')
             ->andWhere('e.deletedAt IS NULL')
             ->setParameter('collection', $collection)
@@ -64,16 +69,29 @@ class ContentEntryRepository extends ServiceEntityRepository
         return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
-    /** @return ContentEntry[] */
-    public function findTrashed(Collection $collection): array
+    /**
+     * @return ContentEntry[]
+     */
+    public function findTrashedPaginated(Collection $collection, int $page = 1, int $perPage = 15, ?string $locale = null): array
     {
-        return $this->createQueryBuilder('e')
-            ->where('e.collection = :collection')
+        $qb = $this->createQueryBuilder('e')
+            ->addSelect('fv', 'cb', 'ub', 'at')
+            ->leftJoin('e.fieldValues', 'fv')
+            ->leftJoin('e.createdBy', 'cb')
+            ->leftJoin('e.updatedBy', 'ub')
+            ->leftJoin('e.assignedTo', 'at')
+            ->andWhere('e.collection = :collection')
             ->andWhere('e.deletedAt IS NOT NULL')
             ->setParameter('collection', $collection)
             ->orderBy('e.deletedAt', 'DESC')
-            ->getQuery()
-            ->getResult();
+            ->setFirstResult(($page - 1) * $perPage)
+            ->setMaxResults($perPage);
+
+        if ($locale !== null) {
+            $qb->andWhere('e.locale = :locale')->setParameter('locale', $locale);
+        }
+
+        return $qb->getQuery()->getResult();
     }
 
     /**
