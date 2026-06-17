@@ -20,6 +20,7 @@ import { HeadingNode, QuoteNode, $createHeadingNode } from '@lexical/rich-text';
 import { ListNode, ListItemNode, INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND } from '@lexical/list';
 import { LinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link';
 import { CodeNode, CodeHighlightNode } from '@lexical/code';
+import { CalloutNode } from './nodes/CalloutNode';
 import { $setBlocksType } from '@lexical/selection';
 import { $isListNode } from '@lexical/list';
 import { $isHeadingNode } from '@lexical/rich-text';
@@ -292,7 +293,7 @@ export function LexicalEditor({ value = '', onChange }: LexicalEditorProps) {
             code: 'lexical-code-block',
             paragraph: 'lexical-paragraph',
         },
-        nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, CodeHighlightNode],
+        nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, CodeHighlightNode, CalloutNode],
         onError: (error: Error) => console.error('[LexicalEditor]', error),
     };
 
