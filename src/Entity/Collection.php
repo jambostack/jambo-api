@@ -67,6 +67,47 @@ class Collection
     #[ORM\Column(nullable: true)]
     public ?\DateTimeImmutable $deletedAt = null;
 
+    #[ORM\Column(type: 'json', nullable: true)]
+    public ?array $settings = null;
+
+    /**
+     * @return array<array{slug: string, label: string, color: string, published: bool}>
+     */
+    public function getWorkflowStatuses(): array
+    {
+        $defaults = [
+            ['slug' => 'draft',     'label' => 'Draft',       'color' => '#6b7280', 'published' => false],
+            ['slug' => 'published', 'label' => 'Published',   'color' => '#10b981', 'published' => true],
+        ];
+        if ($this->settings === null || !isset($this->settings['workflow'])) {
+            return $defaults;
+        }
+        $statuses = $this->settings['workflow']['statuses'] ?? $defaults;
+        if (empty($statuses)) {
+            return $defaults;
+        }
+        return $statuses;
+    }
+
+    public function getDefaultStatus(): string
+    {
+        if ($this->settings === null || !isset($this->settings['workflow'])) {
+            return 'draft';
+        }
+        return $this->settings['workflow']['defaultStatus'] ?? 'draft';
+    }
+
+    public function getPublishedStatus(): ?string
+    {
+        $statuses = $this->getWorkflowStatuses();
+        foreach ($statuses as $s) {
+            if ($s['published'] ?? false) {
+                return $s['slug'];
+            }
+        }
+        return null;
+    }
+
     public function isDeleted(): bool
     {
         return $this->deletedAt !== null;
