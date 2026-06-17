@@ -240,9 +240,9 @@ class SchemaGenerator
     private function mapFieldType(Field $field): Type
     {
         return match ($field->type) {
-            'number', 'decimal' => Type::float(),
+            'number', 'decimal', 'rating' => Type::float(),
             'boolean', 'checkbox' => Type::boolean(),
-            'json', 'array', 'repeater', 'enumeration', 'media', 'relation' => Type::string(),
+            'json', 'array', 'repeater', 'enumeration', 'media', 'relation', 'tags' => Type::string(),
             'date', 'time', 'datetime' => Type::string(),
             default => Type::string(),
         };
@@ -251,9 +251,9 @@ class SchemaGenerator
     private function mapInputFieldType(Field $field): Type
     {
         return match ($field->type) {
-            'number', 'decimal' => Type::float(),
+            'number', 'decimal', 'rating' => Type::float(),
             'boolean', 'checkbox' => Type::boolean(),
-            'json', 'array', 'repeater' => Type::string(),
+            'json', 'array', 'repeater', 'tags' => Type::string(),
             default => Type::string(),
         };
     }
