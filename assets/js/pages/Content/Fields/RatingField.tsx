@@ -2,7 +2,7 @@ import FieldBase, { FieldProps } from './FieldBase';
 import { Star } from 'lucide-react';
 
 export default function RatingField({ field, value, onChange, processing, errors }: FieldProps) {
-    const max = Number(field.options?.max) > 0 ? Number(field.options?.max) : 5;
+    const max = Number((field.options as any)?.max) > 0 ? Number((field.options as any)?.max) : 5;
     const current = Number(value) || 0;
 
     return (
