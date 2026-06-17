@@ -269,6 +269,7 @@ EUSER;
                 'slug'        => $c->slug,
                 'description' => $c->description,
                 'isSingleton' => $c->isSingleton,
+                'settings'    => $c->settings,
                 'fields'      => $fields,
             ];
         }, $collections);
@@ -309,6 +310,7 @@ EUSER;
             return [
                 'id' => $c->id, 'name' => $c->name, 'slug' => $c->slug,
                 'description' => $c->description, 'isSingleton' => $c->isSingleton,
+                'settings' => $c->settings,
                 'fields' => $fields,
             ];
         }, $collections);
@@ -1257,6 +1259,10 @@ PROMPT;
             $collection->description = $colData['description'] ?? null;
             $collection->isSingleton = $colData['isSingleton'] ?? false;
             $collection->deletedAt = null; // Restaurer si soft-deletée auparavant
+
+            if (isset($colData['settings'])) {
+                $collection->settings = $colData['settings'];
+            }
 
             $keptCollectionUuids[] = $collection->uuid?->toRfc4122();
             $keptCollectionSlugs[] = $slug;
