@@ -339,7 +339,8 @@ useEffect(() => {
                                         value: formData[field.slug],
                                         onChange: handleFieldChange,
                                         processing,
-                                        errors
+                                        errors,
+                                        project
                                     })}
                                 </React.Fragment>
                             </div>
