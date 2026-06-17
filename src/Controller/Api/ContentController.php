@@ -170,6 +170,13 @@ class ContentController extends AbstractController
         $entry->locale     = $locale;
         $entry->status     = $data['status'] ?? 'draft';
 
+        if ($entry->status === 'scheduled' && isset($data['scheduledAt'])) {
+            $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
+        }
+        if ($entry->status === 'scheduled' && $entry->scheduledAt === null) {
+            return $this->json(['error' => 'scheduledAt is required when status is scheduled.'], 422);
+        }
+
         $this->hydrateFieldValues($entry, $data, $collection, $token->project);
         $this->em->persist($entry);
         $this->em->flush();
@@ -224,6 +231,12 @@ class ContentController extends AbstractController
         $data = $request->toArray();
         if (isset($data['status'])) {
             $entry->status = $data['status'];
+        }
+        if ($entry->status === 'scheduled' && isset($data['scheduledAt'])) {
+            $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
+        }
+        if ($entry->status === 'scheduled' && $entry->scheduledAt === null) {
+            return $this->json(['error' => 'scheduledAt is required when status is scheduled.'], 422);
         }
         if (isset($data['locale'])) {
             $entry->locale = $data['locale'];
