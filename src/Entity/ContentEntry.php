@@ -33,6 +33,9 @@ class ContentEntry
             if ($value === 'published' && $this->status !== 'published' && $this->publishedAt === null) {
                 $this->publishedAt = new \DateTimeImmutable();
             }
+            if ($value === 'published' && $this->status === 'scheduled') {
+                $this->scheduledAt = null;
+            }
             $this->status = $value;
         }
     }
@@ -73,6 +76,9 @@ class ContentEntry
 
     #[ORM\Column(nullable: true)]
     public ?\DateTimeImmutable $publishedAt = null;
+
+    #[ORM\Column(nullable: true)]
+    public ?\DateTimeImmutable $scheduledAt = null;
 
     public function __construct()
     {
