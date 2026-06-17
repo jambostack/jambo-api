@@ -13,6 +13,7 @@ import { LexicalEditor } from '@/components/editors/lexical/LexicalEditor';
 import { MediaLibraryModal } from '@/pages/Assets/MediaFieldSelectModal';
 import type { Asset } from '@/types';
 import FieldBase, { FieldProps } from './FieldBase';
+import { useTranslation } from '@/lib/i18n';
 
 interface SubFieldDef {
     slug: string;
@@ -132,7 +133,7 @@ function SubFieldInput({
                 <div>
                     <Select value={value ?? ''} onValueChange={onChange} disabled={processing}>
                         <SelectTrigger className="h-9 text-sm">
-                            <SelectValue placeholder="Select..." />
+                            <SelectValue placeholder={t('repeater.select')} />
                         </SelectTrigger>
                         <SelectContent>
                             {values.map((v: string) => (
@@ -155,7 +156,7 @@ function SubFieldInput({
                             value={assetId}
                             onChange={e => onChange(e.target.value)}
                             disabled={processing}
-                            placeholder="UUID du média..."
+                            placeholder={t('repeater.media_uuid_placeholder')}
                             className="flex-1 font-mono text-xs"
                         />
                         {project && (
@@ -194,6 +195,7 @@ function SubFieldInput({
 }
 
 export default function RepeaterField({ field, value, onChange, processing, errors, project }: FieldProps) {
+    const t = useTranslation();
     const subFields: SubFieldDef[] = (field.options?.subFields as SubFieldDef[]) ?? [];
     const items: Record<string, any>[] = Array.isArray(value) && value.length > 0 ? value : [{}];
 
@@ -201,7 +203,7 @@ export default function RepeaterField({ field, value, onChange, processing, erro
         return (
             <FieldBase field={field} value={value} onChange={onChange} processing={processing} errors={errors}>
                 <p className="text-xs text-muted-foreground py-4 text-center">
-                    This repeater has no sub-fields configured. Please configure sub-fields in the Schema Builder.
+                    {t('repeater.no_subfields')}
                 </p>
             </FieldBase>
         );
@@ -259,7 +261,7 @@ export default function RepeaterField({ field, value, onChange, processing, erro
                                                         <GripVertical className="h-4 w-4" />
                                                     </div>
                                                     <span className="text-xs font-semibold text-muted-foreground">
-                                                        Item {idx + 1}
+                                                        {t('repeater.item_n', { n: idx + 1 })}
                                                     </span>
                                                 </div>
                                                 <Button type="button" variant="ghost" size="icon"
@@ -308,7 +310,7 @@ export default function RepeaterField({ field, value, onChange, processing, erro
                 <Button type="button" variant="outline" size="sm"
                     onClick={addItem} disabled={processing}
                     className="w-full">
-                    <Plus className="h-4 w-4 mr-1" />Add item
+                    <Plus className="h-4 w-4 mr-1" />{t('repeater.add_item')}
                 </Button>
             </div>
 
