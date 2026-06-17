@@ -111,6 +111,9 @@ class ContentController extends AbstractController
         $entry->project    = $project;
         $entry->locale     = $locale;
         $entry->status     = $data['status'] ?? 'draft';
+        if ($entry->status === 'scheduled' && isset($data['scheduledAt'])) {
+            $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
+        }
         $entry->createdBy  = $user;
         $entry->updatedBy  = $user;
 
@@ -153,6 +156,9 @@ class ContentController extends AbstractController
         }
         if (isset($data['status'])) {
             $entry->status = $data['status'];
+        }
+        if ($entry->status === 'scheduled' && isset($data['scheduledAt'])) {
+            $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
         }
         $entry->updatedBy = $this->getUser();
 
