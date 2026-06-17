@@ -363,6 +363,9 @@ return [
     'content.schedule_btn'            => 'جدولة',
     'content.publish_now'             => 'نشر الآن',
     'content.reschedule'              => 'إعادة الجدولة',
+    'content.schedule_date'           => 'التاريخ',
+    'content.schedule_time'           => 'الوقت',
+    'content.schedule_confirm'        => 'تأكيد الجدولة',
 
     // Content Form
     'content.form.save_draft'         => 'حفظ كمسودة',

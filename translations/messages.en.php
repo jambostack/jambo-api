@@ -637,6 +637,9 @@ return [
     'content.schedule_btn'            => 'Schedule',
     'content.publish_now'             => 'Publish now',
     'content.reschedule'              => 'Reschedule',
+    'content.schedule_date'           => 'Date',
+    'content.schedule_time'           => 'Time',
+    'content.schedule_confirm'        => 'Confirm scheduling',
 
     // Content Form
     'content.form.save_draft'         => 'Save as draft',
