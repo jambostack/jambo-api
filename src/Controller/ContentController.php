@@ -84,7 +84,7 @@ class ContentController extends AbstractController
         $perPage = min(100, max(1, $request->query->getInt('per_page', 15)));
 
         $entries = $this->entryRepository->findTrashedPaginated($collection, $page, $perPage, $locale ?: null);
-        $total = $this->entryRepository->countByCollection($collection, $locale ?: null);
+        $total = $this->entryRepository->countTrashedByCollection($collection, $locale ?: null);
 
         return $this->json([
             'data' => array_values(array_map(fn ($e) => $this->formatter->formatEntry($e), $entries)),
