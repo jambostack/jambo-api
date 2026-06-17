@@ -37,7 +37,12 @@ type SaveStatus = 'draft' | 'published' | 'scheduled';
 function buildInitialFormData(fields: Field[]): Record<string, any> {
     const data: Record<string, any> = {};
     fields.forEach(field => {
-        if (field.options?.repeatable) {
+        if (field.type === 'repeater') {
+            const subFields = (field.options?.subFields as any[]) ?? [];
+            const defaultItem: Record<string, any> = {};
+            subFields.forEach((sf: any) => { defaultItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+            data[field.slug] = subFields.length > 0 ? [defaultItem] : [];
+        } else if (field.options?.repeatable) {
             data[field.slug] = [{ value: null }];
         } else if (field.type === 'enumeration' && field.options?.multiple) {
             data[field.slug] = [];
@@ -109,6 +114,17 @@ useEffect(() => {
                 } else {
                     const id = Array.isArray(rawValue) ? extractUuid(rawValue[0]) : extractUuid(rawValue);
                     normalisedData[field.slug] = id !== null ? [id] : [];
+                }
+            }
+            if (field.type === 'repeater') {
+                const raw = initialFormData[field.slug];
+                if (Array.isArray(raw) && raw.length > 0) {
+                    normalisedData[field.slug] = raw;
+                } else {
+                    const subFields = (field.options?.subFields as any[]) ?? [];
+                    const defaultItem: Record<string, any> = {};
+                    subFields.forEach((sf: any) => { defaultItem[sf.slug] = sf.type === 'boolean' ? false : null; });
+                    normalisedData[field.slug] = subFields.length > 0 ? [defaultItem] : [];
                 }
             }
         });
@@ -258,6 +274,12 @@ useEffect(() => {
 
     const handleFieldChange = (field: Field, value: any, index?: number) => {
         const newData = { ...formData };
+
+        if (field.type === 'repeater') {
+            newData[field.slug] = value;
+            setFormData(newData);
+            return;
+        }
 
         if (field.options?.repeatable) {
             if (typeof index === 'number') {

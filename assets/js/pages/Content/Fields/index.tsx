@@ -22,6 +22,7 @@ import IconField from './IconField';
 import UuidField from './UuidField';
 import TagsField from './TagsField';
 import RatingField from './RatingField';
+import RepeaterField from './RepeaterField';
 
 export type FieldRendererProps = {
     field: Field;
@@ -80,6 +81,8 @@ export function renderField(props: FieldRendererProps) {
             return <TagsField {...props} />;
         case 'rating':
             return <RatingField {...props} />;
+        case 'repeater':
+            return <RepeaterField {...props} />;
         default:
             return null;
     }
@@ -107,5 +110,6 @@ export {
     IconField,
     UuidField,
     TagsField,
-    RatingField
+    RatingField,
+    RepeaterField
 }; 
