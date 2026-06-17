@@ -79,6 +79,12 @@ export interface Field {
             type: number;
         };
         includeDraft?: boolean;
+        variants?: Array<{
+          slug: string;
+          label: string;
+          subFields: Array<{ slug: string; label: string; type: string; required: boolean }>;
+        }>;
+        defaultVariant?: string;
     };
     /** Champ verrouillé par le système (EndUser schema) — non éditable/supprimable */
     is_system?: boolean;

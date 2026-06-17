@@ -1404,7 +1404,13 @@ interface FieldOptions {
   defaultBool?: boolean;        // valeur par défaut (champs boolean)
   minDate?: string; maxDate?: string; // bornes (champs date/datetime/time)
   helpText?: string; hideInList?: boolean; readOnly?: boolean;
-  subFields?: RepeaterSubField[];
+  subFields?: RepeaterSubField[];  // legacy — kept for backward compatibility
+  variants?: Array<{
+    slug: string;
+    label: string;
+    subFields: RepeaterSubField[];
+  }>;
+  defaultVariant?: string;
   language?: string; // langue par défaut pour les champs 'code'
 }
 const FIELD_OPTION_DEFAULTS: Record<string, Partial<FieldOptions>> = {
@@ -1415,7 +1421,7 @@ const FIELD_OPTION_DEFAULTS: Record<string, Partial<FieldOptions>> = {
   media: { mediaTypes: ['image'], multiple: false },
   relation: { targetCollection: '', relationType: 1, includeDraft: false },
   json: { jsonDefault: '' },
-  repeater: { subFields: [] },
+  repeater: { subFields: [], variants: [], defaultVariant: '' },
 };
 function parseFieldOptions(field: SchemaField, allCollections?: SchemaCollection[]): FieldOptions {
   try {
@@ -1633,82 +1639,167 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
     );
   }
   if (field.type === 'repeater') {
-    const subFields: RepeaterSubField[] = (opts as any).subFields ?? [];
+    const variants: Array<{ slug: string; label: string; subFields: RepeaterSubField[] }> = (opts as any).variants ?? [];
+    const legacySubFields: RepeaterSubField[] = (opts as any).subFields ?? [];
+    const hasVariants = variants.length > 0;
+    const hasLegacy = !hasVariants && legacySubFields.length > 0;
+    const defaultVariant: string = (opts as any).defaultVariant ?? (hasVariants && variants.length > 0 ? variants[0].slug : '');
     const subTypeOptions = FIELD_TYPES.filter(ft => ALLOWED_SUBFIELD_TYPES.includes(ft.type));
-    const addSubField = () => {
-      onChange({ ...opts, subFields: [...subFields, { slug: '', label: '', type: 'text', required: false }] });
+
+    const addVariant = () => {
+      onChange({ ...opts, variants: [...variants, { slug: '', label: '', subFields: [] }], subFields: undefined });
     };
-    const removeSubField = (idx: number) => {
-      onChange({ ...opts, subFields: subFields.filter((_, j) => j !== idx) });
+    const removeVariant = (vi: number) => {
+      const next = variants.filter((_, j) => j !== vi);
+      const newDef = next.length > 0 ? next[0].slug : '';
+      onChange({ ...opts, variants: next, defaultVariant: variants[vi]?.slug === defaultVariant ? newDef : defaultVariant, subFields: undefined });
     };
-    const moveSubField = (idx: number, dir: -1 | 1) => {
-      const next = [...subFields];
-      const target = idx + dir;
-      if (target < 0 || target >= next.length) return;
-      [next[idx], next[target]] = [next[target], next[idx]];
-      onChange({ ...opts, subFields: next });
-    };
+
     return (
       <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'flex', flexDirection:'column', gap:'8px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <span style={{ fontSize:'10px', fontWeight:600, color:'var(--studio-text-dim)' }}>Sub-fields ({subFields.length})</span>
-          <Button size="sm" variant="outline" onClick={addSubField} style={{ height:'24px', fontSize:'10px' }}>
-            <Plus className="w-3 h-3 mr-1" />Add sub-field
-          </Button>
-        </div>
-        {subFields.map((sf, idx) => (
-          <div key={idx} style={{ display:'flex', gap:'6px', alignItems:'center', padding:'6px', border:'1px solid var(--studio-border)', borderRadius:'5px', background:'var(--studio-raised)' }}>
-            <div style={{ display:'flex', flexDirection:'column', gap:'2px' }}>
-              <button onClick={() => moveSubField(idx, -1)} disabled={idx === 0}
-                style={{ background:'none', border:'none', cursor: idx===0 ? 'default' : 'pointer', opacity: idx===0 ? 0.3 : 1, color:'var(--studio-text-muted)', padding:'1px', lineHeight:1 }}>
-                <ChevronUp className="w-3 h-3" />
-              </button>
-              <button onClick={() => moveSubField(idx, 1)} disabled={idx === subFields.length - 1}
-                style={{ background:'none', border:'none', cursor: idx===subFields.length-1 ? 'default' : 'pointer', opacity: idx===subFields.length-1 ? 0.3 : 1, color:'var(--studio-text-muted)', padding:'1px', lineHeight:1 }}>
-                <ChevronDown className="w-3 h-3" />
-              </button>
-            </div>
-            <input
-              placeholder="Label"
-              value={sf.label}
-              onChange={e => {
-                const next = [...subFields];
-                next[idx] = { ...sf, label: e.target.value, slug: toSnakeCase(e.target.value) };
-                onChange({ ...opts, subFields: next });
-              }}
-              style={{ ...S.input, flex:1, minWidth:'80px' }}
-            />
-            <select
-              value={sf.type}
-              onChange={e => {
-                const next = [...subFields];
-                next[idx] = { ...sf, type: e.target.value };
-                onChange({ ...opts, subFields: next });
-              }}
-              style={{ ...S.input, width:'110px' }}
-            >
-              {subTypeOptions.map(ft => (
-                <option key={ft.type} value={ft.type}>{ft.label}</option>
-              ))}
-            </select>
-            <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
-              <Switch checked={sf.required} onCheckedChange={v => {
-                const next = [...subFields];
-                next[idx] = { ...sf, required: v };
-                onChange({ ...opts, subFields: next });
-              }} />
-              <span style={{ fontSize:'9px', color:'var(--studio-text-muted)' }}>Req.</span>
-            </div>
-            <button onClick={() => removeSubField(idx)}
-              style={{ background:'none', border:'none', cursor:'pointer', padding:'4px', opacity:.5, flexShrink:0 }}>
-              <Trash2 className="w-3.5 h-3.5" style={{ color:'var(--studio-red)' }} />
-            </button>
-          </div>
-        ))}
-        {subFields.length === 0 && (
-          <p style={{ fontSize:'10px', color:'var(--studio-text-muted)', textAlign:'center', padding:'8px' }}>
-            No sub-fields defined. Add at least one sub-field to create a structured repeater.
+        {hasLegacy && (
+          <p style={{ fontSize:'10px', color:'var(--studio-text-muted)', padding:'4px', background:'var(--studio-raised)', borderRadius:'4px' }}>
+            ⚠️ Legacy format (subFields). Add at least one variant and save to migrate.
           </p>
+        )}
+        {(hasVariants || (!hasLegacy && variants.length === 0 && legacySubFields.length === 0)) && (
+          <>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <span style={{ fontSize:'10px', fontWeight:600, color:'var(--studio-text-dim)' }}>Variants ({variants.length})</span>
+              <Button size="sm" variant="outline" onClick={addVariant} style={{ height:'24px', fontSize:'10px' }}>
+                <Plus className="w-3 h-3 mr-1" />Add variant
+              </Button>
+            </div>
+
+            {variants.map((v, vi) => {
+              const sf = v.subFields ?? [];
+              const addSub = () => {
+                const next = [...variants];
+                next[vi] = { ...v, subFields: [...sf, { slug: '', label: '', type: 'text', required: false }] };
+                onChange({ ...opts, variants: next, subFields: undefined });
+              };
+              const removeSub = (si: number) => {
+                const next = [...variants];
+                next[vi] = { ...v, subFields: sf.filter((_, j) => j !== si) };
+                onChange({ ...opts, variants: next, subFields: undefined });
+              };
+              const moveSub = (si: number, dir: -1 | 1) => {
+                const target = si + dir;
+                if (target < 0 || target >= sf.length) return;
+                const next = [...variants];
+                const subCopy = [...sf];
+                [subCopy[si], subCopy[target]] = [subCopy[target], subCopy[si]];
+                next[vi] = { ...v, subFields: subCopy };
+                onChange({ ...opts, variants: next, subFields: undefined });
+              };
+
+              return (
+                <details key={vi} style={{ border:'1px solid var(--studio-border)', borderRadius:'5px', padding:'6px', background:'var(--studio-raised)' }}>
+                  <summary style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'10px', fontWeight:600, color:'var(--studio-text-dim)' }}>
+                    {v.label || 'Untitled'} ({sf.length} fields)
+                  </summary>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginTop:'8px' }}>
+                    <div style={{ display:'flex', gap:'6px' }}>
+                      <input
+                        placeholder="Label"
+                        value={v.label}
+                        onChange={e => {
+                          const next = [...variants];
+                          next[vi] = { ...v, label: e.target.value, slug: toSnakeCase(e.target.value) };
+                          onChange({ ...opts, variants: next, subFields: undefined });
+                        }}
+                        style={{ ...S.input, flex:1 }}
+                      />
+                      <button onClick={() => removeVariant(vi)}
+                        style={{ background:'none', border:'none', cursor:'pointer', padding:'4px', opacity:.5, flexShrink:0 }}>
+                        <Trash2 className="w-3.5 h-3.5" style={{ color:'var(--studio-red)' }} />
+                      </button>
+                    </div>
+
+                    <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                      {sf.map((f, si) => (
+                        <div key={si} style={{ display:'flex', gap:'4px', alignItems:'center', padding:'4px', border:'1px solid var(--studio-border)', borderRadius:'4px', background:'var(--studio-bg)' }}>
+                          <div style={{ display:'flex', flexDirection:'column', gap:'1px' }}>
+                            <button onClick={() => moveSub(si, -1)} disabled={si === 0}
+                              style={{ background:'none', border:'none', cursor: si===0?'default':'pointer', opacity: si===0?0.3:1, color:'var(--studio-text-muted)', padding:'0 2px', lineHeight:1 }}>
+                              <ChevronUp className="w-2.5 h-2.5" />
+                            </button>
+                            <button onClick={() => moveSub(si, 1)} disabled={si === sf.length - 1}
+                              style={{ background:'none', border:'none', cursor: si===sf.length-1?'default':'pointer', opacity: si===sf.length-1?0.3:1, color:'var(--studio-text-muted)', padding:'0 2px', lineHeight:1 }}>
+                              <ChevronDown className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                          <input
+                            placeholder="Label"
+                            value={f.label}
+                            onChange={e => {
+                              const next = [...variants];
+                              const subs = [...sf];
+                              subs[si] = { ...f, label: e.target.value, slug: toSnakeCase(e.target.value) };
+                              next[vi] = { ...v, subFields: subs };
+                              onChange({ ...opts, variants: next, subFields: undefined });
+                            }}
+                            style={{ ...S.input, flex:1, minWidth:'60px' }}
+                          />
+                          <select
+                            value={f.type}
+                            onChange={e => {
+                              const next = [...variants];
+                              const subs = [...sf];
+                              subs[si] = { ...f, type: e.target.value };
+                              next[vi] = { ...v, subFields: subs };
+                              onChange({ ...opts, variants: next, subFields: undefined });
+                            }}
+                            style={{ ...S.input, width:'90px' }}
+                          >
+                            {subTypeOptions.map(ft => (
+                              <option key={ft.type} value={ft.type}>{ft.label}</option>
+                            ))}
+                          </select>
+                          <Switch checked={f.required} onCheckedChange={val => {
+                            const next = [...variants];
+                            const subs = [...sf];
+                            subs[si] = { ...f, required: val };
+                            next[vi] = { ...v, subFields: subs };
+                            onChange({ ...opts, variants: next, subFields: undefined });
+                          }} />
+                          <button onClick={() => removeSub(si)}
+                            style={{ background:'none', border:'none', cursor:'pointer', padding:'2px', opacity:.4, flexShrink:0 }}>
+                            <Trash2 className="w-2.5 h-2.5" style={{ color:'var(--studio-red)' }} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button size="sm" variant="outline" onClick={addSub} style={{ height:'20px', fontSize:'9px' }}>
+                      <Plus className="w-2.5 h-2.5 mr-1" />Add sub-field
+                    </Button>
+                  </div>
+                </details>
+              );
+            })}
+
+            {variants.length > 0 && (
+              <div style={{ marginTop:'4px' }}>
+                <span style={{ fontSize:'9px', color:'var(--studio-text-dim)' }}>Default variant: </span>
+                <select
+                  value={defaultVariant}
+                  onChange={e => onChange({ ...opts, defaultVariant: e.target.value, subFields: undefined })}
+                  style={{ height:'24px', fontSize:'9px', background:'var(--studio-bg)', border:'1px solid var(--studio-border)', borderRadius:'5px', color:'var(--studio-text)', padding:'0 4px' }}
+                >
+                  {variants.filter(v => v.slug).map(v => (
+                    <option key={v.slug} value={v.slug}>{v.label || v.slug}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {variants.length === 0 && !hasLegacy && legacySubFields.length === 0 && (
+              <p style={{ fontSize:'10px', color:'var(--studio-text-muted)', textAlign:'center', padding:'8px' }}>
+                No variants defined. Add at least one variant to create a structured repeater.
+              </p>
+            )}
+          </>
         )}
         {general}
       </div>
