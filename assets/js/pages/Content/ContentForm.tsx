@@ -17,7 +17,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import Select from "@/components/ui/select/Select";
+import ReactSelect from "@/components/ui/select/Select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import AiToolbar from '@/components/AiToolbar';
 import VersionHistory from '@/components/VersionHistory';
 
@@ -148,6 +149,10 @@ useEffect(() => {
             const payload: any = { fields: formData, status, locale };
             if (scheduledAt) {
                 payload.scheduledAt = scheduledAt;
+            }
+
+            if (formData._assigned_to_id) {
+                payload.assigned_to_id = parseInt(formData._assigned_to_id);
             }
 
             if (isEditMode && contentEntry) {
@@ -349,125 +354,112 @@ useEffect(() => {
 
                     <div>
                         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-                            {!isSingleton && (
-                                <>
-                                {/* Primary save actions */}
-                                <div className="space-y-2.5 rounded-xl border border-border bg-card/60 p-3 shadow-sm">
-                                    {isEditMode && contentEntry?.status === 'scheduled' && can.publish_content && (
-                                        <>
-                                            <Button
-                                                type="button"
-                                                variant="default"
-                                                onClick={() => handleSubmit('stay', 'published')}
-                                                disabled={processing}
-                                                className="h-10 w-full rounded-lg bg-emerald-600 font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
-                                            >
-                                                <Send className="me-2 h-4 w-4" />
-                                                {t('content.publish_now')}
+                            {!isSingleton && (<>{(() => {
+                                const wfStatuses = collection.settings?.workflow?.statuses ?? [
+                                    { slug: 'draft', label: 'Draft', color: '#6b7280', published: false },
+                                    { slug: 'published', label: 'Published', color: '#10b981', published: true },
+                                ];
+                                const publishedSlug = wfStatuses.find(s => s.published)?.slug ?? 'published';
+
+                                if (isEditMode && contentEntry?.status === 'scheduled' && can.publish_content) {
+                                    return (
+                                        <div className="space-y-2.5 rounded-xl border border-border bg-card/60 p-3 shadow-sm">
+                                            <Button onClick={() => handleSubmit('stay', publishedSlug)} disabled={processing}
+                                                className="h-10 w-full rounded-lg bg-emerald-600 font-medium text-white shadow-sm hover:bg-emerald-700">
+                                                <Send className="me-2 h-4 w-4" />{t('content.publish_now')}
                                             </Button>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={() => setShowSchedulePicker(true)}
-                                                disabled={processing}
-                                                className="h-10 w-full rounded-lg font-medium"
-                                            >
-                                                <Calendar className="w-4 h-4 mr-2" />
-                                                {t('content.reschedule')}
+                                            <Button variant="outline" onClick={() => setShowSchedulePicker(true)} disabled={processing}
+                                                className="h-10 w-full rounded-lg font-medium">
+                                                <Calendar className="w-4 h-4 mr-2" />{t('content.reschedule')}
                                             </Button>
-                                        </>
-                                    )}
-                                    {isEditMode && contentEntry?.status === 'draft' && (
-                                        <Button
-                                            onClick={() => handleSubmit('stay', 'draft')}
-                                            disabled={processing}
-                                            className="h-10 w-full rounded-lg font-medium shadow-sm"
-                                        >
-                                            <Save className="me-2 h-4 w-4" />
-                                            {t('content.form.save_draft')}
-                                        </Button>
-                                    )}
-                                    {!isEditMode && (
-                                        <div className="flex gap-1.5">
-                                            <Button
-                                                onClick={() => handleSubmit('stay', 'draft')}
-                                                disabled={processing}
-                                                variant="secondary"
-                                                className="h-10 flex-1 rounded-lg font-medium"
-                                            >
-                                                <Save className="me-2 h-4 w-4" />
-                                                {t('content.form.save_draft')}
-                                            </Button>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="secondary" size="icon" className="h-10 w-10 shrink-0 rounded-lg">
-                                                        <ChevronDown className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => handleSubmit('close', 'draft')}>
-                                                        {t('content.form.save_close')}
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleSubmit('new', 'draft')}>
-                                                        {t('content.form.save_new')}
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
                                         </div>
-                                    )}
+                                    );
+                                }
 
-                                    {isEditMode && can.publish_content && (
-                                        <Button
-                                            onClick={() => handleSubmit('stay', 'published')}
-                                            disabled={processing}
-                                            className="h-10 w-full rounded-lg bg-emerald-600 font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
-                                        >
-                                            <Send className="me-2 h-4 w-4" />
-                                            {t('content.form.save_publish')}
-                                        </Button>
-                                    )}
+                                return (
+                                    <div className="space-y-2.5 rounded-xl border border-border bg-card/60 p-3 shadow-sm">
+                                        {wfStatuses.map(s => {
+                                            const isPublished = s.published === true;
+                                            const currentStatus = contentEntry?.status;
+                                            const isCurrent = currentStatus === s.slug;
 
-                                    {!isEditMode && can.publish_content && (
-                                        <div className="flex gap-1.5">
-                                            <Button
-                                                onClick={() => handleSubmit('stay', 'published')}
-                                                disabled={processing}
-                                                className="h-10 flex-1 rounded-lg bg-emerald-600 font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
-                                            >
-                                                <Send className="me-2 h-4 w-4" />
-                                                {t('content.form.save_publish')}
-                                            </Button>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button size="icon" className="h-10 w-10 shrink-0 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
-                                                        <ChevronDown className="h-4 w-4" />
+                                            if (isEditMode && isCurrent && !isPublished) {
+                                                return (
+                                                    <Button key={s.slug} onClick={() => handleSubmit('stay', s.slug)} disabled={processing}
+                                                        className="h-10 w-full rounded-lg font-medium shadow-sm">
+                                                        <Save className="me-2 h-4 w-4" />Save as {s.label}
                                                     </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => handleSubmit('close', 'published')}>
-                                                        {t('content.form.save_publish_close')}
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleSubmit('new', 'published')}>
-                                                        {t('content.form.save_publish_new')}
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </div>
-                                    )}
-
-                                    {!showSchedulePicker && can.publish_content && (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={() => setShowSchedulePicker(true)}
-                                            disabled={processing}
-                                            className="h-10 w-full rounded-lg font-medium"
-                                        >
-                                            <Calendar className="w-4 h-4 mr-2" />
-                                            {t('content.schedule_btn')}
-                                        </Button>
-                                    )}
-                                </div>
+                                                );
+                                            }
+                                            if (isEditMode && can.publish_content && isPublished) {
+                                                return (
+                                                    <Button key={s.slug} onClick={() => handleSubmit('stay', s.slug)} disabled={processing}
+                                                        className="h-10 w-full rounded-lg bg-emerald-600 font-medium text-white shadow-sm hover:bg-emerald-700">
+                                                        <Send className="me-2 h-4 w-4" />{s.label}
+                                                    </Button>
+                                                );
+                                            }
+                                            if (!isEditMode && isPublished && can.publish_content) {
+                                                return (
+                                                    <div key={s.slug} className="flex gap-1.5">
+                                                        <Button onClick={() => handleSubmit('stay', s.slug)} disabled={processing}
+                                                            className="h-10 flex-1 rounded-lg bg-emerald-600 font-medium text-white shadow-sm hover:bg-emerald-700">
+                                                            <Send className="me-2 h-4 w-4" />{s.label}
+                                                        </Button>
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button size="icon" className="h-10 w-10 shrink-0 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
+                                                                    <ChevronDown className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem onClick={() => handleSubmit('close', s.slug)}>
+                                                                    {t('content.form.save_publish_close')}
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => handleSubmit('new', s.slug)}>
+                                                                    {t('content.form.save_publish_new')}
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </div>
+                                                );
+                                            }
+                                            if (!isEditMode && !isPublished) {
+                                                return (
+                                                    <div key={s.slug} className="flex gap-1.5">
+                                                        <Button onClick={() => handleSubmit('stay', s.slug)} disabled={processing}
+                                                            variant="secondary" className="h-10 flex-1 rounded-lg font-medium">
+                                                            <Save className="me-2 h-4 w-4" />Save as {s.label}
+                                                        </Button>
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button variant="secondary" size="icon" className="h-10 w-10 shrink-0 rounded-lg">
+                                                                    <ChevronDown className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem onClick={() => handleSubmit('close', s.slug)}>
+                                                                    {t('content.form.save_close')}
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => handleSubmit('new', s.slug)}>
+                                                                    {t('content.form.save_new')}
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })}
+                                        {!showSchedulePicker && can.publish_content && (
+                                            <Button type="button" variant="outline" onClick={() => setShowSchedulePicker(true)} disabled={processing}
+                                                className="h-10 w-full rounded-lg font-medium">
+                                                <Calendar className="w-4 h-4 mr-2" />{t('content.schedule_btn')}
+                                            </Button>
+                                        )}
+                                    </div>
+                                );
+                            })()}
 
                                 {showSchedulePicker && (
                                     <div className="flex items-center gap-3 p-3 border rounded-md bg-muted/30">
@@ -513,6 +505,27 @@ useEffect(() => {
                                         >
                                             <X className="w-4 h-4" />
                                         </Button>
+                                    </div>
+                                )}
+
+                                {isEditMode && (
+                                    <div className="rounded-xl border border-border bg-card/60 p-3 shadow-sm">
+                                        <Label className="text-xs font-medium mb-2 block">Assigne a</Label>
+                                        <Select
+                                            value={formData._assigned_to_id ?? ''}
+                                            onValueChange={(val: string) => setFormData(prev => ({ ...prev, _assigned_to_id: val }))}
+                                            disabled={processing}
+                                        >
+                                            <SelectTrigger className="h-9 text-sm">
+                                                <SelectValue placeholder="Non assigne" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="">Non assigne</SelectItem>
+                                                {(project as any).members?.map((m: any) => (
+                                                    m.user && <SelectItem key={m.user.id} value={String(m.user.id)}>{m.user.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 )}
 
@@ -631,7 +644,7 @@ useEffect(() => {
                                             <Globe2 className="w-4 h-4 text-muted-foreground" />
                                             <span>{t('content.form.locale_label')}</span>
                                         </h3>
-                                        <Select
+                                        <ReactSelect
                                             isMulti={false}
                                             value={{ value: locale, label: locale.toUpperCase() }}
                                             onChange={(option: any) => setLocale(option?.value || locale)}
