@@ -17,7 +17,7 @@ import {
   MessageSquare, Send, Bot, User, Check,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   FolderOpen, Pencil, Sparkles,
-  Users, Lock, UserPlus, Shield, GripVertical, ChevronDown, Settings2,
+  Users, Lock, UserPlus, Shield, GripVertical, ChevronUp, ChevronDown, Settings2,
   Database, Table2, Slash,
   Globe, Smile, Fingerprint, Tags, Star,
   Paperclip, Library,
@@ -36,7 +36,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   boolean: ToggleLeft, color: Palette, date: Calendar,
   datetime: Clock, time: Clock, media: Image, relation: GitBranch, json: Code2,
   url: Globe, markdown: FileText, code: Code2, icon: Smile,
-  uuid: Fingerprint, tags: Tags, rating: Star,
+  uuid: Fingerprint, tags: Tags, rating: Star, repeater: Layers,
 };
 
 interface SchemaField { key: string; name: string; slug: string; type: string; isRequired: boolean; options?: Record<string, any>; }
@@ -1388,6 +1388,8 @@ export default function SchemaBuilder({ project }: { project: Project }) {
 }
 
 /* ═══════════════ FIELD OPTIONS EDITOR ═══════════════ */
+type RepeaterSubField = { slug: string; label: string; type: string; required: boolean; };
+const ALLOWED_SUBFIELD_TYPES = ['text','longtext','richtext','number','email','url','color','date','datetime','time','boolean','enumeration','media'];
 interface FieldOptions {
   minLength?: number; maxLength?: number; pattern?: string; placeholder?: string;
   min?: number; max?: number; step?: number; defaultValue?: string;
@@ -1401,6 +1403,7 @@ interface FieldOptions {
   defaultBool?: boolean;        // valeur par défaut (champs boolean)
   minDate?: string; maxDate?: string; // bornes (champs date/datetime/time)
   helpText?: string; hideInList?: boolean; readOnly?: boolean;
+  subFields?: RepeaterSubField[];
 }
 const FIELD_OPTION_DEFAULTS: Record<string, Partial<FieldOptions>> = {
   text: { placeholder: '', minLength: undefined, maxLength: undefined, pattern: '' },
@@ -1410,6 +1413,7 @@ const FIELD_OPTION_DEFAULTS: Record<string, Partial<FieldOptions>> = {
   media: { mediaTypes: ['image'], multiple: false },
   relation: { targetCollection: '', relationType: 1, includeDraft: false },
   json: { jsonDefault: '' },
+  repeater: { subFields: [] },
 };
 function parseFieldOptions(field: SchemaField, allCollections?: SchemaCollection[]): FieldOptions {
   try {
@@ -1622,6 +1626,88 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
           style={{ ...S.input, height:'auto', minHeight:'72px', padding:'6px', fontFamily:'var(--studio-mono)', lineHeight:'1.4', resize:'vertical', borderColor: jsonValid ? 'var(--studio-border)' : 'var(--studio-red)' }}
         />
         {!jsonValid && <span style={{ fontSize:'9px', color:'var(--studio-red)' }}>{t('studio.fopts.json_invalid')}</span>}
+        {general}
+      </div>
+    );
+  }
+  if (field.type === 'repeater') {
+    const subFields: RepeaterSubField[] = (opts as any).subFields ?? [];
+    const subTypeOptions = FIELD_TYPES.filter(ft => ALLOWED_SUBFIELD_TYPES.includes(ft.type));
+    const addSubField = () => {
+      onChange({ ...opts, subFields: [...subFields, { slug: '', label: '', type: 'text', required: false }] });
+    };
+    const removeSubField = (idx: number) => {
+      onChange({ ...opts, subFields: subFields.filter((_, j) => j !== idx) });
+    };
+    const moveSubField = (idx: number, dir: -1 | 1) => {
+      const next = [...subFields];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      onChange({ ...opts, subFields: next });
+    };
+    return (
+      <div style={{ marginTop:'8px', padding:'8px', border:'1px solid var(--studio-border)', borderRadius:'6px', background:'var(--studio-surface)', display:'flex', flexDirection:'column', gap:'8px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span style={{ fontSize:'10px', fontWeight:600, color:'var(--studio-text-dim)' }}>Sub-fields ({subFields.length})</span>
+          <Button size="sm" variant="outline" onClick={addSubField} style={{ height:'24px', fontSize:'10px' }}>
+            <Plus className="w-3 h-3 mr-1" />Add sub-field
+          </Button>
+        </div>
+        {subFields.map((sf, idx) => (
+          <div key={idx} style={{ display:'flex', gap:'6px', alignItems:'center', padding:'6px', border:'1px solid var(--studio-border)', borderRadius:'5px', background:'var(--studio-raised)' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:'2px' }}>
+              <button onClick={() => moveSubField(idx, -1)} disabled={idx === 0}
+                style={{ background:'none', border:'none', cursor: idx===0 ? 'default' : 'pointer', opacity: idx===0 ? 0.3 : 1, color:'var(--studio-text-muted)', padding:'1px', lineHeight:1 }}>
+                <ChevronUp className="w-3 h-3" />
+              </button>
+              <button onClick={() => moveSubField(idx, 1)} disabled={idx === subFields.length - 1}
+                style={{ background:'none', border:'none', cursor: idx===subFields.length-1 ? 'default' : 'pointer', opacity: idx===subFields.length-1 ? 0.3 : 1, color:'var(--studio-text-muted)', padding:'1px', lineHeight:1 }}>
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            </div>
+            <input
+              placeholder="Label"
+              value={sf.label}
+              onChange={e => {
+                const next = [...subFields];
+                next[idx] = { ...sf, label: e.target.value, slug: toSnakeCase(e.target.value) };
+                onChange({ ...opts, subFields: next });
+              }}
+              style={{ ...S.input, flex:1, minWidth:'80px' }}
+            />
+            <select
+              value={sf.type}
+              onChange={e => {
+                const next = [...subFields];
+                next[idx] = { ...sf, type: e.target.value };
+                onChange({ ...opts, subFields: next });
+              }}
+              style={{ ...S.input, width:'110px' }}
+            >
+              {subTypeOptions.map(ft => (
+                <option key={ft.type} value={ft.type}>{ft.label}</option>
+              ))}
+            </select>
+            <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
+              <Switch checked={sf.required} onCheckedChange={v => {
+                const next = [...subFields];
+                next[idx] = { ...sf, required: v };
+                onChange({ ...opts, subFields: next });
+              }} />
+              <span style={{ fontSize:'9px', color:'var(--studio-text-muted)' }}>Req.</span>
+            </div>
+            <button onClick={() => removeSubField(idx)}
+              style={{ background:'none', border:'none', cursor:'pointer', padding:'4px', opacity:.5, flexShrink:0 }}>
+              <Trash2 className="w-3.5 h-3.5" style={{ color:'var(--studio-red)' }} />
+            </button>
+          </div>
+        ))}
+        {subFields.length === 0 && (
+          <p style={{ fontSize:'10px', color:'var(--studio-text-muted)', textAlign:'center', padding:'8px' }}>
+            No sub-fields defined. Add at least one sub-field to create a structured repeater.
+          </p>
+        )}
         {general}
       </div>
     );
