@@ -45,11 +45,15 @@ class EavFieldHelperService
 
         return match ($type) {
             'email' => filter_var($value, FILTER_VALIDATE_EMAIL) ? [] : ['Format email invalide'],
+            'url' => filter_var($value, FILTER_VALIDATE_URL) ? [] : ['Format URL invalide'],
             'number', 'decimal' => is_numeric($value) ? [] : ['Valeur numérique attendue'],
+            'rating' => is_numeric($value) ? [] : ['Note numérique attendue'],
+            'tags' => is_array($value) ? [] : ['Liste de valeurs attendue (tableau)'],
             'boolean', 'checkbox' => is_bool($value) || in_array($value, [0, 1, '0', '1', true, false], true) ? [] : ['Valeur booléenne attendue'],
             'date' => strtotime((string) $value) ? [] : ['Format de date invalide'],
             'datetime' => strtotime((string) $value) ? [] : ['Format de datetime invalide'],
             'text', 'longtext', 'richtext', 'slug', 'color', 'time', 'password',
+            'markdown', 'code', 'icon', 'uuid',
             'json', 'array', 'repeater', 'enumeration', 'media', 'relation' => [],
             default => [],
         };
