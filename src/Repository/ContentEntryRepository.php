@@ -5,6 +5,7 @@ namespace App\Repository;
 use App\Entity\Collection;
 use App\Entity\ContentEntry;
 use App\Entity\Project;
+use App\Entity\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -19,7 +20,7 @@ class ContentEntryRepository extends ServiceEntityRepository
     }
 
     /** @return ContentEntry[] */
-    public function findByCollectionPaginated(Collection $collection, int $page, int $perPage, ?string $locale = null, ?string $status = null): array
+    public function findByCollectionPaginated(Collection $collection, int $page, int $perPage, ?string $locale = null, ?string $status = null, ?int $assignedToId = null): array
     {
         $qb = $this->createQueryBuilder('e')
             ->where('e.collection = :collection')
@@ -35,6 +36,10 @@ class ContentEntryRepository extends ServiceEntityRepository
 
         if ($status !== null) {
             $qb->andWhere('e.status = :status')->setParameter('status', $status);
+        }
+
+        if ($assignedToId !== null) {
+            $qb->andWhere('e.assignedTo = :assignedTo')->setParameter('assignedTo', $assignedToId);
         }
 
         return $qb->getQuery()->getResult();
@@ -119,6 +124,31 @@ class ContentEntryRepository extends ServiceEntityRepository
             ->setParameter('now', new \DateTimeImmutable())
             ->getQuery()
             ->getResult();
+    }
+
+    /**
+     * @return ContentEntry[]
+     */
+    public function findByAssigneePaginated(Collection $collection, User $assignee, int $page = 1, int $perPage = 15, ?string $locale = null, ?string $status = null): array
+    {
+        $qb = $this->createQueryBuilder('e')
+            ->andWhere('e.collection = :collection')
+            ->andWhere('e.assignedTo = :assignee')
+            ->andWhere('e.deletedAt IS NULL')
+            ->setParameter('collection', $collection)
+            ->setParameter('assignee', $assignee)
+            ->orderBy('e.id', 'DESC')
+            ->setFirstResult(($page - 1) * $perPage)
+            ->setMaxResults($perPage);
+
+        if ($locale !== null) {
+            $qb->andWhere('e.locale = :locale')->setParameter('locale', $locale);
+        }
+        if ($status !== null) {
+            $qb->andWhere('e.status = :status')->setParameter('status', $status);
+        }
+
+        return $qb->getQuery()->getResult();
     }
 
     /**
