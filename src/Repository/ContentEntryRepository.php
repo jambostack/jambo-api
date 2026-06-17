@@ -69,6 +69,21 @@ class ContentEntryRepository extends ServiceEntityRepository
         return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
+    public function countTrashedByCollection(Collection $collection, ?string $locale = null): int
+    {
+        $qb = $this->createQueryBuilder('e')
+            ->select('COUNT(e.id)')
+            ->where('e.collection = :collection')
+            ->andWhere('e.deletedAt IS NOT NULL')
+            ->setParameter('collection', $collection);
+
+        if ($locale !== null) {
+            $qb->andWhere('e.locale = :locale')->setParameter('locale', $locale);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
+    }
+
     /**
      * @return ContentEntry[]
      */
