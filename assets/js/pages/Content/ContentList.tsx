@@ -209,15 +209,18 @@ export default function ContentList({ collection, project }: Props) {
                     options: [
                         { label: t('content.draft'), value: 'draft' },
                         { label: t('content.published'), value: 'published' },
+                        { label: t('content.scheduled'), value: 'scheduled' },
                     ]
                 },
                 cell: (item: ContentEntry) => (
-                    <Badge variant={item.status === 'published' ? 'default' : item.status === 'trashed' ? 'destructive' : 'outline'} className={
+                    <Badge variant={item.status === 'published' ? 'default' : item.status === 'scheduled' ? 'secondary' : item.status === 'trashed' ? 'destructive' : 'outline'} className={
                         item.status === 'published'
                             ? 'bg-green-600 hover:bg-green-700'
-                            : item.status === 'trashed' ? 'bg-red-600 hover:bg-red-700' : 'text-amber-600 border-amber-300'
+                            : item.status === 'scheduled'
+                                ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                                : item.status === 'trashed' ? 'bg-red-600 hover:bg-red-700' : 'text-amber-600 border-amber-300'
                     }>
-                        {item.status === 'published' ? t('content.published') : item.status === 'trashed' ? t('content.trashed') : t('content.draft')}
+                        {item.status === 'published' ? t('content.published') : item.status === 'scheduled' ? t('content.scheduled') : item.status === 'trashed' ? t('content.trashed') : t('content.draft')}
                     </Badge>
                 ),
             },
@@ -226,7 +229,7 @@ export default function ContentList({ collection, project }: Props) {
         // Add field columns from loaded fields
         if (collection.fields && collection.fields.length > 0) {
             // Slugs réservés par les colonnes système — ne pas dupliquer
-            const RESERVED_SLUGS = new Set(['status', 'created_at', 'updated_at', 'deleted_at', 'published_at', 'uuid', 'id']);
+            const RESERVED_SLUGS = new Set(['status', 'created_at', 'updated_at', 'deleted_at', 'published_at', 'scheduled_at', 'uuid', 'id']);
 
             const displayableFields = collection.fields.filter((field: Field) =>
                 field.type !== 'password' &&
