@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Field } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,11 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import InputError from '@/components/input-error';
-import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Image } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { LexicalEditor } from '@/components/editors/lexical/LexicalEditor';
+import { MediaLibraryModal } from '@/pages/Assets/MediaFieldSelectModal';
+import type { Asset } from '@/types';
 import FieldBase, { FieldProps } from './FieldBase';
 
 interface SubFieldDef {
@@ -29,13 +33,16 @@ function SubFieldInput({
     onChange,
     processing,
     error,
+    project,
 }: {
     sf: SubFieldDef;
     value: any;
     onChange: (val: any) => void;
     processing: boolean;
     error?: string;
+    project?: any;
 }) {
+    const [mediaModalOpen, setMediaModalOpen] = useState(false);
     const s = sf;
     switch (s.type) {
         case 'text':
@@ -54,8 +61,11 @@ function SubFieldInput({
             );
         case 'richtext':
             return (
-                <div>
-                    <Textarea value={value ?? ''} onChange={e => onChange(e.target.value)} disabled={processing} rows={4} className="font-mono text-sm" />
+                <div className="min-h-[120px] border rounded-md">
+                    <LexicalEditor
+                        value={value || ''}
+                        onChange={(content) => onChange(content)}
+                    />
                     {error && <InputError message={error} />}
                 </div>
             );
@@ -134,13 +144,45 @@ function SubFieldInput({
                 </div>
             );
         }
-        case 'media':
+        case 'media': {
+            const assetId = value ?? '';
+            const isMultiple = s.options?.multiple ?? false;
             return (
                 <div>
-                    <Input type="text" value={value ?? ''} onChange={e => onChange(e.target.value)} disabled={processing} placeholder="UUID du média..." />
+                    <div className="flex gap-2 items-center">
+                        <Input
+                            type="text"
+                            value={assetId}
+                            onChange={e => onChange(e.target.value)}
+                            disabled={processing}
+                            placeholder="UUID du média..."
+                            className="flex-1 font-mono text-xs"
+                        />
+                        {project && (
+                            <>
+                                <Button type="button" variant="outline" size="sm"
+                                    onClick={() => setMediaModalOpen(true)} disabled={processing}
+                                    className="h-9 shrink-0">
+                                    <Image className="h-3.5 w-3.5 mr-1" />Browse
+                                </Button>
+                                <MediaLibraryModal
+                                    isOpen={mediaModalOpen}
+                                    onClose={() => setMediaModalOpen(false)}
+                                    project={project}
+                                    onSelect={(assets: Asset[]) => {
+                                        if (assets.length > 0) {
+                                            onChange(isMultiple ? assets.map(a => a.uuid) : assets[0].uuid);
+                                        }
+                                    }}
+                                    allowMultiple={isMultiple}
+                                />
+                            </>
+                        )}
+                    </div>
                     {error && <InputError message={error} />}
                 </div>
             );
+        }
         default:
             return (
                 <div>
@@ -151,7 +193,7 @@ function SubFieldInput({
     }
 }
 
-export default function RepeaterField({ field, value, onChange, processing, errors }: FieldProps) {
+export default function RepeaterField({ field, value, onChange, processing, errors, project }: FieldProps) {
     const subFields: SubFieldDef[] = (field.options?.subFields as SubFieldDef[]) ?? [];
     const items: Record<string, any>[] = Array.isArray(value) && value.length > 0 ? value : [{}];
 
@@ -185,81 +227,93 @@ export default function RepeaterField({ field, value, onChange, processing, erro
         onChange(field, next);
     };
 
-    const moveItem = (idx: number, dir: -1 | 1) => {
-        const target = idx + dir;
-        if (target < 0 || target >= items.length) return;
+    const onDragEnd = (result: DropResult) => {
+        if (!result.destination) return;
+        const sourceIdx = result.source.index;
+        const destIdx = result.destination.index;
+        if (sourceIdx === destIdx) return;
         const next = [...items];
-        [next[idx], next[target]] = [next[target], next[idx]];
+        const [moved] = next.splice(sourceIdx, 1);
+        next.splice(destIdx, 0, moved);
         onChange(field, next);
     };
 
     return (
         <FieldBase field={field} value={value} onChange={onChange} processing={processing} errors={errors}>
-            <div className="flex flex-col gap-3">
-                {items.map((item, idx) => (
-                    <div key={idx} className="border rounded-lg p-4 bg-muted/10">
-                        {/* Item header */}
-                        <div className="flex items-center justify-between mb-3">
-                            <span className="text-xs font-semibold text-muted-foreground">
-                                Item {idx + 1}
-                            </span>
-                            <div className="flex gap-1">
-                                <Button type="button" variant="ghost" size="icon"
-                                    disabled={idx === 0 || processing}
-                                    onClick={() => moveItem(idx, -1)}
-                                    className="h-7 w-7">
-                                    <ChevronUp className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button type="button" variant="ghost" size="icon"
-                                    disabled={idx === items.length - 1 || processing}
-                                    onClick={() => moveItem(idx, 1)}
-                                    className="h-7 w-7">
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button type="button" variant="ghost" size="icon"
-                                    disabled={items.length <= 1 || processing}
-                                    onClick={() => removeItem(idx)}
-                                    className="h-7 w-7 text-destructive hover:text-destructive">
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                            </div>
-                        </div>
+            <DragDropContext onDragEnd={onDragEnd}>
+                <Droppable droppableId={`repeater-${field.slug}`}>
+                    {(provided) => (
+                        <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-3">
+                            {items.map((item, idx) => (
+                                <Draggable key={`item-${idx}`} draggableId={`${field.slug}-item-${idx}`} index={idx} isDragDisabled={processing}>
+                                    {(dragProvided, snapshot) => (
+                                        <div
+                                            ref={dragProvided.innerRef}
+                                            {...dragProvided.draggableProps}
+                                            className={`border rounded-lg p-4 bg-muted/10 transition-shadow ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary/20' : ''}`}
+                                        >
+                                            {/* Item header */}
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div {...dragProvided.dragHandleProps} className="cursor-grab text-muted-foreground hover:text-foreground transition-colors p-0.5 -ml-1">
+                                                        <GripVertical className="h-4 w-4" />
+                                                    </div>
+                                                    <span className="text-xs font-semibold text-muted-foreground">
+                                                        Item {idx + 1}
+                                                    </span>
+                                                </div>
+                                                <Button type="button" variant="ghost" size="icon"
+                                                    disabled={items.length <= 1 || processing}
+                                                    onClick={() => removeItem(idx)}
+                                                    className="h-7 w-7 text-destructive hover:text-destructive">
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
 
-                        {/* Sub-fields */}
-                        <div className="flex flex-col gap-3">
-                            {subFields.map((sf) => {
-                                const subValue = item[sf.slug];
-                                const errorKey = subFieldErrorKey(field.slug, idx, sf.slug);
-                                return (
-                                    <div key={sf.slug}>
-                                        <Label className="text-xs mb-1.5 block">
-                                            {sf.label}
-                                            {sf.required && <span className="text-red-500 ml-0.5">*</span>}
-                                        </Label>
-                                        <SubFieldInput
-                                            sf={sf}
-                                            value={subValue}
-                                            onChange={(val) => updateSubField(idx, sf.slug, val)}
-                                            processing={processing}
-                                            error={errors[errorKey]}
-                                        />
-                                    </div>
-                                );
-                            })}
+                                            {/* Sub-fields */}
+                                            <div className="flex flex-col gap-3">
+                                                {subFields.map((sf) => {
+                                                    const subValue = item[sf.slug];
+                                                    const errorKey = subFieldErrorKey(field.slug, idx, sf.slug);
+                                                    return (
+                                                        <div key={sf.slug}>
+                                                            <Label className="text-xs mb-1.5 block">
+                                                                {sf.label}
+                                                                {sf.required && <span className="text-red-500 ml-0.5">*</span>}
+                                                            </Label>
+                                                            <SubFieldInput
+                                                                sf={sf}
+                                                                value={subValue}
+                                                                onChange={(val) => updateSubField(idx, sf.slug, val)}
+                                                                processing={processing}
+                                                                error={errors[errorKey]}
+                                                                project={project}
+                                                            />
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </Draggable>
+                            ))}
+                            {provided.placeholder}
                         </div>
-                    </div>
-                ))}
+                    )}
+                </Droppable>
+            </DragDropContext>
 
-                {/* Add item button */}
+            {/* Add item button */}
+            <div className="mt-3">
                 <Button type="button" variant="outline" size="sm"
                     onClick={addItem} disabled={processing}
                     className="w-full">
                     <Plus className="h-4 w-4 mr-1" />Add item
                 </Button>
-
-                {/* Top-level repeater error */}
-                <InputError message={errors[`fields.${field.slug}`]} />
             </div>
+
+            {/* Top-level repeater error */}
+            <InputError message={errors[`fields.${field.slug}`]} />
         </FieldBase>
     );
 }

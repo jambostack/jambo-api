@@ -30,6 +30,7 @@ export type FieldRendererProps = {
     onChange: (field: Field, value: any, index?: number) => void;
     processing: boolean;
     errors: Record<string, string>;
+    project?: any;
 };
 
 export function renderField(props: FieldRendererProps) {

@@ -10,6 +10,7 @@ export interface FieldProps {
     onChange: (field: Field, value: any, index?: number) => void;
     processing: boolean;
     errors: Record<string, string>;
+    project?: any;
 }
 
 export default function FieldBase({ field, children, errors }: React.PropsWithChildren<FieldProps>) {
