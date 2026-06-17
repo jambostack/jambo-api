@@ -19,6 +19,7 @@ import {
   FolderOpen, Pencil, Sparkles,
   Users, Lock, UserPlus, Shield, GripVertical, ChevronDown, Settings2,
   Database, Table2, Slash,
+  Globe, Smile, Fingerprint, Tags, Star,
   Paperclip, Library,
 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
@@ -34,6 +35,8 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   email: AtSign, password: Lock, number: Hash, enumeration: List,
   boolean: ToggleLeft, color: Palette, date: Calendar,
   datetime: Clock, time: Clock, media: Image, relation: GitBranch, json: Code2,
+  url: Globe, markdown: FileText, code: Code2, icon: Smile,
+  uuid: Fingerprint, tags: Tags, rating: Star,
 };
 
 interface SchemaField { key: string; name: string; slug: string; type: string; isRequired: boolean; options?: Record<string, any>; }
