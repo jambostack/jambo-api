@@ -19,9 +19,12 @@ class ImageTransformService
     public function __construct(
         private string $projectDir,
     ) {
-        $this->manager = extension_loaded('imagick')
-            ? ImageManager::imagick()
-            : ImageManager::gd();
+        // Intervention Image v4 : instanciation par classe de driver
+        // (les helpers statiques ::gd()/::imagick() ne sont pas exposés dans cette build).
+        $driverClass = extension_loaded('imagick')
+            ? \Intervention\Image\Drivers\Imagick\Driver::class
+            : \Intervention\Image\Drivers\Gd\Driver::class;
+        $this->manager = new ImageManager($driverClass);
         $this->cacheDir = $projectDir . '/public/uploads/media/cache';
         $this->fs = new Filesystem();
     }
@@ -47,7 +50,7 @@ class ImageTransformService
 
         $this->fs->mkdir(dirname($cachePath));
 
-        $image = $this->manager->read($sourcePath);
+        $image = $this->manager->decodePath($sourcePath);
 
         if ($params['fit'] === 'crop' && $params['w'] && $params['h']) {
             $image->cover($params['w'], $params['h']);

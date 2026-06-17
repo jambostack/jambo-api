@@ -34,7 +34,14 @@ class ImageTransformController extends AbstractController
             return new Response('Accès non autorisé', 403);
         }
 
-        $filePath = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . $media->fileName;
+        // Les fichiers sont rangés sous un dossier par projet (ProjectDirNamer) :
+        // public/uploads/media/{projectUuid}/{fileName}.
+        $mediaRoot = $this->getParameter('kernel.project_dir') . '/public/uploads/media/';
+        $filePath = $mediaRoot . (string) $project->uuid . '/' . $media->fileName;
+        if (!file_exists($filePath)) {
+            // Repli : anciens médias éventuellement stockés à plat.
+            $filePath = $mediaRoot . $media->fileName;
+        }
         if (!file_exists($filePath)) {
             return new Response('Fichier introuvable', 404);
         }
