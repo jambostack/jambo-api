@@ -8,6 +8,8 @@ import { useTranslation } from '@/lib/i18n';
 import type { Project, Collection, Field, UserCan } from "@/types";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ChevronDown, Clock, FileText, Calendar, User, Globe2, Copy, Key, AlertCircle, Trash2, X, CheckCircle2, Save, Send } from "lucide-react";
 import { renderField } from './Fields';
@@ -30,7 +32,7 @@ interface Props {
 }
 
 type SaveAction = 'stay' | 'close' | 'new';
-type SaveStatus = 'draft' | 'published';
+type SaveStatus = 'draft' | 'published' | 'scheduled';
 
 function buildInitialFormData(fields: Field[]): Record<string, any> {
     const data: Record<string, any> = {};
@@ -69,6 +71,9 @@ export default function ContentForm({ project, collection, contentEntry, formDat
     const can = usePage().props.userCan as UserCan;
     const isSingleton = collection.isSingleton;
     const [localStatus, setLocalStatus] = useState<string | null>(null);
+    const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+    const [scheduledDate, setScheduledDate] = useState<string>('');
+    const [scheduledTime, setScheduledTime] = useState<string>('12:00');
 
     // Locale state
     const projLocales = (project as any).locales as string[] | undefined;
@@ -115,7 +120,7 @@ useEffect(() => {
     setFormData(buildInitialFormData(collection.fields));
 }, [collection.id, initialFormData]);
 
-    const handleSubmit = async (action: SaveAction, status: SaveStatus) => {
+    const handleSubmit = async (action: SaveAction, status: SaveStatus, scheduledAt?: string) => {
         setProcessing(true);
         setErrors({});
 
@@ -124,17 +129,22 @@ useEffect(() => {
             
             const contentBase = `/api/projects/${project.uuid}/collections/${collection.slug}/entries`;
 
+            const payload: any = { fields: formData, status, locale };
+            if (scheduledAt) {
+                payload.scheduledAt = scheduledAt;
+            }
+
             if (isEditMode && contentEntry) {
                 // Update existing content
                 response = await axios.put(
                     `${contentBase}/${contentEntry.uuid}`,
-                    { fields: formData, status, locale }
+                    payload
                 );
             } else {
                 // Create new content
                 response = await axios.post(
                     contentBase,
-                    { fields: formData, status, locale }
+                    payload
                 );
             }
             
@@ -320,6 +330,30 @@ useEffect(() => {
                                 <>
                                 {/* Primary save actions */}
                                 <div className="space-y-2.5 rounded-xl border border-border bg-card/60 p-3 shadow-sm">
+                                    {isEditMode && contentEntry?.status === 'scheduled' && (
+                                        <>
+                                            <Button
+                                                type="button"
+                                                variant="default"
+                                                onClick={() => handleSubmit('stay', 'published')}
+                                                disabled={processing}
+                                                className="h-10 w-full rounded-lg bg-emerald-600 font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
+                                            >
+                                                <Send className="me-2 h-4 w-4" />
+                                                Publier maintenant
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                onClick={() => setShowSchedulePicker(true)}
+                                                disabled={processing}
+                                                className="h-10 w-full rounded-lg font-medium"
+                                            >
+                                                <Calendar className="w-4 h-4 mr-2" />
+                                                Replanifier
+                                            </Button>
+                                        </>
+                                    )}
                                     {isEditMode && contentEntry?.status === 'draft' && (
                                         <Button
                                             onClick={() => handleSubmit('stay', 'draft')}
@@ -397,7 +431,67 @@ useEffect(() => {
                                             </DropdownMenu>
                                         </div>
                                     )}
+
+                                    {!showSchedulePicker && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => setShowSchedulePicker(true)}
+                                            disabled={processing}
+                                            className="h-10 w-full rounded-lg font-medium"
+                                        >
+                                            <Calendar className="w-4 h-4 mr-2" />
+                                            Planifier
+                                        </Button>
+                                    )}
                                 </div>
+
+                                {showSchedulePicker && (
+                                    <div className="flex items-center gap-3 p-3 border rounded-md bg-muted/30">
+                                        <div className="flex items-center gap-2">
+                                            <Label htmlFor="scheduled-date" className="text-sm">Date</Label>
+                                            <Input
+                                                id="scheduled-date"
+                                                type="date"
+                                                value={scheduledDate}
+                                                min={new Date().toISOString().split('T')[0]}
+                                                onChange={(e) => setScheduledDate(e.target.value)}
+                                                className="w-36"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Label htmlFor="scheduled-time" className="text-sm">Heure</Label>
+                                            <Input
+                                                id="scheduled-time"
+                                                type="time"
+                                                value={scheduledTime}
+                                                onChange={(e) => setScheduledTime(e.target.value)}
+                                                className="w-28"
+                                            />
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="default"
+                                            onClick={async () => {
+                                                if (!scheduledDate) return;
+                                                const scheduledAt = `${scheduledDate}T${scheduledTime}:00`;
+                                                await handleSubmit('stay', 'scheduled', scheduledAt);
+                                                setShowSchedulePicker(false);
+                                            }}
+                                            disabled={processing || !scheduledDate}
+                                        >
+                                            Confirmer la planification
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setShowSchedulePicker(false)}
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                )}
 
                                 {isEditMode && contentEntry && (
                                     <div className={`relative flex items-center justify-between gap-2 overflow-hidden rounded-xl border p-3.5 ${
