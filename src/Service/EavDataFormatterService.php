@@ -16,7 +16,7 @@ class EavDataFormatterService
     private const RESERVED_KEYS = [
         'id', 'uuid', 'locale', 'status', 'collection',
         'created_at', 'updated_at', 'deleted_at', 'published_at', 'scheduled_at',
-        'creator', 'updater',
+        'creator', 'updater', 'assigned_to',
     ];
 
     public function __construct(
@@ -41,6 +41,7 @@ class EavDataFormatterService
             'scheduled_at' => $entry->scheduledAt?->format(\DateTimeInterface::ATOM),
             'creator'      => $entry->createdBy ? ['name' => $entry->createdBy->name ?: $entry->createdBy->email] : null,
             'updater'      => $entry->updatedBy ? ['name' => $entry->updatedBy->name ?: $entry->updatedBy->email] : null,
+            'assigned_to'  => $entry->assignedTo !== null ? ['id' => $entry->assignedTo->id, 'name' => $entry->assignedTo->name] : null,
         ];
 
         foreach ($entry->fieldValues as $fieldValue) {
