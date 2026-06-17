@@ -107,6 +107,21 @@ class ContentEntryRepository extends ServiceEntityRepository
     }
 
     /**
+     * @return ContentEntry[]
+     */
+    public function findScheduledToPublish(): array
+    {
+        return $this->createQueryBuilder('e')
+            ->where('e.status = :status')
+            ->andWhere('e.scheduledAt <= :now')
+            ->andWhere('e.deletedAt IS NULL')
+            ->setParameter('status', 'scheduled')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Vérifie l'appartenance au projet d'une liste d'UUIDs de content entries.
      * Retourne uniquement les UUIDs qui appartiennent bien au projet donné.
      *
