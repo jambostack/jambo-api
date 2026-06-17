@@ -510,17 +510,17 @@ useEffect(() => {
 
                                 {isEditMode && (
                                     <div className="rounded-xl border border-border bg-card/60 p-3 shadow-sm">
-                                        <Label className="text-xs font-medium mb-2 block">Assigne a</Label>
+                                        <Label className="text-xs font-medium mb-2 block">{t('content.assigned_to')}</Label>
                                         <Select
                                             value={formData._assigned_to_id ?? ''}
                                             onValueChange={(val: string) => setFormData(prev => ({ ...prev, _assigned_to_id: val }))}
                                             disabled={processing}
                                         >
                                             <SelectTrigger className="h-9 text-sm">
-                                                <SelectValue placeholder="Non assigne" />
+                                                <SelectValue placeholder={t('content.unassigned')} />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="">Non assigne</SelectItem>
+                                                <SelectItem value="">{t('content.unassigned')}</SelectItem>
                                                 {(project as any).members?.map((m: any) => (
                                                     m.user && <SelectItem key={m.user.id} value={String(m.user.id)}>{m.user.name}</SelectItem>
                                                 ))}

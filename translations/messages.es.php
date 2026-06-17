@@ -1416,4 +1416,21 @@ return [
     'studio.preview_collections'        => 'Colecciones',
     'studio.preview_fields'             => 'campos',
 
+    // Content — Asignacion y Busqueda
+    'content.assigned_to'              => 'Asignado a',
+    'content.unassigned'               => 'Sin asignar',
+    'content.by'                       => 'por',
+    'content.unknown'                  => 'Desconocido',
+    'content.search_in'                => 'Buscar en {name}',
+    'content.bulk_trashed'             => '{count} entradas movidas a la papelera',
+    'content.bulk_deleted'             => '{count} entradas eliminadas permanentemente',
+    'content.could_not_load_file'      => 'No se pudieron cargar los detalles del archivo',
+
+    // Repeater
+    'repeater.item_n'                  => 'Elemento {n}',
+    'repeater.add_item'                => 'Añadir elemento',
+    'repeater.select'                  => 'Seleccionar...',
+    'repeater.media_uuid_placeholder'  => 'UUID del medio...',
+    'repeater.no_subfields'            => 'Este repetidor no tiene subcampos configurados. Configure los subcampos en el Schema Builder.',
+
 ];
