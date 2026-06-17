@@ -31,6 +31,7 @@ class ContentController extends AbstractController
         private EntityManagerInterface $em,
         private EventDispatcherInterface $dispatcher,
         private \App\Service\VersioningService $versioning,
+        private \App\Repository\ProjectMemberRepository $memberRepo,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -129,8 +130,10 @@ class ContentController extends AbstractController
         // Handle assignment
         if (isset($data['assigned_to_id'])) {
             $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
-            if ($assignee !== null) {
+            if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $collection->project) !== null) {
                 $entry->assignedTo = $assignee;
+            } elseif ($assignee !== null) {
+                return $this->json(['errors' => ['assigned_to_id' => 'User is not a member of this project.']], 422);
             }
         }
 
@@ -192,7 +195,11 @@ class ContentController extends AbstractController
         if (array_key_exists('assigned_to_id', $data)) {
             if ($data['assigned_to_id'] !== null) {
                 $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
-                $entry->assignedTo = $assignee;
+                if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $entry->collection->project) !== null) {
+                    $entry->assignedTo = $assignee;
+                } elseif ($assignee !== null) {
+                    return $this->json(['errors' => ['assigned_to_id' => 'User is not a member of this project.']], 422);
+                }
             } else {
                 $entry->assignedTo = null;
             }
