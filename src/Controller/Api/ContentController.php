@@ -76,6 +76,7 @@ class ContentController extends AbstractController
         $perPage = min(100, max(1, $request->query->getInt('per_page', 15)));
         $status  = $request->query->getString('status', 'published');
         $allStatuses = array_column($collection->getWorkflowStatuses(), 'slug');
+        $allStatuses[] = 'draft';
         $allStatuses[] = 'scheduled';
         $statusFilter = in_array($status, $allStatuses, true) ? $status : null;
 
@@ -174,8 +175,8 @@ class ContentController extends AbstractController
         $entry->locale     = $locale;
         $status = $data['status'] ?? $collection->getDefaultStatus();
         $statuses = $collection->getWorkflowStatuses();
-        $validStatuses = array_column($statuses, 'slug');
-        $validStatuses[] = 'scheduled';
+        $systemStatuses = ['draft', 'scheduled'];
+        $validStatuses = array_merge(array_column($statuses, 'slug'), $systemStatuses);
         if (!in_array($status, $validStatuses, true)) {
             return $this->json(['errors' => ['status' => 'Invalid status for this collection.']], 422);
         }
