@@ -33,6 +33,18 @@ interface Props {
     project: Project;
 }
 
+function getStatusColor(status: string, workflow?: { statuses: Array<{ slug: string; color: string }> } | null): string {
+    const found = workflow?.statuses?.find(s => s.slug === status);
+    if (found) return found.color;
+    // Fallback colors
+    switch (status) {
+        case 'published': return '#10b981';
+        case 'draft': return '#6b7280';
+        case 'scheduled': return '#3b82f6';
+        default: return '#6b7280';
+    }
+}
+
 export default function ContentList({ collection, project }: Props) {
     const dataTableRef = useRef<DataTableRef>(null);
     const [selectedItems, setSelectedItems] = useState<ContentEntry[]>([]);
@@ -212,20 +224,34 @@ export default function ContentList({ collection, project }: Props) {
                         { label: t('content.scheduled'), value: 'scheduled' },
                     ]
                 },
-                cell: (item: ContentEntry) => (
-                    <Badge variant={item.status === 'published' ? 'default' : item.status === 'scheduled' ? 'secondary' : item.status === 'trashed' ? 'destructive' : 'outline'} className={
-                        item.status === 'published'
-                            ? 'bg-green-600 hover:bg-green-700'
-                            : item.status === 'scheduled'
-                                ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                                : item.status === 'trashed' ? 'bg-red-600 hover:bg-red-700' : 'text-amber-600 border-amber-300'
-                    }>
-                        {item.status === 'published' ? t('content.published') : item.status === 'scheduled' ? t('content.scheduled') : item.status === 'trashed' ? t('content.trashed') : t('content.draft')}
-                    </Badge>
-                ),
+                cell: (item: ContentEntry) => {
+                    const color = getStatusColor(item.status, collection.settings?.workflow);
+                    const isTrashed = item.status === 'trashed';
+                    const badgeVariant = item.status === 'published' ? 'default' : item.status === 'scheduled' ? 'secondary' : isTrashed ? 'destructive' : 'outline';
+                    const badgeLabel = item.status === 'published' ? t('content.published') : item.status === 'scheduled' ? t('content.scheduled') : isTrashed ? t('content.trashed') : t('content.draft');
+                    return (
+                        <Badge
+                            variant={badgeVariant}
+                            style={isTrashed || item.status === 'draft' ? undefined : { backgroundColor: color }}
+                            className={isTrashed ? 'bg-red-600 hover:bg-red-700' : item.status === 'draft' ? 'text-amber-600 border-amber-300' : ''}
+                        >
+                            {badgeLabel}
+                        </Badge>
+                    );
+                },
+            },
+            {
+                key: 'assigned_to',
+                label: 'Assigné à',
+                render: (_: any, item: ContentEntry & { assigned_to?: { id: number; name: string } | null }) => {
+                    if (item.assigned_to?.name) {
+                        return <span className="text-xs">{item.assigned_to.name}</span>;
+                    }
+                    return <span className="text-xs text-muted-foreground">—</span>;
+                },
             },
         ];
-        
+
         // Add field columns from loaded fields
         if (collection.fields && collection.fields.length > 0) {
             // Slugs réservés par les colonnes système — ne pas dupliquer
