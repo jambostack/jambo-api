@@ -1548,7 +1548,8 @@ PROMPT;
             try {
                 $this->em->flush();
             } catch (\Throwable $e) {
-                return ['error' => 'Failed to persist entries: ' . $e->getMessage()];
+                $this->logger?->error('Failed to persist entries in StudioController', ['exception' => $e]);
+                return ['error' => 'Failed to persist entries. Please try again.'];
             }
             return ['created' => $created, 'errors' => $errors, 'note' => 'Mot de passe aleatoire. Utilisateurs crees sans possibilite de connexion directe.'];
         }
@@ -1586,7 +1587,8 @@ PROMPT;
         try {
             $this->em->flush();
         } catch (\Throwable $e) {
-            return ['error' => 'Failed to persist entries: ' . $e->getMessage()];
+            $this->logger?->error('Failed to persist entries in StudioController', ['exception' => $e]);
+            return ['error' => 'Failed to persist entries. Please try again.'];
         }
         return ['created' => $created, 'errors' => $errors];
     }
@@ -1641,7 +1643,8 @@ PROMPT;
         try {
             $this->em->flush();
         } catch (\Throwable $e) {
-            return ['error' => 'Failed to persist entries: ' . $e->getMessage()];
+            $this->logger?->error('Failed to persist entries in StudioController', ['exception' => $e]);
+            return ['error' => 'Failed to persist entries. Please try again.'];
         }
         return ['updated' => $updated];
     }
