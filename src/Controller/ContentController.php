@@ -71,17 +71,23 @@ class ContentController extends AbstractController
     }
 
     #[Route('/trash', name: 'trash', methods: ['GET'])]
-    public function trash(string $projectUuid, string $collectionSlug): JsonResponse
+    public function trash(string $projectUuid, string $collectionSlug, Request $request): JsonResponse
     {
         $collection = $this->resolveCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
         }
 
-        $entries = $this->entryRepository->findTrashed($collection);
+        $locale = $request->query->getString('locale');
+        $page = max(1, $request->query->getInt('page', 1));
+        $perPage = min(100, max(1, $request->query->getInt('per_page', 15)));
+
+        $entries = $this->entryRepository->findTrashedPaginated($collection, $page, $perPage, $locale ?: null);
+        $total = $this->entryRepository->countByCollection($collection, $locale ?: null);
 
         return $this->json([
-            'data' => array_map(fn ($e) => $this->formatter->formatEntry($e), $entries),
+            'data' => array_values(array_map(fn ($e) => $this->formatter->formatEntry($e), $entries)),
+            'meta' => ['total' => $total, 'page' => $page, 'per_page' => $perPage, 'pages' => (int) ceil($total / $perPage)],
         ]);
     }
 
