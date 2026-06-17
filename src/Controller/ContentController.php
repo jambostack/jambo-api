@@ -106,8 +106,8 @@ class ContentController extends AbstractController
 
         // Validate status against workflow
         $statuses = $collection->getWorkflowStatuses();
-        $validStatuses = array_column($statuses, 'slug');
-        $validStatuses[] = 'scheduled'; // scheduled is always allowed
+        $systemStatuses = ['draft', 'scheduled'];
+        $validStatuses = array_merge(array_column($statuses, 'slug'), $systemStatuses);
         $status = $data['status'] ?? 'draft';
         if (!in_array($status, $validStatuses, true)) {
             return $this->json(['errors' => ['status' => 'Invalid status for this collection.']], 422);
@@ -176,8 +176,8 @@ class ContentController extends AbstractController
 
         // Validate status against workflow
         $statuses = $entry->collection->getWorkflowStatuses();
-        $validStatuses = array_column($statuses, 'slug');
-        $validStatuses[] = 'scheduled'; // scheduled is always allowed
+        $systemStatuses = ['draft', 'scheduled'];
+        $validStatuses = array_merge(array_column($statuses, 'slug'), $systemStatuses);
         $status = $data['status'] ?? 'draft';
         if (!in_array($status, $validStatuses, true)) {
             return $this->json(['errors' => ['status' => 'Invalid status for this collection.']], 422);
