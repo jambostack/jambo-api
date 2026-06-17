@@ -15,6 +15,13 @@ import TimeField from './TimeField';
 import MediaField from './MediaField';
 import RelationField from './RelationField';
 import JSONField from './JSONField';
+import UrlField from './UrlField';
+import MarkdownField from './MarkdownField';
+import CodeField from './CodeField';
+import IconField from './IconField';
+import UuidField from './UuidField';
+import TagsField from './TagsField';
+import RatingField from './RatingField';
 
 export type FieldRendererProps = {
     field: Field;
@@ -59,6 +66,20 @@ export function renderField(props: FieldRendererProps) {
             return <RelationField {...props} />;
         case 'json':
             return <JSONField {...props} />;
+        case 'url':
+            return <UrlField {...props} />;
+        case 'markdown':
+            return <MarkdownField {...props} />;
+        case 'code':
+            return <CodeField {...props} />;
+        case 'icon':
+            return <IconField {...props} />;
+        case 'uuid':
+            return <UuidField {...props} />;
+        case 'tags':
+            return <TagsField {...props} />;
+        case 'rating':
+            return <RatingField {...props} />;
         default:
             return null;
     }
@@ -79,5 +100,12 @@ export {
     TimeField,
     MediaField,
     RelationField,
-    JSONField
+    JSONField,
+    UrlField,
+    MarkdownField,
+    CodeField,
+    IconField,
+    UuidField,
+    TagsField,
+    RatingField
 }; 
