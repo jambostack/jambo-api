@@ -5,7 +5,9 @@ namespace App\Repository;
 use App\Entity\Media;
 use App\Entity\Project;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\Persistence\ManagerRegistry;
+use Symfony\Component\Uid\Uuid;
 
 /**
  * @extends ServiceEntityRepository<Media>
@@ -43,8 +45,8 @@ class MediaRepository extends ServiceEntityRepository
     }
 
     /**
-     * Vérifie l'appartenance au projet d'une liste d'UUIDs de média.
-     * Retourne uniquement les UUIDs qui appartiennent bien au projet donné.
+     * Verifie l'appartenance au projet d'une liste d'UUIDs de media.
+     * Retourne uniquement les UUIDs qui appartiennent bien au projet donne.
      *
      * @param string[] $uuids
      * @return string[]
@@ -55,17 +57,12 @@ class MediaRepository extends ServiceEntityRepository
             return [];
         }
 
-        // findOneBy gère correctement la conversion UUID binaire (même logique que
-        // AssetController::show). On évite le QueryBuilder dont le IN() ne convertit
-        // pas fiablement les UUIDs en binaire avec Doctrine ORM 3.x.
-        $validUuids = [];
-        foreach ($uuids as $uuid) {
-            $media = $this->findOneBy(['uuid' => $uuid, 'project' => $project, 'deletedAt' => null]);
-            if ($media !== null) {
-                $validUuids[] = $media->uuid->toRfc4122();
-            }
-        }
+        $conn = $this->getEntityManager()->getConnection();
+        $binaryUuids = array_map(fn ($u) => Uuid::fromString($u)->toBinary(), $uuids);
 
-        return $validUuids;
+        $sql = 'SELECT BIN_TO_UUID(m.uuid) as uuid FROM media m WHERE m.project_id = :pid AND m.uuid IN (:uuids) AND m.deleted_at IS NULL';
+        $stmt = $conn->executeQuery($sql, ['pid' => $project->getId(), 'uuids' => $binaryUuids], ['uuids' => ArrayParameterType::STRING]);
+
+        return array_column($stmt->fetchAllAssociative(), 'uuid');
     }
 }
