@@ -1416,4 +1416,21 @@ return [
     'studio.preview_collections'        => 'المجموعات',
     'studio.preview_fields'             => 'حقول',
 
+    // Content — Assignment & Search
+    'content.assigned_to'              => 'مُسند إلى',
+    'content.unassigned'               => 'غير مسند',
+    'content.by'                       => 'بواسطة',
+    'content.unknown'                  => 'غير معروف',
+    'content.search_in'                => 'بحث في {name}',
+    'content.bulk_trashed'             => '{count} عناصر نُقلت إلى سلة المحذوفات',
+    'content.bulk_deleted'             => '{count} عناصر حُذفت نهائياً',
+    'content.could_not_load_file'      => 'تعذر تحميل تفاصيل الملف',
+
+    // Repeater
+    'repeater.item_n'                  => 'عنصر {n}',
+    'repeater.add_item'                => 'إضافة عنصر',
+    'repeater.select'                  => 'اختر...',
+    'repeater.media_uuid_placeholder'  => 'معرف الوسائط...',
+    'repeater.no_subfields'            => 'هذا المكرر لا يحتوي على حقول فرعية مكونة. يرجى تكوين الحقول الفرعية في منشئ المخطط.',
+
 ];

@@ -1463,4 +1463,21 @@ return [
     'studio.preview_collections'        => 'Collections',
     'studio.preview_fields'             => 'champs',
 
+    // Content — Assignation & Search
+    'content.assigned_to'              => 'Assigné à',
+    'content.unassigned'               => 'Non assigné',
+    'content.by'                       => 'par',
+    'content.unknown'                  => 'Inconnu',
+    'content.search_in'                => 'Rechercher dans {name}',
+    'content.bulk_trashed'             => '{count} entrées déplacées vers la corbeille',
+    'content.bulk_deleted'             => '{count} entrées supprimées définitivement',
+    'content.could_not_load_file'      => 'Impossible de charger le fichier',
+
+    // Repeater
+    'repeater.item_n'                  => 'Élément {n}',
+    'repeater.add_item'                => 'Ajouter un élément',
+    'repeater.select'                  => 'Sélectionner...',
+    'repeater.media_uuid_placeholder'  => 'UUID du média...',
+    'repeater.no_subfields'            => 'Ce repeater n\'a pas de sous-champs configurés. Veuillez configurer des sous-champs dans le Schema Builder.',
+
 ];

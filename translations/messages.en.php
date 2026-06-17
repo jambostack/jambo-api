@@ -1438,4 +1438,21 @@ return [
     'studio.preview_collections'        => 'Collections',
     'studio.preview_fields'             => 'fields',
 
+    // Content — Assignment & Search
+    'content.assigned_to'              => 'Assigned to',
+    'content.unassigned'               => 'Unassigned',
+    'content.by'                       => 'by',
+    'content.unknown'                  => 'Unknown',
+    'content.search_in'                => 'Search {name}',
+    'content.bulk_trashed'             => '{count} entries moved to trash',
+    'content.bulk_deleted'             => '{count} entries permanently deleted',
+    'content.could_not_load_file'      => 'Could not load file details',
+
+    // Repeater
+    'repeater.item_n'                  => 'Item {n}',
+    'repeater.add_item'                => 'Add item',
+    'repeater.select'                  => 'Select...',
+    'repeater.media_uuid_placeholder'  => 'Media UUID...',
+    'repeater.no_subfields'            => 'This repeater has no sub-fields configured. Please configure sub-fields in the Schema Builder.',
+
 ];

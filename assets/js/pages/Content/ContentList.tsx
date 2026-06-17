@@ -66,7 +66,7 @@ export default function ContentList({ collection, project }: Props) {
                 const res = await axios.get(`/api/projects/${project.uuid}/media/${assetOrUuid}`);
                 setMediaPreview(res.data?.data ?? res.data);
             } catch {
-                toast.error('Could not load file details');
+                toast.error(t('content.could_not_load_file'));
             } finally {
                 setMediaLoading(false);
             }
@@ -120,7 +120,7 @@ export default function ContentList({ collection, project }: Props) {
 
             await Promise.all(requests);
 
-            toast.success(`${selectedItems.length} content entries moved to trash`);
+            toast.success(t('content.bulk_trashed', { count: selectedItems.length }));
             setSelectedItems([]);
             setShowDeleteDialog(false);
             dataTableRef.current?.fetchData();
@@ -141,7 +141,7 @@ export default function ContentList({ collection, project }: Props) {
 
             await Promise.all(requests);
 
-            toast.success(`${selectedItems.length} content entries permanently deleted`);
+            toast.success(t('content.bulk_deleted', { count: selectedItems.length }));
             setSelectedItems([]);
             setShowForceDeleteDialog(false);
             dataTableRef.current?.fetchData();
@@ -242,7 +242,7 @@ export default function ContentList({ collection, project }: Props) {
             },
             {
                 key: 'assigned_to',
-                label: 'Assigné à',
+                label: t('content.assigned_to'),
                 render: (_: any, item: ContentEntry & { assigned_to?: { id: number; name: string } | null }) => {
                     if (item.assigned_to?.name) {
                         return <span className="text-xs">{item.assigned_to.name}</span>;
@@ -441,7 +441,7 @@ export default function ContentList({ collection, project }: Props) {
                 cell: (item: ContentEntry) => (
                     <div className="flex flex-col">
                         <span>{new Date(item.created_at).toLocaleString()}</span>
-                        <span className="text-xs text-muted-foreground">by {item.creator?.name || 'Unknown'}</span>
+                        <span className="text-xs text-muted-foreground">{t('content.by')} {item.creator?.name || t('content.unknown')}</span>
                     </div>
                 ),
             },
@@ -455,7 +455,7 @@ export default function ContentList({ collection, project }: Props) {
                 cell: (item: ContentEntry) => (
                     <div className="flex flex-col">
                         <span>{new Date(item.updated_at).toLocaleString()}</span>
-                        <span className="text-xs text-muted-foreground">by {item.updater?.name || 'Unknown'}</span>
+                        <span className="text-xs text-muted-foreground">{t('content.by')} {item.updater?.name || t('content.unknown')}</span>
                     </div>
                 ),
             }
@@ -490,7 +490,7 @@ export default function ContentList({ collection, project }: Props) {
                 ref={dataTableRef}
                 pageName={`content_${collection.project_id}_${collection.id}`}
                 searchRoute={`/api/projects/${project.uuid}/collections/${collection.slug}/entries`}
-                searchPlaceholder={`Search ${collection.name}...`}
+                searchPlaceholder={t('content.search_in', { name: collection.name })}
                 columns={generateColumns()}
                 actions={[
                     {
