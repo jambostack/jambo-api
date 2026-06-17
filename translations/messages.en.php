@@ -1454,5 +1454,6 @@ return [
     'repeater.select'                  => 'Select...',
     'repeater.media_uuid_placeholder'  => 'Media UUID...',
     'repeater.no_subfields'            => 'This repeater has no sub-fields configured. Please configure sub-fields in the Schema Builder.',
+    'repeater.change_variant_confirm'  => 'Changing variant will clear current data. Continue?',
 
 ];

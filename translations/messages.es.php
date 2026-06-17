@@ -1432,5 +1432,6 @@ return [
     'repeater.select'                  => 'Seleccionar...',
     'repeater.media_uuid_placeholder'  => 'UUID del medio...',
     'repeater.no_subfields'            => 'Este repetidor no tiene subcampos configurados. Configure los subcampos en el Schema Builder.',
+    'repeater.change_variant_confirm'  => 'Cambiar la variante borrará los datos actuales. ¿Continuar?',
 
 ];
