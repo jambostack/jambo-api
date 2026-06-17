@@ -359,6 +359,10 @@ return [
     'content.draft_btn'               => 'Volver a borrador',
     'content.draft_success'           => '{count} entradas marcadas como borrador',
     'content.failed_draft'            => 'Error al marcar como borrador',
+    'content.scheduled'               => 'Programado',
+    'content.schedule_btn'            => 'Programar',
+    'content.publish_now'             => 'Publicar ahora',
+    'content.reschedule'              => 'Reprogramar',
 
     // Content Form
     'content.form.save_draft'         => 'Guardar como borrador',

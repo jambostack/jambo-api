@@ -366,6 +366,10 @@ return [
     'content.draft_btn'               => 'Remettre en brouillon',
     'content.draft_success'           => '{count} entrées mises en brouillon',
     'content.failed_draft'            => 'Échec de la mise en brouillon',
+    'content.scheduled'               => 'Planifié',
+    'content.schedule_btn'            => 'Planifier',
+    'content.publish_now'             => 'Publier maintenant',
+    'content.reschedule'              => 'Replanifier',
 
     // Content Form
     'content.form.save_draft'         => 'Enregistrer comme brouillon',

@@ -359,6 +359,10 @@ return [
     'content.draft_btn'               => 'إعادة إلى المسودة',
     'content.draft_success'           => 'تم إعادة {count} إدخالات إلى المسودة',
     'content.failed_draft'            => 'فشل إعادة الإدخالات إلى المسودة',
+    'content.scheduled'               => 'مجدول',
+    'content.schedule_btn'            => 'جدولة',
+    'content.publish_now'             => 'نشر الآن',
+    'content.reschedule'              => 'إعادة الجدولة',
 
     // Content Form
     'content.form.save_draft'         => 'حفظ كمسودة',
