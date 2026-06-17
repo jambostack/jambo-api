@@ -63,13 +63,13 @@ class EavDataFormatterService
             $value = match ($fieldValue->fieldType) {
                 'text', 'textarea', 'richtext', 'wysiwyg', 'markdown',
                 'email', 'url', 'color', 'password', 'slug', 'longtext',
-                'time'                                                   => $fieldValue->textValue,
-                'number', 'decimal'                                      => $fieldValue->numberValue !== null ? (float) $fieldValue->numberValue : null,
+                'code', 'icon', 'uuid', 'time'                           => $fieldValue->textValue,
+                'number', 'decimal', 'rating'                            => $fieldValue->numberValue !== null ? (float) $fieldValue->numberValue : null,
                 'boolean', 'checkbox'                                    => $fieldValue->booleanValue,
                 'date'                                                   => $fieldValue->dateValue?->format('Y-m-d'),
                 'datetime'                                               => $fieldValue->datetimeValue?->format(\DateTimeInterface::ATOM),
                 'json', 'array', 'repeater',
-                'media', 'relation', 'enumeration'                       => $fieldValue->jsonValue,
+                'media', 'relation', 'enumeration', 'tags'               => $fieldValue->jsonValue,
                 default                                                  => $fieldValue->textValue,
             };
 

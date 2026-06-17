@@ -125,6 +125,26 @@ class EavDataFormatterServiceTest extends TestCase
         $this->assertSame('2026-01-15', $result['published_at']);
     }
 
+    public function testFormatEntryRendersTagsAsArray(): void
+    {
+        $entry = $this->makeEntry();
+        $entry->fieldValues->add($this->makeFieldValue($entry, 'keywords', 'tags', jsonValue: ['php', 'symfony']));
+
+        $result = $this->formatter->formatEntry($entry);
+
+        $this->assertSame(['php', 'symfony'], $result['keywords']);
+    }
+
+    public function testFormatEntryRendersRatingAsNumber(): void
+    {
+        $entry = $this->makeEntry();
+        $entry->fieldValues->add($this->makeFieldValue($entry, 'score', 'rating', numberValue: '4'));
+
+        $result = $this->formatter->formatEntry($entry);
+
+        $this->assertSame(4.0, $result['score']);
+    }
+
     private function makeEntry(): ContentEntry
     {
         $project = new Project();
