@@ -484,7 +484,7 @@ class PageController extends InertiaController
         $data = $request->toArray();
         $email = $data['email'] ?? '';
         $password = $data['password'] ?? '';
-        $name = $data['name'] ?? null;
+        $username = $data['username'] ?? null;
         $status = $data['status'] ?? 'active';
 
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -503,7 +503,7 @@ class PageController extends InertiaController
         }
 
         $endUser = new EndUser($project, $email);
-        $endUser->name = $name;
+        $endUser->username = $username;
         $endUser->password = $this->hasher->hashPassword($endUser, $password);
         $endUser->status = $status;
 
@@ -592,8 +592,8 @@ class PageController extends InertiaController
             $endUser->email = $data['email'];
         }
 
-        if (isset($data['name'])) {
-            $endUser->name = $data['name'] ?: null;
+        if (isset($data['username'])) {
+            $endUser->username = $data['username'] ?: null;
         }
 
         if (isset($data['custom_fields'])) {

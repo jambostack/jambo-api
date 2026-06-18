@@ -70,7 +70,7 @@ class EndUserImportHandler implements ImportHandlerInterface
             }
 
             $user->password = $userData['password'];
-            $user->name = $userData['name'] ?? null;
+            $user->username = $userData['username'] ?? null;
             $user->status = $userData['status'] ?? 'active';
             $user->tokenVersion = (int) ($userData['token_version'] ?? 1);
 

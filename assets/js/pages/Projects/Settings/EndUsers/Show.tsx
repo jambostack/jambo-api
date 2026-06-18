@@ -35,7 +35,7 @@ export default function EndUsersShow({ project, endUser, endUserFields = [] }: P
     ];
 
     function getInitials(): string {
-        if (endUser.name) return endUser.name.substring(0, 2).toUpperCase();
+        if (endUser.username) return endUser.username.substring(0, 2).toUpperCase();
         return endUser.email.substring(0, 2).toUpperCase();
     }
 
@@ -93,7 +93,7 @@ export default function EndUsersShow({ project, endUser, endUserFields = [] }: P
                                 <AvatarFallback className="text-lg">{getInitials()}</AvatarFallback>
                             </Avatar>
                             <div>
-                                <h2 className="text-xl font-semibold">{endUser.name || t('end_users.unnamed')}</h2>
+                                <h2 className="text-xl font-semibold">{endUser.username || t('end_users.unnamed')}</h2>
                                 <p className="text-sm text-muted-foreground">{endUser.email}</p>
                                 <Badge variant={statusVariant(endUser.status)} className="mt-1">{endUser.status}</Badge>
                             </div>

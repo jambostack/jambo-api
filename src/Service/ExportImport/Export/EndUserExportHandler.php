@@ -23,7 +23,7 @@ class EndUserExportHandler implements ExportHandlerInterface
                 'uuid'          => $user->uuid?->toString(),
                 'email'         => $user->email,
                 'password'      => $user->password,
-                'name'          => $user->name,
+                'username'      => $user->username,
                 'status'        => $user->status,
                 'token_version' => $user->tokenVersion,
                 'custom_fields' => $user->customFields,

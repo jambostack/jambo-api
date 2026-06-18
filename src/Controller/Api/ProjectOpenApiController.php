@@ -240,7 +240,7 @@ class ProjectOpenApiController extends AbstractController
             'properties' => [
                 'uuid'          => ['type' => 'string', 'format' => 'uuid'],
                 'email'         => ['type' => 'string', 'format' => 'email'],
-                'name'          => ['type' => 'string', 'nullable' => true],
+                'username'      => ['type' => 'string', 'nullable' => true],
                 'status'        => ['type' => 'string', 'enum' => ['active', 'banned', 'pending']],
                 'avatar_url'    => ['type' => 'string', 'nullable' => true],
                 'custom_fields' => empty($customProperties)
@@ -361,7 +361,7 @@ class ProjectOpenApiController extends AbstractController
                     'requestBody' => $jsonBody([
                         'type'       => 'object',
                         'properties' => [
-                            'name'          => ['type' => 'string', 'nullable' => true],
+                            'username'      => ['type' => 'string', 'nullable' => true],
                             'custom_fields' => ['type' => 'object', 'nullable' => true],
                             'password'      => ['type' => 'string', 'minLength' => 8, 'nullable' => true],
                         ],

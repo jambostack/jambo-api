@@ -121,7 +121,7 @@ class EndUserAdminController extends AbstractController
         $data = $request->toArray();
         $email    = trim($data['email'] ?? '');
         $password = $data['password'] ?? '';
-        $name     = trim($data['name'] ?? '');
+        $username = trim($data['username'] ?? '');
         $status   = $data['status'] ?? 'active';
         $customFields = $data['custom_fields'] ?? null;
 
@@ -141,7 +141,7 @@ class EndUserAdminController extends AbstractController
         }
 
         $endUser = new EndUser($project, $email);
-        $endUser->name = $name !== '' ? $name : null;
+        $endUser->username = $username !== '' ? $username : null;
         $endUser->status = $status;
         $endUser->password = $this->hasher->hashPassword($endUser, $password);
         if ($customFields !== null) {
@@ -178,8 +178,8 @@ class EndUserAdminController extends AbstractController
             }
             $endUser->email = $email;
         }
-        if (isset($data['name'])) {
-            $endUser->name = trim($data['name']) ?: null;
+        if (isset($data['username'])) {
+            $endUser->username = trim($data['username']) ?: null;
         }
         if (isset($data['status'])) {
             if (!in_array($data['status'], ['active', 'banned', 'pending'], true)) {

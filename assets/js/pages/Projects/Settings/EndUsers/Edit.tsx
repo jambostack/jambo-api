@@ -75,7 +75,7 @@ export default function EndUsersEdit({ project, endUser, endUserFields }: Props)
         password: string;
         custom_fields: Record<string, any>;
     }>({
-        name: endUser.name || '',
+        username: endUser.username || '',
         email: endUser.email,
         password: '',
         custom_fields: buildInitialCustomFields(customFields, endUser.custom_fields),
@@ -131,12 +131,12 @@ export default function EndUsersEdit({ project, endUser, endUserFields }: Props)
 
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="space-y-1">
-                                <Label htmlFor="name">{t('end_users.name')}</Label>
+                                <Label htmlFor="username">{t('end_users.username')}</Label>
                                 <Input
-                                    id="name"
-                                    placeholder={t('end_users.name_placeholder')}
-                                    value={data.name}
-                                    onChange={e => setData('name', e.target.value)}
+                                    id="username"
+                                    placeholder={t('end_users.username_placeholder')}
+                                    value={data.username}
+                                    onChange={e => setData('username', e.target.value)}
                                 />
                             </div>
 

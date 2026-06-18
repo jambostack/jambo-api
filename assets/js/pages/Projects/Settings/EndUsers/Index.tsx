@@ -294,9 +294,9 @@ export default function EndUsersIndex({ project, endUsers, filters }: Props) {
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
                                                     <Avatar className="h-8 w-8">
-                                                        <AvatarFallback className="text-xs">{getInitials(eu.name, eu.email)}</AvatarFallback>
+                                                        <AvatarFallback className="text-xs">{getInitials(eu.username, eu.email)}</AvatarFallback>
                                                     </Avatar>
-                                                    <span className="font-medium text-sm">{eu.name || '—'}</span>
+                                                    <span className="font-medium text-sm">{eu.username || '—'}</span>
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-sm text-muted-foreground">{eu.email}</TableCell>
