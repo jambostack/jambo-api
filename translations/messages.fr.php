@@ -1481,4 +1481,11 @@ return [
     'repeater.no_subfields'            => 'Ce repeater n\'a pas de sous-champs configurés. Veuillez configurer des sous-champs dans le Schema Builder.',
     'repeater.change_variant_confirm'  => 'Changer de variante effacera les données actuelles. Continuer ?',
 
+    // Comments
+    'comments.title'                   => 'Commentaires',
+    'comments.write_placeholder'       => 'Écrire un commentaire...',
+    'comments.reply'                   => 'Répondre',
+    'comments.resolve'                 => 'Résoudre',
+    'comments.reopen'                  => 'Rouvrir',
+
 ];

@@ -1456,4 +1456,11 @@ return [
     'repeater.no_subfields'            => 'This repeater has no sub-fields configured. Please configure sub-fields in the Schema Builder.',
     'repeater.change_variant_confirm'  => 'Changing variant will clear current data. Continue?',
 
+    // Comments
+    'comments.title'                   => 'Comments',
+    'comments.write_placeholder'       => 'Write a comment...',
+    'comments.reply'                   => 'Reply',
+    'comments.resolve'                 => 'Resolve',
+    'comments.reopen'                  => 'Reopen',
+
 ];
