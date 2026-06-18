@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -1298,7 +1298,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
           {isEndUsers ? (
             <EndUserEditor fields={endUserFields} loading={endUserLoading} allCollections={collections} onAdd={addEndUserField} onUpdate={updateEndUserField} onDelete={deleteEndUserField} newField={endUserNew} setNewField={setEndUserNew} />
           ) : (
-            renderEditor(current, selectedIdx, collections, untitled, t, selectPrev, selectNext, addCollection, updateCollection, removeCollection, addField, updateField, removeField, duplicateField, generatePreview)
+            <EditorView current={current} selectedIdx={selectedIdx} collections={collections} untitled={untitled} t={t} selectPrev={selectPrev} selectNext={selectNext} addCollection={addCollection} updateCollection={updateCollection} removeCollection={removeCollection} addField={addField} updateField={updateField} removeField={removeField} duplicateField={duplicateField} generatePreview={generatePreview} />
           )}
         </div>
 
@@ -2064,15 +2064,24 @@ function FieldOptionsEditor({ field, allCollections, allFields, onValidationRule
   );
 }
 
-/* ═══════════════ SHARED EDITOR RENDERER (desktop + mobile) ═══════════════ */
-function renderEditor(
-  current: SchemaCollection | null, selectedIdx: number | null, collections: SchemaCollection[],
-  untitled: string, t: any,
-  selectPrev: () => void, selectNext: () => void,
-  addCollection: () => void, updateCollection: (i: number, d: Partial<SchemaCollection>) => void, removeCollection: (i: number) => void,
-  addField: () => void, updateField: (ci: number, fk: string, d: Partial<SchemaField>) => void, removeField: (ci: number, fk: string) => void, duplicateField: (ci: number, fk: string) => void,
-  generatePreview: () => void,
-) {
+/* ═══════════════ SHARED EDITOR COMPONENT (desktop + mobile) ═══════════════ */
+function EditorView({
+  current, selectedIdx, collections,
+  untitled, t,
+  selectPrev, selectNext,
+  addCollection, updateCollection, removeCollection,
+  addField, updateField, removeField, duplicateField,
+  generatePreview,
+}: {
+  current: SchemaCollection | null; selectedIdx: number | null; collections: SchemaCollection[];
+  untitled: string; t: any;
+  selectPrev: () => void; selectNext: () => void;
+  addCollection: () => void; updateCollection: (i: number, d: Partial<SchemaCollection>) => void; removeCollection: (i: number) => void;
+  addField: () => void; updateField: (ci: number, fk: string, d: Partial<SchemaField>) => void; removeField: (ci: number, fk: string) => void; duplicateField: (ci: number, fk: string) => void;
+  generatePreview: () => void;
+}) {
+  const [tab, setTab] = useState<'collection'|'workflow'|'fields'>('fields');
+
   if (!current) return (
     <div className="sb-empty">
       <Wand2 style={{ width: '36px', height: '36px' }} />
@@ -2084,132 +2093,163 @@ function renderEditor(
     </div>
   );
 
-  return (<>
-    {/* Collection form */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-      <div><Label style={{ fontSize: '10px', color: 'var(--studio-text-muted)' }}>{t('common.name')}</Label><Input value={current.name} onChange={e => updateCollection(selectedIdx!, { name: e.target.value })} placeholder={t('studio.schema.articles_ph')} style={{ height: '32px', fontSize: '12px', background: 'var(--studio-bg)', borderColor: 'var(--studio-border)', color: 'var(--studio-text)' }} /></div>
-      <div><Label style={{ fontSize: '10px', color: 'var(--studio-text-muted)' }}>{t('studio.schema.slug_label')}</Label><Input value={current.slug} onChange={e => updateCollection(selectedIdx!, { slug: e.target.value })} placeholder="articles" style={{ height: '32px', fontSize: '12px', background: 'var(--studio-bg)', borderColor: 'var(--studio-border)', color: 'var(--studio-text)', fontFamily: 'var(--studio-mono)' }} /></div>
-    </div>
-    <div style={{ marginBottom: '10px' }}>
-      <Label style={{ fontSize: '10px', color: 'var(--studio-text-muted)' }}>{t('studio.schema.desc_label')}</Label>
-      <Input value={current.description} onChange={e => updateCollection(selectedIdx!, { description: e.target.value })} placeholder={t('studio.schema.desc_placeholder')} style={{ height: '32px', fontSize: '12px', background: 'var(--studio-bg)', borderColor: 'var(--studio-border)', color: 'var(--studio-text)' }} />
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-      <Switch checked={current.isSingleton} onCheckedChange={v => updateCollection(selectedIdx!, { isSingleton: v })} />
-      <Label style={{ fontSize: '12px', color: 'var(--studio-text-dim)' }}>{t('studio.schema.singleton_label')}</Label>
-    </div>
-    {/* Workflow editor */}
-    <div style={{ marginBottom: '14px' }}>
-        <Label style={{ fontSize: '10px', color: 'var(--studio-text-muted)', marginBottom: '6px', display: 'block' }}>
-            Workflow
-        </Label>
-        {(() => {
-            const wf = current.settings?.workflow;
-            const statuses = wf?.statuses ?? [
-                { slug: 'draft', label: 'Draft', color: '#6b7280', published: false },
-                { slug: 'published', label: 'Published', color: '#10b981', published: true },
-            ];
-            const defaultStatus = wf?.defaultStatus ?? 'draft';
-            const updateWorkflow = (s: typeof statuses, def: string) => {
-                const c = { ...current };
-                c.settings = { ...c.settings, workflow: { statuses: s, defaultStatus: def } };
-                updateCollection(selectedIdx!, { settings: c.settings } as any);
-            };
-            const addStatus = () => {
-                updateWorkflow([...statuses, { slug: '', label: '', color: '#6b7280', published: false }], defaultStatus);
-            };
-            const removeStatus = (idx: number) => {
-                updateWorkflow(statuses.filter((_, i) => i !== idx), defaultStatus);
-            };
-            return (
-                <div style={{ padding: '8px', border: '1px solid var(--studio-border)', borderRadius: '6px', background: 'var(--studio-surface)', display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
-                    {statuses.map((s, i) => (
-                        <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                            <input
-                                value={s.label}
-                                onChange={e => {
-                                    const next = [...statuses];
-                                    next[i] = { ...s, label: e.target.value, slug: toSnakeCase(e.target.value) };
-                                    updateWorkflow(next, defaultStatus);
-                                }}
-                                placeholder="Label"
-                                style={{ flex: 1, height: '28px', fontSize: '10px', background: 'var(--studio-bg)', border: '1px solid var(--studio-border)', borderRadius: '5px', color: 'var(--studio-text)', padding: '0 6px', outline: 'none' }}
-                            />
-                            <input
-                                type="color"
-                                value={s.color}
-                                onChange={e => {
-                                    const next = [...statuses];
-                                    next[i] = { ...s, color: e.target.value };
-                                    updateWorkflow(next, defaultStatus);
-                                }}
-                                style={{ width: '32px', height: '28px', padding: 0, background: 'none', border: '1px solid var(--studio-border)', borderRadius: '5px', cursor: 'pointer' }}
-                            />
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '2px', fontSize: '9px', color: 'var(--studio-text-dim)', whiteSpace: 'nowrap' }}>
-                                <input type="checkbox" checked={s.published} onChange={e => {
-                                    const next = [...statuses];
-                                    next[i] = { ...s, published: e.target.checked };
-                                    updateWorkflow(next, defaultStatus);
-                                }} style={{ margin: 0 }} />
-                                Pub.
-                            </label>
-                            <button onClick={() => removeStatus(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', opacity: 0.5 }}>
-                                <Trash2 className="w-3 h-3" style={{ color: 'var(--studio-red)' }} />
-                            </button>
-                        </div>
-                    ))}
-                    <Button size="sm" variant="outline" onClick={addStatus} style={{ height: '22px', fontSize: '9px' }}>
-                        <Plus className="w-2.5 h-2.5 mr-1" />Add status
-                    </Button>
-                    {statuses.length > 0 && (
-                        <div style={{ marginTop: '4px' }}>
-                            <span style={{ fontSize: '9px', color: 'var(--studio-text-dim)' }}>Default: </span>
-                            <select
-                                value={defaultStatus}
-                                onChange={e => updateWorkflow(statuses, e.target.value)}
-                                style={{ height: '24px', fontSize: '9px', background: 'var(--studio-bg)', border: '1px solid var(--studio-border)', borderRadius: '5px', color: 'var(--studio-text)', padding: '0 4px' }}
-                            >
-                                {statuses.filter(s => s.slug).map(s => (
-                                    <option key={s.slug} value={s.slug}>{s.label || s.slug}</option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-                </div>
-            );
-        })()}
-    </div>
-    <Separator style={{ marginBottom: '12px', borderColor: 'var(--studio-border)' }} />
+  const wf = current.settings?.workflow;
+  const statuses = wf?.statuses ?? [
+    { slug: 'draft', label: 'Draft', color: '#6b7280', published: false },
+    { slug: 'published', label: 'Published', color: '#10b981', published: true },
+  ];
+  const defaultStatus = wf?.defaultStatus ?? 'draft';
+  const updateWorkflow = (s: typeof statuses, def: string) => {
+    const c = { ...current };
+    c.settings = { ...c.settings, workflow: { statuses: s, defaultStatus: def } };
+    updateCollection(selectedIdx!, { settings: c.settings } as any);
+  };
+  const addStatus = () => {
+    updateWorkflow([...statuses, { slug: '', label: '', color: '#6b7280', published: false }], defaultStatus);
+  };
+  const removeStatus = (idx: number) => {
+    updateWorkflow(statuses.filter((_, i) => i !== idx), defaultStatus);
+  };
 
-    {/* Fields */}
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
-      <h3 style={{ fontSize: '9px', fontFamily: 'var(--studio-mono)', textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--studio-text-muted)', margin: 0 }}>Champs · {current.fields.length}</h3>
-      <Button size="sm" onClick={addField} style={{ height: '26px', fontSize: '10px', background: 'var(--studio-accent)', color: '#000', padding: '0 8px' }}><Plus className="w-3 h-3 mr-1" />Ajouter</Button>
+  const tabs: Array<{ id: 'collection'|'workflow'|'fields'; label: string; icon: React.ComponentType<{className?:string}>; count?: number }> = [
+    { id: 'fields', label: 'Champs', icon: Layers, count: current.fields.length },
+    { id: 'collection', label: 'Collection', icon: Settings2 },
+    { id: 'workflow', label: 'Workflow', icon: GitBranch, count: statuses.length },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <style>{`
+        .sed-tabs { display: flex; flex-shrink: 0; border-bottom: 1px solid var(--studio-border); margin-bottom: 10px; }
+        .sed-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 7px 10px; font-size: 11px; font-weight: 600; cursor: pointer; border: none; background: transparent; color: var(--studio-text-muted); border-bottom: 2px solid transparent; transition: all .12s; position: relative; }
+        .sed-tab:hover { color: var(--studio-text-dim); }
+        .sed-tab.active { color: var(--studio-accent); border-color: var(--studio-accent); }
+        .sed-tab svg { width: 12px; height: 12px; }
+        .sed-tab .tab-count { font-size: 9px; font-family: var(--studio-mono); color: inherit; opacity: .7; }
+        .sed-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        .sed-panel-fields { flex: 1; overflow-y: auto; padding-right: 2px; min-height: 0; }
+        .sed-panel-wf { padding: 10px; border: 1px solid var(--studio-border); border-radius: 6px; background: var(--studio-surface); display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; min-height: 0; }
+      `}</style>
+
+      <div className="sed-tabs">
+        {tabs.map(t => (
+          <button key={t.id} className={`sed-tab${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>
+            <t.icon />
+            {t.label}
+            {t.count !== undefined && <span className="tab-count">{t.count}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Collection ── */}
+      <div className="sed-panel" style={{ display: tab === 'collection' ? 'flex' : 'none', gap: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <div><Label style={{ fontSize: '10px', color: 'var(--studio-text-muted)' }}>{t('common.name')}</Label><Input value={current.name} onChange={e => updateCollection(selectedIdx!, { name: e.target.value })} placeholder={t('studio.schema.articles_ph')} style={{ height: '32px', fontSize: '12px', background: 'var(--studio-bg)', borderColor: 'var(--studio-border)', color: 'var(--studio-text)' }} /></div>
+          <div><Label style={{ fontSize: '10px', color: 'var(--studio-text-muted)' }}>{t('studio.schema.slug_label')}</Label><Input value={current.slug} onChange={e => updateCollection(selectedIdx!, { slug: e.target.value })} placeholder="articles" style={{ height: '32px', fontSize: '12px', background: 'var(--studio-bg)', borderColor: 'var(--studio-border)', color: 'var(--studio-text)', fontFamily: 'var(--studio-mono)' }} /></div>
+        </div>
+        <div>
+          <Label style={{ fontSize: '10px', color: 'var(--studio-text-muted)' }}>{t('studio.schema.desc_label')}</Label>
+          <Input value={current.description} onChange={e => updateCollection(selectedIdx!, { description: e.target.value })} placeholder={t('studio.schema.desc_placeholder')} style={{ height: '32px', fontSize: '12px', background: 'var(--studio-bg)', borderColor: 'var(--studio-border)', color: 'var(--studio-text)' }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Switch checked={current.isSingleton} onCheckedChange={v => updateCollection(selectedIdx!, { isSingleton: v })} />
+          <Label style={{ fontSize: '12px', color: 'var(--studio-text-dim)' }}>{t('studio.schema.singleton_label')}</Label>
+        </div>
+      </div>
+
+      {/* ── Workflow ── */}
+      <div className="sed-panel" style={{ display: tab === 'workflow' ? 'flex' : 'none' }}>
+        <Label style={{ fontSize: '10px', color: 'var(--studio-text-muted)', marginBottom: '6px', display: 'block' }}>
+          Statuts éditoriaux
+        </Label>
+        <div className="sed-panel-wf">
+          {statuses.map((s, i) => (
+            <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                value={s.label}
+                onChange={e => {
+                  const next = [...statuses];
+                  next[i] = { ...s, label: e.target.value, slug: toSnakeCase(e.target.value) };
+                  updateWorkflow(next, defaultStatus);
+                }}
+                placeholder="Label"
+                style={{ flex: 1, height: '28px', fontSize: '10px', background: 'var(--studio-bg)', border: '1px solid var(--studio-border)', borderRadius: '5px', color: 'var(--studio-text)', padding: '0 6px', outline: 'none' }}
+              />
+              <input
+                type="color"
+                value={s.color}
+                onChange={e => {
+                  const next = [...statuses];
+                  next[i] = { ...s, color: e.target.value };
+                  updateWorkflow(next, defaultStatus);
+                }}
+                style={{ width: '32px', height: '28px', padding: 0, background: 'none', border: '1px solid var(--studio-border)', borderRadius: '5px', cursor: 'pointer' }}
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: '2px', fontSize: '9px', color: 'var(--studio-text-dim)', whiteSpace: 'nowrap' }}>
+                <input type="checkbox" checked={s.published} onChange={e => {
+                  const next = [...statuses];
+                  next[i] = { ...s, published: e.target.checked };
+                  updateWorkflow(next, defaultStatus);
+                }} style={{ margin: 0 }} />
+                Pub.
+              </label>
+              <button onClick={() => removeStatus(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', opacity: 0.5 }}>
+                <Trash2 className="w-3 h-3" style={{ color: 'var(--studio-red)' }} />
+              </button>
+            </div>
+          ))}
+          <Button size="sm" variant="outline" onClick={addStatus} style={{ height: '22px', fontSize: '9px' }}>
+            <Plus className="w-2.5 h-2.5 mr-1" />Add status
+          </Button>
+          {statuses.length > 0 && (
+            <div style={{ marginTop: '4px' }}>
+              <span style={{ fontSize: '9px', color: 'var(--studio-text-dim)' }}>Default: </span>
+              <select
+                value={defaultStatus}
+                onChange={e => updateWorkflow(statuses, e.target.value)}
+                style={{ height: '24px', fontSize: '9px', background: 'var(--studio-bg)', border: '1px solid var(--studio-border)', borderRadius: '5px', color: 'var(--studio-text)', padding: '0 4px' }}
+              >
+                {statuses.filter(s => s.slug).map(s => (
+                  <option key={s.slug} value={s.slug}>{s.label || s.slug}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Champs ── */}
+      <div className="sed-panel" style={{ display: tab === 'fields' ? 'flex' : 'none' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px', flexShrink: 0 }}>
+          <h3 style={{ fontSize: '9px', fontFamily: 'var(--studio-mono)', textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--studio-text-muted)', margin: 0 }}>Champs · {current.fields.length}</h3>
+          <Button size="sm" onClick={addField} style={{ height: '26px', fontSize: '10px', background: 'var(--studio-accent)', color: '#000', padding: '0 8px' }}><Plus className="w-3 h-3 mr-1" />Ajouter</Button>
+        </div>
+        <div className="sed-panel-fields">
+          {current.fields.map((field, idx) => (
+            <FieldRow
+              key={field.key}
+              field={field}
+              index={idx}
+              total={current.fields.length}
+              selectedIdx={selectedIdx!}
+              collections={collections}
+              allFields={current.fields}
+              updateField={updateField}
+              removeField={removeField}
+              duplicateField={duplicateField}
+              moveField={(from, to) => {
+                const reordered = [...current.fields];
+                const [moved] = reordered.splice(from, 1);
+                reordered.splice(to, 0, moved);
+                updateCollection(selectedIdx!, { fields: reordered });
+              }}
+            />
+          ))}
+          {current.fields.length === 0 && <p style={{ fontSize: '11px', color: 'var(--studio-text-muted)', textAlign: 'center', padding: '20px' }}>Aucun champ. Cliquez "Ajouter".</p>}
+        </div>
+      </div>
     </div>
-    <div style={{ flex: 1, overflowY: 'auto', paddingRight: '2px', minHeight: 0 }}>
-      {current.fields.map((field, idx) => (
-        <FieldRow
-          key={field.key}
-          field={field}
-          index={idx}
-          total={current.fields.length}
-          selectedIdx={selectedIdx!}
-          collections={collections}
-          allFields={current.fields}
-          updateField={updateField}
-          removeField={removeField}
-          duplicateField={duplicateField}
-          moveField={(from, to) => {
-            const reordered = [...current.fields];
-            const [moved] = reordered.splice(from, 1);
-            reordered.splice(to, 0, moved);
-            updateCollection(selectedIdx!, { fields: reordered });
-          }}
-        />
-      ))}
-      {current.fields.length === 0 && <p style={{ fontSize: '11px', color: 'var(--studio-text-muted)', textAlign: 'center', padding: '20px' }}>Aucun champ. Cliquez "Ajouter".</p>}
-    </div>
-  </>);
+  );
 }
 
 /* ═══════════════ FIELD ROW (expandable, draggable) ═══════════════ */
@@ -2434,7 +2474,7 @@ function MobileEditorView({
 
       {current ? (
         <>
-          {renderEditor(current, selectedIdx, [], untitled, t, onPrev, onNext, onAddCollection, updateCollection, () => {}, addField, updateField, removeField, duplicateField, () => {})}
+          <EditorView current={current} selectedIdx={selectedIdx} collections={[]} untitled={untitled} t={t} selectPrev={onPrev} selectNext={onNext} addCollection={onAddCollection} updateCollection={updateCollection} removeCollection={() => {}} addField={addField} updateField={updateField} removeField={removeField} duplicateField={duplicateField} generatePreview={() => {}} />
         </>
       ) : (
         <div className="sb-empty" style={{ minHeight: '200px' }}>
