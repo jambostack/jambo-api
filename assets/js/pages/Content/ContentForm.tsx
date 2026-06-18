@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import {  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ChevronDown, Clock, FileText, Calendar, User, Globe2, Copy, Key, AlertCircle, Trash2, X, CheckCircle2, Save, Send } from "lucide-react";
 import { renderField } from './Fields';
+import ConditionalFieldWrapper from './Fields/ConditionalFieldWrapper';
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -368,18 +369,20 @@ useEffect(() => {
                             </div>
                         )}
                         {collection.fields.map(field => (
-                            <div className="border border-gray-200 dark:border-gray-800 border-dashed w-full p-4 rounded-md" key={field.id}>
-                                <React.Fragment>
-                                    {renderField({
-                                        field,
-                                        value: formData[field.slug],
-                                        onChange: handleFieldChange,
-                                        processing,
-                                        errors,
-                                        project
-                                    })}
-                                </React.Fragment>
-                            </div>
+                            <ConditionalFieldWrapper key={field.id} field={field} formData={formData}>
+                                <div className="border border-gray-200 dark:border-gray-800 border-dashed w-full p-4 rounded-md">
+                                    <React.Fragment>
+                                        {renderField({
+                                            field,
+                                            value: formData[field.slug],
+                                            onChange: handleFieldChange,
+                                            processing,
+                                            errors,
+                                            project
+                                        })}
+                                    </React.Fragment>
+                                </div>
+                            </ConditionalFieldWrapper>
                         ))}
                     </div>
 
