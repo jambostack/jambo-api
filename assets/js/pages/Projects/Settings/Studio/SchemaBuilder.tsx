@@ -644,7 +644,12 @@ function SchemaChatPanel({
         <button className="scp-clear-btn" onClick={clearHistory} disabled={busy} title={t('studio.chat.clear_title')}><Trash2 className="w-3 h-3" />{t('studio.chat.clear')}</button>
       </div>
 
-      {/* Input wrapper with picker */}
+      {/* Quick prompts — above the input */}
+      <div className="scp-quick-prompts">
+        {SCHEMA_CHAT_QUICK_PILL_KEYS.map((key,i) => { const qp = t(key); return (<button key={i} className="scp-quick-pill" onClick={() => { setInput(qp); setActiveCommand(parseCommand(qp).command); textareaRef.current?.focus(); }} disabled={busy}>{qp}</button>); })}
+      </div>
+
+      {/* Input wrapper */}
       <div className="scp-input-wrapper">
 
         {/* Preview strip — visible when a file is attached */}
@@ -743,11 +748,6 @@ function SchemaChatPanel({
         </div>
       </div>
 
-      {/* Quick prompts */}
-      <div className="scp-quick-prompts">
-        {SCHEMA_CHAT_QUICK_PILL_KEYS.map((key,i) => { const qp = t(key); return (<button key={i} className="scp-quick-pill" onClick={() => { setInput(qp); setActiveCommand(parseCommand(qp).command); textareaRef.current?.focus(); }} disabled={busy}>{qp}</button>); })}
-      </div>
-
       {/* Media library modal */}
       <MediaLibraryModal
         isOpen={mediaModalOpen}
@@ -805,7 +805,7 @@ function DesktopRightPanel({
   return (
     <div className="drp-root">
       <style>{`
-        .drp-root { display:flex; flex-direction:column; height:100%; min-height:0; }
+        .drp-root { display:flex; flex-direction:column; flex:1; min-height:0; }
         .drp-tabs { display:flex; flex-shrink:0; border-bottom:1px solid var(--studio-border); }
         .drp-tab { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:8px 10px; font-size:11px; font-weight:600; cursor:pointer; border:none; background:transparent; color:var(--studio-text-muted); border-bottom:2px solid transparent; transition:all .15s; }
         .drp-tab:hover { color:var(--studio-text-dim); }
@@ -1223,7 +1223,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
           .sb-grid-wrapper { display:none!important; }
           .sb-sidebar, .sb-right-panel { display:none!important; }
           .sb-bottom-bar { display:block; }
-          .sb-mobile-content { display:block; }
+          .sb-mobile-content { display:flex; flex-direction:column; overflow:hidden; }
           .sb-bar h2 { font-size:16px; }
           .sb-bar p { display:none; }
           .sb-actions > .sb-toggle-btn { display:none; }
