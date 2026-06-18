@@ -164,6 +164,45 @@ class ContentController extends AbstractController
             return $this->json(['errors' => $validationErrors], 422);
         }
 
+        // Vérification d'unicité
+        foreach ($collection->fields as $field) {
+            if ($field->isDeleted()) continue;
+            $rules = $field->validationRules;
+            if (empty($rules['unique'])) continue;
+
+            $fieldValue = $data['fields'][$field->slug] ?? null;
+            if ($fieldValue === null || $fieldValue === '' || $fieldValue === []) continue;
+
+            $qb = $this->em->createQueryBuilder();
+            $qb->select('COUNT(cfv.id)')
+               ->from(ContentFieldValue::class, 'cfv')
+               ->join('cfv.contentEntry', 'ce')
+               ->where('ce.collection = :collection')
+               ->andWhere('cfv.field = :field')
+               ->andWhere('cfv.textValue = :value')
+               ->andWhere('ce.deletedAt IS NULL')
+               ->setParameter('collection', $collection)
+               ->setParameter('field', $field)
+               ->setParameter('value', (string)$fieldValue);
+
+            if (isset($entry)) {
+                $qb->andWhere('ce.id != :entryId')
+                   ->setParameter('entryId', $entry->id);
+            }
+
+            $count = $qb->getQuery()->getSingleScalarResult();
+            if ($count > 0) {
+                $validationErrors['fields.' . $field->slug] = sprintf(
+                    'La valeur "%s" existe déjà pour le champ "%s".',
+                    (string)$fieldValue,
+                    $field->name
+                );
+            }
+        }
+        if (!empty($validationErrors)) {
+            return $this->json(['errors' => $validationErrors], 422);
+        }
+
         $this->saveFieldValues($entry, $collection, $data['fields'] ?? []);
 
         $this->em->flush();
@@ -243,6 +282,45 @@ class ContentController extends AbstractController
                 $fieldErrors = $this->fieldValidator->validateFieldValue($field, $fieldValue);
                 if (!empty($fieldErrors)) {
                     $validationErrors['fields.' . $field->slug] = $fieldErrors[0];
+                }
+            }
+            if (!empty($validationErrors)) {
+                return $this->json(['errors' => $validationErrors], 422);
+            }
+
+            // Vérification d'unicité
+            foreach ($entry->collection->fields as $field) {
+                if ($field->isDeleted()) continue;
+                $rules = $field->validationRules;
+                if (empty($rules['unique'])) continue;
+
+                $fieldValue = $data['fields'][$field->slug] ?? null;
+                if ($fieldValue === null || $fieldValue === '' || $fieldValue === []) continue;
+
+                $qb = $this->em->createQueryBuilder();
+                $qb->select('COUNT(cfv.id)')
+                   ->from(ContentFieldValue::class, 'cfv')
+                   ->join('cfv.contentEntry', 'ce')
+                   ->where('ce.collection = :collection')
+                   ->andWhere('cfv.field = :field')
+                   ->andWhere('cfv.textValue = :value')
+                   ->andWhere('ce.deletedAt IS NULL')
+                   ->setParameter('collection', $entry->collection)
+                   ->setParameter('field', $field)
+                   ->setParameter('value', (string)$fieldValue);
+
+                if (isset($entry)) {
+                    $qb->andWhere('ce.id != :entryId')
+                       ->setParameter('entryId', $entry->id);
+                }
+
+                $count = $qb->getQuery()->getSingleScalarResult();
+                if ($count > 0) {
+                    $validationErrors['fields.' . $field->slug] = sprintf(
+                        'La valeur "%s" existe déjà pour le champ "%s".',
+                        (string)$fieldValue,
+                        $field->name
+                    );
                 }
             }
             if (!empty($validationErrors)) {
