@@ -3,6 +3,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { router, usePage } from '@inertiajs/react';
 import { slugify } from '@/lib/utils';
+import { validateFieldValue } from '@/lib/validators';
 import { useTranslation } from '@/lib/i18n';
 
 import type { Project, Collection, Field, UserCan } from "@/types";
@@ -172,6 +173,24 @@ useEffect(() => {
     const handleSubmit = async (action: SaveAction, status: SaveStatus, scheduledAt?: string) => {
         setProcessing(true);
         setErrors({});
+
+        // Valider tous les champs avant soumission
+        const allErrors: Record<string, string> = {};
+        collection.fields.forEach(field => {
+            const error = validateFieldValue(formData[field.slug], field);
+            if (error) {
+                const errorKey = field.options?.repeatable
+                    ? `fields.${field.slug}`
+                    : field.slug;
+                allErrors[errorKey] = error.message;
+            }
+        });
+        if (Object.keys(allErrors).length > 0) {
+            setErrors(allErrors);
+            toast.error(t('content.form.save_error'));
+            setProcessing(false);
+            return; // bloquer la soumission
+        }
 
         try {
             let response;
@@ -345,6 +364,21 @@ useEffect(() => {
         }
 
         setFormData(newData);
+
+        // Validation temps reel du champ modifie
+        const validationError = validateFieldValue(value, field);
+        setErrors(prev => {
+            const next = { ...prev };
+            const errorKey = field.options?.repeatable
+                ? `fields.${field.slug}`
+                : field.slug;
+            if (validationError) {
+                next[errorKey] = validationError.message;
+            } else {
+                delete next[errorKey];
+            }
+            return next;
+        });
     };
 
     // Format a date for display
