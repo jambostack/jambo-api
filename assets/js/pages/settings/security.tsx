@@ -40,8 +40,10 @@ export default function Security() {
 
     const setupTotp = async () => {
         setError(''); setMessage('');
+        const pw = prompt('Entrez votre mot de passe pour continuer :');
+        if (!pw) return;
         try {
-            const data = await api('/api/settings/security/totp/setup');
+            const data = await api('/api/settings/security/totp/setup', { password: pw });
             setSetupData(data);
             setMethod('totp');
         } catch (e: any) { setError(e.message); }
@@ -60,8 +62,10 @@ export default function Security() {
 
     const setupEmail = async () => {
         setError(''); setMessage('');
+        const pw = prompt('Entrez votre mot de passe pour continuer :');
+        if (!pw) return;
         try {
-            await api('/api/settings/security/email/enable');
+            await api('/api/settings/security/email/enable', { password: pw });
             setMethod('email');
             setMessage('Code envoyé à votre adresse email.');
         } catch (e: any) { setError(e.message); }
