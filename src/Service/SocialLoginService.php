@@ -51,7 +51,12 @@ class SocialLoginService
         $clientSecret = $config['clientSecret'];
         // Décrypter si nécessaire (stocké chiffré via WebhookSecretService)
         if (str_starts_with($clientSecret, 'enc:')) {
-            $clientSecret = $this->secretService->decrypt(substr($clientSecret, 4));
+            try {
+                $clientSecret = $this->secretService->decrypt(substr($clientSecret, 4));
+            } catch (\Exception) {
+                // Le secret n'a pas pu être déchiffré — provider mal configuré
+                return null;
+            }
         }
 
         return ['clientId' => $config['clientId'], 'clientSecret' => $clientSecret];
@@ -70,7 +75,11 @@ class SocialLoginService
 
         $clientSecret = $config['clientSecret'];
         if (str_starts_with($clientSecret, 'enc:')) {
-            $clientSecret = $this->secretService->decrypt(substr($clientSecret, 4));
+            try {
+                $clientSecret = $this->secretService->decrypt(substr($clientSecret, 4));
+            } catch (\Exception) {
+                return null;
+            }
         }
 
         return ['clientId' => $config['clientId'], 'clientSecret' => $clientSecret];
