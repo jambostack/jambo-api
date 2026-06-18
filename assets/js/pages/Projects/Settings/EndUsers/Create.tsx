@@ -53,13 +53,13 @@ export default function EndUsersCreate({ project, endUserFields }: Props) {
     const customFields = endUserFields.filter(f => !f.is_system);
 
     const { data, setData, post, processing, errors } = useForm<{
-        name: string;
+        username: string;
         email: string;
         password: string;
         status: string;
         custom_fields: Record<string, any>;
     }>({
-        name: '',
+        username: '',
         email: '',
         password: '',
         status: 'active',
@@ -116,12 +116,12 @@ export default function EndUsersCreate({ project, endUserFields }: Props) {
 
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="space-y-1">
-                                <Label htmlFor="name">{t('end_users.name')}</Label>
+                                <Label htmlFor="username">{t('end_users.username')}</Label>
                                 <Input
-                                    id="name"
-                                    placeholder={t('end_users.name_placeholder')}
-                                    value={data.name}
-                                    onChange={e => setData('name', e.target.value)}
+                                    id="username"
+                                    placeholder={t('end_users.username_placeholder')}
+                                    value={data.username}
+                                    onChange={e => setData('username', e.target.value)}
                                 />
                             </div>
 

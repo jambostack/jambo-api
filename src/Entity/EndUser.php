@@ -28,11 +28,11 @@ class EndUser implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 180)]
     public string $email;
 
-    #[ORM\Column(length: 255)]
-    public string $password;
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $password = null;
 
     #[ORM\Column(length: 255, nullable: true)]
-    public ?string $name = null;
+    public ?string $username = null;
 
     #[ORM\Column(length: 500, nullable: true)]
     public ?string $avatarUrl = null;
@@ -69,6 +69,18 @@ class EndUser implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     public ?\DateTimeImmutable $twoFactorConfirmedAt = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $googleId = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $microsoftId = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $githubId = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $gitlabId = null;
 
     public function __construct(Project $project, string $email)
     {
