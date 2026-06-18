@@ -8,6 +8,7 @@ use App\Service\TwoFactorMailer;
 use Symfony\Component\HttpFoundation\Request;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
@@ -42,7 +43,7 @@ class TwoFactorChallengeController extends InertiaController
     }
 
     #[Route('/two-factor-challenge', name: 'two_factor_challenge_verify', methods: ['POST'])]
-    public function verify(Request $request, RateLimiterFactory $twoFactorLimiter): Response
+    public function verify(Request $request, #[Autowire(service: 'limiter.two_factor_limiter')] RateLimiterFactory $twoFactorLimiter): Response
     {
         $session = $request->getSession();
 
