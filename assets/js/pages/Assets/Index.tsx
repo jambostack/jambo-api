@@ -287,8 +287,10 @@ export default function Index({ project, assets, filters }: Props) {
 		<AppLayout breadcrumbs={breadcrumbs}>
 			<Head title={t('assets.title')} />
 
-			<div className="flex gap-6 rtl:space-x-reverse">
-				<ProjectSidebar project={project} />
+			<div className="flex flex-col lg:flex-row lg:gap-6 gap-0">
+				<div className="hidden lg:block lg:w-64 lg:flex-shrink-0">
+					<ProjectSidebar project={project} />
+				</div>
 
 				{/* Arbre des dossiers — desktop : sidebar fixe */}
 				<aside className="w-56 flex-shrink-0 border-r border-border pr-3 overflow-y-auto hidden md:block">
@@ -437,7 +439,7 @@ export default function Index({ project, assets, filters }: Props) {
 										className="rounded-none h-9 gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground border-0 px-3"
 									>
 										<ArrowUpDown className="h-3 w-3" />
-										{getSortLabel()}
+										<span className="hidden sm:inline">{getSortLabel()}</span>
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent className="w-40">
@@ -462,7 +464,7 @@ export default function Index({ project, assets, filters }: Props) {
 										className="rounded-none h-9 gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground border-0 px-3"
 									>
 										<Calendar className="h-3 w-3" />
-										{getDateFilterLabel()}
+										<span className="hidden sm:inline">{getDateFilterLabel()}</span>
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent className="w-40">
@@ -512,7 +514,7 @@ export default function Index({ project, assets, filters }: Props) {
 
 					{/* ── Selection action bar ─────────────────────── */}
 					{selectedAssets.length > 0 && (
-						<div className="flex items-center justify-between gap-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5">
+						<div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5">
 							<div className="flex items-center gap-3">
 								<span className="text-sm font-medium">
 									{t('assets.selected', { count: String(selectedAssets.length) })}
