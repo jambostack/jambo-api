@@ -63,6 +63,8 @@ class EndUserJwtService
                 'pid'  => $token->claims()->get('pid'),
                 'tkn'  => $token->claims()->get('tkn'),
                 'ref'  => $token->claims()->get('ref') ?? false,
+                'tfa'  => $token->claims()->get('tfa') ?? false,
+                'code' => $token->claims()->get('code'),
             ];
         } catch (\Throwable $e) {
             $this->logger?->warning('JWT validation failed: {message}', [
@@ -77,6 +79,33 @@ class EndUserJwtService
     public function isRefreshToken(array $claims): bool
     {
         return ($claims['ref'] ?? false) === true;
+    }
+
+    /** Generate a short-lived 2FA challenge token (TTL 60 seconds). */
+    public function createTwoFactorToken(EndUser $endUser, ?string $emailCode = null): string
+    {
+        $now = new \DateTimeImmutable();
+        $builder = $this->config->builder()
+            ->issuedAt($now)
+            ->expiresAt($now->modify('+60 seconds'))
+            ->withClaim('euid', $endUser->uuid->toRfc4122())
+            ->withClaim('pid', $endUser->project->uuid->toRfc4122())
+            ->withClaim('tfa', true); // marker: this is a 2FA token
+
+        if ($emailCode !== null) {
+            $builder = $builder->withClaim('code', $emailCode);
+        }
+
+        return $builder->getToken($this->config->signer(), $this->config->signingKey())->toString();
+    }
+
+    /** Validate a 2FA token. Returns claims or null. Same TTL validation but marked as 2FA. */
+    public function validateTwoFactorToken(string $jwt): ?array
+    {
+        $claims = $this->validateToken($jwt);
+        if ($claims === null) return null;
+        if (!($claims['tfa'] ?? false)) return null;
+        return $claims;
     }
 
     /** Resolve effective TTL: use project value if &gt; 0, else fallback to default. */
