@@ -7,6 +7,7 @@ use App\Entity\PasswordResetToken;
 use App\Repository\EndUserRepository;
 use App\Repository\ProjectRepository;
 use App\Service\EndUserJwtService;
+use App\Service\TwoFactorService;
 use App\Controller\EndUserSerializerTrait;
 use Doctrine\ORM\EntityManagerInterface;
 use OpenApi\Attributes as OA;
@@ -28,6 +29,7 @@ class EndUserAuthController extends AbstractController
         private ProjectRepository $projectRepository,
         private EndUserRepository $endUserRepository,
         private EndUserJwtService $jwtService,
+        private TwoFactorService $twoFactorService,
         private UserPasswordHasherInterface $hasher,
         private EntityManagerInterface $em,
     ) {}
@@ -146,6 +148,105 @@ class EndUserAuthController extends AbstractController
 
         if (!$endUser->isActive()) {
             return $this->json(['error' => 'Account is ' . $endUser->status], 403);
+        }
+
+        // Check 2FA
+        $projectSettings = $project->getSettings() ?? [];
+        $endUserTwoFactorEnabled = $projectSettings['security']['endUserTwoFactor'] ?? false;
+
+        if ($endUserTwoFactorEnabled && $endUser->twoFactorEnabled) {
+            $twoFactorToken = $this->jwtService->createTwoFactorToken($endUser);
+            return $this->json([
+                'requires_2fa' => true,
+                'two_factor_token' => $twoFactorToken,
+                'two_factor_method' => $endUser->twoFactorMethod,
+            ]);
+        }
+
+        $accessToken = $this->jwtService->createAccessToken($endUser);
+        $refreshToken = $this->jwtService->createRefreshToken($endUser);
+
+        return $this->json([
+            'data' => [
+                'user' => $this->serializeEndUser($endUser),
+                'access_token'  => $accessToken,
+                'refresh_token' => $refreshToken,
+            ],
+        ]);
+    }
+
+    #[OA\Post(
+        path: '/api/{projectId}/auth/verify-2fa',
+        summary: 'Verify 2FA code and exchange ephemeral token for JWT pair',
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(
+            required: ['two_factor_token', 'code'],
+            properties: [
+                new OA\Property(property: 'two_factor_token', type: 'string'),
+                new OA\Property(property: 'code', type: 'string'),
+            ]
+        )),
+        parameters: [new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid'))],
+        responses: [
+            new OA\Response(response: 200, description: '2FA verified, JWT pair returned', content: new OA\JsonContent(properties: [
+                new OA\Property(property: 'data', properties: [
+                    new OA\Property(property: 'user', ref: '#/components/schemas/EndUser'),
+                    new OA\Property(property: 'access_token', type: 'string'),
+                    new OA\Property(property: 'refresh_token', type: 'string'),
+                ]),
+            ])),
+            new OA\Response(response: 401, description: 'Invalid 2FA token', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+            new OA\Response(response: 422, description: 'Invalid code or missing fields', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
+        ]
+    )]
+    #[Route('/verify-2fa', name: 'verify_2fa', methods: ['POST'])]
+    public function verifyTwoFactor(Request $request, string $projectId): JsonResponse
+    {
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        $data = $request->toArray();
+        $twoFactorToken = $data['two_factor_token'] ?? '';
+        $code = (string) ($data['code'] ?? '');
+
+        if (empty($twoFactorToken) || empty($code)) {
+            return $this->json(['error' => 'Token and code are required'], 422);
+        }
+
+        // Validate the 2FA JWT
+        $claims = $this->jwtService->validateTwoFactorToken($twoFactorToken);
+        if ($claims === null) {
+            return $this->json(['error' => 'Invalid or expired 2FA token. Please login again.'], 401);
+        }
+
+        $endUser = $this->endUserRepository->findOneBy(['uuid' => $claims['euid']]);
+        if (!$endUser || !$endUser->isActive()) {
+            return $this->json(['error' => 'User not found or inactive'], 401);
+        }
+
+        // Verify the code
+        $valid = false;
+        if ($endUser->twoFactorMethod === 'totp') {
+            $valid = $this->twoFactorService->verifyTotp($endUser->twoFactorSecret ?? '', $code);
+        } elseif ($endUser->twoFactorMethod === 'email') {
+            // Email codes are embedded in the JWT claim
+            $storedCode = $claims['code'] ?? null;
+            $valid = $storedCode !== null && $code === $storedCode;
+        }
+
+        // Fallback: backup codes
+        if (!$valid && $endUser->twoFactorBackupCodes) {
+            $codes = $endUser->twoFactorBackupCodes;
+            $valid = $this->twoFactorService->verifyAndConsumeBackupCode($codes, $code);
+            if ($valid) {
+                $endUser->twoFactorBackupCodes = $codes;
+                $this->em->flush();
+            }
+        }
+
+        if (!$valid) {
+            return $this->json(['error' => 'Invalid code'], 422);
         }
 
         $accessToken = $this->jwtService->createAccessToken($endUser);
