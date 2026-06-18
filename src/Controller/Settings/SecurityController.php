@@ -39,11 +39,15 @@ class SecurityController extends AbstractController
     }
 
     #[Route('/totp/setup', name: 'totp_setup', methods: ['POST'])]
-    public function totpSetup(): JsonResponse
+    public function totpSetup(Request $request): JsonResponse
     {
         $user = $this->requireUser();
         if ($user->twoFactorEnabled) {
             return $this->json(['error' => '2FA already enabled. Disable it first.'], 409);
+        }
+        $password = (string) ($request->toArray()['password'] ?? '');
+        if (!$this->hasher->isPasswordValid($user, $password)) {
+            return $this->json(['error' => 'Invalid password.'], 422);
         }
 
         $secret = $this->twoFactor->generateSecret();
@@ -98,11 +102,15 @@ class SecurityController extends AbstractController
     }
 
     #[Route('/email/enable', name: 'email_enable', methods: ['POST'])]
-    public function emailEnable(): JsonResponse
+    public function emailEnable(Request $request): JsonResponse
     {
         $user = $this->requireUser();
         if ($user->twoFactorEnabled) {
             return $this->json(['error' => '2FA already enabled.'], 409);
+        }
+        $password = (string) ($request->toArray()['password'] ?? '');
+        if (!$this->hasher->isPasswordValid($user, $password)) {
+            return $this->json(['error' => 'Invalid password.'], 422);
         }
 
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
