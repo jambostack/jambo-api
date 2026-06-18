@@ -13,6 +13,7 @@ use App\Repository\MediaRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
 use App\Service\EavDataFormatterService;
+use App\Service\EavFieldHelperService;
 use Doctrine\ORM\EntityManagerInterface;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -36,6 +37,7 @@ class ContentController extends AbstractController
         private EntityManagerInterface $em,
         private \App\Repository\ProjectMemberRepository $memberRepo,
         private \App\Service\FieldValueHydrator $fieldValueHydrator,
+        private EavFieldHelperService $fieldValidator,
     ) {}
 
     #[OA\Get(
@@ -200,6 +202,23 @@ class ContentController extends AbstractController
         }
 
         $this->hydrateFieldValues($entry, $data, $collection, $token->project);
+
+        // Validation des champs
+        $validationErrors = [];
+        foreach ($collection->fields as $field) {
+            if ($field->isDeleted()) {
+                continue;
+            }
+            $fieldValue = $data[$field->slug] ?? null;
+            $fieldErrors = $this->fieldValidator->validateFieldValue($field, $fieldValue);
+            if (!empty($fieldErrors)) {
+                $validationErrors[$field->slug] = $fieldErrors[0];
+            }
+        }
+        if (!empty($validationErrors)) {
+            return $this->json(['errors' => $validationErrors], 422);
+        }
+
         $this->em->persist($entry);
         $this->em->flush();
 
@@ -282,6 +301,23 @@ class ContentController extends AbstractController
         }
 
         $this->hydrateFieldValues($entry, $data, $collection, $token->project);
+
+        // Validation des champs
+        $validationErrors = [];
+        foreach ($collection->fields as $field) {
+            if ($field->isDeleted()) {
+                continue;
+            }
+            $fieldValue = $data[$field->slug] ?? null;
+            $fieldErrors = $this->fieldValidator->validateFieldValue($field, $fieldValue);
+            if (!empty($fieldErrors)) {
+                $validationErrors[$field->slug] = $fieldErrors[0];
+            }
+        }
+        if (!empty($validationErrors)) {
+            return $this->json(['errors' => $validationErrors], 422);
+        }
+
         $this->em->flush();
 
         return $this->json($this->formatter->formatEntry($entry));
