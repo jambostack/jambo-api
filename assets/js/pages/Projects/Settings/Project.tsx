@@ -36,6 +36,7 @@ export default function ProjectSettingsPage({ project }: Props) {
         name: project.name || '',
         description: project.description || '',
         default_locale: project.default_locale || '',
+        security: project.security || { endUserTwoFactor: false },
     });
 
     const can = usePage().props.userCan as UserCan;
@@ -93,6 +94,39 @@ export default function ProjectSettingsPage({ project }: Props) {
                             <DeleteProject projectId={project.id} projectUuid={project.uuid} projectName={project.name} />
                         </>
                     )}
+
+                    {/* Security Settings */}
+                    <div className="mt-6 border-t pt-6">
+                        <h3 className="text-sm font-semibold mb-3">Sécurité</h3>
+                        <div className="space-y-3">
+                            <label className="flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={data.security?.endUserTwoFactor ?? false}
+                                    onChange={e => setData('security', { ...data.security, endUserTwoFactor: e.target.checked })}
+                                    className="rounded"
+                                />
+                                <div>
+                                    <span className="text-sm font-medium">Authentification à deux facteurs pour les utilisateurs finaux</span>
+                                    <p className="text-xs text-muted-foreground">Les utilisateurs finaux devront configurer la 2FA dans leur espace personnel.</p>
+                                </div>
+                            </label>
+
+                            {data.security?.endUserTwoFactor && (
+                                <div className="ml-8 space-y-2">
+                                    <span className="text-xs text-muted-foreground">Méthodes autorisées :</span>
+                                    <label className="flex items-center gap-2">
+                                        <input type="checkbox" defaultChecked className="rounded" />
+                                        <span className="text-sm">TOTP (application d'authentification)</span>
+                                    </label>
+                                    <label className="flex items-center gap-2">
+                                        <input type="checkbox" defaultChecked className="rounded" />
+                                        <span className="text-sm">Email</span>
+                                    </label>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
 
 
