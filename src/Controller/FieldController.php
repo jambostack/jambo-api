@@ -62,6 +62,9 @@ class FieldController extends AbstractController
         $field->slug = NamingConvention::toSnakeCase($data['slug'] ?? $data['name']);
         $field->type = $data['type'];
         $field->options = $this->normalizeOptions($field->type, $data['options'] ?? null, $collection);
+        if (isset($data['validationRules'])) {
+            $field->validationRules = $data['validationRules'];
+        }
         $field->order = $data['order'] ?? 0;
         $field->isRequired = $data['is_required'] ?? false;
         $field->collection = $collection;
@@ -104,6 +107,9 @@ class FieldController extends AbstractController
         }
         if (array_key_exists('options', $data)) {
             $field->options = $this->normalizeOptions($field->type, $data['options'], $field->collection);
+        }
+        if (isset($data['validationRules'])) {
+            $field->validationRules = $data['validationRules'];
         }
         if (isset($data['order'])) {
             $field->order = (int) $data['order'];
