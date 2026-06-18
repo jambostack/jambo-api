@@ -1176,7 +1176,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
         .sb-col-item .col-meta { font-size:9px; color:var(--studio-text-muted); font-family:var(--studio-mono); }
 
         /* Editor */
-        .sb-editor { flex:1; min-width:0; overflow:hidden; display:flex; flex-direction:column; }
+        .sb-editor { flex:1; min-width:0; overflow-y:auto; display:flex; flex-direction:column; }
         .sb-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; gap:12px; text-align:center; border:1px dashed var(--studio-border); border-radius:10px; background:var(--studio-surface); min-height:300px; }
         .sb-empty svg { opacity:.25; }
         .sb-empty h3 { font-size:15px; font-weight:600; color:var(--studio-text-dim); margin:0; }
@@ -2122,7 +2122,7 @@ function renderEditor(
                 updateWorkflow(statuses.filter((_, i) => i !== idx), defaultStatus);
             };
             return (
-                <div style={{ padding: '8px', border: '1px solid var(--studio-border)', borderRadius: '6px', background: 'var(--studio-surface)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ padding: '8px', border: '1px solid var(--studio-border)', borderRadius: '6px', background: 'var(--studio-surface)', display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
                     {statuses.map((s, i) => (
                         <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                             <input
