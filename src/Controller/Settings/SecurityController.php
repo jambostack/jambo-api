@@ -12,7 +12,6 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Endroid\QrCode\Builder\Builder;
-use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\Writer\PngWriter;
 
 #[Route('/api/settings/security', name: 'settings_security_')]
@@ -59,13 +58,12 @@ class SecurityController extends AbstractController
         $this->em->flush();
 
         // Generate QR code PNG as data URI
-        $qrCode = Builder::create()
-            ->writer(new PngWriter())
-            ->data($uri)
-            ->encoding(new Encoding('UTF-8'))
-            ->size(250)
-            ->build();
-        $qrDataUri = $qrCode->getDataUri();
+        $qrCode = new Builder(
+            writer: new PngWriter(),
+            data: $uri,
+            size: 250,
+        );
+        $qrDataUri = $qrCode->build()->getDataUri();
 
         return $this->json([
             'secret' => $secret,
