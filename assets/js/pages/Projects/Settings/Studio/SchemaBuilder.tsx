@@ -1185,7 +1185,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
         .sb-field-card:hover { border-color:var(--studio-border-active); }
 
         /* Right panel */
-        .sb-right-panel { flex-shrink:0; overflow:hidden; border:1px solid var(--studio-border); border-radius:10px; background:var(--studio-surface); transition:width .18s; }
+        .sb-right-panel { flex-shrink:0; overflow:hidden; border:1px solid var(--studio-border); border-radius:10px; background:var(--studio-surface); transition:width .18s; display:flex; flex-direction:column; }
         .sb-right-panel > * { flex:1; min-height:0; display:flex; flex-direction:column; }
         .sb-right-panel.collapsed { width:0!important; border:none; }
 
