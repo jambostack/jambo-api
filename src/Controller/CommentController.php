@@ -1,6 +1,7 @@
 <?php
 namespace App\Controller;
 use App\Entity\Comment;
+use App\EventSubscriber\NotificationSubscriber;
 use App\Repository\CommentRepository;
 use App\Repository\CollectionRepository;
 use App\Repository\ContentEntryRepository;
@@ -51,6 +52,7 @@ class CommentController extends AbstractController
         }
         $this->em->persist($comment);
         $this->em->flush();
+        $this->container->get(NotificationSubscriber::class)->onCommentCreated($comment);
         return $this->json(['data' => $this->serializeComment($comment)], 201);
     }
 
