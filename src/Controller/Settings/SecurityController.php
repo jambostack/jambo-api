@@ -214,17 +214,28 @@ class SecurityController extends AbstractController
     {
         $user = $this->requireUser();
 
+        $allProviders = ['google', 'microsoft', 'github', 'gitlab'];
+
         if ($this->socialLogin === null) {
-            return $this->json(['providers' => [], 'linked' => []]);
+            $items = [];
+            foreach ($allProviders as $p) {
+                $items[$p] = ['linked' => false, 'configured' => false];
+            }
+            return $this->json(['providers' => $items]);
         }
 
         $available = $this->socialLogin->getAvailableProviders();
         $linked = $this->socialLogin->getLinkedProviders($user);
 
-        return $this->json([
-            'providers' => $available,
-            'linked'    => array_combine($linked, array_fill(0, count($linked), true)),
-        ]);
+        $items = [];
+        foreach ($allProviders as $p) {
+            $items[$p] = [
+                'linked'     => in_array($p, $linked, true),
+                'configured' => in_array($p, $available, true),
+            ];
+        }
+
+        return $this->json(['providers' => $items]);
     }
 
     #[Route('/social/{provider}/link', name: 'social_link', methods: ['POST'])]

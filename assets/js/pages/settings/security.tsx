@@ -26,8 +26,7 @@ export default function Security() {
     const [error, setError] = useState('');
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
     const [showBackupCodes, setShowBackupCodes] = useState(false);
-    const [socialLinked, setSocialLinked] = useState<Record<string, boolean>>({});
-    const [socialProviders, setSocialProviders] = useState<string[]>([]);
+    const [socialProviders, setSocialProviders] = useState<Record<string, { linked: boolean; configured: boolean }>>({});
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: t('settings.security.breadcrumb'), href: '/settings/security' },
@@ -47,8 +46,7 @@ export default function Security() {
             const res = await fetch('/api/settings/security/social');
             if (res.ok) {
                 const data = await res.json();
-                setSocialLinked(data.linked ?? {});
-                setSocialProviders(data.providers ?? []);
+                setSocialProviders(data.providers ?? {});
             }
         } catch {}
     };
@@ -293,33 +291,39 @@ export default function Security() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            {socialProviders.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">Aucun fournisseur social configuré.</p>
+                            {Object.keys(socialProviders).length === 0 ? (
+                                <p className="text-xs text-muted-foreground">Chargement...</p>
                             ) : (
                                 <div className="space-y-3">
-                                    {socialProviders.map((p) => (
+                                    {Object.entries(socialProviders).map(([p, info]) => (
                                         <div key={p} className="flex items-center justify-between border-b pb-2 last:border-b-0 last:pb-0">
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm font-medium">{SOCIAL_LABELS[p] ?? p}</span>
-                                                {socialLinked[p] ? (
+                                                {info.linked ? (
                                                     <Badge variant="default" className="bg-green-600 text-xs">Lié</Badge>
-                                                ) : (
+                                                ) : info.configured ? (
                                                     <Badge variant="outline" className="text-xs">Non lié</Badge>
+                                                ) : (
+                                                    <Badge variant="outline" className="text-xs text-muted-foreground border-dashed">Non configuré</Badge>
                                                 )}
                                             </div>
-                                            {socialLinked[p] ? (
+                                            {info.linked ? (
                                                 <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive"
                                                     onClick={() => unlinkSocial(p)}>
                                                     <Unlink className="h-3 w-3 mr-1" />
                                                     Dissocier
                                                 </Button>
-                                            ) : (
+                                            ) : info.configured ? (
                                                 <a href={`/connect/${p}`}>
                                                     <Button variant="outline" size="sm" className="text-xs h-7">
                                                         <Link className="h-3 w-3 mr-1" />
                                                         Lier
                                                     </Button>
                                                 </a>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">
+                                                    Configurer dans AppSettings
+                                                </span>
                                             )}
                                         </div>
                                     ))}
