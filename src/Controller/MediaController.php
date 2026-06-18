@@ -59,17 +59,21 @@ class MediaController extends AbstractController
             ->select('m')
             ->from(Media::class, 'm')
             ->where($where)
-            ->setParameters($params)
             ->orderBy('m.createdAt', 'DESC')
             ->setMaxResults($perPage)
             ->setFirstResult(($page - 1) * $perPage);
+        foreach ($params as $key => $value) {
+            $qb->setParameter($key, $value);
+        }
 
-        $total = (int) $this->em->createQueryBuilder()
+        $countQb = $this->em->createQueryBuilder()
             ->select('COUNT(m.id)')
             ->from(Media::class, 'm')
-            ->where($where)
-            ->setParameters($params)
-            ->getQuery()->getSingleScalarResult();
+            ->where($where);
+        foreach ($params as $key => $value) {
+            $countQb->setParameter($key, $value);
+        }
+        $total = (int) $countQb->getQuery()->getSingleScalarResult();
 
         $media = $qb->getQuery()->getResult();
 
