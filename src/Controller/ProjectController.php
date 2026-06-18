@@ -13,6 +13,7 @@ use App\Repository\UserRepository;
 use App\Service\ApiTokenChecker;
 use App\Service\EndUserJwtService;
 use App\Service\EndUserSchemaSeeder;
+use App\Service\WebhookSecretService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,6 +31,7 @@ class ProjectController extends AbstractController
         private RoleRepository $roleRepository,
         private EndUserSchemaSeeder $endUserSchemaSeeder,
         private ApiTokenChecker $tokenChecker,
+        private WebhookSecretService $secretService,
     ) {}
 
     private ?ProjectMember $currentMember = null;
@@ -151,6 +153,44 @@ class ProjectController extends AbstractController
                 }
                 $project->jwtRefreshTtl = $ttl;
             }
+        }
+
+        if (array_key_exists('security', $data) && is_array($data['security'])) {
+            $current = $project->settings['security'] ?? [];
+            $incoming = $data['security'];
+
+            if (array_key_exists('endUserTwoFactor', $incoming)) {
+                $current['endUserTwoFactor'] = (bool) $incoming['endUserTwoFactor'];
+            }
+            if (array_key_exists('endUserTwoFactorMethods', $incoming)) {
+                $current['endUserTwoFactorMethods'] = (array) $incoming['endUserTwoFactorMethods'];
+            }
+            if (array_key_exists('endUserSocialLogin', $incoming)) {
+                $current['endUserSocialLogin'] = (bool) $incoming['endUserSocialLogin'];
+            }
+            if (array_key_exists('endUserSocialProviders', $incoming) && is_array($incoming['endUserSocialProviders'])) {
+                $current['endUserSocialProviders'] = $current['endUserSocialProviders'] ?? [];
+                foreach (['google', 'microsoft', 'github', 'gitlab'] as $provider) {
+                    if (!array_key_exists($provider, $incoming['endUserSocialProviders'])) {
+                        continue;
+                    }
+                    $p = $incoming['endUserSocialProviders'][$provider];
+                    if (array_key_exists('enabled', $p)) {
+                        $current['endUserSocialProviders'][$provider]['enabled'] = (bool) $p['enabled'];
+                    }
+                    if (array_key_exists('clientId', $p)) {
+                        $current['endUserSocialProviders'][$provider]['clientId'] = trim((string) $p['clientId']) ?: null;
+                    }
+                    if (array_key_exists('clientSecret', $p)) {
+                        $val = trim((string) $p['clientSecret']);
+                        $current['endUserSocialProviders'][$provider]['clientSecret'] = $val !== ''
+                            ? 'enc:' . $this->secretService->encrypt($val)
+                            : null;
+                    }
+                }
+            }
+
+            $project->settings = array_merge($project->settings ?? [], ['security' => $current]);
         }
 
         // Cross-check: refresh TTL must be >= access TTL
@@ -472,6 +512,17 @@ class ProjectController extends AbstractController
 
     private function serialize(Project $project): array
     {
+        $security = $project->settings['security'] ?? [];
+
+        // Ne jamais exposer les secrets — on filtre pour le frontend
+        $socialProviders = [];
+        foreach (($security['endUserSocialProviders'] ?? []) as $p => $cfg) {
+            $socialProviders[$p] = [
+                'enabled'    => (bool) ($cfg['enabled'] ?? false),
+                'configured' => !empty($cfg['clientId']) && !empty($cfg['clientSecret']),
+            ];
+        }
+
         return [
             'uuid'             => $project->uuid?->toString(),
             'name'             => $project->name,
@@ -484,6 +535,12 @@ class ProjectController extends AbstractController
             'jwt_refresh_ttl'  => $project->jwtRefreshTtl,
             'collectionsCount' => $project->collections->count(),
             'membersCount'     => $project->projectMembers->count(),
+            'security'         => [
+                'endUserTwoFactor'        => $security['endUserTwoFactor'] ?? false,
+                'endUserTwoFactorMethods' => $security['endUserTwoFactorMethods'] ?? ['totp', 'email'],
+                'endUserSocialLogin'      => $security['endUserSocialLogin'] ?? false,
+                'endUserSocialProviders'  => $socialProviders,
+            ],
         ];
     }
 }

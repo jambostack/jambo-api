@@ -1,3 +1,10 @@
+export interface ProjectSecurity {
+    endUserTwoFactor: boolean;
+    endUserTwoFactorMethods?: string[];
+    endUserSocialLogin: boolean;
+    endUserSocialProviders?: Record<string, { enabled: boolean; configured: boolean }>;
+}
+
 export interface Project {
     id: number;
     uuid: string;
@@ -8,6 +15,7 @@ export interface Project {
     default_locale: string;
     locales?: string[];
     settings: Record<string, any> | null;
+    security?: ProjectSecurity;
     public_api: boolean;
     created_at: string;
     updated_at: string;
