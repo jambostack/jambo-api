@@ -2,6 +2,7 @@
 namespace App\Controller\Settings;
 
 use App\Entity\User;
+use App\Service\SocialLoginService;
 use App\Service\TwoFactorService;
 use App\Service\TwoFactorMailer;
 use Doctrine\ORM\EntityManagerInterface;
@@ -23,6 +24,7 @@ class SecurityController extends AbstractController
         private TwoFactorMailer $twoFactorMailer,
         private UserPasswordHasherInterface $hasher,
         private RequestStack $requestStack,
+        private ?SocialLoginService $socialLogin = null,
     ) {}
 
     #[Route('', name: 'status', methods: ['GET'])]
@@ -203,6 +205,68 @@ class SecurityController extends AbstractController
             'message' => 'Backup codes regenerated.',
             'backup_codes' => $backupResult['plaintext'],
         ]);
+    }
+
+    // ─── Social Login ──────────────────────────────────────────────────────
+
+    #[Route('/social', name: 'social_providers', methods: ['GET'])]
+    public function socialProviders(): JsonResponse
+    {
+        $user = $this->requireUser();
+
+        if ($this->socialLogin === null) {
+            return $this->json(['providers' => [], 'linked' => []]);
+        }
+
+        $available = $this->socialLogin->getAvailableProviders();
+        $linked = $this->socialLogin->getLinkedProviders($user);
+
+        return $this->json([
+            'providers' => $available,
+            'linked'    => array_combine($linked, array_fill(0, count($linked), true)),
+        ]);
+    }
+
+    #[Route('/social/{provider}/link', name: 'social_link', methods: ['POST'])]
+    public function linkSocialProvider(string $provider): JsonResponse
+    {
+        if ($this->socialLogin === null) {
+            return $this->json(['error' => 'Social login is not available'], 500);
+        }
+
+        if (!in_array($provider, ['google', 'microsoft', 'github', 'gitlab'], true)) {
+            return $this->json(['error' => 'Unknown provider'], 400);
+        }
+
+        // La liaison réelle se fait via OAuth redirect — ce endpoint est informatif
+        return $this->json([
+            'message' => 'Redirect to /connect/' . $provider . ' to link this provider.',
+            'redirect_url' => '/connect/' . $provider,
+        ]);
+    }
+
+    #[Route('/social/{provider}', name: 'social_unlink', methods: ['DELETE'])]
+    public function unlinkSocialProvider(string $provider): JsonResponse
+    {
+        $user = $this->requireUser();
+
+        if ($this->socialLogin === null) {
+            return $this->json(['error' => 'Social login is not available'], 500);
+        }
+
+        if (!in_array($provider, ['google', 'microsoft', 'github', 'gitlab'], true)) {
+            return $this->json(['error' => 'Unknown provider'], 400);
+        }
+
+        if (!$this->socialLogin->canUnlinkProvider($user, $provider)) {
+            return $this->json([
+                'error' => 'Cannot unlink the last authentication method. Set a password or link another provider first.',
+            ], 400);
+        }
+
+        $this->socialLogin->unlinkProvider($user, $provider);
+
+        return $this->json(['message' => 'Provider unlinked successfully.']);
     }
 
     private function requireUser(): User

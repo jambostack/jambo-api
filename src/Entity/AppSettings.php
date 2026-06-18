@@ -66,6 +66,10 @@ class AppSettings
     #[ORM\Column(type: 'json', nullable: true)]
     public ?array $aiProviders = null;
 
+    /** Credentials OAuth pour le Social Login admin */
+    #[ORM\Column(type: 'json', nullable: true)]
+    public ?array $oauthProviders = null;
+
     public function getLogoUrl(): ?string
     {
         return $this->logoFileName ? '/uploads/app/' . $this->logoFileName : null;
