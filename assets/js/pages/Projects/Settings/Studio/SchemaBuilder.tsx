@@ -1134,7 +1134,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
   return (
     <div className="sb-root">
       <style>{`
-        .sb-root { display:flex; flex-direction:column; gap:12px; height:calc(100vh - 180px); min-height:0; }
+        .sb-root { display:flex; flex-direction:column; gap:12px; height:100%; min-height:0; }
         .sb-root * { box-sizing:border-box; }
 
         /* Theme variables — inherit from app, fallback values for Studio */
@@ -1219,7 +1219,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
 
         /* ── RESPONSIVE BREAKPOINTS ── */
         @media (max-width: 1024px) {
-          .sb-root { height:calc(100dvh - 100px); gap:8px; }
+          .sb-root { height:100%; gap:8px; }
           .sb-grid-wrapper { display:none!important; }
           .sb-sidebar, .sb-right-panel { display:none!important; }
           .sb-bottom-bar { display:block; }
@@ -1232,7 +1232,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
           .sb-field-card .sb-field-row > * { min-width:0; }
         }
         @media (max-width: 480px) {
-          .sb-root { height:calc(100dvh - 140px); }
+          .sb-root { height:100%; }
           .sb-bar { flex-direction:column; align-items:flex-start; gap:6px; }
           .sb-actions { width:100%; }
           .sb-actions > * { flex:1; }
