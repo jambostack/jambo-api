@@ -800,7 +800,7 @@ class PageController extends InertiaController
 
     private function serializeProject(Project $project, bool $withCollections = false): array
     {
-        $security = $project->settings['security'] ?? [];
+        $security = ($project->settings ?? [])['security'] ?? [];
         $socialProviders = [];
         foreach (($security['endUserSocialProviders'] ?? []) as $p => $cfg) {
             $socialProviders[$p] = [

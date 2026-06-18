@@ -156,7 +156,7 @@ class ProjectController extends AbstractController
         }
 
         if (array_key_exists('security', $data) && is_array($data['security'])) {
-            $current = $project->settings['security'] ?? [];
+            $current = ($project->settings ?? [])['security'] ?? [];
             $incoming = $data['security'];
 
             if (array_key_exists('endUserTwoFactor', $incoming)) {
@@ -512,7 +512,7 @@ class ProjectController extends AbstractController
 
     private function serialize(Project $project): array
     {
-        $security = $project->settings['security'] ?? [];
+        $security = ($project->settings ?? [])['security'] ?? [];
 
         // Ne jamais exposer les secrets — on filtre pour le frontend
         $socialProviders = [];
