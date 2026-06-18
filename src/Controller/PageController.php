@@ -794,6 +794,15 @@ class PageController extends InertiaController
 
     private function serializeProject(Project $project, bool $withCollections = false): array
     {
+        $security = $project->settings['security'] ?? [];
+        $socialProviders = [];
+        foreach (($security['endUserSocialProviders'] ?? []) as $p => $cfg) {
+            $socialProviders[$p] = [
+                'enabled'    => (bool) ($cfg['enabled'] ?? false),
+                'configured' => !empty($cfg['clientId']) && !empty($cfg['clientSecret']),
+            ];
+        }
+
         $data = [
             'id'              => $project->id,
             'uuid'            => $project->uuid?->toRfc4122(),
@@ -803,6 +812,12 @@ class PageController extends InertiaController
             'default_locale'  => $project->defaultLocale,
             'locales'         => $project->locales,
             'settings'        => null,
+            'security'        => [
+                'endUserTwoFactor'          => $security['endUserTwoFactor'] ?? false,
+                'endUserTwoFactorMethods'   => $security['endUserTwoFactorMethods'] ?? ['totp', 'email'],
+                'endUserSocialLogin'        => $security['endUserSocialLogin'] ?? false,
+                'endUserSocialProviders'    => $socialProviders,
+            ],
             'public_api'       => $project->publicApi,
             'jwt_access_ttl'   => $project->jwtAccessTtl,
             'jwt_refresh_ttl'  => $project->jwtRefreshTtl,
