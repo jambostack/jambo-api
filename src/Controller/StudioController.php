@@ -1269,6 +1269,9 @@ PROMPT;
                 $field->type = $fieldData['type'] ?? 'text';
                 $field->isRequired = $fieldData['isRequired'] ?? false;
                 $field->options = $this->normalizeFieldOptions($field->type, $fieldData['options'] ?? null, $project);
+                if (isset($fieldData['validationRules'])) {
+                    $field->validationRules = $fieldData['validationRules'];
+                }
                 $field->order = $order++;
 
                 $this->em->persist($field);
