@@ -2,7 +2,7 @@
 
 namespace App\Service;
 
-use App\DTO\SocialUser;
+use App\Dto\SocialUser;
 use App\Entity\EndUser;
 use App\Entity\Project;
 use App\Entity\User;
