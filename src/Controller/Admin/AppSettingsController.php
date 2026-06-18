@@ -3,6 +3,7 @@
 namespace App\Controller\Admin;
 
 use App\Repository\AppSettingsRepository;
+use App\Service\WebhookSecretService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -22,6 +23,7 @@ class AppSettingsController extends AbstractController
         private EntityManagerInterface $em,
         private UploadHandler $uploadHandler,
         private CacheInterface $cache,
+        private ?WebhookSecretService $secretService = null,
     ) {}
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -245,6 +247,39 @@ class AppSettingsController extends AbstractController
                 $settings->aiProviders = $current;
                 $changed = true;
             }
+
+            // OAuth providers (JSON body with key "oauthProviders")
+            if (array_key_exists('oauthProviders', $data) && is_array($data['oauthProviders'])) {
+                $current  = $settings->oauthProviders ?? [];
+                $incoming = $data['oauthProviders'];
+
+                foreach (['google', 'microsoft', 'github', 'gitlab'] as $provider) {
+                    if (!array_key_exists($provider, $incoming)) {
+                        continue;
+                    }
+                    $p = $incoming[$provider];
+
+                    if (array_key_exists('enabled', $p)) {
+                        $current[$provider]['enabled'] = (bool) $p['enabled'];
+                    }
+                    if (array_key_exists('clientId', $p)) {
+                        $current[$provider]['clientId'] = trim((string) $p['clientId']) ?: null;
+                    }
+                    if (array_key_exists('clientSecret', $p)) {
+                        $val = trim((string) $p['clientSecret']);
+                        if ($val !== '') {
+                            $current[$provider]['clientSecret'] = $this->secretService
+                                ? 'enc:' . $this->secretService->encrypt($val)
+                                : $val;
+                        } else {
+                            $current[$provider]['clientSecret'] = null;
+                        }
+                    }
+                }
+
+                $settings->oauthProviders = $current;
+                $changed = true;
+            }
         }
 
         if ($changed) {
@@ -361,7 +396,23 @@ class AppSettingsController extends AbstractController
                     'model'      => $providers['qwen']['model']       ?? 'qwen-max',
                 ],
             ],
+            'oauthProviders' => $this->serializeOauthProviders($s->oauthProviders ?? []),
         ];
+    }
+
+    /** @return array<string, array{enabled: bool, configured: bool}> */
+    private function serializeOauthProviders(?array $providers): array
+    {
+        $result = [];
+        foreach (['google', 'microsoft', 'github', 'gitlab'] as $p) {
+            $cfg = $providers[$p] ?? [];
+            $result[$p] = [
+                'enabled'    => (bool) ($cfg['enabled'] ?? false),
+                'configured' => !empty($cfg['clientId']) && !empty($cfg['clientSecret']),
+                'redirectUri'=> ($cfg['enabled'] ?? false) ? '/connect/' . $p . '/check' : null,
+            ];
+        }
+        return $result;
     }
 
 }
