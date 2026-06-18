@@ -28,3 +28,7 @@ framework:
             policy: sliding_window
             limit: 30
             interval: '60 seconds'
+        two_factor_limiter:
+            policy: sliding_window
+            limit: 5
+            interval: '60 seconds'
