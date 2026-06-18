@@ -1044,7 +1044,7 @@ return [
     'settings.heading'             => 'Settings',
     'settings.heading_desc'        => 'Manage your profile and account settings',
     'settings.nav.profile'         => 'Profile',
-    'settings.nav.password'        => 'Security',
+    'settings.nav.password'        => 'Password',
     'settings.nav.appearance'      => 'Appearance',
     'settings.nav.security'        => 'Security',
 

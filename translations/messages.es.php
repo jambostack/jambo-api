@@ -1214,7 +1214,7 @@ return [
 
     // Tabs Settings personales
     'settings.nav.profile'         => 'Perfil',
-    'settings.nav.password'        => 'Seguridad',
+    'settings.nav.password'        => 'Contraseña',
     'settings.nav.appearance'      => 'Apariencia',
     'settings.nav.security'        => 'Seguridad',
 

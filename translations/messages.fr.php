@@ -1043,7 +1043,7 @@ return [
     'settings.heading'             => 'Paramètres',
     'settings.heading_desc'        => 'Gérez votre profil et les paramètres de votre compte',
     'settings.nav.profile'         => 'Profil',
-    'settings.nav.password'        => 'Sécurité',
+    'settings.nav.password'        => 'Mot de passe',
     'settings.nav.appearance'      => 'Apparence',
     'settings.nav.security'        => 'Sécurité',
 
