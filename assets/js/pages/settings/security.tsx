@@ -3,7 +3,11 @@ import { Button } from '@/components/ui/button';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Shield, Key, Mail, AlertTriangle } from 'lucide-react';
+import { Shield, Key, Mail, AlertTriangle, Link, Unlink } from 'lucide-react';
+
+const SOCIAL_LABELS: Record<string, string> = {
+    google: 'Google', microsoft: 'Microsoft', github: 'GitHub', gitlab: 'GitLab',
+};
 
 export default function Security() {
     const [status, setStatus] = useState<any>(null);
@@ -15,6 +19,8 @@ export default function Security() {
     const [error, setError] = useState('');
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
     const [showBackupCodes, setShowBackupCodes] = useState(false);
+    const [socialLinked, setSocialLinked] = useState<Record<string, boolean>>({});
+    const [socialProviders, setSocialProviders] = useState<string[]>([]);
 
     const csrf = () => (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
 
@@ -25,7 +31,10 @@ export default function Security() {
         setLoading(false);
     };
 
-    useEffect(() => { fetchStatus(); }, []);
+    useEffect(() => {
+        fetchStatus();
+        fetchSocial();
+    }, []);
 
     const api = async (url: string, body?: any) => {
         const res = await fetch(url, {
@@ -91,6 +100,31 @@ export default function Security() {
             setMessage(data.message);
             setBackupCodes([]);
             fetchStatus();
+        } catch (e: any) { setError(e.message); }
+    };
+
+    const fetchSocial = async () => {
+        try {
+            const res = await fetch('/api/settings/security/social');
+            if (res.ok) {
+                const data = await res.json();
+                setSocialLinked(data.linked ?? {});
+                setSocialProviders(data.providers ?? []);
+            }
+        } catch {}
+    };
+
+    const unlinkSocial = async (provider: string) => {
+        setError(''); setMessage('');
+        try {
+            const res = await fetch(`/api/settings/security/social/${provider}`, {
+                method: 'DELETE',
+                headers: { 'X-CSRF-TOKEN': csrf() },
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            setMessage(data.message);
+            fetchSocial();
         } catch (e: any) { setError(e.message); }
     };
 
@@ -220,6 +254,50 @@ export default function Security() {
                                 <AlertTriangle className="h-4 w-4 mr-2" />
                                 Désactiver la 2FA
                             </Button>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Linked Accounts */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                        <Link className="h-4 w-4" />
+                        Comptes liés
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {socialProviders.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Aucun fournisseur social configuré.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {socialProviders.map((p) => (
+                                <div key={p} className="flex items-center justify-between border-b pb-2 last:border-b-0 last:pb-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium">{SOCIAL_LABELS[p] ?? p}</span>
+                                        {socialLinked[p] ? (
+                                            <Badge variant="default" className="bg-green-600 text-xs">Lié</Badge>
+                                        ) : (
+                                            <Badge variant="outline" className="text-xs">Non lié</Badge>
+                                        )}
+                                    </div>
+                                    {socialLinked[p] ? (
+                                        <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive"
+                                            onClick={() => unlinkSocial(p)}>
+                                            <Unlink className="h-3 w-3 mr-1" />
+                                            Dissocier
+                                        </Button>
+                                    ) : (
+                                        <a href={`/connect/${p}`}>
+                                            <Button variant="outline" size="sm" className="text-xs h-7">
+                                                <Link className="h-3 w-3 mr-1" />
+                                                Lier
+                                            </Button>
+                                        </a>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     )}
                 </CardContent>
