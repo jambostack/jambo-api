@@ -60,7 +60,10 @@ export interface Field {
     order?: number;
     description?: string;
     placeholder?: string;
+    /** Alias pour le form builder — mapping différent de la source API */
     validations?: Record<string, any>;
+    /** Règles de validation provenant de la colonne JSON validationRules de l'entité Field */
+    validationRules?: Record<string, any>;
     options?: {
         repeatable?: boolean;
         hideInContentList?: boolean;
