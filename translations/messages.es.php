@@ -1208,6 +1208,7 @@ return [
     'settings.nav.profile'         => 'Perfil',
     'settings.nav.password'        => 'Seguridad',
     'settings.nav.appearance'      => 'Apariencia',
+    'settings.nav.security'        => 'Seguridad',
 
     // Tabs API Access
     'projects.settings.api.tab_access'  => 'Acceso API',
