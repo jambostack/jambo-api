@@ -21,7 +21,8 @@ export default function TwoFactorChallenge({ error }: { error?: string }) {
 
     const resendEmail = async () => {
         setSending(true);
-        await fetch('/two-factor-challenge/send-email', { method: 'POST' });
+        const csrf = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
+        await fetch('/two-factor-challenge/send-email', { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf } });
         setSending(false);
     };
 
