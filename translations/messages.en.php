@@ -268,6 +268,14 @@ return [
     'settings.appearance.heading'       => 'Appearance settings',
     'settings.appearance.description'   => "Update your account's appearance settings",
 
+    'settings.security.breadcrumb'      => 'Security',
+    'settings.security.heading'         => 'Security',
+    'settings.security.description'     => 'Manage two-factor authentication and linked accounts',
+
+    // Social login
+    'auth.social.connect_with'          => 'Connect with {provider}',
+    'auth.social.or'                    => 'or',
+
     // Collections
     'collections.content_create'          => 'Create Content',
     'collections.content_edit'            => 'Edit Content',
@@ -957,8 +965,8 @@ return [
     'end_users.create_error'       => 'Failed to create user',
     'end_users.updated_success'    => 'User updated successfully',
     'end_users.update_error'       => 'Failed to update user',
-    'end_users.name'               => 'Name',
-    'end_users.name_placeholder'   => 'Full name (optional)',
+    'end_users.username'            => 'Username',
+    'end_users.username_placeholder'=> 'Username (optional)',
     'end_users.email_placeholder'  => 'user@example.com',
     'end_users.password_placeholder' => 'Minimum 8 characters',
     'end_users.actions'            => 'Actions',
