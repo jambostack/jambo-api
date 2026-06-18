@@ -268,6 +268,14 @@ return [
     'settings.appearance.heading'     => 'Paramètres d\'apparence',
     'settings.appearance.description' => 'Mettez à jour les paramètres d\'apparence de votre compte',
 
+    'settings.security.breadcrumb'    => 'Sécurité',
+    'settings.security.heading'       => 'Sécurité',
+    'settings.security.description'   => 'Gérez l\'authentification à deux facteurs et les comptes liés',
+
+    // Social login
+    'auth.social.connect_with'        => 'Se connecter avec {provider}',
+    'auth.social.or'                  => 'ou',
+
     // Collections
     'collections.content_create'          => 'Créer du contenu',
     'collections.content_edit'            => 'Modifier le contenu',
@@ -956,8 +964,8 @@ return [
     'end_users.create_error'        => 'Échec de la création',
     'end_users.updated_success'     => 'Utilisateur mis à jour',
     'end_users.update_error'        => 'Échec de la mise à jour',
-    'end_users.name'                => 'Nom',
-    'end_users.name_placeholder'    => 'Nom complet (optionnel)',
+    'end_users.username'             => 'Nom d\'utilisateur',
+    'end_users.username_placeholder' => 'Nom d\'utilisateur (optionnel)',
     'end_users.email_placeholder'   => 'utilisateur@exemple.com',
     'end_users.password_placeholder' => 'Minimum 8 caractères',
     'end_users.actions'             => 'Actions',
