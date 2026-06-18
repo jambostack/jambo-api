@@ -36,7 +36,17 @@ export default function ProjectSettingsPage({ project }: Props) {
         name: project.name || '',
         description: project.description || '',
         default_locale: project.default_locale || '',
-        security: project.security || { endUserTwoFactor: false },
+        security: {
+            endUserTwoFactor: project.security?.endUserTwoFactor ?? false,
+            endUserTwoFactorMethods: project.security?.endUserTwoFactorMethods ?? ['totp', 'email'],
+            endUserSocialLogin: project.security?.endUserSocialLogin ?? false,
+            endUserSocialProviders: {
+                google:    { enabled: project.security?.endUserSocialProviders?.google?.enabled ?? false,    clientId: '', clientSecret: '' },
+                microsoft: { enabled: project.security?.endUserSocialProviders?.microsoft?.enabled ?? false, clientId: '', clientSecret: '' },
+                github:    { enabled: project.security?.endUserSocialProviders?.github?.enabled ?? false,    clientId: '', clientSecret: '' },
+                gitlab:    { enabled: project.security?.endUserSocialProviders?.gitlab?.enabled ?? false,    clientId: '', clientSecret: '' },
+            },
+        },
     });
 
     const can = usePage().props.userCan as UserCan;
@@ -117,6 +127,103 @@ export default function ProjectSettingsPage({ project }: Props) {
                                         <input type="checkbox" defaultChecked className="rounded" />
                                         <span className="text-sm">Email</span>
                                     </label>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Social Login for End Users */}
+                    <Separator />
+                    <div>
+                        <h3 className="text-sm font-semibold mb-3">Social Login pour les utilisateurs finaux</h3>
+                        <div className="space-y-3">
+                            <label className="flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={data.security?.endUserSocialLogin ?? false}
+                                    onChange={e => setData('security', {
+                                        ...data.security,
+                                        endUserSocialLogin: e.target.checked,
+                                    })}
+                                    className="rounded"
+                                />
+                                <div>
+                                    <span className="text-sm font-medium">Connexion via fournisseurs OAuth</span>
+                                    <p className="text-xs text-muted-foreground">Les utilisateurs finaux pourront se connecter avec Google, Microsoft, GitHub ou GitLab.</p>
+                                </div>
+                            </label>
+
+                            {data.security?.endUserSocialLogin && (
+                                <div className="ml-8 space-y-4">
+                                    {(['google', 'microsoft', 'github', 'gitlab'] as const).map(p => {
+                                        const sp = data.security.endUserSocialProviders?.[p];
+                                        const pp = project.security?.endUserSocialProviders?.[p];
+                                        const isConfigured = pp?.configured ?? false;
+
+                                        return (
+                                            <div key={p} className="border rounded-lg p-3 space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-medium capitalize">{p}</span>
+                                                        {isConfigured && sp?.enabled && (
+                                                            <span className="text-xs text-green-600 font-medium">Configuré</span>
+                                                        )}
+                                                    </div>
+                                                    <label className="flex items-center gap-2 text-xs">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={sp?.enabled ?? false}
+                                                            onChange={e => setData('security', {
+                                                                ...data.security,
+                                                                endUserSocialProviders: {
+                                                                    ...data.security.endUserSocialProviders,
+                                                                    [p]: { ...sp, enabled: e.target.checked },
+                                                                },
+                                                            })}
+                                                            className="rounded"
+                                                        />
+                                                        Activé
+                                                    </label>
+                                                </div>
+
+                                                {sp?.enabled && (
+                                                    <div className="space-y-2 pl-2 border-l-2 border-muted">
+                                                        <div>
+                                                            <Label className="text-xs">Client ID</Label>
+                                                            <Input
+                                                                placeholder="..."
+                                                                value={sp.clientId ?? ''}
+                                                                onChange={e => setData('security', {
+                                                                    ...data.security,
+                                                                    endUserSocialProviders: {
+                                                                        ...data.security.endUserSocialProviders,
+                                                                        [p]: { ...sp, clientId: e.target.value },
+                                                                    },
+                                                                })}
+                                                                className="h-8 text-xs"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-xs">Client Secret</Label>
+                                                            <Input
+                                                                type="password"
+                                                                placeholder={isConfigured ? '••••••••' : '...'}
+                                                                value={sp.clientSecret ?? ''}
+                                                                onChange={e => setData('security', {
+                                                                    ...data.security,
+                                                                    endUserSocialProviders: {
+                                                                        ...data.security.endUserSocialProviders,
+                                                                        [p]: { ...sp, clientSecret: e.target.value },
+                                                                    },
+                                                                })}
+                                                                className="h-8 text-xs"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
