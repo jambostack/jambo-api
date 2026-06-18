@@ -736,6 +736,14 @@ class PageController extends InertiaController
         return $this->inertia($request, 'settings/appearance', []);
     }
 
+    #[Route('/settings/security', name: 'settings_security', priority: 10)]
+    public function settingsSecurity(Request $request): Response
+    {
+        return $this->inertia($request, 'settings/security', [
+            'user' => $this->serializeCurrentUser(),
+        ]);
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
