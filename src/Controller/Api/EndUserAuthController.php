@@ -155,7 +155,15 @@ class EndUserAuthController extends AbstractController
         $endUserTwoFactorEnabled = $projectSettings['security']['endUserTwoFactor'] ?? false;
 
         if ($endUserTwoFactorEnabled && $endUser->twoFactorEnabled) {
-            $twoFactorToken = $this->jwtService->createTwoFactorToken($endUser);
+            $emailCodeHash = null;
+            if ($endUser->twoFactorMethod === 'email') {
+                $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                // Envoyer le code par email, stocker uniquement le hash dans le JWT
+                $this->container->get(\App\Service\TwoFactorMailer::class)
+                    ->sendCode($endUser->email, $code, 'JamboAPI');
+                $emailCodeHash = hash('sha256', $code);
+            }
+            $twoFactorToken = $this->jwtService->createTwoFactorToken($endUser, $emailCodeHash);
             return $this->json([
                 'requires_2fa' => true,
                 'two_factor_token' => $twoFactorToken,
@@ -230,9 +238,9 @@ class EndUserAuthController extends AbstractController
         if ($endUser->twoFactorMethod === 'totp') {
             $valid = $this->twoFactorService->verifyTotp($endUser->twoFactorSecret ?? '', $code);
         } elseif ($endUser->twoFactorMethod === 'email') {
-            // Email codes are embedded in the JWT claim
-            $storedCode = $claims['code'] ?? null;
-            $valid = $storedCode !== null && $code === $storedCode;
+            // Le JWT contient un hash du code (pas le code en clair)
+            $storedHash = $claims['ech'] ?? null;
+            $valid = $storedHash !== null && hash('sha256', $code) === $storedHash;
         }
 
         // Fallback: backup codes

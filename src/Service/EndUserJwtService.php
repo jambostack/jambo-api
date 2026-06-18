@@ -81,8 +81,9 @@ class EndUserJwtService
         return ($claims['ref'] ?? false) === true;
     }
 
-    /** Generate a short-lived 2FA challenge token (TTL 60 seconds). */
-    public function createTwoFactorToken(EndUser $endUser, ?string $emailCode = null): string
+    /** Generate a short-lived 2FA challenge token (TTL 60 seconds).
+     *  @param string|null $emailCodeHash sha256 hash of the email code (never the plaintext code) */
+    public function createTwoFactorToken(EndUser $endUser, ?string $emailCodeHash = null): string
     {
         $now = new \DateTimeImmutable();
         $builder = $this->config->builder()
@@ -92,8 +93,8 @@ class EndUserJwtService
             ->withClaim('pid', $endUser->project->uuid->toRfc4122())
             ->withClaim('tfa', true); // marker: this is a 2FA token
 
-        if ($emailCode !== null) {
-            $builder = $builder->withClaim('code', $emailCode);
+        if ($emailCodeHash !== null) {
+            $builder = $builder->withClaim('ech', $emailCodeHash); // email code hash
         }
 
         return $builder->getToken($this->config->signer(), $this->config->signingKey())->toString();
