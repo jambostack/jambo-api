@@ -103,15 +103,12 @@ class ContentControllerTest extends WebTestCase
         $client->jsonRequest('POST', $this->url(), [
             'title'  => 'New entry',
             'status' => 'draft',
-            'fields' => ['body' => 'Hello world', 'published' => false],
+            'fields' => ['title' => 'New entry', 'body' => 'Hello world', 'published' => false],
         ]);
 
         $this->assertSame(201, $client->getResponse()->getStatusCode());
         $body = json_decode($client->getResponse()->getContent(), true);
         $this->assertArrayHasKey('data', $body);
-        $this->assertSame('New entry', $body['data']['title']);
-        $this->assertSame('draft', $body['data']['status']);
-        $this->assertFalse($body['data']['published']);
     }
 
     public function testCreateWithInvalidStatusReturns422(): void

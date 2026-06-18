@@ -147,9 +147,8 @@ class ContentController extends AbstractController
         }
 
         $this->em->persist($entry);
-        $this->saveFieldValues($entry, $collection, $data['fields'] ?? []);
 
-        // Validation des champs
+        // Validation des champs avant saveFieldValues
         $validationErrors = [];
         foreach ($collection->fields as $field) {
             if ($field->isDeleted()) {
@@ -164,6 +163,8 @@ class ContentController extends AbstractController
         if (!empty($validationErrors)) {
             return $this->json(['errors' => $validationErrors], 422);
         }
+
+        $this->saveFieldValues($entry, $collection, $data['fields'] ?? []);
 
         $this->em->flush();
 
