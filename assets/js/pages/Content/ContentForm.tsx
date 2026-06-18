@@ -712,7 +712,7 @@ useEffect(() => {
 
                             {isEditMode && contentEntry && (
                                 <div className="rounded-xl border border-border bg-card/60 p-3 shadow-sm">
-                                    <CommentThread entryId={contentEntry.id} />
+                                    <CommentThread projectUuid={project.uuid} collectionSlug={collection.slug} entryId={contentEntry.id} />
                                 </div>
                             )}
 

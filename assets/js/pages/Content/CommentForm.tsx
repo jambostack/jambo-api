@@ -4,7 +4,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Send } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 
-export default function CommentForm({ entryId, parentId, onDone }: { entryId: number; parentId?: number; onDone: () => void }) {
+export default function CommentForm({ baseUrl, parentId, onDone }: { baseUrl: string; parentId?: number; onDone: () => void }) {
     const t = useTranslation();
     const [body, setBody] = useState('');
     const [sending, setSending] = useState(false);
@@ -12,8 +12,8 @@ export default function CommentForm({ entryId, parentId, onDone }: { entryId: nu
     const submit = async () => {
         if (!body.trim()) return;
         setSending(true);
-        const csrf = (document.querySelector('meta[name="csrf-token"]') as any)?.content;
-        await fetch(`/api/comments/${entryId}`, {
+        const csrf = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
+        await fetch(baseUrl, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
             body: JSON.stringify({ body, parent_id: parentId ?? null }),
         });
