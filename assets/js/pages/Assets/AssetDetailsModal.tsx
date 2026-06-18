@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {  Dialog,  DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { FileImage, FileText, FileVideo, FileAudio, File, Download, Crop, Lock, Unlock, Copy, Check } from 'lucide-react';
+import { FileImage, FileText, FileVideo, FileAudio, File, Download, Crop, Lock, Unlock, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import ReactCrop, { Crop as CropType, centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import InputError from '@/components/input-error';
@@ -39,6 +39,7 @@ export default function AssetDetailsModal({
     const [asset, setAsset] = useState(initialAsset);
     const [copied, setCopied] = useState(false);
     const [copiedUuid, setCopiedUuid] = useState(false);
+    const [showTransformations, setShowTransformations] = useState(false);
     const imgRef = useRef<HTMLImageElement>(null);
     const [submitting, setSubmitting] = useState(false);
 
@@ -265,7 +266,7 @@ export default function AssetDetailsModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className='sm:max-w-4xl overflow-y-auto'>
+            <DialogContent className='sm:max-w-4xl max-h-[85vh] overflow-y-auto flex flex-col'>
                 <DialogHeader className="flex flex-row items-center justify-between space-y-0 p-0">
                     <DialogTitle className="text-lg font-medium">{asset.original_filename}</DialogTitle>
                     <DialogDescription className="sr-only">
@@ -292,10 +293,10 @@ export default function AssetDetailsModal({
                     </div>
                 </DialogHeader>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
                     {/* Asset Preview */}
                     <div className={`${isCropping ? 'lg:col-span-3' : 'lg:col-span-2'} space-y-4`}>
-                        <div className={`bg-muted rounded-md flex items-center justify-center overflow-hidden ${isCropping ? 'h-[calc(100vh-200px)]' : 'h-[250px]'}`}>
+                        <div className={`bg-muted rounded-md flex items-center justify-center overflow-hidden ${isCropping ? 'max-h-[350px]' : 'h-[180px] sm:h-[250px]'}`}>
                             {isImage ? (
                                 isCropping ? (
                                     <div className="relative w-full h-full flex items-center justify-center">
@@ -361,11 +362,11 @@ export default function AssetDetailsModal({
 
                         {/* Asset Information */}
                         {!isCropping && (
-                            <div className="bg-muted/50 rounded-md p-3">
-                                <div className="flex items-center justify-between mb-2">
-                                    <h3 className="text-base font-medium">{t('assets.modal_file_info')}</h3>
+                            <div className="bg-muted/50 rounded-md p-2 sm:p-3 max-h-[250px] overflow-y-auto">
+                                <div className="flex items-center justify-between mb-1">
+                                    <h3 className="text-sm font-medium">{t('assets.modal_file_info')}</h3>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 gap-1 sm:gap-2">
                                     <div>
                                         <Label className="text-xs text-muted-foreground">{t('assets.modal_filename')}</Label>
                                         <p className="text-sm font-medium truncate">{asset.original_filename}</p>
@@ -419,9 +420,16 @@ export default function AssetDetailsModal({
 
                                 </div>
                                 {isImage && (
-                                    <div className="bg-muted/50 rounded-lg p-3 mt-2">
-                                        <Label className="text-xs font-semibold mb-2 block">Transformations</Label>
-                                        <div className="space-y-1.5">
+                                    <div className="bg-muted/50 rounded-lg p-2 mt-1">
+                                        <button
+                                            type="button"
+                                            className="flex items-center justify-between w-full text-xs font-semibold"
+                                            onClick={() => setShowTransformations(!showTransformations)}
+                                        >
+                                            Transformations
+                                            {showTransformations ? <ChevronUp className="h-3 w-3 flex-shrink-0 ml-1" /> : <ChevronDown className="h-3 w-3 flex-shrink-0 ml-1" />}
+                                        </button>
+                                        {showTransformations && (<div className="space-y-1.5 mt-1">
                                             {[
                                                 { label: 'Thumbnail (200×200 WebP)', params: 'w=200&h=200&fit=crop&fmt=webp&q=80' },
                                                 { label: 'Medium (800×600)', params: 'w=800&h=600&fit=scale-down' },
@@ -445,9 +453,10 @@ export default function AssetDetailsModal({
                                         <p className="text-xs text-muted-foreground mt-2">
                                             Utilisez <code className="text-xs bg-muted px-1 rounded">/cdn/media/{'{{uuid}}'}?w=800&amp;h=600&amp;fit=crop&amp;fmt=webp</code>
                                         </p>
+                                        )}
                                     </div>
                                 )}
-                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                <div className="grid grid-cols-2 gap-1 mt-1">
                                     <div>
                                         <Label className="text-xs text-muted-foreground">{t('assets.modal_uploaded')}</Label>
                                         <p className="text-sm font-medium">{formatDate(asset.created_at)}</p>
@@ -464,9 +473,9 @@ export default function AssetDetailsModal({
                     {/* Edit Form */}
                     {!isCropping && (
                         <div>
-                            <div className="bg-muted/50 rounded-md p-3 pb-5">
-                                <form onSubmit={handleSubmit} className="space-y-2">
-                                    <div className="space-y-1">
+                            <div className="bg-muted/50 rounded-md p-2 sm:p-3 max-h-[300px] sm:max-h-none overflow-y-auto">
+                                <form onSubmit={handleSubmit} className="space-y-1.5">
+                                    <div>
                                         <Label htmlFor="alt_text" className="text-xs">{t('assets.modal_alt_text')}</Label>
                                         <Input
                                             id="alt_text"
@@ -478,7 +487,7 @@ export default function AssetDetailsModal({
                                         <InputError message={errors.alt_text} />
                                     </div>
 
-                                    <div className="space-y-1">
+                                    <div>
                                         <Label htmlFor="title" className="text-xs">{t('assets.modal_title')}</Label>
                                         <Input
                                             id="title"
@@ -490,33 +499,33 @@ export default function AssetDetailsModal({
                                         <InputError message={errors.title} />
                                     </div>
 
-                                    <div className="space-y-1">
+                                    <div>
                                         <Label htmlFor="caption" className="text-xs">{t('assets.modal_caption')}</Label>
                                         <Textarea
                                             id="caption"
                                             value={data.caption}
                                             onChange={(e) => setData('caption', e.target.value)}
                                             placeholder={t('assets.modal_caption_ph')}
-                                            rows={2}
+                                            rows={1}
                                             className="text-sm"
                                         />
                                         <InputError message={errors.caption} />
                                     </div>
 
-                                    <div className="space-y-1">
+                                    <div>
                                         <Label htmlFor="description" className="text-xs">{t('assets.modal_description')}</Label>
                                         <Textarea
                                             id="description"
                                             value={data.description}
                                             onChange={(e) => setData('description', e.target.value)}
                                             placeholder={t('assets.modal_description_ph')}
-                                            rows={3}
+                                            rows={2}
                                             className="text-sm"
                                         />
                                         <InputError message={errors.description} />
                                     </div>
 
-                                    <div className="space-y-1">
+                                    <div className="">
                                         <Label htmlFor="author" className="text-xs">{t('assets.modal_author')}</Label>
                                         <Input
                                             id="author"
@@ -528,7 +537,7 @@ export default function AssetDetailsModal({
                                         <InputError message={errors.author} />
                                     </div>
 
-                                    <div className="space-y-1">
+                                    <div className="">
                                         <Label htmlFor="copyright" className="text-xs">{t('assets.modal_copyright')}</Label>
                                         <Input
                                             id="copyright"
@@ -540,7 +549,7 @@ export default function AssetDetailsModal({
                                         <InputError message={errors.copyright} />
                                     </div>
 
-                                    <Button type="submit" disabled={submitting} className="w-full mt-2">
+                                    <Button type="submit" disabled={submitting} size="sm" className="w-full mt-1">
                                         {submitting ? t('assets.modal_saving') : t('assets.modal_save')}
                                     </Button>
                                 </form>
