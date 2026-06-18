@@ -33,14 +33,22 @@ export default function NotificationBell() {
         return () => clearInterval(timer);
     }, []);
 
+    const csrf = () => (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
+
     const markAsRead = async (id: number, link: string) => {
-        await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
+        await fetch(`/api/notifications/${id}/read`, {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrf() },
+        });
         setCount(c => Math.max(0, c - 1));
         router.visit(link);
     };
 
     const markAllAsRead = async () => {
-        await fetch('/api/notifications/read-all', { method: 'POST' });
+        await fetch('/api/notifications/read-all', {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrf() },
+        });
         setCount(0);
         setNotifs(prev => prev.map(n => ({ ...n, read_at: new Date().toISOString() })));
     };
