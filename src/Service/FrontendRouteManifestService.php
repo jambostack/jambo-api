@@ -52,6 +52,15 @@ class FrontendRouteManifestService
         'assets.destroy'                        => 'api_media_delete',
         'assets.bulk-destroy'                   => 'api_media_bulk_destroy',
         'assets.crop'                           => 'api_media_crop',
+        'assets.move'                           => 'api_media_move',
+
+        // Assets — folders
+        'assets.folders.index'                  => 'api_media_folder_index',
+        'assets.folders.tree'                   => 'api_media_folder_tree',
+        'assets.folders.store'                  => 'api_media_folder_store',
+        'assets.folders.update'                 => 'api_media_folder_update',
+        'assets.folders.move'                   => 'api_media_folder_move',
+        'assets.folders.destroy'                => 'api_media_folder_delete',
 
         // Project pages
         'projects.workbench'                    => 'workbench_page',

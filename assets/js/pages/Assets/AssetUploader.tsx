@@ -35,6 +35,7 @@ interface AssetUploaderProps {
 	projectId: number;
 	projectUuid: string;
 	onUploadComplete: () => void;
+	folderId?: number | null;
 }
 
 type UploadStatus = 'pending' | 'uploading' | 'completed' | 'error' | 'cancelled';
@@ -48,7 +49,7 @@ interface UploadFile {
 	status: UploadStatus;
 }
 
-export default function AssetUploader({ isOpen, onClose, projectId, projectUuid, onUploadComplete }: AssetUploaderProps) {
+export default function AssetUploader({ isOpen, onClose, projectId, projectUuid, onUploadComplete, folderId }: AssetUploaderProps) {
 	const t = useTranslation();
 	const [files, setFiles] = useState<UploadFile[]>([]);
 	const [uploading, setUploading] = useState(false);
@@ -162,6 +163,9 @@ export default function AssetUploader({ isOpen, onClose, projectId, projectUuid,
 
 				const formData = new FormData();
 				formData.append('file', fileItem.file);
+				if (folderId != null) {
+					formData.append('folder_id', String(folderId));
+				}
 
 				try {
 					await axios.post(`/api/projects/${projectUuid}/media`, formData, {

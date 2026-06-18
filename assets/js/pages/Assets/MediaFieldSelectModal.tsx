@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/ui/dropdown-menu';
-import { LayoutGrid, List, ArrowUpDown, Calendar, Plus, X } from 'lucide-react';
+import { LayoutGrid, List, ArrowUpDown, Calendar, Plus, X, Folder } from 'lucide-react';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -16,6 +16,7 @@ import AssetGrid from '@/pages/Assets/AssetGrid';
 import AssetTable from '@/pages/Assets/AssetTable';
 import AssetUploader from '@/pages/Assets/AssetUploader';
 import AssetDetailsModal from '@/pages/Assets/AssetDetailsModal';
+import MediaFolderTree from '@/pages/Assets/MediaFolderTree';
 
 import type { Project, Asset } from '@/types';
 import { DialogDescription } from '@radix-ui/react-dialog';
@@ -76,6 +77,7 @@ export function MediaLibraryModal({
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [assetToDelete, setAssetToDelete] = useState<Asset | null>(null);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
 
     // Reset the selected assets when the modal is opened.
     // Dépend de `isOpen` SEULEMENT : éviter de relancer cet effet à chaque
@@ -98,7 +100,7 @@ export function MediaLibraryModal({
         if (isOpen) {
             loadAssets();
         }
-    }, [isOpen, search, assetType, dateFilter, sortOption, currentPage, itemsPerPage]);
+    }, [isOpen, search, assetType, dateFilter, sortOption, currentPage, itemsPerPage, selectedFolderId]);
 
     // Update selectedAssetObjects when assets or selectedAssets change.
     // Functional update form avoids adding selectedAssetObjects to deps (which would loop).
@@ -119,8 +121,13 @@ export function MediaLibraryModal({
     const loadAssets = async () => {
         setLoading(true);
         try {
-            const response = await fetch(route('assets.api.index', project.uuid) +
-                `?search=${search}&type=${assetType !== 'all' ? assetType : ''}&date_filter=${dateFilter}&sort=${sortOption}&page=${currentPage}&per_page=${itemsPerPage}`);
+            let url = route('assets.api.index', project.uuid) +
+                `?search=${search}&type=${assetType !== 'all' ? assetType : ''}&date_filter=${dateFilter}&sort=${sortOption}&page=${currentPage}&per_page=${itemsPerPage}`;
+            // Filtrer par dossier : null = racine, absent = tous
+            if (selectedFolderId !== null) {
+                url += `&folder_id=${selectedFolderId}`;
+            }
+            const response = await fetch(url);
 
             if (!response.ok) {
                 throw new Error('Failed to load assets');
@@ -385,178 +392,195 @@ export function MediaLibraryModal({
                             projectId={project.id}
                             projectUuid={project.uuid}
                             onUploadComplete={handleAssetUploaded}
+                            folderId={selectedFolderId}
                         />
                     ) : (
-                        <div className="space-y-4">
-                            <div className="flex flex-col md:flex-row gap-2 justify-between">
-                                <div className="flex flex-wrap gap-2">
-                                    <SearchBar
-                                        placeholder={t('assets.search_ph')}
-                                        className="w-full md:w-auto"
-                                        value={search}
-                                        onChange={handleSearchChange}
-                                    />
-                                    <MultiSelect
-                                        instanceId="asset-type-select"
-                                        options={assetTypeOptions}
-                                        className="min-w-[140px]"
-                                        isSearchable={false}
-                                        value={assetTypeOptions.find(o => o.value === assetType)}
-                                        onChange={(newValue: any) => handleTypeChange(newValue?.value ?? 'all')}
-                                    />
+                        <div className="flex gap-4 min-h-[400px]">
+                            {/* Sidebar — arbre des dossiers */}
+                            <aside className="w-56 flex-shrink-0 border-r border-border pr-3 overflow-y-auto max-h-[60vh]">
+                                <div className="flex items-center gap-2 mb-2 px-1">
+                                    <Folder className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dossiers</span>
+                                </div>
+                                <MediaFolderTree
+                                    projectUuid={project.uuid}
+                                    selectedFolderId={selectedFolderId}
+                                    onSelectFolder={(folderId) => { setSelectedFolderId(folderId); setCurrentPage(1); }}
+                                />
+                            </aside>
 
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="w-[140px]">
-                                                <Calendar className="h-4 w-4 mr-2" />
-                                                {getDateFilterDisplayLocal(dateFilter)}
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="start">
-                                            <DropdownMenuRadioGroup value={dateFilter} onValueChange={handleDateFilterChange}>
-                                                <DropdownMenuRadioItem value="">{t('assets.modal_all_time')}</DropdownMenuRadioItem>
-                                                <DropdownMenuRadioItem value="today">{t('assets.date_today')}</DropdownMenuRadioItem>
-                                                <DropdownMenuRadioItem value="week">{t('assets.date_week')}</DropdownMenuRadioItem>
-                                                <DropdownMenuRadioItem value="month">{t('assets.date_month')}</DropdownMenuRadioItem>
-                                                <DropdownMenuRadioItem value="quarter">{t('assets.date_quarter')}</DropdownMenuRadioItem>
-                                            </DropdownMenuRadioGroup>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                            {/* Zone principale — filtres + grille */}
+                            <div className="flex-1 min-w-0 space-y-4">
+                                <div className="flex flex-col md:flex-row gap-2 justify-between">
+                                    <div className="flex flex-wrap gap-2">
+                                        <SearchBar
+                                            placeholder={t('assets.search_ph')}
+                                            className="w-full md:w-auto"
+                                            value={search}
+                                            onChange={handleSearchChange}
+                                        />
+                                        <MultiSelect
+                                            instanceId="asset-type-select"
+                                            options={assetTypeOptions}
+                                            className="min-w-[140px]"
+                                            isSearchable={false}
+                                            value={assetTypeOptions.find(o => o.value === assetType)}
+                                            onChange={(newValue: any) => handleTypeChange(newValue?.value ?? 'all')}
+                                        />
 
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="w-[140px]">
-                                                <ArrowUpDown className="h-4 w-4 mr-2" />
-                                                {getSortOptionDisplayLocal(sortOption)}
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuRadioGroup value={sortOption} onValueChange={handleSortChange}>
-                                                <DropdownMenuRadioItem value="newest">{t('assets.modal_sort_newest')}</DropdownMenuRadioItem>
-                                                <DropdownMenuRadioItem value="oldest">{t('assets.modal_sort_oldest')}</DropdownMenuRadioItem>
-                                                <DropdownMenuRadioItem value="name">{t('assets.modal_sort_name')}</DropdownMenuRadioItem>
-                                                <DropdownMenuRadioItem value="size">{t('assets.modal_sort_size')}</DropdownMenuRadioItem>
-                                            </DropdownMenuRadioGroup>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" className="w-[140px]">
+                                                    <Calendar className="h-4 w-4 mr-2" />
+                                                    {getDateFilterDisplayLocal(dateFilter)}
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="start">
+                                                <DropdownMenuRadioGroup value={dateFilter} onValueChange={handleDateFilterChange}>
+                                                    <DropdownMenuRadioItem value="">{t('assets.modal_all_time')}</DropdownMenuRadioItem>
+                                                    <DropdownMenuRadioItem value="today">{t('assets.date_today')}</DropdownMenuRadioItem>
+                                                    <DropdownMenuRadioItem value="week">{t('assets.date_week')}</DropdownMenuRadioItem>
+                                                    <DropdownMenuRadioItem value="month">{t('assets.date_month')}</DropdownMenuRadioItem>
+                                                    <DropdownMenuRadioItem value="quarter">{t('assets.date_quarter')}</DropdownMenuRadioItem>
+                                                </DropdownMenuRadioGroup>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" className="w-[140px]">
+                                                    <ArrowUpDown className="h-4 w-4 mr-2" />
+                                                    {getSortOptionDisplayLocal(sortOption)}
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuRadioGroup value={sortOption} onValueChange={handleSortChange}>
+                                                    <DropdownMenuRadioItem value="newest">{t('assets.modal_sort_newest')}</DropdownMenuRadioItem>
+                                                    <DropdownMenuRadioItem value="oldest">{t('assets.modal_sort_oldest')}</DropdownMenuRadioItem>
+                                                    <DropdownMenuRadioItem value="name">{t('assets.modal_sort_name')}</DropdownMenuRadioItem>
+                                                    <DropdownMenuRadioItem value="size">{t('assets.modal_sort_size')}</DropdownMenuRadioItem>
+                                                </DropdownMenuRadioGroup>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            className="px-3"
+                                            onClick={() => setShowUploader(!showUploader)}
+                                        >
+                                            <Plus className="h-4 w-4 mr-2" />
+                                            {t('assets.modal_upload')}
+                                        </Button>
+
+                                        <Tabs value={viewMode} onValueChange={handleViewModeChange} className="hidden md:flex">
+                                            <TabsList>
+                                                <TabsTrigger value="grid" className="px-3">
+                                                    <LayoutGrid className="h-4 w-4" />
+                                                </TabsTrigger>
+                                                <TabsTrigger value="list" className="px-3">
+                                                    <List className="h-4 w-4" />
+                                                </TabsTrigger>
+                                            </TabsList>
+                                        </Tabs>
+                                    </div>
                                 </div>
 
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        className="px-3"
-                                        onClick={() => setShowUploader(!showUploader)}
-                                    >
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        {t('assets.modal_upload')}
-                                    </Button>
+                                {loading ? (
+                                    <div className="flex justify-center items-center h-64">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {viewMode === 'grid' && (
+                                            <AssetGrid
+                                                assets={assets.data}
+                                                selectedAssets={selectedAssets}
+                                                onAssetSelect={handleAssetSelect}
+                                                project={project}
+                                                onDelete={confirmDeleteAsset}
+                                                selectOnClick
+                                            />
+                                        )}
 
-                                    <Tabs value={viewMode} onValueChange={handleViewModeChange} className="hidden md:flex">
-                                        <TabsList>
-                                            <TabsTrigger value="grid" className="px-3">
-                                                <LayoutGrid className="h-4 w-4" />
-                                            </TabsTrigger>
-                                            <TabsTrigger value="list" className="px-3">
-                                                <List className="h-4 w-4" />
-                                            </TabsTrigger>
-                                        </TabsList>
-                                    </Tabs>
-                                </div>
+                                        {viewMode === 'list' && (
+                                            <AssetTable
+                                                assets={assets.data}
+                                                selectedAssets={selectedAssets}
+                                                onAssetSelect={handleAssetSelect}
+                                                onViewDetails={handleViewAssetDetails}
+                                                onDelete={confirmDeleteAsset}
+                                            />
+                                        )}
+
+                                        {/* Pagination */}
+                                        {assets.last_page > 1 && (
+                                            <div className="flex justify-between mt-4">
+                                                <div className="pb-1 w-1/2">
+                                                    <Pagination className="justify-start">
+                                                        <PaginationContent>
+                                                            <PaginationItem>
+                                                                <PaginationPrevious
+                                                                    href="#"
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        if (currentPage > 1) handlePageChange(currentPage - 1);
+                                                                    }}
+                                                                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
+                                                                />
+                                                            </PaginationItem>
+
+                                                            {getPageNumbers().map((page, i) =>
+                                                                typeof page === 'string' ? (
+                                                                    <PaginationItem key={page}>
+                                                                        <PaginationEllipsis />
+                                                                    </PaginationItem>
+                                                                ) : (
+                                                                    <PaginationItem key={page}>
+                                                                        <PaginationLink
+                                                                            href="#"
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                handlePageChange(page as number);
+                                                                            }}
+                                                                            isActive={currentPage === page}
+                                                                        >
+                                                                            {page}
+                                                                        </PaginationLink>
+                                                                    </PaginationItem>
+                                                                )
+                                                            )}
+
+                                                            <PaginationItem>
+                                                                <PaginationNext
+                                                                    href="#"
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        if (currentPage < assets.last_page) handlePageChange(currentPage + 1);
+                                                                    }}
+                                                                    className={currentPage === assets.last_page ? 'pointer-events-none opacity-50' : ''}
+                                                                />
+                                                            </PaginationItem>
+                                                        </PaginationContent>
+                                                    </Pagination>
+                                                </div>
+                                                <div className="flex justify-end items-center mb-4 px-2 w-1/2">
+                                                    <span className="text-sm text-muted-foreground mr-2">{t('assets.modal_items_per_page')}</span>
+                                                    <MultiSelect
+                                                        instanceId="items-per-page-select"
+                                                        options={itemsPerPageOptions}
+                                                        className="w-[70px] h-8"
+                                                        isSearchable={false}
+                                                        value={itemsPerPageOptions.find(o => o.value === itemsPerPage)}
+                                                        onChange={(newValue: any) => handleItemsPerPageChange(newValue.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                             </div>
-
-                            {loading ? (
-                                <div className="flex justify-center items-center h-64">
-                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                                </div>
-                            ) : (
-                                <>
-                                    {viewMode === 'grid' && (
-                                        <AssetGrid
-                                            assets={assets.data}
-                                            selectedAssets={selectedAssets}
-                                            onAssetSelect={handleAssetSelect}
-                                            project={project}
-                                            onDelete={confirmDeleteAsset}
-                                            selectOnClick
-                                        />
-                                    )}
-
-                                    {viewMode === 'list' && (
-                                        <AssetTable
-                                            assets={assets.data}
-                                            selectedAssets={selectedAssets}
-                                            onAssetSelect={handleAssetSelect}
-                                            onViewDetails={handleViewAssetDetails}
-                                            onDelete={confirmDeleteAsset}
-                                        />
-                                    )}
-
-                                    {/* Pagination */}
-                                    {assets.last_page > 1 && (
-                                        <div className="flex justify-between mt-4">
-                                            <div className="pb-1 w-1/2">
-                                                <Pagination className="justify-start">
-                                                    <PaginationContent>
-                                                        <PaginationItem>
-                                                            <PaginationPrevious
-                                                                href="#"
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    if (currentPage > 1) handlePageChange(currentPage - 1);
-                                                                }}
-                                                                className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
-                                                            />
-                                                        </PaginationItem>
-
-                                                        {getPageNumbers().map((page, i) =>
-                                                            typeof page === 'string' ? (
-                                                                <PaginationItem key={page}>
-                                                                    <PaginationEllipsis />
-                                                                </PaginationItem>
-                                                            ) : (
-                                                                <PaginationItem key={page}>
-                                                                    <PaginationLink
-                                                                        href="#"
-                                                                        onClick={(e) => {
-                                                                            e.preventDefault();
-                                                                            handlePageChange(page as number);
-                                                                        }}
-                                                                        isActive={currentPage === page}
-                                                                    >
-                                                                        {page}
-                                                                    </PaginationLink>
-                                                                </PaginationItem>
-                                                            )
-                                                        )}
-
-                                                        <PaginationItem>
-                                                            <PaginationNext
-                                                                href="#"
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    if (currentPage < assets.last_page) handlePageChange(currentPage + 1);
-                                                                }}
-                                                                className={currentPage === assets.last_page ? 'pointer-events-none opacity-50' : ''}
-                                                            />
-                                                        </PaginationItem>
-                                                    </PaginationContent>
-                                                </Pagination>
-                                            </div>
-                                            <div className="flex justify-end items-center mb-4 px-2 w-1/2">
-                                                <span className="text-sm text-muted-foreground mr-2">{t('assets.modal_items_per_page')}</span>
-                                                <MultiSelect
-                                                    instanceId="items-per-page-select"
-                                                    options={itemsPerPageOptions}
-                                                    className="w-[70px] h-8"
-                                                    isSearchable={false}
-                                                    value={itemsPerPageOptions.find(o => o.value === itemsPerPage)}
-                                                    onChange={(newValue: any) => handleItemsPerPageChange(newValue.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
-                            )}
                         </div>
                     )}
                 </DialogContent>
