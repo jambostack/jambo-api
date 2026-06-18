@@ -153,8 +153,8 @@ class EndUserAuthController extends AbstractController
         }
 
         // Check 2FA
-        $projectSettings = $project->getSettings() ?? [];
-        $endUserTwoFactorEnabled = $projectSettings['security']['endUserTwoFactor'] ?? false;
+        $projectSettings = $project->settings ?? [];
+        $endUserTwoFactorEnabled = ($projectSettings['security'] ?? [])['endUserTwoFactor'] ?? false;
 
         if ($endUserTwoFactorEnabled && $endUser->twoFactorEnabled) {
             $emailCodeHash = null;
@@ -554,7 +554,7 @@ class EndUserAuthController extends AbstractController
         }
 
         // Vérifier que le Social Login est activé pour ce projet
-        $security = $project->settings['security'] ?? [];
+        $security = ($project->settings ?? [])['security'] ?? [];
         if (!($security['endUserSocialLogin'] ?? false)) {
             return $this->json(['error' => 'Social login is not enabled for this project'], 400);
         }
