@@ -17,17 +17,26 @@ interface LoginProps {
     csrfToken: string;
     error?: string;
     lastUsername?: string;
+    socialProviders?: string[];
 }
 
-export default function Login({ status, canResetPassword, csrfToken, error, lastUsername }: LoginProps) {
+const SOCIAL_BUTTONS: Record<string, { label: string; icon: string; bg: string }> = {
+    google:    { label: 'Google',    icon: 'G',  bg: '#4285F4' },
+    microsoft: { label: 'Microsoft', icon: 'M',  bg: '#00A4EF' },
+    github:    { label: 'GitHub',    icon: 'Gh', bg: '#24292e' },
+    gitlab:    { label: 'GitLab',    icon: 'Gi', bg: '#FC6D26' },
+};
+
+export default function Login({ status, canResetPassword, csrfToken, error, lastUsername, socialProviders }: LoginProps) {
     const [processing, setProcessing] = useState(false);
     const formRef = useRef<HTMLFormElement>(null);
     const t = useTranslation();
 
     const submit: FormEventHandler = (e) => {
         setProcessing(true);
-        // Let the native form submit — Symfony form_login handles everything
     };
+
+    const hasSocial = socialProviders && socialProviders.length > 0;
 
     return (
         <AuthLayout title={t('auth.login.title')} description={t('auth.login.description')}>
@@ -39,7 +48,36 @@ export default function Login({ status, canResetPassword, csrfToken, error, last
                 </div>
             )}
 
-            {/* Native POST — Symfony form_login reads email/password from the encoded body */}
+            {hasSocial && (
+                <div className="flex flex-col gap-2 mb-6">
+                    {socialProviders.map((p) => {
+                        const cfg = SOCIAL_BUTTONS[p];
+                        if (!cfg) return null;
+                        return (
+                            <a
+                                key={p}
+                                href={`/connect/${p}`}
+                                className="flex items-center justify-center gap-3 rounded-md px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                                style={{ backgroundColor: cfg.bg }}
+                            >
+                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-xs font-bold">
+                                    {cfg.icon}
+                                </span>
+                                {t('auth.social.connect_with', { provider: cfg.label })}
+                            </a>
+                        );
+                    })}
+                    <div className="relative my-2">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-border" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-card px-2 text-muted-foreground">{t('auth.social.or')}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <form
                 ref={formRef}
                 className="flex flex-col gap-6"
