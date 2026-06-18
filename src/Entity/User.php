@@ -32,8 +32,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column]
     public array $roles = [];
 
-    #[ORM\Column]
-    public string $password = '';
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $password = null;
 
     #[ORM\Column(length: 255)]
     public string $name = '';
@@ -55,6 +55,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     public ?\DateTimeImmutable $twoFactorConfirmedAt = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $googleId = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $microsoftId = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $githubId = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $gitlabId = null;
 
     #[ORM\ManyToMany(targetEntity: Role::class, inversedBy: 'users')]
     #[ORM\JoinTable(name: 'user_roles')]
@@ -94,7 +106,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this->email;
     }
 
-    public function getPassword(): string
+    public function getPassword(): ?string
     {
         return $this->password;
     }

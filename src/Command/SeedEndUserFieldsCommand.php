@@ -30,7 +30,7 @@ class SeedEndUserFieldsCommand extends Command
         $systemFields = [
             ['name' => 'Email',    'slug' => 'email',    'type' => 'email',       'order' => 0, 'isRequired' => true,  'options' => null],
             ['name' => 'Password', 'slug' => 'password', 'type' => 'password',    'order' => 1, 'isRequired' => true,  'options' => null],
-            ['name' => 'Name',     'slug' => 'name',     'type' => 'text',        'order' => 2, 'isRequired' => false, 'options' => null],
+            ['name' => 'Username', 'slug' => 'username', 'type' => 'text',        'order' => 2, 'isRequired' => false, 'options' => null],
             ['name' => 'Status',   'slug' => 'status',   'type' => 'enumeration', 'order' => 3, 'isRequired' => true,
              'options' => ['enumeration' => ['list' => ['active', 'banned', 'pending']]]],
         ];

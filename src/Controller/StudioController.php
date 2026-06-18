@@ -788,14 +788,14 @@ PROMPT;
         }
 
         $endUser = new \App\Entity\EndUser($project, $email);
-        $endUser->name = $data['name'] ?? '';
+        $endUser->username = $data['name'] ?? '';
         $endUser->status = 'active'; // Toujours actif à la création, non modifiable par l'IA
         $endUser->password = $this->passwordHasher->hashPassword($endUser, bin2hex(random_bytes(16)));
 
         // Champs personnalisés : collecter tout ce qui n'est pas système
         // Les EndUserFields (définis dans le Schema Builder EndUser) sont attendus par nom.
         $customData = [];
-        $systemFields = ['email', 'name', 'status', 'avatar_url', 'password', 'uuid', 'id', 'created_at', 'updated_at', 'collection', 'entries', 'token_version'];
+        $systemFields = ['email', 'username', 'status', 'avatar_url', 'password', 'uuid', 'id', 'created_at', 'updated_at', 'collection', 'entries', 'token_version'];
         foreach ($data as $k => $v) {
             if (!in_array($k, $systemFields, true)) {
                 $customData[$k] = $v;
@@ -1528,11 +1528,11 @@ PROMPT;
                         ->findOneBy(['project' => $project, 'email' => $email]);
                     if ($existing) continue;
                     $endUser = new \App\Entity\EndUser($project, $email);
-                    $endUser->name = $entryData['name'] ?? '';
+                    $endUser->username = $entryData['name'] ?? '';
                     $endUser->password = $this->passwordHasher->hashPassword($endUser, bin2hex(random_bytes(16)));
                     $customData = [];
                     foreach ($entryData as $k => $v) {
-                        if (!in_array($k, ['email','name','status','password'], true)) $customData[$k] = $v;
+                        if (!in_array($k, ['email','username','status','password'], true)) $customData[$k] = $v;
                     }
                     if ($customData) $endUser->customFields = $customData;
                     $this->em->persist($endUser);

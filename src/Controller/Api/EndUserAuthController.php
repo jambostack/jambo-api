@@ -42,7 +42,7 @@ class EndUserAuthController extends AbstractController
             properties: [
                 new OA\Property(property: 'email', type: 'string', format: 'email'),
                 new OA\Property(property: 'password', type: 'string', minLength: 8),
-                new OA\Property(property: 'name', type: 'string', nullable: true),
+                new OA\Property(property: 'username', type: 'string', nullable: true),
             ]
         )),
         parameters: [new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid'))],
@@ -69,7 +69,7 @@ class EndUserAuthController extends AbstractController
         $data = $request->toArray();
         $email = $data['email'] ?? '';
         $password = $data['password'] ?? '';
-        $name = $data['name'] ?? null;
+        $username = $data['username'] ?? null;
 
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return $this->json(['error' => 'Valid email is required'], 422);
@@ -84,7 +84,7 @@ class EndUserAuthController extends AbstractController
         }
 
         $endUser = new EndUser($project, $email);
-        $endUser->name = $name;
+        $endUser->username = $username;
         $endUser->password = $this->hasher->hashPassword($endUser, $password);
 
         $this->em->persist($endUser);
@@ -369,8 +369,8 @@ class EndUserAuthController extends AbstractController
 
         $data = $request->toArray();
 
-        if (isset($data['name'])) {
-            $endUser->name = $data['name'];
+        if (isset($data['username'])) {
+            $endUser->username = $data['username'];
         }
         if (isset($data['custom_fields'])) {
             $endUser->customFields = $data['custom_fields'];
