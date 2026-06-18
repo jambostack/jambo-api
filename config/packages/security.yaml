@@ -30,6 +30,8 @@ security:
         main:
             lazy: true
             provider: app_user_provider
+            custom_authenticators:
+                - App\Security\SocialLoginAuthenticator
             form_login:
                 login_path: app_login
                 check_path: app_login
@@ -47,6 +49,7 @@ security:
     access_control:
         - { path: ^/api/docs, roles: PUBLIC_ACCESS }
         - { path: ^/favicon, roles: PUBLIC_ACCESS }
+        - { path: ^/connect, roles: PUBLIC_ACCESS }
         - { path: ^/login, roles: PUBLIC_ACCESS }
         - { path: ^/register, roles: PUBLIC_ACCESS }
         - { path: ^/forgot-password, roles: PUBLIC_ACCESS }
