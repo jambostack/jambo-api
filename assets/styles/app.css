@@ -183,13 +183,23 @@
 }
 
 @layer base {
-    * {
-        @apply border-border outline-ring/50;
+    html, body {
+        height: 100%;
     }
 
     body {
         @apply bg-background text-foreground;
         font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    }
+
+    #app {
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    * {
+        @apply border-border outline-ring/50;
     }
 
     h1, h2, h3, h4, h5, h6 {
