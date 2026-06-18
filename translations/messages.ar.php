@@ -1214,7 +1214,7 @@ return [
 
     // علامات تبويب الإعدادات الشخصية
     'settings.nav.profile'         => 'الملف الشخصي',
-    'settings.nav.password'        => 'الأمان',
+    'settings.nav.password'        => 'كلمة المرور',
     'settings.nav.appearance'      => 'المظهر',
     'settings.nav.security'        => 'الأمان',
 
