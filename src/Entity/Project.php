@@ -77,6 +77,10 @@ class Project
         set { $this->storageStrategy = $value; }
     }
 
+    /** Paramètres additionnels du projet (sécurité end-users, social login, etc.) */
+    #[ORM\Column(type: 'json', nullable: true)]
+    public ?array $settings = null;
+
     #[ORM\OneToMany(targetEntity: ProjectStorageProfile::class, mappedBy: 'project', cascade: ['persist', 'remove'], orphanRemoval: true)]
     public DoctrineCollection $storageProfiles;
 
