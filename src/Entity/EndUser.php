@@ -55,6 +55,21 @@ class EndUser implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'integer')]
     public int $tokenVersion = 1;
 
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    public bool $twoFactorEnabled = false;
+
+    #[ORM\Column(length: 10, nullable: true)]
+    public ?string $twoFactorMethod = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $twoFactorSecret = null;
+
+    #[ORM\Column(type: 'json', nullable: true)]
+    public ?array $twoFactorBackupCodes = null;
+
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    public ?\DateTimeImmutable $twoFactorConfirmedAt = null;
+
     public function __construct(Project $project, string $email)
     {
         $this->project = $project;

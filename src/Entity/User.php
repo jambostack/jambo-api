@@ -41,6 +41,21 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 5, options: ['default' => 'en'])]
     public string $locale = 'en';
 
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    public bool $twoFactorEnabled = false;
+
+    #[ORM\Column(length: 10, nullable: true)]
+    public ?string $twoFactorMethod = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $twoFactorSecret = null;
+
+    #[ORM\Column(type: 'json', nullable: true)]
+    public ?array $twoFactorBackupCodes = null;
+
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    public ?\DateTimeImmutable $twoFactorConfirmedAt = null;
+
     #[ORM\ManyToMany(targetEntity: Role::class, inversedBy: 'users')]
     #[ORM\JoinTable(name: 'user_roles')]
     public DoctrineCollection $userRoles;
