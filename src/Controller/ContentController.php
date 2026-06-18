@@ -11,6 +11,7 @@ use App\Repository\ContentEntryRepository;
 use App\Repository\FieldRepository;
 use App\Repository\ProjectRepository;
 use App\Service\EavDataFormatterService;
+use App\Service\EavFieldHelperService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -33,6 +34,7 @@ class ContentController extends AbstractController
         private \App\Service\VersioningService $versioning,
         private \App\Repository\ProjectMemberRepository $memberRepo,
         private \App\Service\FieldValueHydrator $fieldValueHydrator,
+        private EavFieldHelperService $fieldValidator,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -146,6 +148,23 @@ class ContentController extends AbstractController
 
         $this->em->persist($entry);
         $this->saveFieldValues($entry, $collection, $data['fields'] ?? []);
+
+        // Validation des champs
+        $validationErrors = [];
+        foreach ($collection->fields as $field) {
+            if ($field->isDeleted()) {
+                continue;
+            }
+            $fieldValue = $data['fields'][$field->slug] ?? null;
+            $fieldErrors = $this->fieldValidator->validateFieldValue($field, $fieldValue);
+            if (!empty($fieldErrors)) {
+                $validationErrors['fields.' . $field->slug] = $fieldErrors[0];
+            }
+        }
+        if (!empty($validationErrors)) {
+            return $this->json(['errors' => $validationErrors], 422);
+        }
+
         $this->em->flush();
 
         $this->dispatcher->dispatch(new ContentEvent(ContentEvent::CREATED, $project, $entry));
@@ -213,6 +232,22 @@ class ContentController extends AbstractController
         }
 
         if (isset($data['fields'])) {
+            // Validation des champs avant la transaction
+            $validationErrors = [];
+            foreach ($entry->collection->fields as $field) {
+                if ($field->isDeleted()) {
+                    continue;
+                }
+                $fieldValue = $data['fields'][$field->slug] ?? null;
+                $fieldErrors = $this->fieldValidator->validateFieldValue($field, $fieldValue);
+                if (!empty($fieldErrors)) {
+                    $validationErrors['fields.' . $field->slug] = $fieldErrors[0];
+                }
+            }
+            if (!empty($validationErrors)) {
+                return $this->json(['errors' => $validationErrors], 422);
+            }
+
             // Capture l'état courant comme version AVANT d'écraser les champs (EAV)
             if ($entry->fieldValues->count() > 0) {
                 $this->versioning->createVersion($entry, 'Sauvegarde');
