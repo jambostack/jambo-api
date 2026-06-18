@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash, Calendar, LayoutGrid, List, ArrowUpDown, X, Download } from 'lucide-react';
+import { Plus, Trash, Calendar, LayoutGrid, List, ArrowUpDown, X, Download, Folder } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -25,6 +25,7 @@ import { SearchBar } from '@/components/ui/search-bar';
 
 import ProjectSidebar from '../Projects/ProjectSidebar';
 import AssetDetailsModal from './AssetDetailsModal';
+import MediaFolderTree from '@/pages/Assets/MediaFolderTree';
 
 interface Props {
 	project: Project;
@@ -72,6 +73,7 @@ export default function Index({ project, assets, filters }: Props) {
 	const [selectedAssetForModal, setSelectedAssetForModal] = useState<Asset | null>(null);
 	const [showDetailsModal, setShowDetailsModal] = useState(false);
 	const [assetsState, setAssets] = useState(assets);
+	const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
 	const page = usePage<{ can?: Record<string, boolean> }>();
 	const can = page.props.userCan as UserCan;
 
@@ -106,19 +108,26 @@ export default function Index({ project, assets, filters }: Props) {
 		dateFilter?: string;
 		sort?: string;
 		perPage?: string;
+		folderId?: number | null;
 	}) => {
 		if (updates.search !== undefined) setSearch(updates.search);
 		if (updates.type !== undefined) setAssetType(updates.type);
 		if (updates.dateFilter !== undefined) setDateFilter(updates.dateFilter);
 		if (updates.sort !== undefined) setSortOption(updates.sort);
+		if (updates.folderId !== undefined) setSelectedFolderId(updates.folderId);
 
-		const queryParams = {
+		const queryParams: Record<string, any> = {
 			search: updates.search ?? search,
 			type: (updates.type ?? assetType) === 'all' ? '' : (updates.type ?? assetType),
 			date_filter: updates.dateFilter ?? dateFilter,
 			sort: updates.sort ?? sortOption,
 			per_page: updates.perPage ?? filters.per_page,
 		};
+
+		const fid = updates.folderId !== undefined ? updates.folderId : selectedFolderId;
+		if (fid !== null) {
+			queryParams.folder_id = fid;
+		}
 
 		setSelectedAssets([]);
 
@@ -151,11 +160,19 @@ export default function Index({ project, assets, filters }: Props) {
 	const handlePageChange = (page: number) => {
 		setSelectedAssets([]);
 
-		router.get(route('assets.index', project.id), {
+		const params: Record<string, any> = {
 			page,
 			search,
 			type: assetType === 'all' ? '' : assetType,
-		}, {
+			date_filter: dateFilter,
+			sort: sortOption,
+			per_page: filters.per_page,
+		};
+		if (selectedFolderId !== null) {
+			params.folder_id = selectedFolderId;
+		}
+
+		router.get(route('assets.index', project.id), params, {
 			preserveState: true,
 		});
 	};
@@ -204,7 +221,7 @@ export default function Index({ project, assets, filters }: Props) {
 			setSelectedAssets([]);
 			setShowBulkDeleteDialog(false);
 			toast.success(t('assets.deleted_success', { count: String(count) }));
-			applyFilters({ search, type: assetType, dateFilter });
+			applyFilters({ search, type: assetType, dateFilter, folderId: selectedFolderId });
 		} catch {
 			toast.error(t('assets.delete_error'));
 		}
@@ -220,7 +237,7 @@ export default function Index({ project, assets, filters }: Props) {
 			await axios.delete(`/api/projects/${project.uuid}/media/${assetToDelete.uuid}`);
 			toast.success(t('assets.delete_asset_success'));
 			setAssetToDelete(null);
-			applyFilters({ search, type: assetType, dateFilter });
+			applyFilters({ search, type: assetType, dateFilter, folderId: selectedFolderId });
 		} catch {
 			toast.error(t('assets.delete_asset_error'));
 			setAssetToDelete(null);
@@ -271,6 +288,19 @@ export default function Index({ project, assets, filters }: Props) {
 
 			<div className="flex gap-6 rtl:space-x-reverse">
 				<ProjectSidebar project={project} />
+
+				{/* Arbre des dossiers */}
+				<aside className="w-56 flex-shrink-0 border-r border-border pr-3 overflow-y-auto hidden md:block">
+					<div className="flex items-center gap-2 mb-2 px-1 pt-1">
+						<Folder className="h-4 w-4 text-muted-foreground" />
+						<span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dossiers</span>
+					</div>
+					<MediaFolderTree
+						projectUuid={project.uuid}
+						selectedFolderId={selectedFolderId}
+						onSelectFolder={(folderId) => { setSelectedFolderId(folderId); applyFilters({ folderId }); }}
+					/>
+				</aside>
 
 				<Separator className="my-6 md:hidden" />
 
@@ -627,8 +657,9 @@ export default function Index({ project, assets, filters }: Props) {
 				onClose={() => setShowUploader(false)}
 				projectId={project.id}
 				projectUuid={project.uuid}
+				folderId={selectedFolderId}
 				onUploadComplete={() => {
-					applyFilters({ search, type: assetType, dateFilter });
+					applyFilters({ search, type: assetType, dateFilter, folderId: selectedFolderId });
 				}}
 			/>
 
