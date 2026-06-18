@@ -3,7 +3,9 @@
 namespace App\Controller;
 
 use App\Entity\Media;
+use App\Entity\MediaFolder;
 use App\Entity\Project;
+use App\Repository\MediaFolderRepository;
 use App\Repository\MediaRepository;
 use App\Repository\ProjectRepository;
 use App\Service\MediaSerializer;
@@ -24,6 +26,7 @@ class MediaController extends AbstractController
         private UploadHandler $uploadHandler,
         private ProjectRepository $projectRepository,
         private MediaRepository $mediaRepository,
+        private MediaFolderRepository $folderRepository,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -37,11 +40,26 @@ class MediaController extends AbstractController
         $page    = max(1, (int) $request->query->get('page', 1));
         $perPage = min(100, max(1, (int) $request->query->get('per_page', 20)));
 
+        // Construire les conditions WHERE
+        $where = 'm.project = :project AND m.deletedAt IS NULL';
+        $params = ['project' => $project];
+
+        // Filtre par dossier : folder_id=null → racine (sans dossier)
+        if ($request->query->has('folder_id')) {
+            $folderId = $request->query->get('folder_id');
+            if ($folderId === '' || $folderId === null || $folderId === 'null') {
+                $where .= ' AND m.folder IS NULL';
+            } else {
+                $where .= ' AND m.folder = :folderId';
+                $params['folderId'] = (int) $folderId;
+            }
+        }
+
         $qb = $this->em->createQueryBuilder()
             ->select('m')
             ->from(Media::class, 'm')
-            ->where('m.project = :project')
-            ->setParameter('project', $project)
+            ->where($where)
+            ->setParameters($params)
             ->orderBy('m.createdAt', 'DESC')
             ->setMaxResults($perPage)
             ->setFirstResult(($page - 1) * $perPage);
@@ -49,8 +67,8 @@ class MediaController extends AbstractController
         $total = (int) $this->em->createQueryBuilder()
             ->select('COUNT(m.id)')
             ->from(Media::class, 'm')
-            ->where('m.project = :project')
-            ->setParameter('project', $project)
+            ->where($where)
+            ->setParameters($params)
             ->getQuery()->getSingleScalarResult();
 
         $media = $qb->getQuery()->getResult();
@@ -83,6 +101,15 @@ class MediaController extends AbstractController
         $media->caption      = $request->request->get('caption');
         $media->originalName = $uploadedFile->getClientOriginalName();
         $media->setFile($uploadedFile);
+
+        // Dossier cible optionnel
+        $folderId = $request->request->get('folder_id');
+        if ($folderId !== null && $folderId !== '') {
+            $folder = $this->folderRepository->findOneBy(['id' => (int) $folderId, 'project' => $project]);
+            if ($folder) {
+                $media->folder = $folder;
+            }
+        }
 
         $this->em->persist($media);
         $this->em->flush();
@@ -136,6 +163,36 @@ class MediaController extends AbstractController
         }
         if (array_key_exists('caption', $data)) {
             $media->caption = $data['caption'];
+        }
+
+        $this->em->flush();
+
+        return $this->json(['data' => $this->mediaSerializer->serialize($media)]);
+    }
+
+    #[Route('/{uuid}/move', name: 'move', methods: ['PUT', 'PATCH'])]
+    public function move(string $projectUuid, string $uuid, Request $request): JsonResponse
+    {
+        $media = $this->findMedia($projectUuid, $uuid);
+        if ($media instanceof JsonResponse) {
+            return $media;
+        }
+
+        $data = $request->toArray();
+        if (!array_key_exists('folder_id', $data)) {
+            return $this->json(['error' => 'folder_id is required'], 422);
+        }
+
+        $folderId = $data['folder_id'];
+        if ($folderId === null || $folderId === 'null' || $folderId === '') {
+            $media->folder = null;
+        } else {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+            $folder = $this->folderRepository->findOneBy(['id' => (int) $folderId, 'project' => $project]);
+            if (!$folder) {
+                return $this->json(['error' => 'Folder not found'], 404);
+            }
+            $media->folder = $folder;
         }
 
         $this->em->flush();

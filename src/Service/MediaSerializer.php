@@ -40,6 +40,7 @@ class MediaSerializer
         return [
             'id'                => $media->id,
             'uuid'              => $media->uuid?->toRfc4122(),
+            'folder_id'         => $media->folder?->id,
             'filename'          => $media->fileName,
             'original_filename' => $media->originalName,
             'mime_type'         => $media->mimeType,
