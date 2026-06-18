@@ -183,14 +183,14 @@ export default function StudioLayout({ project, collections: initialCollections 
 
         /* Mobile: horizontal scroll nav */
         .studio-mobile-nav {
-          display: flex; gap: 6px; overflow-x: auto;
-          padding-bottom: 4px; -webkit-overflow-scrolling: touch;
-          scrollbar-width: none;
+          display: flex; gap: 4px; overflow-x: auto;
+          padding-bottom: 2px; -webkit-overflow-scrolling: touch;
+          scrollbar-width: none; margin-top: 10px;
         }
         .studio-mobile-nav::-webkit-scrollbar { display: none; }
         .studio-mobile-nav .mob-tab {
-          flex-shrink: 0; display: flex; align-items: center; gap: 5px;
-          padding: 8px 14px; border-radius: 999px; font-size: 12px;
+          flex-shrink: 0; display: flex; align-items: center; gap: 4px;
+          padding: 6px 10px; border-radius: 999px; font-size: 11px;
           border: 1px solid var(--studio-border);
           background: var(--studio-surface);
           color: var(--studio-text-dim);
@@ -202,8 +202,13 @@ export default function StudioLayout({ project, collections: initialCollections 
           border-color: var(--studio-border-active);
           color: var(--studio-text);
         }
-        .studio-mobile-nav .mob-tab svg { width: 13px; height: 13px; }
+        .studio-mobile-nav .mob-tab svg { width: 12px; height: 12px; }
         .studio-mobile-nav .mob-tab.sb-active svg { color: var(--studio-accent); }
+        @media (max-width: 480px) {
+          .studio-mobile-nav { gap: 3px; margin-top: 6px; }
+          .studio-mobile-nav .mob-tab { padding: 5px 7px; font-size: 10px; gap: 3px; }
+          .studio-mobile-nav .mob-tab svg { width: 11px; height: 11px; }
+        }
 
         @media (min-width: 769px) {
           .studio-mobile-nav { display: none; }
@@ -212,11 +217,11 @@ export default function StudioLayout({ project, collections: initialCollections 
         /* ── Header bar ── */
         .studio-header {
           display: flex; align-items: flex-start; justify-content: space-between;
-          gap: 16px; flex-wrap: wrap; padding-bottom: 8px;
+          gap: 12px; flex-wrap: wrap; padding-bottom: 6px;
         }
         .studio-header h2 {
           font-family: var(--studio-serif);
-          font-size: clamp(18px, 3vw, 22px);
+          font-size: clamp(16px, 3vw, 22px);
           font-weight: 500; letter-spacing: -.01em;
           color: var(--studio-text); margin: 0;
         }
@@ -272,7 +277,7 @@ export default function StudioLayout({ project, collections: initialCollections 
         })}
       </div>
 
-      <div className="studio-grid" style={{ marginTop: '20px' }}>
+      <div className="studio-grid" style={{ marginTop: '12px' }}>
         {/* ── SIDEBAR (tablet+) ── */}
         <nav className="studio-sidebar" style={{ display: 'none' }}>
           <style>{`@media(min-width:769px){.studio-sidebar{display:flex!important}}`}</style>
