@@ -96,11 +96,29 @@ export interface Field {
           subFields: Array<{ slug: string; label: string; type: string; required: boolean }>;
         }>;
         defaultVariant?: string;
+        conditions?: FieldCondition[];
     };
     /** Champ verrouillé par le système (EndUser schema) — non éditable/supprimable */
     is_system?: boolean;
     created_at?: string;
     updated_at?: string;
+}
+
+export interface FieldValidationRules {
+    regex?: string;
+    regexMessage?: string;
+    minLength?: number;
+    maxLength?: number;
+    min?: number;
+    max?: number;
+    unique?: boolean;
+    custom?: string;
+}
+
+export interface FieldCondition {
+    field: string;
+    operator: 'eq' | 'neq' | 'empty' | 'notEmpty' | 'in' | 'contains' | 'startsWith' | 'gt' | 'gte' | 'lt' | 'lte';
+    value: string | number | boolean | string[];
 }
 
 export interface AssetMetadata {
