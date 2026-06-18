@@ -58,6 +58,7 @@ class FrontendRouteManifestService
 
         // Project settings — pages
         'projects.settings.project'             => 'projects_settings_project',
+        'projects.settings.security'            => 'projects_settings_security',
         'projects.settings.localization'        => 'projects_settings_localization',
         'projects.settings.user-access'         => 'projects_settings_user_access',
         'projects.settings.api-access'          => 'projects_settings_api_access',

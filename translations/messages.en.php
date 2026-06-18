@@ -1270,6 +1270,8 @@ return [
     // Email/SMTP
     'projects.settings.mailer'            => 'SMTP Mailer',
     'projects.settings.nav_mailer'        => 'SMTP Mailer',
+    'projects.settings.nav_security'      => 'Security',
+    'projects.settings.security'          => 'Security',
     'projects.settings.mailer.title'      => 'SMTP Configuration',
     'projects.settings.mailer.desc'       => 'Each project can have its own SMTP server for sending emails. The password is encrypted server-side.',
     'projects.settings.mailer.enabled'    => 'Mailer enabled',
