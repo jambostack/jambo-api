@@ -261,6 +261,14 @@ return [
     'settings.appearance.heading'     => 'إعدادات المظهر',
     'settings.appearance.description' => 'حدّث إعدادات مظهر حسابك',
 
+    'settings.security.breadcrumb'    => 'الأمان',
+    'settings.security.heading'       => 'الأمان',
+    'settings.security.description'   => 'إدارة المصادقة الثنائية والحسابات المرتبطة',
+
+    // Social login
+    'auth.social.connect_with'        => 'الاتصال بـ {provider}',
+    'auth.social.or'                  => 'أو',
+
     // Collections
     'collections.content_create'          => 'إنشاء محتوى',
     'collections.content_edit'            => 'تعديل المحتوى',
@@ -955,8 +963,8 @@ return [
     'end_users.create_error'         => 'فشل إنشاء المستخدم',
     'end_users.updated_success'      => 'تم تحديث المستخدم',
     'end_users.update_error'         => 'فشل تحديث المستخدم',
-    'end_users.name'                 => 'الاسم',
-    'end_users.name_placeholder'     => 'الاسم الكامل (اختياري)',
+    'end_users.username'             => 'اسم المستخدم',
+    'end_users.username_placeholder' => 'اسم المستخدم (اختياري)',
     'end_users.email_placeholder'    => 'مستخدم@مثال.com',
     'end_users.password_placeholder' => '8 أحرف على الأقل',
     'end_users.actions'              => 'الإجراءات',

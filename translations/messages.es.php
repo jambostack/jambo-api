@@ -261,6 +261,14 @@ return [
     'settings.appearance.heading'     => 'Configuración de apariencia',
     'settings.appearance.description' => 'Actualice la configuración de apariencia de su cuenta',
 
+    'settings.security.breadcrumb'    => 'Seguridad',
+    'settings.security.heading'       => 'Seguridad',
+    'settings.security.description'   => 'Gestione la autenticación de dos factores y las cuentas vinculadas',
+
+    // Social login
+    'auth.social.connect_with'        => 'Conectar con {provider}',
+    'auth.social.or'                  => 'o',
+
     // Collections
     'collections.content_create'          => 'Crear contenido',
     'collections.content_edit'            => 'Editar contenido',
@@ -955,8 +963,8 @@ return [
     'end_users.create_error'         => 'Error al crear el usuario',
     'end_users.updated_success'      => 'Usuario actualizado',
     'end_users.update_error'         => 'Error al actualizar el usuario',
-    'end_users.name'                 => 'Nombre',
-    'end_users.name_placeholder'     => 'Nombre completo (opcional)',
+    'end_users.username'             => 'Nombre de usuario',
+    'end_users.username_placeholder' => 'Nombre de usuario (opcional)',
     'end_users.email_placeholder'    => 'usuario@ejemplo.com',
     'end_users.password_placeholder' => 'Mínimo 8 caracteres',
     'end_users.actions'              => 'Acciones',
