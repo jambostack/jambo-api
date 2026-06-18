@@ -88,15 +88,9 @@ export default function ProjectSettingsPage({ project }: Props) {
                         </div>
                     </form>
 
-                    {can.delete_project && (
-                        <>
-                            <Separator />
-                            <DeleteProject projectId={project.id} projectUuid={project.uuid} projectName={project.name} />
-                        </>
-                    )}
-
                     {/* Security Settings */}
-                    <div className="mt-6 border-t pt-6">
+                    <Separator />
+                    <div>
                         <h3 className="text-sm font-semibold mb-3">Sécurité</h3>
                         <div className="space-y-3">
                             <label className="flex items-center gap-3">
@@ -127,6 +121,13 @@ export default function ProjectSettingsPage({ project }: Props) {
                             )}
                         </div>
                     </div>
+
+                    {can.delete_project && (
+                        <>
+                            <Separator />
+                            <DeleteProject projectId={project.id} projectUuid={project.uuid} projectName={project.name} />
+                        </>
+                    )}
                 </div>
 
 
