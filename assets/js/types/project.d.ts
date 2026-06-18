@@ -147,6 +147,18 @@ export interface AssetMetadata {
     thumbnail_url: string | null;
     formatted_size: string;
     metadata: AssetMetadata | null;
+    folder_id: number | null;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface MediaFolder {
+    id: number;
+    name: string;
+    slug: string;
+    position: number;
+    parent_id: number | null;
+    children: MediaFolder[];
     created_at: string;
     updated_at: string;
   }

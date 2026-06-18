@@ -187,11 +187,24 @@ class PageController extends InertiaController
         $page    = max(1, (int) $request->query->get('page', 1));
         $perPage = min(100, max(1, (int) $request->query->get('per_page', 20)));
 
+        $where = 'm.project = :project AND m.deletedAt IS NULL';
+        $params = ['project' => $project];
+
+        if ($request->query->has('folder_id')) {
+            $folderId = $request->query->get('folder_id');
+            if ($folderId === '' || $folderId === null || $folderId === 'null') {
+                $where .= ' AND m.folder IS NULL';
+            } else {
+                $where .= ' AND m.folder = :folderId';
+                $params['folderId'] = (int) $folderId;
+            }
+        }
+
         $qb = $this->em->createQueryBuilder()
             ->select('m')
             ->from(Media::class, 'm')
-            ->where('m.project = :project')
-            ->setParameter('project', $project)
+            ->where($where)
+            ->setParameters($params)
             ->orderBy('m.createdAt', 'DESC')
             ->setMaxResults($perPage)
             ->setFirstResult(($page - 1) * $perPage);
@@ -199,8 +212,8 @@ class PageController extends InertiaController
         $total = (int) $this->em->createQueryBuilder()
             ->select('COUNT(m.id)')
             ->from(Media::class, 'm')
-            ->where('m.project = :project')
-            ->setParameter('project', $project)
+            ->where($where)
+            ->setParameters($params)
             ->getQuery()->getSingleScalarResult();
 
         $media = $qb->getQuery()->getResult();

@@ -46,6 +46,10 @@ class Media
     #[ORM\JoinColumn(nullable: false)]
     public ?Project $project = null;
 
+    #[ORM\ManyToOne(targetEntity: MediaFolder::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    public ?MediaFolder $folder = null;
+
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(nullable: true)]
     public ?User $createdBy = null;
