@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { MessageCircle, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 import CommentForm from './CommentForm';
@@ -9,12 +8,14 @@ function formatRelative(date: string): string {
     return moment(date).fromNow();
 }
 
-export default function CommentItem({ comment, entryId, onRefresh }: {
-    comment: any; entryId: number; onRefresh: () => void;
+export default function CommentItem({ comment, baseUrl, onRefresh }: {
+    comment: any; baseUrl: string; onRefresh: () => void;
 }) {
     const t = useTranslation();
     const [showReply, setShowReply] = useState(false);
     const isResolved = comment.status === 'resolved';
+
+    const csrf = () => (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
 
     return (
         <div className={`${isResolved ? 'opacity-60' : ''}`}>
@@ -31,14 +32,14 @@ export default function CommentItem({ comment, entryId, onRefresh }: {
                             <MessageCircle className="h-3 w-3 inline mr-1" />{t('comments.reply')}
                         </button>
                         <button type="button" className="text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => fetch(`/api/comments/${comment.id}/resolve`, {
-                                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content },
+                            onClick={() => fetch(`${baseUrl}/${comment.id}/resolve`, {
+                                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
                                 body: JSON.stringify({ status: isResolved ? 'open' : 'resolved' })
                             }).then(() => onRefresh())}>
                             {isResolved ? t('comments.reopen') : t('comments.resolve')}
                         </button>
                     </div>
-                    {showReply && <div className="mt-2 ml-4"><CommentForm entryId={entryId} parentId={comment.id} onDone={() => { setShowReply(false); onRefresh(); }} /></div>}
+                    {showReply && <div className="mt-2 ml-4"><CommentForm baseUrl={baseUrl} parentId={comment.id} onDone={() => { setShowReply(false); onRefresh(); }} /></div>}
                 </div>
             </div>
             {comment.children?.length > 0 && (
