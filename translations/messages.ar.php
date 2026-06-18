@@ -1208,6 +1208,7 @@ return [
     'settings.nav.profile'         => 'الملف الشخصي',
     'settings.nav.password'        => 'الأمان',
     'settings.nav.appearance'      => 'المظهر',
+    'settings.nav.security'        => 'الأمان',
 
     // علامات تبويب الوصول إلى API
     'projects.settings.api.tab_access'  => 'الوصول إلى API',
