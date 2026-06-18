@@ -1,0 +1,16 @@
+{# templates/email/two_factor_code.html.twig #}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
+    <h2 style="color: #1a1a2e;">Code de vérification</h2>
+    <p>Utilisez le code suivant pour vous connecter :</p>
+    <div style="background: #f4f4f8; border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0;">
+        <span style="font-size: 32px; font-weight: 700; letter-spacing: 8px; font-family: 'Courier New', monospace;">{{ code }}</span>
+    </div>
+    <p style="color: #666; font-size: 14px;">Ce code expire dans 5 minutes.</p>
+    <p style="color: #999; font-size: 12px;">Si vous n'avez pas demandé ce code, ignorez cet email.</p>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
+    <p style="color: #999; font-size: 11px;">{{ issuer }}</p>
+</body>
+</html>
