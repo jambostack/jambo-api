@@ -7,6 +7,7 @@ use App\Entity\PasswordResetToken;
 use App\Repository\EndUserRepository;
 use App\Repository\ProjectRepository;
 use App\Service\EndUserJwtService;
+use App\Service\SocialLoginService;
 use App\Service\TwoFactorService;
 use App\Controller\EndUserSerializerTrait;
 use Doctrine\ORM\EntityManagerInterface;
@@ -32,6 +33,7 @@ class EndUserAuthController extends AbstractController
         private TwoFactorService $twoFactorService,
         private UserPasswordHasherInterface $hasher,
         private EntityManagerInterface $em,
+        private ?SocialLoginService $socialLogin = null,
     ) {}
 
     #[OA\Post(
@@ -513,5 +515,95 @@ class EndUserAuthController extends AbstractController
         $this->em->flush();
 
         return $this->json(['message' => 'Password has been reset successfully.']);
+    }
+
+    // ─── Social Login ──────────────────────────────────────────────────────
+
+    #[OA\Post(
+        path: '/api/{projectId}/auth/social/{provider}',
+        summary: 'Social login — exchange OAuth code for JWT',
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(
+            required: ['code'],
+            properties: [new OA\Property(property: 'code', type: 'string')],
+        )),
+        parameters: [
+            new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+            new OA\Parameter(name: 'provider', in: 'path', required: true, schema: new OA\Schema(type: 'string', enum: ['google', 'microsoft', 'github', 'gitlab'])),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'JWT issued', content: new OA\JsonContent(properties: [
+                new OA\Property(property: 'data', properties: [
+                    new OA\Property(property: 'user', ref: '#/components/schemas/EndUser'),
+                    new OA\Property(property: 'access_token', type: 'string'),
+                    new OA\Property(property: 'refresh_token', type: 'string'),
+                ]),
+            ])),
+            new OA\Response(response: 400, description: 'Provider not configured or invalid code'),
+        ]
+    )]
+    #[Route('/social/{provider}', name: 'social_login', methods: ['POST'])]
+    public function socialLogin(Request $request, string $projectId, string $provider): JsonResponse
+    {
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        if (!in_array($provider, ['google', 'microsoft', 'github', 'gitlab'], true)) {
+            return $this->json(['error' => 'Unknown provider'], 400);
+        }
+
+        // Vérifier que le Social Login est activé pour ce projet
+        $security = $project->settings['security'] ?? [];
+        if (!($security['endUserSocialLogin'] ?? false)) {
+            return $this->json(['error' => 'Social login is not enabled for this project'], 400);
+        }
+
+        $data = $request->toArray();
+        $code = $data['code'] ?? '';
+
+        if (empty($code)) {
+            return $this->json(['error' => 'Authorization code is required'], 422);
+        }
+
+        try {
+            if ($this->socialLogin === null) {
+                return $this->json(['error' => 'Social login is not available'], 500);
+            }
+
+            $redirectUri = $request->getSchemeAndHttpHost() . "/api/{$projectId}/auth/social/{$provider}";
+            $socialUser = $this->socialLogin->getUserFromProvider(
+                $provider,
+                $code,
+                $redirectUri,
+            );
+
+            $endUser = $this->socialLogin->findOrCreateEndUser($project, $socialUser, $provider);
+
+            // Vérifier 2FA
+            if ($endUser->twoFactorEnabled) {
+                $twoFactorToken = bin2hex(random_bytes(32));
+                // Stocker le token 2FA pour cet end-user (simplifié — à améliorer)
+                $accessToken = $this->jwtService->createAccessToken($endUser);
+
+                return $this->json([
+                    'requires_2fa' => true,
+                    'two_factor_token' => $twoFactorToken,
+                ]);
+            }
+
+            $accessToken = $this->jwtService->createAccessToken($endUser);
+            $refreshToken = $this->jwtService->createRefreshToken($endUser);
+
+            return $this->json([
+                'data' => [
+                    'user'          => $this->serializeEndUser($endUser),
+                    'access_token'  => $accessToken,
+                    'refresh_token' => $refreshToken,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return $this->json(['error' => 'Social login failed: ' . $e->getMessage()], 400);
+        }
     }
 }
