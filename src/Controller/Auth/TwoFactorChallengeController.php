@@ -1,19 +1,18 @@
 <?php
 namespace App\Controller\Auth;
 
+use App\Controller\InertiaController;
 use App\Entity\User;
 use App\Service\TwoFactorService;
 use App\Service\TwoFactorMailer;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Authentication\AuthenticationUtils;
 
-class TwoFactorChallengeController extends AbstractController
+class TwoFactorChallengeController extends InertiaController
 {
     public function __construct(
         private TwoFactorService $twoFactor,
@@ -23,9 +22,9 @@ class TwoFactorChallengeController extends AbstractController
     ) {}
 
     #[Route('/two-factor-challenge', name: 'two_factor_challenge', methods: ['GET'])]
-    public function show(): Response
+    public function show(Request $request): Response
     {
-        $session = $this->requestStack->getCurrentRequest()->getSession();
+        $session = $request->getSession();
 
         // Vérifier que l'utilisateur a passé l'étape 1 (login)
         if (!$session->has('two_factor_user_id') || !$session->has('two_factor_expires')) {
@@ -37,7 +36,7 @@ class TwoFactorChallengeController extends AbstractController
             return $this->redirectToRoute('app_login');
         }
 
-        return $this->render('auth/two_factor_challenge.html.twig', [
+        return $this->inertia($request, 'auth/two-factor-challenge', [
             'error' => null,
         ]);
     }
@@ -59,7 +58,7 @@ class TwoFactorChallengeController extends AbstractController
         // Rate limiting
         $limiter = $twoFactorLimiter->create($request->getClientIp());
         if (!$limiter->consume()->isAccepted()) {
-            return $this->render('auth/two_factor_challenge.html.twig', [
+            return $this->inertia($request, 'auth/two-factor-challenge', [
                 'error' => 'Too many attempts. Please wait 60 seconds.',
             ]);
         }
@@ -69,8 +68,8 @@ class TwoFactorChallengeController extends AbstractController
             return $this->redirectToRoute('app_login');
         }
 
-        $code = (string) ($request->request->get('code', ''));
-        $useBackup = $request->request->getBoolean('use_backup', false);
+        $code = (string) ($request->get('code', ''));
+        $useBackup = $request->getBoolean('use_backup', false);
 
         $valid = false;
 
@@ -95,7 +94,7 @@ class TwoFactorChallengeController extends AbstractController
         }
 
         if (!$valid) {
-            return $this->render('auth/two_factor_challenge.html.twig', [
+            return $this->inertia($request, 'auth/two-factor-challenge', [
                 'error' => 'Invalid code. Please try again.',
             ]);
         }
