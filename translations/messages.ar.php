@@ -1248,6 +1248,8 @@ return [
     // Email/SMTP
     'projects.settings.mailer'            => 'SMTP البريد',
     'projects.settings.nav_mailer'        => 'SMTP البريد',
+    'projects.settings.nav_security'      => 'الأمان',
+    'projects.settings.security'          => 'الأمان',
     'projects.settings.mailer.title'      => 'تكوين SMTP',
     'projects.settings.mailer.desc'       => 'يمكن لكل مشروع أن يكون له خادم SMTP خاص به. يتم تشفير كلمة المرور على الخادم.',
     'projects.settings.mailer.enabled'    => 'البريد مفعل',

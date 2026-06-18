@@ -1248,6 +1248,8 @@ return [
     // Email/SMTP
     'projects.settings.mailer'            => 'SMTP Mailer',
     'projects.settings.nav_mailer'        => 'SMTP Mailer',
+    'projects.settings.nav_security'      => 'Seguridad',
+    'projects.settings.security'          => 'Seguridad',
     'projects.settings.mailer.title'      => 'Configuración SMTP',
     'projects.settings.mailer.desc'       => 'Cada proyecto puede tener su propio servidor SMTP. La contraseña se cifra en el servidor.',
     'projects.settings.mailer.enabled'    => 'Mailer activado',
