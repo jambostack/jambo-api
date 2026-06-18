@@ -35,19 +35,22 @@ class TwoFactorService
         return $totp->verify($code, $now, 1);
     }
 
-    /** Génère 8 codes de secours (format XXXX-XXXX-XXXX-XXXX) */
+    /** Génère 8 codes de secours (format XXXX-XXXX-XXXX-XXXX).
+     *  @return array{hashes: array, plaintext: string[]} — hashes for DB storage, plaintext for one-time display */
     public function generateBackupCodes(): array
     {
-        $codes = [];
+        $hashes = [];
+        $plaintext = [];
         for ($i = 0; $i < self::BACKUP_CODE_COUNT; $i++) {
             $raw = bin2hex(random_bytes(self::BACKUP_CODE_BYTES));
             $formatted = implode('-', str_split(strtoupper($raw), 4));
-            $codes[] = [
+            $hashes[] = [
                 'hash' => hash('sha256', $formatted),
                 'used' => false,
             ];
+            $plaintext[] = $formatted;
         }
-        return $codes;
+        return ['hashes' => $hashes, 'plaintext' => $plaintext];
     }
 
     /** Vérifie et consomme un code de secours. Retourne true si valide, false sinon. */

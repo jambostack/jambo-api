@@ -88,14 +88,15 @@ class SecurityController extends AbstractController
             return $this->json(['error' => 'Invalid code. Please try again.'], 422);
         }
 
+        $backupResult = $this->twoFactor->generateBackupCodes();
         $user->twoFactorEnabled = true;
         $user->twoFactorConfirmedAt = new \DateTimeImmutable();
-        $user->twoFactorBackupCodes = $this->twoFactor->generateBackupCodes();
+        $user->twoFactorBackupCodes = $backupResult['hashes'];
         $this->em->flush();
 
         return $this->json([
             'message' => '2FA enabled successfully.',
-            'backup_codes' => array_map(fn ($c) => $c['used'] ? null : '****-****-****-****', $user->twoFactorBackupCodes),
+            'backup_codes' => $backupResult['plaintext'],
         ]);
     }
 
@@ -151,14 +152,15 @@ class SecurityController extends AbstractController
         $session->remove('two_factor_email_code');
         $session->remove('two_factor_email_expires');
 
+        $backupResult = $this->twoFactor->generateBackupCodes();
         $user->twoFactorEnabled = true;
         $user->twoFactorConfirmedAt = new \DateTimeImmutable();
-        $user->twoFactorBackupCodes = $this->twoFactor->generateBackupCodes();
+        $user->twoFactorBackupCodes = $backupResult['hashes'];
         $this->em->flush();
 
         return $this->json([
             'message' => '2FA enabled successfully.',
-            'backup_codes' => array_map(fn ($c) => $c['used'] ? null : '****-****-****-****', $user->twoFactorBackupCodes),
+            'backup_codes' => $backupResult['plaintext'],
         ]);
     }
 
@@ -193,12 +195,13 @@ class SecurityController extends AbstractController
             return $this->json(['error' => '2FA is not enabled.'], 400);
         }
 
-        $user->twoFactorBackupCodes = $this->twoFactor->generateBackupCodes();
+        $backupResult = $this->twoFactor->generateBackupCodes();
+        $user->twoFactorBackupCodes = $backupResult['hashes'];
         $this->em->flush();
 
         return $this->json([
             'message' => 'Backup codes regenerated.',
-            'backup_codes' => array_map(fn ($c) => $c['used'] ? null : '****-****-****-****', $user->twoFactorBackupCodes),
+            'backup_codes' => $backupResult['plaintext'],
         ]);
     }
 
