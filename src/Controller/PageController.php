@@ -239,6 +239,12 @@ class PageController extends InertiaController
         return $this->settingsPage($project, $request, 'Projects/Settings/Project');
     }
 
+    #[Route('/projects/{project}/settings/security', name: 'projects_settings_security', requirements: ['project' => '\d+'], priority: 10)]
+    public function settingsProjectSecurity(int $project, Request $request): Response
+    {
+        return $this->settingsPage($project, $request, 'Projects/Settings/Security');
+    }
+
     #[Route('/projects/{project}/settings/localization', name: 'projects_settings_localization', requirements: ['project' => '\d+'], priority: 10)]
     public function settingsLocalization(int $project, Request $request): Response
     {
