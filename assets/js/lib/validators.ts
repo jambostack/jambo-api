@@ -46,7 +46,15 @@ export function validateFieldValue(
     // regex
     if (rules.regex && typeof value === 'string') {
         try {
-            const re = new RegExp(rules.regex);
+            // Supprimer les delimiteurs eventuels (ex: /^[a-z]+$/i -> ^[a-z]+$)
+            let pattern = rules.regex;
+            const delimiterMatch = pattern.match(/^\/(.+)\/([gimsu]*)$/);
+            let flags = '';
+            if (delimiterMatch) {
+                pattern = delimiterMatch[1];
+                flags = delimiterMatch[2];
+            }
+            const re = new RegExp(pattern, flags);
             if (!re.test(value)) {
                 return { fieldSlug: field.slug, message: rules.regexMessage || `Le champ "${field.label || field.name}" ne respecte pas le format attendu.` };
             }
