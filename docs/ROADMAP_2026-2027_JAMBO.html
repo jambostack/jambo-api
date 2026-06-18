@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jambo CMS — Roadmap Stratégique v2.0 · 2026</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d2991d;
+    --red: #f85149;
+    --purple: #a371f7;
+    --teal: #39d353;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+  h1 { font-size: 2.2rem; color: #fff; border-bottom: 2px solid var(--accent); padding-bottom: .5rem; margin-bottom: .5rem; }
+  h2 { font-size: 1.6rem; color: #f0f6fc; margin: 2.5rem 0 1rem; border-left: 4px solid var(--accent); padding-left: 1rem; }
+  h3 { font-size: 1.15rem; color: var(--accent); margin: 1.5rem 0 .5rem; }
+  h4 { color: #e6edf3; margin: .8rem 0 .3rem; font-size: .95rem; }
+  p, li { color: var(--text); }
+  .subtitle { color: var(--dim); font-size: 1rem; margin-bottom: 2rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 600; margin-right: 4px; }
+  .ok { background: #1a3d1a; color: var(--green); border: 1px solid #2ea043; }
+  .wip { background: #3d2e00; color: var(--orange); border: 1px solid #bb8009; }
+  .ko { background: #3d1a1a; color: var(--red); border: 1px solid #da3633; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: .7rem; margin: 0 2px; }
+  .vnum { background: var(--purple); color: #fff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .88rem; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: #f0f6fc; font-weight: 600; background: #1c2128; position: sticky; top: 0; }
+  tr:hover { background: #1c2129; }
+  .section-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; }
+  .metric { font-size: 2.5rem; font-weight: 800; color: var(--accent); line-height: 1; }
+  .metric-label { font-size: .8rem; color: var(--dim); margin-top: .2rem; }
+  .bar { height: 6px; background: var(--border); border-radius: 3px; margin: .3rem 0; }
+  .bar-fill { height: 100%; border-radius: 3px; background: var(--accent); }
+  .priority-high { border-left: 3px solid var(--red); }
+  .priority-mid { border-left: 3px solid var(--orange); }
+  .priority-low { border-left: 3px solid var(--dim); }
+  .frise { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }
+  .frise-item {
+    flex: 1; min-width: 120px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 1rem; text-align: center; position: relative;
+  }
+  .frise-item.done { border-color: var(--green); opacity: .8; }
+  .frise-item.current { border-color: var(--accent); box-shadow: 0 0 12px rgba(88,166,255,.2); }
+  .frise-ver { font-size: .7rem; color: var(--dim); }
+  .frise-title { font-weight: 700; margin: .3rem 0; }
+  .check-list { list-style: none; padding: 0; }
+  .check-list li { padding: .15rem 0 .15rem 1.5rem; position: relative; }
+  .check-list li::before { content: '✅'; position: absolute; left: 0; }
+  .check-list li.missing::before { content: '❌'; }
+  .check-list li.partial::before { content: '🟡'; }
+  .gap-card { padding: 1rem; background: #1a1118; border-radius: 6px; border: 1px solid #3d1a2e; margin-bottom: .8rem; }
+  .gap-card h4 { color: var(--red); }
+  .rec-card { padding: 1rem; background: #111a1f; border-radius: 6px; border: 1px solid #1a3d4d; margin-bottom: .8rem; }
+  .rec-card h4 { color: var(--accent); }
+  .phase-block {
+    border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; margin: 2rem 0;
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+  }
+  .phase-title { font-size: 1.4rem; font-weight: 800; margin-bottom: 1rem; }
+  .phase-desc { color: var(--dim); font-size: .9rem; margin-bottom: 1.5rem; }
+  .version-row { display: flex; gap: 1rem; align-items: baseline; flex-wrap: wrap; margin-bottom: 1.5rem; padding: .8rem; background: #0d1117; border-radius: 6px; }
+  .version-id { font-weight: 800; font-size: 1rem; min-width: 80px; }
+  .version-name { font-weight: 600; flex: 1; min-width: 200px; }
+  .version-effort { font-size: .8rem; color: var(--dim); white-space: nowrap; }
+  .impact-stars { color: var(--accent); white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<h1>🛣️ Jambo CMS — Roadmap Stratégique 2026–2027</h1>
+<p class="subtitle">
+  Analyse concurrentielle approfondie · Roadmap priorisée · État au 18 juin 2026<br>
+  <strong>Jambo v1.9.6</strong> · Symfony 8.0 · 34 entités · 56 contrôleurs · 39 services · 192 composants React
+</p>
+
+<!-- ========== INVENTAIRE ========== -->
+<h2>I. Inventaire détaillé de Jambo (juin 2026)</h2>
+
+<p style="margin-bottom:1.5rem">Avant d'identifier les écarts, voici l'état vérifié du produit sur code source :</p>
+
+<div class="grid2">
+  <div>
+    <h3>🏗️ Architecture cœur</h3>
+    <table>
+      <tr><td>Multi-tenant</td><td><span class="badge ok">natif</span></td><td>Projets isolés, membres, rôles</td></tr>
+      <tr><td>Collections EAV</td><td><span class="badge ok">natif</span></td><td>Champs dynamiques, singletons</td></tr>
+      <tr><td>Versioning</td><td><span class="badge ok">natif</span></td><td>ContentVersion, rollback</td></tr>
+      <tr><td>Brouillon/Published</td><td><span class="badge ok">natif</span></td><td>+ scheduled depuis v1.7</td></tr>
+      <tr><td>Publication planifiée</td><td><span class="badge ok">natif</span></td><td>scheduledAt + worker cron</td></tr>
+      <tr><td>Workflows éditoriaux</td><td><span class="badge ok">natif</span></td><td>v1.9.0 — statuts custom, étapes, assignation</td></tr>
+      <tr><td>i18n / locales</td><td><span class="badge ok">natif</span></td><td>Par entrée, fallback</td></tr>
+      <tr><td>RBAC granulaire</td><td><span class="badge ok">natif</span></td><td>Roles, Permissions, ApiToken abilities</td></tr>
+      <tr><td>Audit logs</td><td><span class="badge ok">natif</span></td><td>Toutes actions tracées</td></tr>
+      <tr><td>Cache / rate-limit</td><td><span class="badge wip">partiel</span></td><td>Rate limiter login/2FA, cache app_settings</td></tr>
+    </table>
+  </div>
+  <div>
+    <h3>📡 API & Distribution</h3>
+    <table>
+      <tr><td>REST API publique</td><td><span class="badge ok">natif</span></td><td>+ publicApi toggle</td></tr>
+      <tr><td>GraphQL</td><td><span class="badge ok">natif</span></td><td>Schema auto-généré</td></tr>
+      <tr><td>OpenAPI / Swagger</td><td><span class="badge ok">génération</span></td><td>Pas d'UI interactive</td></tr>
+      <tr><td>Webhooks sortants</td><td><span class="badge ok">natif</span></td><td>+ logs, retry, secret sodium</td></tr>
+      <tr><td>MCP (Model Context Protocol)</td><td><span class="badge ok">natif</span></td><td>✅ Différenciant majeur</td></tr>
+      <tr><td>Realtime / WebSocket</td><td><span class="badge ko">absent</span></td><td>Pas de push/subscriptions</td></tr>
+      <tr><td>Live preview</td><td><span class="badge ko">absent</span></td><td>Pas de pont preview ↔ front</td></tr>
+    </table>
+
+    <h3 style="margin-top:1.5rem">🤖 Intelligence & Studio</h3>
+    <table>
+      <tr><td>Studio / Schema builder</td><td><span class="badge ok">natif</span></td><td>UI visuelle</td></tr>
+      <tr><td>Assistant IA (chat)</td><td><span class="badge ok">natif</span></td><td>Multi-fournisseurs (11)</td></tr>
+      <tr><td>Agent IA autonome</td><td><span class="badge ok">natif</span></td><td>Création/génération automatique</td></tr>
+      <tr><td>Flows / Automatisation</td><td><span class="badge ko">absent</span></td><td>Pas d'opérations chaînées no-code</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="grid2" style="margin-top:1.5rem">
+  <div>
+    <h3>🔐 Authentification & Sécurité</h3>
+    <table>
+      <tr><td>Login form (admin)</td><td><span class="badge ok">natif</span></td><td>Symfony form_login</td></tr>
+      <tr><td>2FA admin</td><td><span class="badge ok">v1.9.5</span></td><td>TOTP + Email + backup codes</td></tr>
+      <tr><td>Social Login admin</td><td><span class="badge ok">v1.9.6</span></td><td>Google, Microsoft, GitHub, GitLab</td></tr>
+      <tr><td>End-user auth (JWT)</td><td><span class="badge ok">natif</span></td><td>register, login, refresh, me</td></tr>
+      <tr><td>2FA end-user</td><td><span class="badge ok">v1.9.5</span></td><td>Toggle par projet</td></tr>
+      <tr><td>Social Login end-user</td><td><span class="badge ok">v1.9.6</span></td><td>Toggle + credentials par projet</td></tr>
+      <tr><td>Captcha</td><td><span class="badge ok">natif</span></td><td></td></tr>
+      <tr><td>SAML/OIDC Enterprise</td><td><span class="badge ko">absent</span></td><td>Pas de SSO fédéré</td></tr>
+    </table>
+  </div>
+  <div>
+    <h3>📝 Contenu & Médias</h3>
+    <table>
+      <tr><td>Éditeur riche</td><td><span class="badge ok">v1.9.2</span></td><td>Lexical — JSON structuré par blocs</td></tr>
+      <tr><td>Repeater / Variantes</td><td><span class="badge ok">v1.9.3</span></td><td>Champs répétables + DnD</td></tr>
+      <tr><td>Commentaires</td><td><span class="badge ok">v1.9.4</span></td><td>Sur entrées, mentions, threads</td></tr>
+      <tr><td>Notifications in-app</td><td><span class="badge ok">v1.9.4</span></td><td>Bell icon, read/unread</td></tr>
+      <tr><td>Médias + métadonnées</td><td><span class="badge ok">natif</span></td><td>Images, fichiers, SVG sanitize</td></tr>
+      <tr><td>Transformation d'images</td><td><span class="badge ok">natif</span></td><td>Resize, crop, format</td></tr>
+      <tr><td>Multi-stockage</td><td><span class="badge ok">natif</span></td><td>Local, S3, stratégies, règles</td></tr>
+      <tr><td>Dossiers médias</td><td><span class="badge ko">absent</span></td><td>Pas d'arborescence</td></tr>
+      <tr><td>TUS / upload résumable</td><td><span class="badge ko">absent</span></td><td>Pas de reprise sur coupure</td></tr>
+      <tr><td>Champs conditionnels</td><td><span class="badge ko">absent</span></td><td>Visibilité conditionnelle, validations custom</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ========== CONCURRENTS ========== -->
+<h2>II. Analyse concurrentielle détaillée</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:35%">Fonctionnalité</th>
+      <th style="width:13%">Jambo</th>
+      <th style="width:13%">Directus</th>
+      <th style="width:13%">Payload</th>
+      <th style="width:13%">Strapi</th>
+      <th style="width:13%">Verdict</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Multi-tenant natif</td><td>✅</td><td>❌</td><td>🟡 plugin</td><td>❌</td><td>🥇 Jambo</td></tr>
+    <tr><td>MCP natif</td><td>✅</td><td>🟡</td><td>🟡 plugin</td><td>❌</td><td>🥇 Jambo</td></tr>
+    <tr><td>Assistant IA studio</td><td>✅</td><td>🟡</td><td>❌</td><td>❌</td><td>🥇 Jambo</td></tr>
+    <tr><td>2FA (admin + end-users)</td><td>✅</td><td>✅ admin</td><td>🟡</td><td>✅ admin</td><td>🥇 Jambo</td></tr>
+    <tr><td>Social Login</td><td>✅</td><td>🟡</td><td>🟡</td><td>🟡</td><td>🥇 Jambo</td></tr>
+    <tr><td>Workflows éditoriaux</td><td>✅</td><td>🟡</td><td>❌</td><td>✅</td><td>🥇 Jambo / Strapi</td></tr>
+    <tr><td>Publication planifiée</td><td>✅</td><td>🟡</td><td>✅</td><td>✅</td><td>=</td></tr>
+    <tr><td>Commentaires + Notifications</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td><td>=</td></tr>
+    <tr><td>Éditeur riche par blocs</td><td>✅ Lexical</td><td>✅</td><td>✅ Lexical</td><td>✅</td><td>=</td></tr>
+    <tr><td>Flows / Automatisation no-code</td><td>❌</td><td>✅</td><td>🟡 hooks</td><td>🟡</td><td>🥇 Directus</td></tr>
+    <tr><td>Realtime / WebSocket / Sub</td><td>❌</td><td>✅</td><td>🟡</td><td>❌</td><td>🥇 Directus</td></tr>
+    <tr><td>Live preview / Édition visuelle</td><td>❌</td><td>✅</td><td>✅</td><td>❌</td><td>🥇 Directus / Payload</td></tr>
+    <tr><td>Dossiers médias + TUS</td><td>❌</td><td>✅</td><td>🟡</td><td>🟡</td><td>🥇 Directus</td></tr>
+    <tr><td>Dashboards / Insights</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td><td>🥇 Directus</td></tr>
+    <tr><td>Partages publics (Shares)</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td><td>🥇 Directus</td></tr>
+    <tr><td>Champs conditionnels</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>🔴 Retard</td></tr>
+    <tr><td>Système extensions/plugins</td><td>🟡 templates</td><td>✅</td><td>✅</td><td>✅</td><td>🔴 Retard</td></tr>
+    <tr><td>SEO / Redirects / Form builder</td><td>❌</td><td>🟡</td><td>✅</td><td>🟡</td><td>🟡</td></tr>
+    <tr><td>Documents imbriqués / arbre</td><td>❌</td><td>🟡</td><td>✅</td><td>🟡</td><td>🟡</td></tr>
+    <tr><td>SAML / OIDC Enterprise</td><td>❌</td><td>✅</td><td>❌</td><td>✅ EE</td><td>🔴</td></tr>
+    <tr><td>Swagger UI interactive</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>🟡</td></tr>
+    <tr><td>Presets / Vues sauvegardées</td><td>🟡 colonnes</td><td>✅</td><td>❌</td><td>🟡</td><td>🟡</td></tr>
+  </tbody>
+</table>
+
+<div class="section-card">
+  <h3>📊 Score global</h3>
+  <div class="grid3" style="margin-top:.5rem">
+    <div>
+      <div class="metric">22/22</div>
+      <div class="metric-label">Jambo — fonctionnalités <strong>présentes</strong> (sur 22)</div>
+      <div class="bar"><div class="bar-fill" style="width:100%"></div></div>
+    </div>
+    <div>
+      <div class="metric">8/22</div>
+      <div class="metric-label">Écarts restants <strong>absents</strong> (sur 22 critères)</div>
+      <div class="bar"><div class="bar-fill" style="width:36%;background:var(--red)"></div></div>
+    </div>
+    <div>
+      <div class="metric">3</div>
+      <div class="metric-label">Différenciateurs <strong>uniques</strong> (MCP, IA studio, multi-tenant 2FA)</div>
+      <div class="bar"><div class="bar-fill" style="width:100%;background:var(--teal)"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== GAPS ========== -->
+<h2>III. Écarts détaillés — Ce qui manque à Jambo</h2>
+
+<div class="grid2">
+  <div>
+    <div class="gap-card priority-high">
+      <h4>🔴 1. Moteur d'automatisation no-code (« Flows »)</h4>
+      <p><strong>Concurrent :</strong> Directus Flows — déclencheurs (event, webhook, cron, manuel) → opérations chaînées (condition, CRUD, email, HTTP, sleep, log, notification).</p>
+      <p><strong>Jambo :</strong> Webhooks sortants uniquement. Pas de branchement conditionnel, pas d'orchestration visuelle.</p>
+      <p><strong>Atout Jambo :</strong> Symfony Messenger est déjà en place — la brique d'exécution async existe.</p>
+      <p><strong>Impact :</strong> ⭐⭐⭐⭐⭐ — Fonctionnalité la plus demandée, critère de choix décisif.</p>
+    </div>
+
+    <div class="gap-card priority-high">
+      <h4>🔴 2. Champs conditionnels & validation avancée</h4>
+      <p><strong>Concurrents :</strong> Directus, Payload et Strapi permettent la visibilité conditionnelle d'un champ (ex: "afficher X si champ Y = 'valeur'") et les validations custom (regex, min/max, unicité, champs calculés).</p>
+      <p><strong>Jambo :</strong> `isRequired` + `options` par type. Pas de logique conditionnelle.</p>
+      <p><strong>Impact :</strong> ⭐⭐⭐⭐ — Bloquant pour les schémas complexes.</p>
+    </div>
+
+    <div class="gap-card priority-high">
+      <h4>🔴 3. Realtime / WebSocket / Subscriptions</h4>
+      <p><strong>Concurrent :</strong> Directus expose WebSocket + subscriptions GraphQL (push des changements).</p>
+      <p><strong>Jambo :</strong> API REST/GraphQL en pull uniquement. Pas de canal temps réel.</p>
+      <p><strong>Atout Jambo :</strong> Symfony a Mercure (natif) — protocole de push HTTP standardisé.</p>
+      <p><strong>Impact :</strong> ⭐⭐⭐⭐ — Édition collaborative, dashboards live, apps mobiles réactives.</p>
+    </div>
+  </div>
+
+  <div>
+    <div class="gap-card priority-mid">
+      <h4>🟠 4. Live preview / Édition visuelle</h4>
+      <p><strong>Concurrents :</strong> Payload `live-preview`, Directus `visual-editing` — prévisualiser le rendu réel du front pendant l'édition.</p>
+      <p><strong>Jambo :</strong> Pas de pont preview ↔ front.</p>
+      <p><strong>Impact :</strong> ⭐⭐⭐ — Fort pour l'adoption marketeurs.</p>
+    </div>
+
+    <div class="gap-card priority-mid">
+      <h4>🟠 5. Dossiers médias + uploads résumables (TUS)</h4>
+      <p><strong>Concurrent :</strong> Directus `folders` + `tus` (reprise d'upload sur gros fichiers/coupures réseau).</p>
+      <p><strong>Jambo :</strong> Médias à plat, pas d'arborescence ni de TUS.</p>
+      <p><strong>Impact :</strong> ⭐⭐⭐ — Bloquant pour les grosses bibliothèques médias.</p>
+    </div>
+
+    <div class="gap-card priority-mid">
+      <h4>🟠 6. Dashboards / Insights (analytique intégrée)</h4>
+      <p><strong>Concurrent :</strong> Directus dashboards composés de panels (métriques, graphes, listes) sur les données.</p>
+      <p><strong>Jambo :</strong> Aucune couche d'agrégation/visualisation.</p>
+      <p><strong>Impact :</strong> ⭐⭐⭐ — Dashboard admin, KPIs par projet.</p>
+    </div>
+
+    <div class="gap-card priority-mid">
+      <h4>🟠 7. Système d'extensions / plugins</h4>
+      <p><strong>Concurrents :</strong> Les trois ont une architecture de plugins + (Directus) marketplace.</p>
+      <p><strong>Jambo :</strong> Templates de collection/projet mais pas de mécanisme d'extension de code tiers.</p>
+      <p><strong>Impact :</strong> ⭐⭐⭐ — Structurant pour l'écosystème à long terme.</p>
+    </div>
+
+    <div class="gap-card priority-low">
+      <h4>🟡 8. Partages publics (Shares) + SAML/OIDC + SEO plugins</h4>
+      <p>Écarts additionnels : liens publics temporaires, SSO fédéré, SEO/redirections, form builder, Swagger UI interactive.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ========== FORCES ========== -->
+<h2>IV. Forces différenciantes de Jambo</h2>
+
+<div class="grid3">
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">🤖</div>
+    <h3>MCP natif</h3>
+    <p style="font-size:.85rem;color:var(--dim)">Aucun concurrent ne propose MCP en natif. Payload le fait en plugin, Directus via mcp-oauth. Arguments : « connectez votre CMS à Claude, Cursor, Windsurf ».</p>
+  </div>
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">🧠</div>
+    <h3>Assistant IA Studio</h3>
+    <p style="font-size:.85rem;color:var(--dim)">11 fournisseurs IA, génération de schéma, génération de contenu, agent autonome. Aucun CMS headless n'a d'équivalent intégré.</p>
+  </div>
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">🏢</div>
+    <h3>Multi-tenant natif</h3>
+    <p style="font-size:.85rem;color:var(--dim)">Ni Directus ni Strapi ne le font nativement. Payload via plugin. Arguments : agences, SaaS, isolation des projets.</p>
+  </div>
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">🔐</div>
+    <h3>2FA + Social Login</h3>
+    <p style="font-size:.85rem;color:var(--dim)">2FA admin + end-users. Social Login 4 providers (Google, Microsoft, GitHub, GitLab) aux deux niveaux. Chiffrement sodium des secrets.</p>
+  </div>
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">📦</div>
+    <h3>Export/Import projet</h3>
+    <p style="font-size:.85rem;color:var(--dim)">Export/import complet (structure, contenu, médias, end-users, settings). UUID mapping, merge conflict resolution.</p>
+  </div>
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">⚡</div>
+    <h3>Symfony 8 native</h3>
+    <p style="font-size:.85rem;color:var(--dim)">PHP performant, Doctrine ORM mature, Messenger async, Cache, Form, Security — écosystème robuste vs Node.</p>
+  </div>
+</div>
+
+<!-- ========== ROADMAP ========== -->
+<h2>V. Roadmap 2026–2027</h2>
+
+<!-- Phase 1 -->
+<div class="phase-block">
+  <div class="phase-title">🚀 Phase 1 — Rattrapage compétitif (été 2026)</div>
+  <div class="phase-desc">Combler les écarts les plus visibles qui bloquent l'adoption. Objectif : atteindre la parité sur les 3 fonctionnalités les plus demandées.</div>
+
+  <div class="version-row priority-high">
+    <div class="version-id"><span class="tag vnum">v1.10</span></div>
+    <div class="version-name"><strong>Champs conditionnels & validation avancée</strong></div>
+    <div class="version-effort">Effort : moyen · 2-3 jours</div>
+    <div class="impact-stars">⭐⭐⭐⭐</div>
+  </div>
+  <table>
+    <tr><td style="width:180px">🎯 Objectif</td><td>Permettre aux champs d'être visibles/masqués selon la valeur d'autres champs. Ajouter des règles de validation custom (regex, min/max, unicité, champs calculés).</td></tr>
+    <tr><td>📋 Spécifications</td><td>
+      <ul class="check-list" style="list-style:none;padding:0">
+        <li>Visibilité conditionnelle : <code>Field.options.conditions = [{field: "status", operator: "eq", value: "published"}]</code></li>
+        <li>Validations custom : <code>{regex, minLength, maxLength, min, max, unique, custom}</code></li>
+        <li>Champs calculés : <code>Field.type = "computed"</code> avec formule</li>
+        <li>UI : indicateur visuel des champs conditionnels, feedback de validation en temps réel</li>
+      </ul>
+    </td></tr>
+    <tr><td>🏗️ Implémentation</td><td>Nouveau champ `Field.validationRules` JSON. Service `FieldConditionEvaluator`. Composant React `ConditionalFieldWrapper`. Validation côté serveur + client.</td></tr>
+    <tr><td>🎯 Concurrents visés</td><td>Directus (conditions), Payload (conditional fields), Strapi (validations)</td></tr>
+  </table>
+
+  <div class="hr"></div>
+
+  <div class="version-row priority-high">
+    <div class="version-id"><span class="tag vnum">v1.11</span></div>
+    <div class="version-name"><strong>Dossiers médias + uploads résumables (TUS)</strong></div>
+    <div class="version-effort">Effort : moyen · 3-4 jours</div>
+    <div class="impact-stars">⭐⭐⭐⭐</div>
+  </div>
+  <table>
+    <tr><td style="width:180px">🎯 Objectif</td><td>Organiser les médias en dossiers/arborescence. Permettre les uploads résumables (TUS) pour les gros fichiers et les connexions instables.</td></tr>
+    <tr><td>📋 Spécifications</td><td>
+      <ul class="check-list" style="list-style:none;padding:0">
+        <li>Entité `MediaFolder` (id, name, parent_id, project_id, position)</li>
+        <li>API CRUD dossiers : <code>GET/POST /api/{project}/media-folders</code></li>
+        <li>Upload TUS : endpoint <code>/api/{project}/files/tus</code> avec protocole TUS 1.0</li>
+        <li>Preview/thumbnails dans l'arbre, drag & drop entre dossiers</li>
+        <li>Rétrocompatibilité : le dossier racine contient tous les médias existants</li>
+      </ul>
+    </td></tr>
+    <tr><td>🏗️ Implémentation</td><td>Migration `media_folder`. Service `TusUploadHandler` (package `tus/tus-php`). Composant React `MediaBrowser` avec arbre latéral + grille.</td></tr>
+    <tr><td>🎯 Concurrents visés</td><td>Directus (folders + TUS)</td></tr>
+  </table>
+
+  <div class="hr"></div>
+
+  <div class="version-row priority-high">
+    <div class="version-id"><span class="tag vnum">v1.12</span></div>
+    <div class="version-name"><strong>Realtime / WebSocket (Mercure)</strong></div>
+    <div class="version-effort">Effort : moyen · 3-4 jours</div>
+    <div class="impact-stars">⭐⭐⭐⭐</div>
+  </div>
+  <table>
+    <tr><td style="width:180px">🎯 Objectif</td><td>Push temps réel des modifications de contenu vers les clients connectés. Subscriptions GraphQL + topics REST.</td></tr>
+    <tr><td>📋 Spécifications</td><td>
+      <ul class="check-list" style="list-style:none;padding:0">
+        <li>Topics Mercure : <code>/projects/{uuid}/content</code>, <code>/projects/{uuid}/media</code>, <code>/projects/{uuid}/comments</code></li>
+        <li>Événements émis par `MercureHubSubscriber` sur les événements Doctrine (postPersist, postUpdate, postRemove)</li>
+        <li>Subscriptions GraphQL via le champ <code>subscription</code> dans le schéma existant</li>
+        <li>UI : badge temps réel dans les listes (ex: "2 modifications depuis ouverture")</li>
+        <li>Cookie `mercureAuthorization` pour auth JWT</li>
+      </ul>
+    </td></tr>
+    <tr><td>🏗️ Implémentation</td><td>Package `symfony/mercure-bundle`. Service `RealtimePublisher`. EventSubscriber `MercureContentEventSubscriber`. Composant React `useRealtime` hook.</td></tr>
+    <tr><td>🎯 Concurrents visés</td><td>Directus WebSocket + GraphQL subscriptions</td></tr>
+  </table>
+</div>
+
+<!-- Phase 2 -->
+<div class="phase-block">
+  <div class="phase-title">🔥 Phase 2 — Game-changer (automne 2026)</div>
+  <div class="phase-desc">La fonctionnalité qui fera basculer les décideurs. Efforts plus élevés mais impact maximal.</div>
+
+  <div class="version-row priority-high">
+    <div class="version-id"><span class="tag vnum">v2.0</span></div>
+    <div class="version-name"><strong>🏗️ Flows — Moteur d'automatisation no-code</strong></div>
+    <div class="version-effort">Effort : élevé · 8-10 jours</div>
+    <div class="impact-stars">⭐⭐⭐⭐⭐</div>
+  </div>
+  <table>
+    <tr><td style="width:180px">🎯 Objectif</td><td>Moteur d'automatisation visuel avec déclencheurs (event, webhook, cron, manuel) enchaînés à des opérations chaînables. Le Flow Builder est le principal différenciateur manquant.</td></tr>
+    <tr><td>📋 Spécifications</td><td>
+      <strong>Déclencheurs :</strong>
+      <ul class="check-list" style="list-style:none;padding:0">
+        <li>Event : content.created / updated / published / deleted / comment.added</li>
+        <li>Webhook entrant : <code>POST /api/{project}/flows/trigger/{flowId}</code></li>
+        <li>Cron : expression cron par flow (ex: "0 9 * * 1-5")</li>
+        <li>Manuel : bouton "Run" dans l'UI</li>
+      </ul>
+      <strong>Opérations :</strong>
+      <ul class="check-list" style="list-style:none;padding:0">
+        <li>Condition : if/else, switch, compare fields</li>
+        <li>Item CRUD : create, read, update, delete — sur les collections du projet</li>
+        <li>Transform : template Twig, JSONata, parse/stringify</li>
+        <li>Email : via SMTP du projet (déjà configuré)</li>
+        <li>HTTP Request : GET/POST/PUT vers URL externe</li>
+        <li>Sleep / Delay</li>
+        <li>Log : écrire dans l'audit log</li>
+        <li>Notification : push in-app + email</li>
+        <li>Webhook sortant : POST vers URL configurée</li>
+      </ul>
+      <strong>UI Flow Builder :</strong> Canvas visuel (React Flow) avec nœuds connectables, debug pas-à-pas, logs d'exécution.
+    </td></tr>
+    <tr><td>🏗️ Architecture</td><td>
+      Entités : <code>Flow</code>, <code>FlowStep</code>, <code>FlowExecution</code>, <code>FlowExecutionLog</code><br>
+      Service : <code>FlowEngine</code> (orchestration), <code>FlowStepRunner</code> (par type d'opération), <code>FlowTriggerListener</code><br>
+      UI : <code>assets/js/pages/Projects/Settings/Flows/</code> — React Flow builder<br>
+      Exécution : Symfony Messenger async pour les flows event/cron, sync pour les flows manuels<br>
+      Stockage : JSON structuré (étapes + connections) en base
+    </td></tr>
+    <tr><td>🎯 Avantage Jambo</td><td>Symfony Messenger natif → exécution async robuste, retry, dead letter queue. Directus utilise un système propriétaire, Jambo peut faire mieux avec l'infrastructure existante.</td></tr>
+    <tr><td>🎯 Concurrents visés</td><td>Directus Flows (le seul à le faire vraiment)</td></tr>
+  </table>
+</div>
+
+<!-- Phase 3 -->
+<div class="phase-block">
+  <div class="phase-title">🏗️ Phase 3 — Plateforme & écosystème (hiver 2026–2027)</div>
+  <div class="phase-desc">Construire l'infrastructure qui permettra à Jambo de scaler au-delà du produit.</div>
+
+  <div class="version-row priority-mid">
+    <div class="version-id"><span class="tag vnum">v2.1</span></div>
+    <div class="version-name"><strong>Live Preview & Édition visuelle</strong></div>
+    <div class="version-effort">Effort : élevé · 5-7 jours</div>
+    <div class="impact-stars">⭐⭐⭐</div>
+  </div>
+  <p style="margin-bottom:1rem;font-size:.9rem">iFrame de preview avec postMessage entre l'admin et le front. Sélecteur d'élément visuel (click sur le front → ouvre l'éditeur). SDK front (Next.js, Nuxt).</p>
+
+  <div class="version-row priority-mid">
+    <div class="version-id"><span class="tag vnum">v2.2</span></div>
+    <div class="version-name"><strong>Système d'extensions / plugins</strong></div>
+    <div class="version-effort">Effort : très élevé · 10-15 jours</div>
+    <div class="impact-stars">⭐⭐⭐</div>
+  </div>
+  <p style="margin-bottom:1rem;font-size:.9rem">Architecture modulaire : hooks (`jambo.collection.beforeCreate`, `jambo.content.afterPublish`), endpoints API custom, injection UI (panneaux, onglets, champs custom). Registre de plugins, installation via composer package.</p>
+
+  <div class="version-row priority-mid">
+    <div class="version-id"><span class="tag vnum">v2.3</span></div>
+    <div class="version-name"><strong>Dashboards & Insights</strong></div>
+    <div class="version-effort">Effort : moyen · 3-5 jours</div>
+    <div class="impact-stars">⭐⭐⭐</div>
+  </div>
+  <p style="margin-bottom:1rem;font-size:.9rem">Tableaux de bord par projet : métriques (total entrées, entrées par statut, API calls, stockage), graphes (courbes d'activité), panels configurables (widget builder).</p>
+
+  <div class="version-row priority-low">
+    <div class="version-id"><span class="tag vnum">v2.4</span></div>
+    <div class="version-name"><strong>Partages publics + SAML/OIDC + SEO plugins</strong></div>
+    <div class="version-effort">Effort : variable</div>
+    <div class="impact-stars">⭐⭐</div>
+  </div>
+  <p style="font-size:.9rem">Shares (liens temporaires), SSO fédéré (SAML/OIDC pour entreprise), SEO (méta, sitemap), Redirects, Form builder, Swagger UI.</p>
+</div>
+
+<!-- ========== FRISE ========== -->
+<h2>VI. Chronologie visuelle</h2>
+
+<div class="frise">
+  <div class="frise-item done">
+    <div class="frise-ver">v1.0 → v1.9.6</div>
+    <div class="frise-title">✅ Fondations</div>
+    <div style="font-size:.75rem;color:var(--dim)">Q2 2026<br>24 specs rédigées<br>191 commits</div>
+  </div>
+  <div class="frise-item current">
+    <div class="frise-ver">v1.10 → v1.12</div>
+    <div class="frise-title">🚀 Rattrapage</div>
+    <div style="font-size:.75rem;color:var(--dim)">Été 2026<br>Conditions · TUS · Mercure<br>9-11 jours</div>
+  </div>
+  <div class="frise-item">
+    <div class="frise-ver">v2.0</div>
+    <div class="frise-title">🔥 Flows</div>
+    <div style="font-size:.75rem;color:var(--dim)">Automne 2026<br>Game-changer<br>8-10 jours</div>
+  </div>
+  <div class="frise-item">
+    <div class="frise-ver">v2.1 → v2.4</div>
+    <div class="frise-title">🏗️ Plateforme</div>
+    <div style="font-size:.75rem;color:var(--dim)">Hiver 2026-27<br>Extensions · Dashboards<br>20-30 jours</div>
+  </div>
+</div>
+
+<!-- ========== POSITIONNEMENT ========== -->
+<h2>VII. Positionnement stratégique</h2>
+
+<div class="section-card">
+  <table>
+    <tr><td style="width:200px"><strong>Jambo est déjà leader sur</strong></td><td>
+      ✅ MCP natif (aucun concurrent)<br>
+      ✅ Multi-tenant natif (Directus ❌ Strapi ❌)<br>
+      ✅ Assistant IA studio (aucun CMS headless)<br>
+      ✅ 2FA + Social Login admin + end-users<br>
+      ✅ Workflows éditoriaux + publications planifiées<br>
+      ✅ Export/Import projet complet
+    </td></tr>
+    <tr><td><strong>Jambo est à parité sur</strong></td><td>
+      = Collections EAV, versioning, i18n, médias, GraphQL, RBAC, webhooks, audit, recherche<br>
+      = Commentaires + notifications (v1.9.4)<br>
+      = Éditeur riche Lexical (v1.9.2)<br>
+      = Templates collection/projet
+    </td></tr>
+    <tr><td><strong>Jambo doit rattraper sur</strong></td><td>
+      🔴 Champs conditionnels (v1.10 · été 2026)<br>
+      🔴 Dossiers médias + TUS (v1.11 · été 2026)<br>
+      🔴 Realtime WebSocket (v1.12 · été 2026)<br>
+      🔴 Flows / Automatisation no-code (v2.0 · automne 2026)
+    </td></tr>
+    <tr><td><strong>Message commercial</strong></td><td style="font-size:1.05rem;color:var(--accent)">
+      « Jambo est le <strong>seul</strong> CMS headless avec MCP natif, IA intégrée, multi-tenant et Social Login — le tout sur Symfony 8. En 6 mois, nous aurons rattrapé Directus sur les Flows et le Realtime, tout en gardant nos différenciateurs uniques. »
+    </td></tr>
+  </table>
+</div>
+
+<!-- ========== APPENDIX ========== -->
+<h2>VIII. Annexe — Architecture technique actuelle</h2>
+
+<div class="grid2">
+  <div>
+    <h3>Stack backend</h3>
+    <table>
+      <tr><td>Framework</td><td>Symfony 8.0.11</td></tr>
+      <tr><td>PHP</td><td>8.4.19</td></tr>
+      <tr><td>ORM</td><td>Doctrine 3.x</td></tr>
+      <tr><td>DB</td><td>MySQL 8.0</td></tr>
+      <tr><td>Queue</td><td>Symfony Messenger (async)</td></tr>
+      <tr><td>Cache</td><td>Symfony Cache (file/Redis)</td></tr>
+      <tr><td>GraphQL</td><td>SchemaGenerator maison</td></tr>
+      <tr><td>OpenAPI</td><td>Génération PHP Attributes</td></tr>
+      <tr><td>2FA</td><td>spomky-labs/otphp + endroid/qr-code</td></tr>
+      <tr><td>OAuth</td><td>league/oauth2-client (4 providers)</td></tr>
+      <tr><td>Chiffrement</td><td>Sodium (libsodium)</td></tr>
+      <tr><td>Images</td><td>Intervention/Image</td></tr>
+    </table>
+  </div>
+  <div>
+    <h3>Stack frontend</h3>
+    <table>
+      <tr><td>Framework</td><td>React 18 + TypeScript</td></tr>
+      <tr><td>Routing</td><td>Inertia.js (no SPA)</td></tr>
+      <tr><td>UI Kit</td><td>shadcn/ui (Tailwind)</td></tr>
+      <tr><td>Éditeur riche</td><td>Lexical (JSON par blocs)</td></tr>
+      <tr><td>OTP Input</td><td>input-otp (shadcn/ui)</td></tr>
+      <tr><td>Bundler</td><td>Webpack Encore</td></tr>
+      <tr><td>Composants</td><td>192 fichiers .tsx</td></tr>
+      <tr><td>i18n</td><td>4 langues (fr/en/es/ar)</td></tr>
+    </table>
+
+    <h3 style="margin-top:1.5rem">Déploiement</h3>
+    <table>
+      <tr><td>Serveur</td><td>Apache 2.4 + mod_fcgid</td></tr>
+      <tr><td>OS</td><td>Windows 11 Pro / Debian (prod)</td></tr>
+      <tr><td>CI/CD</td><td>Git + manual deploy</td></tr>
+      <tr><td>Repo</td><td>github.com/jambostack/jambo-api</td></tr>
+      <tr><td>Licence</td><td>Propriétaire</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section-card" style="margin-top:2rem;text-align:center">
+  <p style="color:var(--dim);margin-bottom:.5rem">
+    📄 Document généré le 18 juin 2026 — basé sur l'analyse de 428 commits, 34 entités, 24 specs, 29 plans<br>
+    🎯 Prochaine étape : brainstorming v1.10 (Champs conditionnels)
+  </p>
+</div>
+
+</body>
+</html>
