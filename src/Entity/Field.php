@@ -37,6 +37,12 @@ class Field
         set { $this->options = $value; }
     }
 
+    #[ORM\Column(type: 'json', nullable: true)]
+    public ?array $validationRules = null {
+        get => $this->validationRules;
+        set { $this->validationRules = $value; }
+    }
+
     #[ORM\Column(name: '`order`')]
     public int $order = 0 {
         get => $this->order;
