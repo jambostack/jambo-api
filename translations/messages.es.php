@@ -1194,6 +1194,19 @@ return [
     'app_settings.tab_general'     => 'General',
     'app_settings.tab_branding'    => 'Apariencia',
     'app_settings.tab_ai'          => 'Proveedores IA',
+    'app_settings.tab_oauth'       => 'Social Login',
+
+    'app_settings.oauth.description'    => 'Configure las credenciales OAuth para el Social Login. Los secretos se cifran en la base de datos.',
+    'app_settings.oauth.configured'     => 'Configurado',
+    'app_settings.oauth.redirect_uri'   => 'URI de redirección',
+    'app_settings.oauth.google'         => 'Google',
+    'app_settings.oauth.google_uri'     => '/connect/google/check',
+    'app_settings.oauth.microsoft'      => 'Microsoft',
+    'app_settings.oauth.microsoft_uri'  => '/connect/microsoft/check',
+    'app_settings.oauth.github'         => 'GitHub',
+    'app_settings.oauth.github_uri'     => '/connect/github/check',
+    'app_settings.oauth.gitlab'         => 'GitLab',
+    'app_settings.oauth.gitlab_uri'     => '/connect/gitlab/check',
 
     // Proveedores IA
     'app_settings.ai.description'      => 'Configura las claves API de tus proveedores de IA. Estos ajustes tienen prioridad sobre las variables de entorno.',

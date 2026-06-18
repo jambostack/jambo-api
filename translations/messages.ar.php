@@ -1194,6 +1194,19 @@ return [
     'app_settings.tab_general'     => 'عام',
     'app_settings.tab_branding'    => 'المظهر',
     'app_settings.tab_ai'          => 'مزودي الذكاء الاصطناعي',
+    'app_settings.tab_oauth'       => 'الدخول الاجتماعي',
+
+    'app_settings.oauth.description'    => 'تكوين بيانات اعتماد OAuth للدخول الاجتماعي. الأسرار مشفرة في قاعدة البيانات.',
+    'app_settings.oauth.configured'     => 'مُهيأ',
+    'app_settings.oauth.redirect_uri'   => 'رابط التحويل',
+    'app_settings.oauth.google'         => 'Google',
+    'app_settings.oauth.google_uri'     => '/connect/google/check',
+    'app_settings.oauth.microsoft'      => 'Microsoft',
+    'app_settings.oauth.microsoft_uri'  => '/connect/microsoft/check',
+    'app_settings.oauth.github'         => 'GitHub',
+    'app_settings.oauth.github_uri'     => '/connect/github/check',
+    'app_settings.oauth.gitlab'         => 'GitLab',
+    'app_settings.oauth.gitlab_uri'     => '/connect/gitlab/check',
 
     // مزودي الذكاء الاصطناعي
     'app_settings.ai.description'      => 'قم بتكوين مفاتيح API لمزودي الذكاء الاصطناعي. هذه الإعدادات لها أولوية على متغيرات البيئة.',

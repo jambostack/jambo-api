@@ -58,6 +58,44 @@ export default function AppSettingsPage() {
         { title: t('app_settings.breadcrumb'), href: '/admin/app-settings' },
     ];
 
+    // ── OAuth ────────────────────────────────────────────────────────────
+    type OAuthProvider = 'google' | 'microsoft' | 'github' | 'gitlab';
+    const oa = appSettings.oauthProviders;
+    const [oauth, setOauth] = useState<Record<OAuthProvider, { enabled: boolean; clientId: string; clientSecret: string; saving: boolean; saved: boolean; error: string | null }>>({
+        google:    { enabled: oa?.google?.enabled ?? false,    clientId: '', clientSecret: '', saving: false, saved: false, error: null },
+        microsoft: { enabled: oa?.microsoft?.enabled ?? false, clientId: '', clientSecret: '', saving: false, saved: false, error: null },
+        github:    { enabled: oa?.github?.enabled ?? false,    clientId: '', clientSecret: '', saving: false, saved: false, error: null },
+        gitlab:    { enabled: oa?.gitlab?.enabled ?? false,    clientId: '', clientSecret: '', saving: false, saved: false, error: null },
+    });
+
+    const oauthConfigured = Object.values(oauth).filter(p => p.enabled).length;
+
+    const handleOauthToggle = async (name: OAuthProvider, enabled: boolean) => {
+        setOauth(prev => ({ ...prev, [name]: { ...prev[name], enabled, saving: true, error: null } }));
+        try {
+            const payload: any = {};
+            payload[name] = { enabled };
+            await post(JSON.stringify({ oauthProviders: payload }), true);
+            setOauth(prev => ({ ...prev, [name]: { ...prev[name], saving: false } }));
+        } catch (e: any) {
+            setOauth(prev => ({ ...prev, [name]: { ...prev[name], enabled: !enabled, saving: false, error: e.message } }));
+        }
+    };
+
+    const handleOauthSave = async (name: OAuthProvider) => {
+        const p = oauth[name];
+        setOauth(prev => ({ ...prev, [name]: { ...prev[name], saving: true, error: null, saved: false } }));
+        try {
+            const payload: any = {};
+            payload[name] = { enabled: p.enabled, clientId: p.clientId, clientSecret: p.clientSecret };
+            await post(JSON.stringify({ oauthProviders: payload }), true);
+            setOauth(prev => ({ ...prev, [name]: { ...prev[name], clientSecret: '', saving: false, saved: true } }));
+            setTimeout(() => setOauth(prev => ({ ...prev, [name]: { ...prev[name], saved: false } })), 2000);
+        } catch (e: any) {
+            setOauth(prev => ({ ...prev, [name]: { ...prev[name], saving: false, error: e.message } }));
+        }
+    };
+
     // ── Général ──────────────────────────────────────────────────────────
     const [appName, setAppName] = useState(appSettings.appName ?? '');
     const [saving, setSaving]   = useState(false);
@@ -455,6 +493,14 @@ export default function AppSettingsPage() {
                                 </span>
                             )}
                         </TabsTrigger>
+                        <TabsTrigger value="oauth">
+                            {t('app_settings.tab_oauth')}
+                            {oauthConfigured > 0 && (
+                                <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                                    {oauthConfigured}
+                                </span>
+                            )}
+                        </TabsTrigger>
                     </TabsList>
 
                     {/* ── Onglet Général ───────────────────────────────── */}
@@ -551,6 +597,85 @@ export default function AppSettingsPage() {
                             label="Qwen (Alibaba)"
                             keyPlaceholder="sk-..."
                         />
+                    </TabsContent>
+
+                    {/* ── Onglet Social Login ─────────────────────────────── */}
+                    <TabsContent value="oauth" className="space-y-4">
+                        <p className="text-sm text-muted-foreground pb-2">{t('app_settings.oauth.description')}</p>
+
+                        {(['google', 'microsoft', 'github', 'gitlab'] as OAuthProvider[]).map(name => {
+                            const p = oauth[name];
+                            const cfg = oa?.[name];
+                            const isConfigured = cfg?.configured ?? false;
+
+                            return (
+                                <div key={name} className={cn(
+                                    'rounded-lg border p-4 transition-colors',
+                                    p.enabled ? 'border-primary/40 bg-primary/5' : 'border-border opacity-60',
+                                )}>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-semibold text-sm capitalize">{t('app_settings.oauth.' + name)}</span>
+                                            {isConfigured && p.enabled && (
+                                                <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                    {t('app_settings.oauth.configured')}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {p.saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                                            <Switch
+                                                checked={p.enabled}
+                                                onCheckedChange={v => handleOauthToggle(name, v)}
+                                                disabled={p.saving}
+                                                aria-label={`Activer ${name}`}
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mb-1">
+                                        {t('app_settings.oauth.redirect_uri')}: {t('app_settings.oauth.' + name + '_uri')}
+                                    </p>
+
+                                    {p.enabled && (
+                                        <div className="space-y-3 pt-3 border-t">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs">Client ID</Label>
+                                                <Input
+                                                    placeholder="..."
+                                                    value={p.clientId}
+                                                    onChange={e => setOauth(prev => ({ ...prev, [name]: { ...prev[name], clientId: e.target.value } }))}
+                                                    autoComplete="off"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs">Client Secret</Label>
+                                                <Input
+                                                    type="password"
+                                                    placeholder={isConfigured ? '••••••••' : '...'}
+                                                    value={p.clientSecret}
+                                                    onChange={e => setOauth(prev => ({ ...prev, [name]: { ...prev[name], clientSecret: e.target.value } }))}
+                                                    autoComplete="off"
+                                                />
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => handleOauthSave(name)}
+                                                disabled={p.saving || (!p.clientId.trim() && !isConfigured)}
+                                            >
+                                                {p.saving
+                                                    ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />{t('common.loading')}</>
+                                                    : p.saved
+                                                    ? t('common.saved')
+                                                    : t('common.save')}
+                                            </Button>
+                                            {p.error && <p className="text-destructive text-xs">{p.error}</p>}
+                                            {p.saved && <p className="text-xs text-green-600">{t('common.saved')}</p>}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </TabsContent>
                 </Tabs>
             </div>

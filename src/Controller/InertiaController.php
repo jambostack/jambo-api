@@ -130,8 +130,23 @@ abstract class InertiaController extends AbstractController
                     'perplexity'=> ['enabled' => (bool)($p['perplexity']['enabled']?? false), 'configured' => !empty($p['perplexity']['key']),'model' => $p['perplexity']['model']?? 'sonar-pro'],
                     'qwen'      => ['enabled' => (bool)($p['qwen']['enabled']      ?? false), 'configured' => !empty($p['qwen']['key']),      'model' => $p['qwen']['model']      ?? 'qwen-max'],
                 ],
+                'oauthProviders' => $this->serializeOauth($s->oauthProviders ?? []),
             ];
         });
+    }
+
+    /** @return array<string, array{enabled: bool, configured: bool}> */
+    private function serializeOauth(?array $providers): array
+    {
+        $result = [];
+        foreach (['google', 'microsoft', 'github', 'gitlab'] as $p) {
+            $cfg = $providers[$p] ?? [];
+            $result[$p] = [
+                'enabled'    => (bool) ($cfg['enabled'] ?? false),
+                'configured' => !empty($cfg['clientId']) && !empty($cfg['clientSecret']),
+            ];
+        }
+        return $result;
     }
 
     private function loadTranslations(string $locale = 'en'): array
