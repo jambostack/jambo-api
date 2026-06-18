@@ -1434,4 +1434,11 @@ return [
     'repeater.no_subfields'            => 'Este repetidor no tiene subcampos configurados. Configure los subcampos en el Schema Builder.',
     'repeater.change_variant_confirm'  => 'Cambiar la variante borrará los datos actuales. ¿Continuar?',
 
+    // Comments
+    'comments.title'                   => 'Comentarios',
+    'comments.write_placeholder'       => 'Escribir un comentario...',
+    'comments.reply'                   => 'Responder',
+    'comments.resolve'                 => 'Resolver',
+    'comments.reopen'                  => 'Reabrir',
+
 ];

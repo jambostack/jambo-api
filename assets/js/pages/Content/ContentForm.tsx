@@ -21,6 +21,7 @@ import ReactSelect from "@/components/ui/select/Select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import AiToolbar from '@/components/AiToolbar';
 import VersionHistory from '@/components/VersionHistory';
+import CommentThread from './CommentThread';
 
 interface Props {
     project: Project;
@@ -707,6 +708,12 @@ useEffect(() => {
                                     entryUuid={contentEntry.uuid}
                                     onRestored={() => window.location.reload()}
                                 />
+                            )}
+
+                            {isEditMode && contentEntry && (
+                                <div className="rounded-xl border border-border bg-card/60 p-3 shadow-sm">
+                                    <CommentThread entryId={contentEntry.id} />
+                                </div>
                             )}
 
                             {isEditMode && contentEntry && (

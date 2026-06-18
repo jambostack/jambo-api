@@ -1434,4 +1434,11 @@ return [
     'repeater.no_subfields'            => 'هذا المكرر لا يحتوي على حقول فرعية مكونة. يرجى تكوين الحقول الفرعية في منشئ المخطط.',
     'repeater.change_variant_confirm'  => 'تغيير المتغير سيمسح البيانات الحالية. متابعة؟',
 
+    // Comments
+    'comments.title'                   => 'تعليقات',
+    'comments.write_placeholder'       => 'اكتب تعليقاً...',
+    'comments.reply'                   => 'رد',
+    'comments.resolve'                 => 'حل',
+    'comments.reopen'                  => 'إعادة فتح',
+
 ];
