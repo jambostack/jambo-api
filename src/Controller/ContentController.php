@@ -368,6 +368,70 @@ class ContentController extends AbstractController
 
         $this->em->persist($clone);
 
+        $collection = $source->collection;
+
+        // Validation des champs avant de copier les valeurs
+        $validationErrors = [];
+        foreach ($collection->fields as $field) {
+            if ($field->isDeleted()) {
+                continue;
+            }
+            $fieldValue = null;
+            foreach ($source->fieldValues as $fv) {
+                if ($fv->field && $fv->field->slug === $field->slug) {
+                    $fieldValue = $fv->textValue ?? $fv->numberValue ?? $fv->jsonValue ?? $fv->booleanValue ?? $fv->dateValue ?? $fv->datetimeValue;
+                    break;
+                }
+            }
+            $fieldErrors = $this->fieldValidator->validateFieldValue($field, $fieldValue);
+            if (!empty($fieldErrors)) {
+                $validationErrors['fields.' . $field->slug] = $fieldErrors[0];
+            }
+        }
+        if (!empty($validationErrors)) {
+            return $this->json(['errors' => $validationErrors], 422);
+        }
+
+        // Vérification d'unicité
+        foreach ($collection->fields as $field) {
+            if ($field->isDeleted()) continue;
+            $rules = $field->validationRules;
+            if (empty($rules['unique'])) continue;
+
+            $fieldValue = null;
+            foreach ($source->fieldValues as $fv) {
+                if ($fv->field && $fv->field->slug === $field->slug) {
+                    $fieldValue = $fv->textValue ?? $fv->numberValue ?? $fv->jsonValue ?? $fv->booleanValue ?? $fv->dateValue ?? $fv->datetimeValue;
+                    break;
+                }
+            }
+            if ($fieldValue === null || $fieldValue === '' || $fieldValue === []) continue;
+
+            $qb = $this->em->createQueryBuilder();
+            $qb->select('COUNT(cfv.id)')
+               ->from(ContentFieldValue::class, 'cfv')
+               ->join('cfv.contentEntry', 'ce')
+               ->where('ce.collection = :collection')
+               ->andWhere('cfv.field = :field')
+               ->andWhere('cfv.textValue = :value')
+               ->andWhere('ce.deletedAt IS NULL')
+               ->setParameter('collection', $collection)
+               ->setParameter('field', $field)
+               ->setParameter('value', (string)$fieldValue);
+
+            $count = $qb->getQuery()->getSingleScalarResult();
+            if ($count > 0) {
+                $validationErrors['fields.' . $field->slug] = sprintf(
+                    'La valeur "%s" existe déjà pour le champ "%s".',
+                    (string)$fieldValue,
+                    $field->name
+                );
+            }
+        }
+        if (!empty($validationErrors)) {
+            return $this->json(['errors' => $validationErrors], 422);
+        }
+
         foreach ($source->fieldValues as $fv) {
             $newFv = new ContentFieldValue();
             $newFv->contentEntry  = $clone;
