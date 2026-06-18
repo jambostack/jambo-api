@@ -417,7 +417,7 @@
   <div class="phase-desc">La fonctionnalité qui fera basculer les décideurs. Efforts plus élevés mais impact maximal.</div>
 
   <div class="version-row priority-high">
-    <div class="version-id"><span class="tag vnum">v2.0</span></div>
+    <div class="version-id"><span class="tag vnum">v1.13</span></div>
     <div class="version-name"><strong>🏗️ Flows — Moteur d'automatisation no-code</strong></div>
     <div class="version-effort">Effort : élevé · 8-10 jours</div>
     <div class="impact-stars">⭐⭐⭐⭐⭐</div>
@@ -460,11 +460,11 @@
 
 <!-- Phase 3 -->
 <div class="phase-block">
-  <div class="phase-title">🏗️ Phase 3 — Plateforme & écosystème (hiver 2026–2027)</div>
+  <div class="phase-title">🏗️ Phase 3 — Plateforme & écosystème (hiver 2026)</div>
   <div class="phase-desc">Construire l'infrastructure qui permettra à Jambo de scaler au-delà du produit.</div>
 
   <div class="version-row priority-mid">
-    <div class="version-id"><span class="tag vnum">v2.1</span></div>
+    <div class="version-id"><span class="tag vnum">v1.14</span></div>
     <div class="version-name"><strong>Live Preview & Édition visuelle</strong></div>
     <div class="version-effort">Effort : élevé · 5-7 jours</div>
     <div class="impact-stars">⭐⭐⭐</div>
@@ -472,28 +472,67 @@
   <p style="margin-bottom:1rem;font-size:.9rem">iFrame de preview avec postMessage entre l'admin et le front. Sélecteur d'élément visuel (click sur le front → ouvre l'éditeur). SDK front (Next.js, Nuxt).</p>
 
   <div class="version-row priority-mid">
-    <div class="version-id"><span class="tag vnum">v2.2</span></div>
+    <div class="version-id"><span class="tag vnum">v1.15</span></div>
     <div class="version-name"><strong>Système d'extensions / plugins</strong></div>
     <div class="version-effort">Effort : très élevé · 10-15 jours</div>
     <div class="impact-stars">⭐⭐⭐</div>
   </div>
   <p style="margin-bottom:1rem;font-size:.9rem">Architecture modulaire : hooks (`jambo.collection.beforeCreate`, `jambo.content.afterPublish`), endpoints API custom, injection UI (panneaux, onglets, champs custom). Registre de plugins, installation via composer package.</p>
 
-  <div class="version-row priority-mid">
-    <div class="version-id"><span class="tag vnum">v2.3</span></div>
-    <div class="version-name"><strong>Dashboards & Insights</strong></div>
-    <div class="version-effort">Effort : moyen · 3-5 jours</div>
-    <div class="impact-stars">⭐⭐⭐</div>
-  </div>
-  <p style="margin-bottom:1rem;font-size:.9rem">Tableaux de bord par projet : métriques (total entrées, entrées par statut, API calls, stockage), graphes (courbes d'activité), panels configurables (widget builder).</p>
-
   <div class="version-row priority-low">
-    <div class="version-id"><span class="tag vnum">v2.4</span></div>
-    <div class="version-name"><strong>Partages publics + SAML/OIDC + SEO plugins</strong></div>
-    <div class="version-effort">Effort : variable</div>
+    <div class="version-id"><span class="tag vnum">v1.16</span></div>
+    <div class="version-name"><strong>Dashboards, Partages, SAML/OIDC, SEO</strong></div>
+    <div class="version-effort">Effort : variable · 5-7 jours</div>
     <div class="impact-stars">⭐⭐</div>
   </div>
-  <p style="font-size:.9rem">Shares (liens temporaires), SSO fédéré (SAML/OIDC pour entreprise), SEO (méta, sitemap), Redirects, Form builder, Swagger UI.</p>
+  <p style="font-size:.9rem">Dashboards & Insights (métriques, graphes, panels par projet). Partages publics temporaires (Shares). SSO Entreprise (SAML/OIDC). SEO/Redirects/Form builder. Swagger UI interactive.</p>
+</div>
+
+<!-- Phase 4 — Stabilisation -->
+<div class="phase-block" style="border-color: var(--teal); background: linear-gradient(135deg, #0d1117 0%, #0f1f18 100%);">
+  <div class="phase-title" style="color: var(--teal)">🏁 Phase 4 — Stabilisation & v2.0.0 (printemps 2027)</div>
+  <div class="phase-desc">Atteindre le niveau de qualité, performance et stabilité qui mérite le label « v2.0 ».</div>
+
+  <div class="grid2">
+    <div>
+      <h4 style="color: var(--teal)">🎯 Critères de passage en v2.0.0</h4>
+      <ul class="check-list" style="list-style:none;padding:0">
+        <li>Couverture de tests ≥ 80% (unitaires + fonctionnels)</li>
+        <li>Suite E2E navigateur automatisée (Playwright)</li>
+        <li>Zéro bug critique ouvert depuis > 7 jours</li>
+        <li>Documentation développeur complète (README, API ref, guides)</li>
+        <li>Guide de migration v1.x → v2.0</li>
+        <li>Performance : temps de réponse API < 200ms p95</li>
+        <li>CI/CD : tests automatiques + déploiement automatisé</li>
+        <li>Cache Redis systématique sur lectures publiques</li>
+        <li>Rate-limiting global robuste</li>
+        <li>Monitoring/observabilité (logs, métriques, alertes)</li>
+      </ul>
+    </div>
+    <div>
+      <h4 style="color: var(--teal)">📦 Tâches de stabilisation</h4>
+      <table>
+        <tr><td>Tests automatisés</td><td>PHPUnit + Playwright E2E</td></tr>
+        <tr><td>Documentation</td><td>README, guides, API ref, migration</td></tr>
+        <tr><td>Performance</td><td>Redis, query optimization, lazy loading</td></tr>
+        <tr><td>Rate-limiting</td><td>Global + per-endpoint + per-project</td></tr>
+        <tr><td>Monitoring</td><td>Symfony profiler → prod metrics</td></tr>
+        <tr><td>Bug fixes</td><td>Zéro critique, backlog < 20 bugs</td></tr>
+        <tr><td>Upgrade notes</td><td>Breaking changes documentés</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="version-row" style="margin-top:1.5rem; background: #0a1f14">
+    <div class="version-id"><span class="tag" style="background: var(--teal); color: #000; font-size:.85rem">v2.0.0</span></div>
+    <div class="version-name"><strong>🚀 Jambo v2.0 — Stable Release</strong></div>
+    <div class="version-effort">Effort : moyen · 10-15 jours</div>
+    <div class="impact-stars" style="color: var(--teal)">Première version stable</div>
+  </div>
+  <p style="font-size:.9rem; color: var(--teal); text-align: center; margin-top: 1rem">
+    v2.0.0 marque le passage d'un produit en construction à une plateforme prête pour la production.<br>
+    Toutes les fonctionnalités majeures sont présentes, testées, documentées et performantes.
+  </p>
 </div>
 
 <!-- ========== FRISE ========== -->
@@ -511,14 +550,19 @@
     <div style="font-size:.75rem;color:var(--dim)">Été 2026<br>Conditions · TUS · Mercure<br>9-11 jours</div>
   </div>
   <div class="frise-item">
-    <div class="frise-ver">v2.0</div>
+    <div class="frise-ver">v1.13</div>
     <div class="frise-title">🔥 Flows</div>
     <div style="font-size:.75rem;color:var(--dim)">Automne 2026<br>Game-changer<br>8-10 jours</div>
   </div>
   <div class="frise-item">
-    <div class="frise-ver">v2.1 → v2.4</div>
+    <div class="frise-ver">v1.14 → v1.16</div>
     <div class="frise-title">🏗️ Plateforme</div>
-    <div style="font-size:.75rem;color:var(--dim)">Hiver 2026-27<br>Extensions · Dashboards<br>20-30 jours</div>
+    <div style="font-size:.75rem;color:var(--dim)">Hiver 2026<br>Extensions · Dashboards<br>15-22 jours</div>
+  </div>
+  <div class="frise-item" style="border-color: var(--teal); box-shadow: 0 0 12px rgba(57,211,83,.15);">
+    <div class="frise-ver" style="color: var(--teal)">v2.0.0</div>
+    <div class="frise-title" style="color: var(--teal)">🏁 Stable</div>
+    <div style="font-size:.75rem;color:var(--dim)">Printemps 2027<br>Tests · Perf · Docs<br>10-15 jours</div>
   </div>
 </div>
 
@@ -545,10 +589,13 @@
       🔴 Champs conditionnels (v1.10 · été 2026)<br>
       🔴 Dossiers médias + TUS (v1.11 · été 2026)<br>
       🔴 Realtime WebSocket (v1.12 · été 2026)<br>
-      🔴 Flows / Automatisation no-code (v2.0 · automne 2026)
+      🔴 Flows / Automatisation no-code (v1.13 · automne 2026)
+    </td></tr>
+    <tr><td><strong>Jambo passera en stable sur</strong></td><td style="color:var(--teal)">
+      🏁 v2.0.0 — Tests, performance, documentation, CI/CD, monitoring (printemps 2027)
     </td></tr>
     <tr><td><strong>Message commercial</strong></td><td style="font-size:1.05rem;color:var(--accent)">
-      « Jambo est le <strong>seul</strong> CMS headless avec MCP natif, IA intégrée, multi-tenant et Social Login — le tout sur Symfony 8. En 6 mois, nous aurons rattrapé Directus sur les Flows et le Realtime, tout en gardant nos différenciateurs uniques. »
+      « Jambo est le <strong>seul</strong> CMS headless avec MCP natif, IA intégrée, multi-tenant et Social Login — le tout sur Symfony 8. Fin 2026, toutes les fonctionnalités majeures sont en place (v1.16). v2.0.0 apporte la stabilité et la documentation pour la production. »
     </td></tr>
   </table>
 </div>
@@ -601,7 +648,8 @@
 <div class="section-card" style="margin-top:2rem;text-align:center">
   <p style="color:var(--dim);margin-bottom:.5rem">
     📄 Document généré le 18 juin 2026 — basé sur l'analyse de 428 commits, 34 entités, 24 specs, 29 plans<br>
-    🎯 Prochaine étape : brainstorming v1.10 (Champs conditionnels)
+    🎯 Prochaine étape : brainstorming v1.10 (Champs conditionnels)<br>
+    🏁 v2.0.0 prévu au printemps 2027 — quand stabilité, performance et documentation seront au rendez-vous
   </p>
 </div>
 
