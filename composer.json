@@ -1,6 +1,6 @@
 {
     "name": "jambostack/jambo-api",
-    "version": "1.9.3",
+    "version": "1.9.4",
     "description": "Jambo API — Headless CMS open-source. Backend API REST + GraphQL pour le JamboStack.",
     "type": "project",
     "license": "AGPL-3.0",

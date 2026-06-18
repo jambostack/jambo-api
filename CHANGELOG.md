@@ -107,6 +107,18 @@ First stable release.
 
 ---
 
+## [1.9.4] — 2026-06-18
+
+### Added
+
+- **Commentaires threadés** — les utilisateurs peuvent commenter sur les entrées (`Comment` entity), répondre à un commentaire (threading 1 niveau), marquer comme résolu (open/resolved), et mentionner des utilisateurs (`@username`). API REST complète : liste paginée, création, modification, suppression, toggle résolution.
+- **Notifications** — système de notifications en temps réel (`Notification` entity) pour les assignations, commentaires, mentions et changements de statut. Cloche dans la navbar avec badge compteur, poll toutes les 30s, dropdown des 10 dernières notifications, marquage comme lu individuellement ou en masse.
+- **`CommentThread`** dans la sidebar du ContentForm — liste paginée des commentaires avec threading, formulaire d'ajout, boutons répondre/résoudre/rouvrir.
+- **`NotificationBell`** dans la navbar (`app-header`) — composant avec Popover, badge compteur (`unread-count`), lien de redirection vers l'entrée concernée.
+- **i18n** — 5 clés de traduction : `comments.title`, `comments.write_placeholder`, `comments.reply`, `comments.resolve`, `comments.reopen` (FR/EN/AR/ES).
+
+---
+
 ## [1.9.3] — 2026-06-18
 
 ### Added
@@ -239,3 +251,4 @@ First stable release.
 [1.9.1]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.1
 [1.9.2]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.2
 [1.9.3]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.3
+[1.9.4]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.4
