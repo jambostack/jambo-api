@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash, Calendar, LayoutGrid, List, ArrowUpDown, X, Download, Folder } from 'lucide-react';
+import { Plus, Trash, Calendar, LayoutGrid, List, ArrowUpDown, X, Download, Folder, ChevronLeft } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -74,6 +74,7 @@ export default function Index({ project, assets, filters }: Props) {
 	const [showDetailsModal, setShowDetailsModal] = useState(false);
 	const [assetsState, setAssets] = useState(assets);
 	const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
+	const [mobileFolderOpen, setMobileFolderOpen] = useState(false);
 	const page = usePage<{ can?: Record<string, boolean> }>();
 	const can = page.props.userCan as UserCan;
 
@@ -289,7 +290,7 @@ export default function Index({ project, assets, filters }: Props) {
 			<div className="flex gap-6 rtl:space-x-reverse">
 				<ProjectSidebar project={project} />
 
-				{/* Arbre des dossiers */}
+				{/* Arbre des dossiers — desktop : sidebar fixe */}
 				<aside className="w-56 flex-shrink-0 border-r border-border pr-3 overflow-y-auto hidden md:block">
 					<div className="flex items-center gap-2 mb-2 px-1 pt-1">
 						<Folder className="h-4 w-4 text-muted-foreground" />
@@ -301,6 +302,34 @@ export default function Index({ project, assets, filters }: Props) {
 						onSelectFolder={(folderId) => { setSelectedFolderId(folderId); applyFilters({ folderId }); }}
 					/>
 				</aside>
+
+				{/* Arbre des dossiers — mobile : slide-over panel */}
+				{mobileFolderOpen && (
+					<div className="fixed inset-0 z-50 md:hidden">
+						{/* Overlay */}
+						<div className="fixed inset-0 bg-black/40" onClick={() => setMobileFolderOpen(false)} />
+						{/* Panel */}
+						<div className="fixed inset-y-0 left-0 w-72 bg-background shadow-xl border-r border-border flex flex-col z-50">
+							<div className="flex items-center justify-between px-3 py-3 border-b border-border">
+								<span className="text-sm font-semibold">Dossiers</span>
+								<button onClick={() => setMobileFolderOpen(false)} className="p-1 rounded-md hover:bg-muted">
+									<ChevronLeft className="h-4 w-4" />
+								</button>
+							</div>
+							<div className="flex-1 overflow-y-auto px-2 py-2">
+								<MediaFolderTree
+									projectUuid={project.uuid}
+									selectedFolderId={selectedFolderId}
+									onSelectFolder={(folderId) => {
+										setSelectedFolderId(folderId);
+										applyFilters({ folderId });
+										setMobileFolderOpen(false);
+									}}
+								/>
+							</div>
+						</div>
+					</div>
+				)}
 
 				<Separator className="my-6 md:hidden" />
 
@@ -325,8 +354,19 @@ export default function Index({ project, assets, filters }: Props) {
 					</div>
 
 					{/* ── Controls toolbar ─────────────────────────── */}
-					<div className="flex flex-wrap items-center gap-2">
-						{/* Select-all checkbox */}
+					<div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+						{/* Dossiers � mobile only */}
+							<button
+								className="md:hidden flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-border/70 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
+								onClick={() => setMobileFolderOpen(true)}
+							>
+								<Folder className="h-3.5 w-3.5" />
+								{selectedFolderId !== null && (
+									<span className="w-1.5 h-1.5 rounded-full bg-primary" />
+								)}
+							</button>
+
+							{/* Select-all checkbox */}
 						{can.delete_asset && (
 							<div className="flex h-9 items-center rounded-lg border border-border/70 px-2.5">
 								<Checkbox
@@ -339,7 +379,7 @@ export default function Index({ project, assets, filters }: Props) {
 						)}
 
 						{/* Search */}
-						<div className="relative min-w-[180px] flex-1">
+						<div className="relative min-w-[120px] flex-1">
 							<SearchBar
 								value={search}
 								onChange={handleSearchChange}
@@ -348,25 +388,45 @@ export default function Index({ project, assets, filters }: Props) {
 							/>
 						</div>
 
-						{/* Type filter pills */}
-						<div className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-1 flex-shrink-0">
-							{TYPE_OPTIONS.map((opt) => (
-								<button
-									key={opt.value}
-									type="button"
-									onClick={() => handleTypeChange(opt.value)}
-									className={cn(
-										'inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium transition-all whitespace-nowrap',
-										assetType === opt.value
-											? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
-											: 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-									)}
-								>
-									{t(opt.labelKey)}
-								</button>
-							))}
-						</div>
+						{/* Type filter pills � desktop */}
+							<div className="hidden md:inline-flex items-center gap-0.5 rounded-lg bg-muted p-1 flex-shrink-0">
+								{TYPE_OPTIONS.map((opt) => (
+									<button
+										key={opt.value}
+										type="button"
+										onClick={() => handleTypeChange(opt.value)}
+										className={cn(
+											'inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium transition-all whitespace-nowrap',
+											assetType === opt.value
+												? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
+												: 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+										)}
+									>
+										{t(opt.labelKey)}
+									</button>
+								))}
+							</div>
 
+							{/* Type filter � mobile dropdown */}
+							<div className="md:hidden flex-shrink-0">
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<Button variant="outline" size="sm" className="h-9 gap-1 text-xs">
+											{t(TYPE_OPTIONS.find(o => o.value === assetType)?.labelKey ?? 'assets.type_all')}
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="start" className="w-36">
+										<DropdownMenuRadioGroup value={assetType} onValueChange={handleTypeChange}>
+											{TYPE_OPTIONS.map(opt => (
+												<DropdownMenuRadioItem key={opt.value} value={opt.value}>
+													{t(opt.labelKey)}
+												</DropdownMenuRadioItem>
+											))}
+										</DropdownMenuRadioGroup>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							</div>
+						
 						{/* Sort + Date grouped control */}
 						<div className="flex items-center divide-x divide-border/60 rounded-lg border border-border/70 overflow-hidden flex-shrink-0">
 							<DropdownMenu>

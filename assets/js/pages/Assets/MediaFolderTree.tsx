@@ -111,7 +111,7 @@ export default function MediaFolderTree({ projectUuid, selectedFolderId, onSelec
                     {!isEditing && (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-                                <button className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted-foreground/10 transition-opacity">
+                                <button className="md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded hover:bg-muted-foreground/10 transition-opacity">
                                     <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
                                 </button>
                             </DropdownMenuTrigger>
