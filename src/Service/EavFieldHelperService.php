@@ -90,9 +90,16 @@ class EavFieldHelperService
 
         // regex
         if (!empty($rules['regex'])) {
-            if (is_string($value) && !preg_match($rules['regex'], $value)) {
-                $msg = $rules['regexMessage'] ?? sprintf('Le champ "%s" ne respecte pas le format attendu.', $field->name);
-                $errors[] = $msg;
+            if (is_string($value)) {
+                $regex = $rules['regex'];
+                // Ajouter des delimiteurs si absents (preg_match les exige)
+                if (@preg_match($regex, '') === false) {
+                    $regex = '/' . str_replace('/', '\/', $regex) . '/';
+                }
+                if (!preg_match($regex, $value)) {
+                    $msg = $rules['regexMessage'] ?? sprintf('Le champ "%s" ne respecte pas le format attendu.', $field->name);
+                    $errors[] = $msg;
+                }
             }
         }
 
