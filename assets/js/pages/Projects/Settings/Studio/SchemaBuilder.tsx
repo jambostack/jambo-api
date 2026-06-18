@@ -39,7 +39,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   uuid: Fingerprint, tags: Tags, rating: Star, repeater: Layers,
 };
 
-interface SchemaField { key: string; name: string; slug: string; type: string; isRequired: boolean; options?: Record<string, any>; }
+interface SchemaField { key: string; name: string; slug: string; type: string; isRequired: boolean; options?: Record<string, any>; validationRules?: Record<string, any>; }
 interface SchemaCollection {
   id?: number; key: string; uuid?: string; name: string; slug: string; description: string;
   isSingleton: boolean; fields: SchemaField[];
@@ -934,7 +934,7 @@ function EndUserEditor({
             </div>
             {canEditOptions && isExpanded && (
               <div style={{ padding:'4px 10px 10px 38px', background:'var(--studio-surface)', borderTop:'1px solid var(--studio-border)' }}>
-                <FieldOptionsEditor field={toSchemaField(f)} allCollections={allCollections} onChange={opts => handleOptionsChange(f, opts)} />
+                <FieldOptionsEditor field={toSchemaField(f)} allCollections={allCollections} allFields={fields.map(toSchemaField)} onValidationRulesChange={()=>{}} onChange={opts => handleOptionsChange(f, opts)} />
               </div>
             )}
           </div>
@@ -993,7 +993,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
       const data = await res.json() as { data: ServerCollection[] };
       const loaded = (data.data ?? []).map((c): SchemaCollection => ({
         id: c.id, key: `col_${c.id}`, uuid: c.uuid, name: c.name, slug: c.slug, description: c.description ?? '', isSingleton: c.isSingleton,
-        fields: (c.fields ?? []).map((f, fi): SchemaField => ({ key: `fld_${c.id}_${fi}`, name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired, options: f.options })),
+        fields: (c.fields ?? []).map((f, fi): SchemaField => ({ key: `fld_${c.id}_${fi}`, name: f.name, slug: f.slug, type: f.type, isRequired: f.isRequired, options: f.options, validationRules: (f as any).validationRules })),
       }));
       setCollections(loaded);
       // Conserve la sélection courante ; ne sélectionne la 1ère qu'au tout premier chargement.
@@ -1454,7 +1454,190 @@ function parseFieldOptions(field: SchemaField, allCollections?: SchemaCollection
     return result;
   } catch { return {}; }
 }
-function FieldOptionsEditor({ field, allCollections, onChange }: { field: SchemaField; allCollections: SchemaCollection[]; onChange: (opts: FieldOptions) => void; }) {
+function ConditionEditor({ field, onChange, otherFields, S }: {
+    field: SchemaField;
+    onChange: (opts: FieldOptions) => void;
+    otherFields: SchemaField[];
+    S: { input: React.CSSProperties; label: React.CSSProperties };
+}) {
+    const t = useTranslation();
+    const conditions = (field.options?.conditions as any[]) ?? [];
+    const OPERATORS: { value: string; label: string }[] = [
+        { value: 'eq', label: 'Égal à' },
+        { value: 'neq', label: 'Différent de' },
+        { value: 'empty', label: 'Est vide' },
+        { value: 'notEmpty', label: 'N\'est pas vide' },
+        { value: 'contains', label: 'Contient' },
+        { value: 'startsWith', label: 'Commence par' },
+        { value: 'in', label: 'Dans la liste' },
+        { value: 'gt', label: '>' },
+        { value: 'gte', label: '>=' },
+        { value: 'lt', label: '<' },
+        { value: 'lte', label: '<=' },
+    ];
+
+    const addCondition = () => {
+        const firstField = otherFields[0];
+        onChange({
+            ...field.options,
+            conditions: [
+                ...conditions,
+                { field: firstField?.slug ?? '', operator: 'eq' as const, value: '' },
+            ],
+        });
+    };
+
+    const updateCondition = (i: number, patch: Partial<{ field: string; operator: string; value: any }>) => {
+        const next = conditions.map((c: any, j: number) => j === i ? { ...c, ...patch } : c);
+        onChange({ ...field.options, conditions: next });
+    };
+
+    const removeCondition = (i: number) => {
+        onChange({ ...field.options, conditions: conditions.filter((_: any, j: number) => j !== i) });
+    };
+
+    const needsValue = (op: string) => !['empty', 'notEmpty'].includes(op);
+
+    return (
+        <details style={{ marginTop: '8px', fontSize: '10px' }}>
+            <summary style={{ cursor: 'pointer', color: 'var(--studio-accent)', fontWeight: 600 }}>
+                ⚡ Conditions d'affichage {conditions.length > 0 ? `(${conditions.length})` : ''}
+            </summary>
+            <div style={{ marginTop: '6px', padding: '6px', border: '1px solid var(--studio-border)', borderRadius: '6px', background: 'var(--studio-surface)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ ...S.label, color: 'var(--studio-text-dim)', fontSize: '9px' }}>
+                    Afficher ce champ uniquement si TOUTES ces conditions sont remplies (ET logique).
+                </span>
+                {conditions.map((cond: any, i: number) => (
+                    <div key={i} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <select
+                            value={cond.field}
+                            onChange={e => updateCondition(i, { field: e.target.value })}
+                            style={{ ...S.input, flex: 2 }}
+                        >
+                            <option value="">Champ...</option>
+                            {otherFields.map(of => (
+                                <option key={of.slug} value={of.slug}>{of.name || of.slug}</option>
+                            ))}
+                        </select>
+                        <select
+                            value={cond.operator}
+                            onChange={e => updateCondition(i, { operator: e.target.value as any })}
+                            style={{ ...S.input, flex: 2 }}
+                        >
+                            {OPERATORS.map(op => (
+                                <option key={op.value} value={op.value}>{op.label}</option>
+                            ))}
+                        </select>
+                        {needsValue(cond.operator) && (
+                            <input
+                                value={String(cond.value ?? '')}
+                                onChange={e => updateCondition(i, { value: e.target.value })}
+                                style={{ ...S.input, flex: 1 }}
+                                placeholder="Valeur"
+                            />
+                        )}
+                        <button onClick={() => removeCondition(i)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}>
+                            <Trash2 className="w-3 h-3" style={{ color: 'var(--studio-red)' }} />
+                        </button>
+                    </div>
+                ))}
+                <Button size="sm" variant="outline" onClick={addCondition}
+                    style={{ height: '20px', fontSize: '9px' }}>
+                    <Plus className="w-2.5 h-2.5 mr-1" />Ajouter une condition
+                </Button>
+            </div>
+        </details>
+    );
+}
+
+function ValidationRulesEditor({ rules, onChange, fieldType, S }: {
+    rules: Record<string, any>;
+    onChange: (r: Record<string, any>) => void;
+    fieldType: string;
+    S: { input: React.CSSProperties; label: React.CSSProperties };
+}) {
+    const t = useTranslation();
+    const setRules = (r: Record<string, any>) => {
+        onChange(r);
+    };
+
+    const isTextType = ['text', 'longtext', 'url', 'markdown', 'code', 'slug', 'email', 'password'].includes(fieldType);
+    const isNumericType = ['number', 'decimal', 'rating'].includes(fieldType);
+
+    return (
+        <details style={{ marginTop: '8px', fontSize: '10px' }}>
+            <summary style={{ cursor: 'pointer', color: 'var(--studio-green)', fontWeight: 600 }}>
+                ✅ Règles de validation {Object.keys(rules).filter(k => rules[k] !== undefined && rules[k] !== '').length > 0 ? '(configurées)' : ''}
+            </summary>
+            <div style={{ marginTop: '6px', padding: '6px', border: '1px solid var(--studio-border)', borderRadius: '6px', background: 'var(--studio-surface)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {isTextType && (
+                    <>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                            <div>
+                                <span style={S.label}>Longueur min</span>
+                                <input type="number" value={rules.minLength ?? ''} onChange={e => setRules({ ...rules, minLength: e.target.value ? Number(e.target.value) : undefined })}
+                                    style={{ ...S.input, width: '100%' }} />
+                            </div>
+                            <div>
+                                <span style={S.label}>Longueur max</span>
+                                <input type="number" value={rules.maxLength ?? ''} onChange={e => setRules({ ...rules, maxLength: e.target.value ? Number(e.target.value) : undefined })}
+                                    style={{ ...S.input, width: '100%' }} />
+                            </div>
+                        </div>
+                        <div>
+                            <span style={S.label}>Regex (pattern)</span>
+                            <input value={rules.regex ?? ''} onChange={e => setRules({ ...rules, regex: e.target.value })}
+                                style={{ ...S.input, width: '100%', fontFamily: 'var(--studio-mono)' }}
+                                placeholder="^[a-z0-9_-]+$" />
+                        </div>
+                        <div>
+                            <span style={S.label}>Message si regex invalide</span>
+                            <input value={rules.regexMessage ?? ''} onChange={e => setRules({ ...rules, regexMessage: e.target.value })}
+                                style={{ ...S.input, width: '100%' }}
+                                placeholder="Format attendu : lettres et chiffres uniquement" />
+                        </div>
+                    </>
+                )}
+                {isNumericType && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                        <div>
+                            <span style={S.label}>Valeur min</span>
+                            <input type="number" value={rules.min ?? ''} onChange={e => setRules({ ...rules, min: e.target.value ? Number(e.target.value) : undefined })}
+                                style={{ ...S.input, width: '100%' }} />
+                        </div>
+                        <div>
+                            <span style={S.label}>Valeur max</span>
+                            <input type="number" value={rules.max ?? ''} onChange={e => setRules({ ...rules, max: e.target.value ? Number(e.target.value) : undefined })}
+                                style={{ ...S.input, width: '100%' }} />
+                        </div>
+                    </div>
+                )}
+                {(isTextType || fieldType === 'email') && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Switch checked={rules.unique === true}
+                            onCheckedChange={v => setRules({ ...rules, unique: v || undefined })} />
+                        <span style={S.label}>Valeur unique dans la collection</span>
+                    </div>
+                )}
+                <div>
+                    <span style={S.label}>Message d'erreur personnalisé</span>
+                    <input value={rules.custom ?? ''} onChange={e => setRules({ ...rules, custom: e.target.value })}
+                        style={{ ...S.input, width: '100%' }}
+                        placeholder="Surcharge le message d'erreur par défaut" />
+                </div>
+            </div>
+        </details>
+    );
+}
+
+function FieldOptionsEditor({ field, allCollections, allFields, onValidationRulesChange, onChange }: {
+    field: SchemaField;
+    allCollections: SchemaCollection[];
+    allFields: SchemaField[];
+    onValidationRulesChange: (rules: Record<string, any>) => void;
+    onChange: (opts: FieldOptions) => void;
+}) {
   const t = useTranslation();
   const opts = parseFieldOptions(field, allCollections);
   const defaults = FIELD_OPTION_DEFAULTS[field.type] ?? {};
@@ -1477,6 +1660,8 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
         <div><span style={S.label}>{t('studio.fopts.placeholder')}</span><input value={opts.placeholder ?? ''} onChange={e => onChange({ ...opts, placeholder: e.target.value })} style={{ ...S.input, width:'100%' }} placeholder={t('studio.fopts.email_ph')} /></div>
         <div><span style={S.label}>{t('studio.fopts.default')}</span><input type="email" value={opts.defaultValue ?? ''} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
         {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1485,7 +1670,10 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
       <div style={{ ...panelStyle, display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
         <div><span style={S.label}>{t('studio.fopts.min_length')}</span><input type="number" value={opts.minLength ?? ''} onChange={e => onChange({ ...opts, minLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
         <div><span style={S.label}>{t('studio.fopts.max_length')}</span><input type="number" value={opts.maxLength ?? ''} onChange={e => onChange({ ...opts, maxLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
-        <div style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', gap:'6px' }}>{general}</div>
+        <div style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', gap:'6px' }}>{general}
+          <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+          <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
+        </div>
       </div>
     );
   }
@@ -1494,6 +1682,8 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
       <div style={panelStyle}>
         <div><span style={S.label}>{t('studio.fopts.placeholder')}</span><input value={opts.placeholder ?? ''} onChange={e => onChange({ ...opts, placeholder: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
         {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1502,6 +1692,8 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
       <div style={panelStyle}>
         <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.defaultBool ?? false} onCheckedChange={v => onChange({ ...opts, defaultBool: v })} /><span style={S.label}>{t('studio.fopts.default_bool')}</span></div>
         {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1514,6 +1706,8 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
           <input value={opts.defaultValue ?? ''} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} placeholder="#000000" style={{ ...S.input, flex:1, fontFamily:'var(--studio-mono)' }} />
         </div>
         {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1524,7 +1718,10 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
         <div><span style={S.label}>{t('studio.fopts.min')}</span><input type={inputType} value={opts.minDate ?? ''} onChange={e => onChange({ ...opts, minDate: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
         <div><span style={S.label}>{t('studio.fopts.max')}</span><input type={inputType} value={opts.maxDate ?? ''} onChange={e => onChange({ ...opts, maxDate: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
         <div style={{ gridColumn:'1/-1' }}><span style={S.label}>{t('studio.fopts.default')}</span><input type={inputType} value={opts.defaultValue ?? ''} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
-        <div style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', gap:'6px' }}>{general}</div>
+        <div style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', gap:'6px' }}>{general}
+          <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+          <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
+        </div>
       </div>
     );
   }
@@ -1542,6 +1739,9 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
           ))}
         </div>
         <Button size="sm" variant="outline" onClick={() => onChange({ ...opts, values: [...values, ''] })} style={{ height:'22px', fontSize:'9px' }}><Plus className="w-2.5 h-2.5 mr-1" />{t('studio.fopts.enum_add')}</Button>
+        {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1552,6 +1752,9 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
         <div><span style={S.label}>{t('studio.fopts.max')}</span><input type="number" value={opts.max ?? ''} onChange={e => onChange({ ...opts, max: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
         <div><span style={S.label}>{t('studio.fopts.step')}</span><input type="number" value={opts.step ?? ''} onChange={e => onChange({ ...opts, step: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
         <div><span style={S.label}>{t('studio.fopts.default')}</span><input value={opts.defaultValue ?? ''} onChange={e => onChange({ ...opts, defaultValue: e.target.value })} style={{ ...S.input, width:'100%' }} /></div>
+        {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1562,6 +1765,9 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
         <div><span style={S.label}>{t('studio.fopts.min_length')}</span><input type="number" value={opts.minLength ?? ''} onChange={e => onChange({ ...opts, minLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
         <div><span style={S.label}>{t('studio.fopts.max_length')}</span><input type="number" value={opts.maxLength ?? ''} onChange={e => onChange({ ...opts, maxLength: e.target.value ? Number(e.target.value) : undefined })} style={{ ...S.input, width:'100%' }} /></div>
         <div style={{ gridColumn:'1/-1' }}><span style={S.label}>{t('studio.fopts.pattern')}</span><input value={opts.pattern ?? ''} onChange={e => onChange({ ...opts, pattern: e.target.value })} style={{ ...S.input, width:'100%', fontFamily:'var(--studio-mono)' }} /></div>
+        {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1580,6 +1786,9 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
           ))}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'8px' }}><Switch checked={opts.multiple ?? defaults.multiple ?? false} onCheckedChange={v => onChange({ ...opts, multiple: v })} /><span style={S.label}>{t('studio.fopts.multiple_files')}</span></div>
+        {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1617,6 +1826,9 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
           <Switch checked={includeDraft} onCheckedChange={v => onChange({ ...opts, includeDraft: v })} />
           <span style={S.label}>{t('studio.fopts.include_draft')}</span>
         </div>
+        {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1635,6 +1847,8 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
         />
         {!jsonValid && <span style={{ fontSize:'9px', color:'var(--studio-red)' }}>{t('studio.fopts.json_invalid')}</span>}
         {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1802,6 +2016,8 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
           </>
         )}
         {general}
+        <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+        <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
       </div>
     );
   }
@@ -1842,6 +2058,8 @@ function FieldOptionsEditor({ field, allCollections, onChange }: { field: Schema
   return (
     <div style={panelStyle}>
       {general}
+      <ConditionEditor field={field} onChange={(newOpts) => onChange(newOpts)} otherFields={allFields.filter(f => f.key !== field.key)} S={S} />
+      <ValidationRulesEditor rules={field.validationRules ?? {}} onChange={onValidationRulesChange} fieldType={field.type} S={S} />
     </div>
   );
 }
@@ -1977,6 +2195,7 @@ function renderEditor(
           total={current.fields.length}
           selectedIdx={selectedIdx!}
           collections={collections}
+          allFields={current.fields}
           updateField={updateField}
           removeField={removeField}
           duplicateField={duplicateField}
@@ -1995,11 +2214,12 @@ function renderEditor(
 
 /* ═══════════════ FIELD ROW (expandable, draggable) ═══════════════ */
 function FieldRow({
-  field, index, total, selectedIdx, collections,
+  field, index, total, selectedIdx, collections, allFields,
   updateField, removeField, duplicateField, moveField,
 }: {
   field: SchemaField; index: number; total: number; selectedIdx: number;
   collections: SchemaCollection[];
+  allFields: SchemaField[];
   updateField: (ci: number, fk: string, d: Partial<SchemaField>) => void;
   removeField: (ci: number, fk: string) => void;
   duplicateField: (ci: number, fk: string) => void;
@@ -2110,7 +2330,13 @@ function FieldRow({
 
           {/* Type-specific options */}
           {hasOptions && (
-            <FieldOptionsEditor field={field} allCollections={collections} onChange={handleOptionsChange} />
+            <FieldOptionsEditor
+                field={field}
+                allCollections={collections}
+                allFields={allFields}
+                onValidationRulesChange={(rules) => updateField(selectedIdx, field.key, { validationRules: rules })}
+                onChange={handleOptionsChange}
+            />
           )}
 
           {/* General options for all types */}
