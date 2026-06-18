@@ -86,6 +86,11 @@ export default function StudioLayout({ project, collections: initialCollections 
           --studio-amber: #f7b955;
           --studio-mono: 'JetBrains Mono', ui-monospace, monospace;
           --studio-serif: 'Newsreader', 'Cormorant Garamond', Georgia, serif;
+
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          min-height: 0;
         }
         .studio-root .font-serif { font-family: var(--studio-serif); }
         .studio-root .font-mono { font-family: var(--studio-mono); }
@@ -149,7 +154,11 @@ export default function StudioLayout({ project, collections: initialCollections 
         .studio-grid {
           display: grid;
           grid-template-columns: 1fr;
+          grid-template-rows: minmax(0, 1fr);
           gap: 24px;
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
         }
 
         /* ── RESPONSIVE BREAKPOINTS ── */
