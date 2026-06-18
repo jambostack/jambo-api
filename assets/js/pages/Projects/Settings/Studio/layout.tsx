@@ -181,7 +181,7 @@ export default function StudioLayout({ project, collections: initialCollections 
           }
         }
 
-        /* Mobile: horizontal scroll nav */
+        /* Mobile: horizontal scroll nav — compact, icon-first */
         .studio-mobile-nav {
           display: flex; gap: 4px; overflow-x: auto;
           padding-bottom: 2px; -webkit-overflow-scrolling: touch;
@@ -189,25 +189,32 @@ export default function StudioLayout({ project, collections: initialCollections 
         }
         .studio-mobile-nav::-webkit-scrollbar { display: none; }
         .studio-mobile-nav .mob-tab {
-          flex-shrink: 0; display: flex; align-items: center; gap: 4px;
-          padding: 6px 10px; border-radius: 999px; font-size: 11px;
+          flex-shrink: 0; display: flex; align-items: center; gap: 5px;
+          padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 600;
           border: 1px solid var(--studio-border);
           background: var(--studio-surface);
           color: var(--studio-text-dim);
           cursor: pointer; white-space: nowrap;
-          transition: all .15s ease;
+          transition: all .12s ease;
         }
         .studio-mobile-nav .mob-tab.sb-active {
           background: var(--studio-accent-dim);
           border-color: var(--studio-border-active);
           color: var(--studio-text);
+          box-shadow: 0 0 0 1px var(--studio-border-active);
         }
-        .studio-mobile-nav .mob-tab svg { width: 12px; height: 12px; }
+        .studio-mobile-nav .mob-tab svg { width: 13px; height: 13px; flex-shrink: 0; }
         .studio-mobile-nav .mob-tab.sb-active svg { color: var(--studio-accent); }
-        @media (max-width: 480px) {
+        /* Hide label on tiny screens — icons only */
+        @media (max-width: 400px) {
           .studio-mobile-nav { gap: 3px; margin-top: 6px; }
-          .studio-mobile-nav .mob-tab { padding: 5px 7px; font-size: 10px; gap: 3px; }
-          .studio-mobile-nav .mob-tab svg { width: 11px; height: 11px; }
+          .studio-mobile-nav .mob-tab { padding: 5px; min-width: 32px; justify-content: center; }
+          .studio-mobile-nav .mob-tab .label-text { display: none; }
+          .studio-mobile-nav .mob-tab svg { width: 14px; height: 14px; }
+        }
+        @media (min-width: 401px) and (max-width: 540px) {
+          .studio-mobile-nav .mob-tab { padding: 5px 8px; font-size: 10px; gap: 4px; }
+          .studio-mobile-nav .mob-tab svg { width: 12px; height: 12px; }
         }
 
         @media (min-width: 769px) {
@@ -265,13 +272,20 @@ export default function StudioLayout({ project, collections: initialCollections 
       </div>
 
       {/* ── Mobile: horizontal scroll tabs ── */}
-      <div className="studio-mobile-nav" style={{ marginTop: '16px' }}>
+      <div className="studio-mobile-nav">
         {nav.map(item => {
           const isActive = active === item.id;
           const Icon = item.icon;
+          // Short labels for mobile
+          const shortLabel = item.id === 'schema' ? 'Schema' :
+            item.id === 'export' ? 'Export' :
+            item.id === 'search' ? 'Recherche' :
+            item.id === 'audit' ? 'Audit' :
+            item.id === 'graphql' ? 'GraphQL' :
+            item.id === 'aiguide' ? 'IA' : item.label;
           return (
             <button key={item.id} onClick={() => setActive(item.id)} className={`mob-tab${isActive ? ' sb-active' : ''}`}>
-              <Icon /><span className="label-text">{item.label}</span>
+              <Icon /><span className="label-text">{shortLabel}</span>
             </button>
           );
         })}
