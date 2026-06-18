@@ -23,7 +23,7 @@ class AppSettingsController extends AbstractController
         private EntityManagerInterface $em,
         private UploadHandler $uploadHandler,
         private CacheInterface $cache,
-        private ?WebhookSecretService $secretService = null,
+        private WebhookSecretService $secretService,
     ) {}
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -267,13 +267,9 @@ class AppSettingsController extends AbstractController
                     }
                     if (array_key_exists('clientSecret', $p)) {
                         $val = trim((string) $p['clientSecret']);
-                        if ($val !== '') {
-                            $current[$provider]['clientSecret'] = $this->secretService
-                                ? 'enc:' . $this->secretService->encrypt($val)
-                                : $val;
-                        } else {
-                            $current[$provider]['clientSecret'] = null;
-                        }
+                        $current[$provider]['clientSecret'] = $val !== ''
+                            ? 'enc:' . $this->secretService->encrypt($val)
+                            : null;
                     }
                 }
 
