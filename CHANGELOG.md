@@ -107,6 +107,29 @@ First stable release.
 
 ---
 
+## [1.9.5] — 2026-06-18
+
+### Added
+
+- **Authentification à deux facteurs (2FA)** — TOTP (Google Authenticator / Authy, RFC 6238) et Email (code 6 chiffres) pour les utilisateurs admin CMS (`User`) et les utilisateurs finaux (`EndUser`). Activation facultative par utilisateur admin, toggle activer/désactiver par projet pour les end-users.
+- **`TwoFactorService`** — génération/vérification TOTP avec fenêtre ±1 période, codes de secours (8 codes hashés à usage unique), génération QR code via `endroid/qr-code`.
+- **`TwoFactorMailer`** — envoi de code de vérification par email avec template responsive.
+- **`SecurityController`** — 7 endpoints REST sous `/api/settings/security` : statut, setup TOTP, confirmation TOTP, activation email, confirmation email, désactivation (avec mot de passe), régénération codes de secours.
+- **`TwoFactorChallengeController`** — page de challenge 2FA après login admin (`GET/POST /two-factor-challenge`), vérification TOTP/email/backup, rate limiting 5 tentatives/60s.
+- **`TwoFactorRedirectSubscriber`** — intercepte `LoginSuccessEvent` pour rediriger vers le challenge 2FA si activé.
+- **API End-User 2FA** — `POST /api/{projectId}/auth/verify-2fa` avec JWT éphémère 60s pour valider le code et obtenir les tokens JWT.
+- **Frontend** — page `two-factor-challenge.tsx` avec `InputOTP` (shadcn/ui), onglet Sécurité dans les réglages (QR code, setup TOTP/email, backup codes), toggle dans les paramètres projet.
+- **i18n** — clé `settings.nav.security` dans les 4 langues (FR/EN/AR/ES).
+
+### Security
+
+- Ré-authentification par mot de passe obligatoire avant toute modification 2FA (setup, désactivation).
+- Hash SHA-256 des codes email dans les JWT (jamais en clair).
+- Rate limiting dédié `two_factor_limiter` : 5 tentatives / 60 secondes.
+- Régénération de l'ID de session après authentification 2FA réussie.
+
+---
+
 ## [1.9.4] — 2026-06-18
 
 ### Added
@@ -252,3 +275,4 @@ First stable release.
 [1.9.2]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.2
 [1.9.3]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.3
 [1.9.4]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.4
+[1.9.5]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.5
