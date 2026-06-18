@@ -105,4 +105,137 @@ First stable release.
 - Open redirect — validate host in referer before redirect
 - AI execute tools — error message sanitisation (no raw exception exposure)
 
+---
+
+## [1.9.3] — 2026-06-18
+
+### Added
+
+- **Repeater à variantes (Dynamic Zones)** — chaque item d'un Repeater peut maintenant avoir un ensemble de sous-champs différent (variante). Définition de variantes nommées dans le SchemaBuilder, choix de la variante par item dans le ContentForm via un dropdown. Rétrocompatible avec l'ancien format `subFields`.
+- SchemaBuilder : éditeur de variantes avec cards `<details>` collapsibles, sous-champs par variante, variante par défaut, migration automatique depuis l'ancien format `subFields`.
+
+---
+
+## [1.9.2] — 2026-06-17
+
+### Added
+
+- **Lexical structuré** — 5 nouveaux blocs de contenu dans l'éditeur Rich Text : **Code Block** (avec dropdown de langage), **Blockquote** (citation), **Horizontal Rule** (séparateur), **Tableau** (popover 3×3, `@lexical/table`), **Callout** (info/warning/success/danger avec icônes et couleurs).
+- **Champ Code avancé** — remplacement du textarea brut par **CodeMirror 6** avec coloration syntaxique (13 langages supportés), thème One Dark, numéros de ligne. Composant `CodeMirrorEditor` réutilisable.
+- SchemaBuilder : option `language` pour le type `code` (JavaScript, TypeScript, JSON, HTML, CSS, SQL, PHP, Python, Markdown, XML, YAML, Shell, Plain Text).
+
+---
+
+## [1.9.1] — 2026-06-17
+
+### Fixed
+
+- **Pagination sur la corbeille** (`/trash`) — `findTrashedPaginated()` remplace `findTrashed()` sans limite.
+- **Statuts système** — `draft` et `scheduled` sont toujours valides, même sans workflow custom.
+- **Service `FieldValueHydrator`** — centralise les 5 copies du `match($field->type)` en un seul service partagé.
+- **i18n** — 13 clés de traduction ajoutées (FR/EN/AR/ES) : `content.assigned_to`, `content.unassigned`, `content.by`, `content.unknown`, `content.search_in`, `repeater.item_n`, `repeater.add_item`, `repeater.select`, etc.
+- **Fuites d'informations dans les erreurs** — 3 `catch (\Throwable $e)` dans `StudioController` loggent l'exception côté serveur et renvoient un message générique.
+
+### Added
+
+- **Tests automatisés** — `CollectionTest` (7 tests workflow helpers), `ContentControllerTest` (5 tests statuts + assignation), `EavDataFormatterServiceTest` (2 tests `assigned_to`).
+
+### Performance
+
+- **Index composite** `content_field_value(content_entry_id, field_id)` — accélère les requêtes EAV.
+- **Eager-loading** — `findByCollectionPaginated()` charge maintenant `fieldValues`, `createdBy`, `updatedBy`, `assignedTo` en une seule requête.
+- **`findProjectMediaUuids()`** — remplacement de la boucle N+1 par une requête `IN()`.
+
+---
+
+## [1.9.0] — 2026-06-17
+
+### Added
+
+- **Workflows éditoriaux** — **statuts custom par collection** définis dans `Collection.settings.workflow` (slug, label, couleur, `published`). Boutons dynamiques dans le ContentForm, badges couleur dans la liste. Rétrocompatible : si aucun workflow n'est défini, `draft`/`published`/`scheduled` par défaut.
+- **Assignation de contenu** — FK `assigned_to_id` sur `content_entry` → `User`. Selecteur d'assignation dans la sidebar du ContentForm, colonne « Assigné à » dans la liste, filtre « Mes contenus ». Validation : l'assigné doit être membre du projet (IDOR protégé).
+- SchemaBuilder : nouveau panneau **Workflow** pour configurer les statuts (label, couleur, published, statut par défaut).
+- API : `workflow` exposé dans `GET /public-api/collections/{slug}`, `assigned_to` dans les réponses d'entrées, filtre `status` acceptant tous les statuts custom.
+
+---
+
+## [1.8.1] — 2026-06-17
+
+### Added
+
+- **Drag-and-drop** dans le RepeaterField — remplacement des boutons ↑↓ par `@hello-pangea/dnd` avec handle `GripVertical`.
+- **Support richtext** dans les sous-champs du Repeater — utilisation de l'éditeur `LexicalEditor` complet.
+- **Support media** dans les sous-champs — bouton « Browse » + `MediaLibraryModal` natif pour choisir des fichiers.
+
+---
+
+## [1.8.0] — 2026-06-17
+
+### Added
+
+- **Repeater structuré (nested fields)** — nouveau type `repeater` avec **sous-champs configurables** dans le SchemaBuilder. L'utilisateur définit des sous-champs nommés (slug, label, type, required), et le ContentForm affiche un composant `RepeaterField` avec add/remove/reorder d'items contenant les sous-champs. Stockage via `jsonValue` existant — aucune migration DB.
+
+---
+
+## [1.7.0] — 2026-06-17
+
+### Added
+
+- **Publication planifiée** — nouveau statut `scheduled` avec champ `scheduledAt` (datetime) sur `content_entry`. Bouton « Planifier » + datepicker dans le ContentForm. Badge bleu « Planifié » dans la liste. Filtre « Planifié » dans le dropdown.
+- **Commande `app:publish-scheduled`** — à exécuter via cron, publie automatiquement les entrées dont `scheduledAt <= now`. Transition `scheduled → published`, `scheduledAt → null`, `publishedAt` défini.
+- **Permission `can.publish_content`** — gate sur les boutons Planifier/Publier/Replanifier.
+- **i18n** — clés `schedule_btn`, `schedule_date`, `schedule_time`, `schedule_confirm`, `publish_now`, `reschedule` dans les 4 langues.
+
+---
+
+## [1.6.1] — 2026-06-17
+
+### Fixed
+
+- Correctifs validation pour `rating` (Integer limitations), `tags` (pas de Unique/Character count), `url`/`markdown` (text options).
+- Icônes des nouveaux types dans le SchemaBuilder (`ICON_MAP`).
+
+---
+
+## [1.6.0] — 2026-06-17
+
+### Added
+
+- **7 nouveaux types de champs** : `url`, `markdown`, `code`, `icon` (Lucide icon name), `uuid`, `tags`, `rating` (star score).
+- Composants React dédiés : `UrlField`, `MarkdownField`, `CodeField`, `IconField`, `UuidField`, `TagsField`, `RatingField`.
+
+---
+
+## [1.5.0] — 2026-06-07
+
+### Added
+
+- **JSONField** — éditeur JSON avec coloration syntaxique (Prism.js) et validation inline.
+- **DateField amélioré** — support mode range (date de début → date de fin).
+- **Options de champs étendues** — `helpText`, `hideInList`, `readOnly` dans le FieldOptionsEditor du SchemaBuilder.
+
+---
+
+## [1.4.0] — 2026-06-05
+
+### Added
+
+- **Opérations bulk dans la liste de contenu** — publier, dépublier, supprimer, restaurer plusieurs entrées en une action.
+- **Colonnes personnalisables** — l'utilisateur peut masquer/afficher les colonnes dans la liste de contenu.
+- **Améliorations MediaField** — prévisualisation des miniatures, chargement lazy, modal de sélection refondu.
+
+---
+
 [1.0.0]: https://github.com/jambostack/jambo-api/releases/tag/v1.0.0
+[1.0.1]: https://github.com/jambostack/jambo-api/releases/tag/v1.0.1
+[1.4.0]: https://github.com/jambostack/jambo-api/releases/tag/v1.4.0
+[1.5.0]: https://github.com/jambostack/jambo-api/releases/tag/v1.5.0
+[1.6.0]: https://github.com/jambostack/jambo-api/releases/tag/v1.6.0
+[1.6.1]: https://github.com/jambostack/jambo-api/releases/tag/v1.6.1
+[1.7.0]: https://github.com/jambostack/jambo-api/releases/tag/v1.7.0
+[1.8.0]: https://github.com/jambostack/jambo-api/releases/tag/v1.8.0
+[1.8.1]: https://github.com/jambostack/jambo-api/releases/tag/v1.8.1
+[1.9.0]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.0
+[1.9.1]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.1
+[1.9.2]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.2
+[1.9.3]: https://github.com/jambostack/jambo-api/releases/tag/v1.9.3
