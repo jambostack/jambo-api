@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/ui/dropdown-menu';
-import { LayoutGrid, List, ArrowUpDown, Calendar, Plus, X, Folder } from 'lucide-react';
+import { LayoutGrid, List, ArrowUpDown, Calendar, Plus, X, Folder, ChevronDown, ChevronRight } from 'lucide-react';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -78,6 +78,7 @@ export function MediaLibraryModal({
     const [assetToDelete, setAssetToDelete] = useState<Asset | null>(null);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
+    const [showFolderSidebar, setShowFolderSidebar] = useState(false); // mobile : toggle accordéon dossiers
 
     // Reset the selected assets when the modal is opened.
     // Dépend de `isOpen` SEULEMENT : éviter de relancer cet effet à chaque
@@ -395,30 +396,77 @@ export function MediaLibraryModal({
                             folderId={selectedFolderId}
                         />
                     ) : (
-                        <div className="flex gap-4 min-h-[400px]">
-                            {/* Sidebar — arbre des dossiers */}
-                            <aside className="w-56 flex-shrink-0 border-r border-border pr-3 overflow-y-auto max-h-[60vh]">
-                                <div className="flex items-center gap-2 mb-2 px-1">
+                        <div className="flex flex-col md:flex-row gap-4 min-h-[400px]">
+                            {/* Sidebar — arbre des dossiers (desktop : colonne fixe ; mobile : accordéon pliable) */}
+                            <aside className="md:w-56 md:flex-shrink-0 md:border-r md:border-border md:pr-3 md:overflow-y-auto md:max-h-[60vh]">
+                                {/* Mobile toggle */}
+                                <button
+                                    className="flex items-center justify-between w-full md:hidden py-2 px-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                    onClick={() => setShowFolderSidebar(!showFolderSidebar)}
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Folder className="h-4 w-4" />
+                                        Dossiers
+                                        {selectedFolderId !== null && (
+                                            <span className="inline-flex items-center justify-center h-4 min-w-4 rounded-full bg-primary/20 text-[10px] font-bold text-primary px-1">
+                                                ●
+                                            </span>
+                                        )}
+                                    </span>
+                                    {showFolderSidebar
+                                        ? <ChevronDown className="h-4 w-4" />
+                                        : <ChevronRight className="h-4 w-4" />
+                                    }
+                                </button>
+                                {/* Desktop header */}
+                                <div className="hidden md:flex items-center gap-2 mb-2 px-1">
                                     <Folder className="h-4 w-4 text-muted-foreground" />
                                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dossiers</span>
                                 </div>
-                                <MediaFolderTree
-                                    projectUuid={project.uuid}
-                                    selectedFolderId={selectedFolderId}
-                                    onSelectFolder={(folderId) => { setSelectedFolderId(folderId); setCurrentPage(1); }}
-                                />
+                                {/* Tree — visible desktop / toggled mobile */}
+                                <div className={`${showFolderSidebar ? 'block' : 'hidden'} md:block`}>
+                                    <MediaFolderTree
+                                        projectUuid={project.uuid}
+                                        selectedFolderId={selectedFolderId}
+                                        onSelectFolder={(folderId) => { setSelectedFolderId(folderId); setCurrentPage(1); }}
+                                    />
+                                </div>
                             </aside>
 
                             {/* Zone principale — filtres + grille */}
-                            <div className="flex-1 min-w-0 space-y-4">
-                                <div className="flex flex-col md:flex-row gap-2 justify-between">
-                                    <div className="flex flex-wrap gap-2">
+                            <div className="flex-1 min-w-0 space-y-3 md:space-y-4">
+                                <div className="flex flex-col gap-2">
+                                    {/* Ligne 1 : Search + Upload */}
+                                    <div className="flex items-center gap-2">
                                         <SearchBar
                                             placeholder={t('assets.search_ph')}
-                                            className="w-full md:w-auto"
+                                            className="flex-1 min-w-0"
                                             value={search}
                                             onChange={handleSearchChange}
                                         />
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-1 flex-shrink-0"
+                                            onClick={() => setShowUploader(!showUploader)}
+                                        >
+                                            <Plus className="h-3.5 w-3.5" />
+                                            <span className="hidden sm:inline">{t('assets.modal_upload')}</span>
+                                        </Button>
+                                        <Tabs value={viewMode} onValueChange={handleViewModeChange} className="hidden md:flex flex-shrink-0">
+                                            <TabsList>
+                                                <TabsTrigger value="grid" className="px-3">
+                                                    <LayoutGrid className="h-4 w-4" />
+                                                </TabsTrigger>
+                                                <TabsTrigger value="list" className="px-3">
+                                                    <List className="h-4 w-4" />
+                                                </TabsTrigger>
+                                            </TabsList>
+                                        </Tabs>
+                                    </div>
+
+                                    {/* Ligne 2 : Filtres (type, date, sort, per_page) */}
+                                    <div className="flex flex-wrap items-center gap-1.5">
                                         <MultiSelect
                                             instanceId="asset-type-select"
                                             options={assetTypeOptions}
@@ -430,7 +478,7 @@ export function MediaLibraryModal({
 
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" className="w-[140px]">
+                                                <Button variant="outline" className="flex-1 sm:flex-none">
                                                     <Calendar className="h-4 w-4 mr-2" />
                                                     {getDateFilterDisplayLocal(dateFilter)}
                                                 </Button>
@@ -448,7 +496,7 @@ export function MediaLibraryModal({
 
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" className="w-[140px]">
+                                                <Button variant="outline" className="flex-1 sm:flex-none">
                                                     <ArrowUpDown className="h-4 w-4 mr-2" />
                                                     {getSortOptionDisplayLocal(sortOption)}
                                                 </Button>
@@ -464,27 +512,6 @@ export function MediaLibraryModal({
                                         </DropdownMenu>
                                     </div>
 
-                                    <div className="flex gap-2">
-                                        <Button
-                                            variant="outline"
-                                            className="px-3"
-                                            onClick={() => setShowUploader(!showUploader)}
-                                        >
-                                            <Plus className="h-4 w-4 mr-2" />
-                                            {t('assets.modal_upload')}
-                                        </Button>
-
-                                        <Tabs value={viewMode} onValueChange={handleViewModeChange} className="hidden md:flex">
-                                            <TabsList>
-                                                <TabsTrigger value="grid" className="px-3">
-                                                    <LayoutGrid className="h-4 w-4" />
-                                                </TabsTrigger>
-                                                <TabsTrigger value="list" className="px-3">
-                                                    <List className="h-4 w-4" />
-                                                </TabsTrigger>
-                                            </TabsList>
-                                        </Tabs>
-                                    </div>
                                 </div>
 
                                 {loading ? (
