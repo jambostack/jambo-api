@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Plus, Edit, Trash, Play, Clock, List, Workflow } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import type { Project } from '@/types';
 import AutomationForm from './AutomationForm';
 import AutomationRuns from './AutomationRuns';
 import FlowBuilderPage from '../../../Automations/FlowBuilder/FlowBuilderPage';
@@ -14,18 +15,15 @@ interface Automation {
     name: string;
     is_active: boolean;
     debug_mode: boolean;
-    trigger_type: string;
-    trigger_config: Record<string, any> | null;
-    conditions: Array<{field: string; operator: string; value: any}> | null;
-    action_type: string;
-    action_config: Record<string, any> | null;
+    flow_graph: Record<string, any> | null;
     last_run_at: string | null;
     created_at: string;
     updated_at: string;
 }
 
 interface Props {
-    projectUuid: string;
+    project?: Project;
+    projectUuid?: string;
 }
 
 const TRIGGER_LABELS: Record<string, string> = {
@@ -44,7 +42,8 @@ const ACTION_LABELS: Record<string, string> = {
     'send_notification': 'Envoyer une notification',
 };
 
-export default function AutomationsIndex({ projectUuid }: Props) {
+export default function AutomationsIndex({ project, projectUuid }: Props) {
+    const uuid = project?.uuid || projectUuid || '';
     const [automations, setAutomations] = useState<Automation[]>([]);
     const [loading, setLoading] = useState(true);
     const [formOpen, setFormOpen] = useState(false);
@@ -55,7 +54,7 @@ export default function AutomationsIndex({ projectUuid }: Props) {
 
     const load = async () => {
         try {
-            const r = await axios.get(`/api/projects/${projectUuid}/automations`);
+            const r = await axios.get(`/api/projects/${uuid}/automations`);
             setAutomations(r.data.data || []);
         } catch {
             toast.error('Erreur de chargement des automatisations');
@@ -64,7 +63,7 @@ export default function AutomationsIndex({ projectUuid }: Props) {
         }
     };
 
-    useEffect(() => { load(); }, [projectUuid]);
+    useEffect(() => { load(); }, [uuid]);
 
     const handleDelete = async (id: number) => {
         if (!confirm('Supprimer cette automatisation ?')) return;
@@ -89,7 +88,7 @@ export default function AutomationsIndex({ projectUuid }: Props) {
     if (builderOpen) {
         return (
             <FlowBuilderPage
-                projectUuid={projectUuid}
+                projectUuid={uuid}
                 automationId={builderId}
                 onClose={() => { setBuilderOpen(false); load(); }}
                 onSaved={() => { setBuilderOpen(false); load(); }}
@@ -98,7 +97,7 @@ export default function AutomationsIndex({ projectUuid }: Props) {
     }
 
     if (runsFor) {
-        return <AutomationRuns projectUuid={projectUuid} automation={runsFor} onBack={() => setRunsFor(null)} />;
+        return <AutomationRuns projectUuid={uuid} automation={runsFor} onBack={() => setRunsFor(null)} />;
     }
 
     return (
@@ -106,7 +105,7 @@ export default function AutomationsIndex({ projectUuid }: Props) {
             <div className="flex items-center justify-between">
                 <div>
                     <h3 className="text-lg font-semibold">Automatisations</h3>
-                    <p className="text-sm text-muted-foreground">Déclencheur → Conditions → Action</p>
+                    <p className="text-sm text-muted-foreground">Flows visuels avec nodes, branches et actions</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <Button
@@ -145,8 +144,12 @@ export default function AutomationsIndex({ projectUuid }: Props) {
                             {automations.map(a => (
                                 <tr key={a.id} className="hover:bg-muted/30">
                                     <td className="px-4 py-2.5 font-medium">{a.name}</td>
-                                    <td className="px-4 py-2.5 text-xs">{TRIGGER_LABELS[a.trigger_type] || a.trigger_type}</td>
-                                    <td className="px-4 py-2.5 text-xs">{ACTION_LABELS[a.action_type] || a.action_type}</td>
+                                    <td className="px-4 py-2.5 text-xs">
+                                        {a.flow_graph?.nodes?.[0]?.data?.label || '—'}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-xs">
+                                        {a.flow_graph?.nodes?.[a.flow_graph.nodes.length - 1]?.data?.label || '—'}
+                                    </td>
                                     <td className="px-4 py-2.5">
                                         <Badge variant={a.is_active ? 'default' : 'secondary'} className="cursor-pointer text-xs" onClick={() => handleToggle(a)}>
                                             {a.is_active ? 'Actif' : 'Inactif'}
@@ -180,7 +183,7 @@ export default function AutomationsIndex({ projectUuid }: Props) {
 
             {formOpen && (
                 <AutomationForm
-                    projectUuid={projectUuid}
+                    projectUuid={uuid}
                     automation={editing}
                     onClose={() => setFormOpen(false)}
                     onSaved={() => { setFormOpen(false); load(); }}
