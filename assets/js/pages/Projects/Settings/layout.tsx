@@ -49,7 +49,7 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
 
             <div className="flex flex-col lg:flex-row lg:space-y-0 lg:space-x-12 rtl:lg:space-x-reverse">
                 <aside className="w-full lg:w-48">
-                    <nav className="flex flex-col space-y-1">
+                    <nav className="flex flex-col space-y-1 max-h-[calc(100vh-10rem)] overflow-y-auto">
                         {sidebarNavItems
                             .filter((item) => can[item.permission])
                             .map((item, index) => (
