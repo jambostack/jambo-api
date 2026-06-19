@@ -451,34 +451,34 @@ export default function AssetDetailsModal({
                                             className="flex items-center justify-between w-full text-xs font-semibold"
                                             onClick={() => setShowTransformations(!showTransformations)}
                                         >
-                                            Transformations
+                                            {t('assets.modal_transforms')}
                                             {showTransformations ? <ChevronUp className="h-3 w-3 flex-shrink-0 ml-1" /> : <ChevronDown className="h-3 w-3 flex-shrink-0 ml-1" />}
                                         </button>
                                         {showTransformations && (
                                             <div>
                                                 <div className="space-y-1.5 mt-1">
                                                     {[
-                                                        { label: 'Thumbnail (200×200 WebP)', params: 'w=200&h=200&fit=crop&fmt=webp&q=80' },
-                                                        { label: 'Medium (800×600)', params: 'w=800&h=600&fit=scale-down' },
-                                                        { label: 'WebP optimisé', params: 'fmt=webp&q=80' },
-                                                        { label: 'AVIF optimisé', params: 'fmt=avif&q=70' },
-                                                    ].map(t => {
-                                                        const url = `/cdn/media/${asset.uuid}?${t.params}`;
+                                                        { labelKey: 'assets.modal_thumb_label', params: 'w=200&h=200&fit=crop&fmt=webp&q=80' },
+                                                        { labelKey: 'assets.modal_medium_label', params: 'w=800&h=600&fit=scale-down' },
+                                                        { labelKey: 'assets.modal_webp_label', params: 'fmt=webp&q=80' },
+                                                        { labelKey: 'assets.modal_avif_label', params: 'fmt=avif&q=70' },
+                                                    ].map(transform => {
+                                                        const url = `/cdn/media/${asset.uuid}?${transform.params}`;
                                                         return (
-                                                            <div key={t.params} className="flex items-center justify-between text-xs">
-                                                                <span className="text-muted-foreground truncate flex-1 mr-2">{t.label}</span>
+                                                            <div key={transform.params} className="flex items-center justify-between text-xs">
+                                                                <span className="text-muted-foreground truncate flex-1 mr-2">{t(transform.labelKey)}</span>
                                                                 <button
                                                                     className="text-primary hover:underline shrink-0"
-                                                                    onClick={() => { navigator.clipboard.writeText(url); toast.success('URL copiée'); }}
+                                                                    onClick={() => { navigator.clipboard.writeText(url); toast.success(t('assets.modal_url_copied_toast')); }}
                                                                 >
-                                                                    Copier
+                                                                    {t('assets.modal_copy')}
                                                                 </button>
                                                             </div>
                                                         );
                                                     })}
                                                 </div>
                                                 <p className="text-xs text-muted-foreground mt-2">
-                                                    Utilisez <code className="text-xs bg-muted px-1 rounded">/cdn/media/{'{{uuid}}'}?w=800&amp;h=600&amp;fit=crop&amp;fmt=webp</code>
+                                                    {t('assets.modal_transform_usage')} <code className="text-xs bg-muted px-1 rounded">{t('assets.modal_transform_code_hint')}</code>
                                                 </p>
                                             </div>
                                         )}
