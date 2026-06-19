@@ -112,7 +112,7 @@ export default function AssetTable({
                                 </TableCell>
                             )}
                             <TableCell className="py-2 align-middle text-center">
-                                {asset.thumbnail_url ? (
+                                {asset.mime_type?.startsWith('image/') && asset.thumbnail_url ? (
                                     <div className="h-10 w-10 overflow-hidden">
                                         <img
                                             src={asset.thumbnail_url}
