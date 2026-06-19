@@ -3,6 +3,7 @@
 namespace App\Service\Flow\Handlers\Action;
 
 use App\Repository\ContentEntryRepository;
+use App\Repository\ProjectRepository;
 use App\Service\EavFieldHelperService;
 use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowNodeHandler;
@@ -14,6 +15,7 @@ class UpdateEntryHandler implements FlowNodeHandler
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ContentEntryRepository $entryRepo,
+        private readonly ProjectRepository $projectRepo,
         private readonly EavFieldHelperService $eavHelper,
     ) {}
 
@@ -22,7 +24,8 @@ class UpdateEntryHandler implements FlowNodeHandler
         $config = $ctx->variables['_node_config'] ?? [];
         $entryUuid = $config['entry_uuid'] ?? '';
 
-        $entry = $this->entryRepo->findOneBy(['uuid' => $entryUuid]);
+        $project = $this->projectRepo->findOneBy(['uuid' => $ctx->projectUuid]);
+        $entry = $this->entryRepo->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
         if (!$entry) {
             return new NodeOutput(data: ['updated' => false, 'error' => "Entry '$entryUuid' not found"]);
         }

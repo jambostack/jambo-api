@@ -43,12 +43,19 @@ class HttpRequestHandler implements FlowNodeHandler
         if (!in_array($scheme, ['http', 'https'], true)) {
             throw new \RuntimeException('Only http/https allowed');
         }
-        $ip = gethostbyname($host);
-        if ($ip === $host) {
+        // Bloquer les IPs internes/reservees (IPv4 + IPv6)
+        $records = dns_get_record($host, DNS_A | DNS_AAAA);
+        if (empty($records)) {
             throw new \RuntimeException('Cannot resolve host');
         }
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-            throw new \RuntimeException('Private/internal IP blocked');
+
+        foreach ($records as $record) {
+            $ip = $record['ip'] ?? $record['ipv6'] ?? '';
+            if ($ip === '') continue;
+
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+                throw new \RuntimeException('Private/internal IP blocked');
+            }
         }
     }
 

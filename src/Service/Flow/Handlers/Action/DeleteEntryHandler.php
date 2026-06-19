@@ -3,6 +3,7 @@
 namespace App\Service\Flow\Handlers\Action;
 
 use App\Repository\ContentEntryRepository;
+use App\Repository\ProjectRepository;
 use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowNodeHandler;
 use App\Service\Flow\NodeOutput;
@@ -13,6 +14,7 @@ class DeleteEntryHandler implements FlowNodeHandler
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ContentEntryRepository $entryRepo,
+        private readonly ProjectRepository $projectRepo,
     ) {}
 
     public function execute(array $input, FlowContext $ctx): NodeOutput
@@ -20,7 +22,8 @@ class DeleteEntryHandler implements FlowNodeHandler
         $config = $ctx->variables['_node_config'] ?? [];
         $entryUuid = $config['entry_uuid'] ?? '';
 
-        $entry = $this->entryRepo->findOneBy(['uuid' => $entryUuid]);
+        $project = $this->projectRepo->findOneBy(['uuid' => $ctx->projectUuid]);
+        $entry = $this->entryRepo->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
         if (!$entry) {
             return new NodeOutput(data: ['deleted' => false, 'error' => "Entry '$entryUuid' not found"]);
         }
