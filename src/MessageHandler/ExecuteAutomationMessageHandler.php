@@ -88,11 +88,39 @@ class ExecuteAutomationMessageHandler
         $headers = $config['headers'] ?? [];
         $body    = $config['body'] ?? '';
 
+        // Protection SSRF : valider l'URL et bloquer les IPs internes
+        $this->validateUrl($url);
+
         $client = HttpClient::create(['timeout' => 10]);
         $client->request($method, $url, [
             'headers' => $headers,
             'body'    => $body,
         ]);
+    }
+
+    private function validateUrl(string $url): void
+    {
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+        $host   = parse_url($url, PHP_URL_HOST);
+
+        if ($host === null || $host === false || $host === '') {
+            throw new \RuntimeException('Invalid webhook URL: missing host');
+        }
+
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            throw new \RuntimeException('Invalid webhook URL: only http/https allowed');
+        }
+
+        // Bloquer les IPs internes/réservées
+        $ip = gethostbyname($host);
+        if ($ip === $host) {
+            // gethostbyname() returned the input unchanged = résolution échouée
+            throw new \RuntimeException('Cannot resolve webhook host');
+        }
+
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            throw new \RuntimeException('Webhook URL resolves to private/internal IP');
+        }
     }
 
     private function executeCreateEntry(ExecuteAutomationMessage $msg): void
