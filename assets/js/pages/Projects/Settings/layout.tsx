@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { NavItem, Project, UserCan } from '@/types/index.d';
-import { Settings as SettingsIcon, Globe, Users, Key, Share2, UserCog, FileText, Wand2, Plug, Mail, HardDrive, Clock, Shield } from 'lucide-react';
+import { Settings as SettingsIcon, Globe, Users, Key, Share2, UserCog, FileText, Wand2, Plug, Mail, HardDrive, Clock, Shield, Zap } from 'lucide-react';
 import { PropsWithChildren } from 'react';
 import { useTranslation } from '@/lib/i18n';
 
@@ -36,6 +36,7 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
         { title: t('projects.settings.nav_api_docs'), href: `${basePath}/api-docs`, icon: FileText, permission: 'access_api_access_settings' },
         { title: t('projects.settings.nav_mcp_access'), href: `${basePath}/mcp-access`, icon: Plug, permission: 'access_api_access_settings' },
         { title: t('projects.settings.nav_webhooks'), href: `${basePath}/webhooks`, icon: Share2, permission: 'access_webhooks_settings' },
+        { title: 'Automatisations', href: `${basePath}/automations`, icon: Zap, permission: 'access_project_settings' },
         { title: t('projects.settings.nav_mailer'), href: `${basePath}/mailer`, icon: Mail, permission: 'access_project_settings' },
         { title: t('projects.settings.nav_security'), href: `${basePath}/security`, icon: Shield, permission: 'access_project_settings' },
         { title: t('projects.settings.nav_end_users'), href: `${basePath}/end-users`, icon: UserCog, permission: 'access_end_users_settings' },
