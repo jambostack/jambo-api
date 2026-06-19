@@ -65,7 +65,7 @@ export default function Show({ project, collection, contentEntry, formData, isEd
 
                 <Separator className="my-6 md:hidden" />
 
-                <div className="flex-1 max-w-full md:w-2xl lg:w-xl xl:w-3xl">
+                <div className="flex-1 max-w-full md:w-2xl lg:w-xl xl:w-full">
                     {!showContentForm && <ContentList collection={collection} project={project} />}
                     {showContentForm && (
                         <ContentForm 
