@@ -85,8 +85,8 @@ export default function ProjectSidebar({ project }: Props) {
 
     return (
         <div>
-            <aside className="w-full lg:w-64 space-y-4 sticky top-4">
-                <div className="flex items-center justify-between">
+            <aside className="w-full lg:w-64 space-y-4 sticky top-4 max-h-[calc(100vh-6rem)] flex flex-col">
+                <div className="flex items-center justify-between shrink-0">
                     <h3 className="font-medium">{t('projects.sidebar.title')}</h3>
                     {can.create_collection && (
                     <Button
@@ -105,9 +105,10 @@ export default function ProjectSidebar({ project }: Props) {
                     value={searchQuery}
                     onChange={setSearchQuery}
                     placeholder={t('projects.sidebar.search')}
-                    className="px-1"
+                    className="px-1 shrink-0"
                 />
 
+                <div className="flex-1 min-h-0 overflow-y-auto">
                 <DragDropContext onDragEnd={handleDragEnd}>
                     <Droppable droppableId="collections">
                         {(provided: DroppableProvided) => (
@@ -202,9 +203,10 @@ export default function ProjectSidebar({ project }: Props) {
                         )}
                     </Droppable>
                 </DragDropContext>
+                </div>
 
                 {can.access_end_users_settings && (
-                    <div className="pt-2 border-t">
+                    <div className="pt-2 border-t shrink-0">
                         <div className="flex items-center space-x-2 rtl:space-x-reverse">
                             <Link
                                 href={route('projects.settings.end-users', project.id)}
