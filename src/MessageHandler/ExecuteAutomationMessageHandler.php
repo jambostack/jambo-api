@@ -91,7 +91,7 @@ class ExecuteAutomationMessageHandler
         // Protection SSRF : valider l'URL et bloquer les IPs internes
         $this->validateUrl($url);
 
-        $client = HttpClient::create(['timeout' => 10]);
+        $client = HttpClient::create(['timeout' => 10, 'max_redirects' => 0]);
         $client->request($method, $url, [
             'headers' => $headers,
             'body'    => $body,
