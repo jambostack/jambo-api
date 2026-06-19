@@ -5,49 +5,14 @@ namespace App\Service\Flow\Handlers\Database;
 use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowNodeHandler;
 use App\Service\Flow\NodeOutput;
-use Doctrine\ORM\EntityManagerInterface;
 
 class RawQueryHandler implements FlowNodeHandler
 {
-    public function __construct(
-        private readonly EntityManagerInterface $em,
-    ) {}
-
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
-        $config = $ctx->variables['_node_config'] ?? [];
-        $dql = $config['dql'] ?? '';
-        $params = $config['parameters'] ?? [];
-
-        try {
-            $query = $this->em->createQuery($dql);
-            $query->setMaxResults(min(500, $config['max_results'] ?? 100));
-            foreach ($params as $key => $value) {
-                $query->setParameter($key, $value);
-            }
-            $results = $query->getResult();
-
-            $serialized = array_map(function ($entity) {
-                if (method_exists($entity, '__toString')) {
-                    return (string) $entity;
-                }
-                if (method_exists($entity, 'getId')) {
-                    return ['id' => $entity->getId()];
-                }
-                return [];
-            }, $results);
-
-            return new NodeOutput(data: [
-                'results' => $serialized,
-                'count' => count($serialized),
-            ]);
-        } catch (\Throwable $e) {
-            return new NodeOutput(data: [
-                'error' => $e->getMessage(),
-                'results' => [],
-                'count' => 0,
-            ]);
-        }
+        throw new \RuntimeException(
+            'RawQueryHandler: Raw DQL execution is disabled for security reasons. Use FindEntriesHandler or CountEntriesHandler instead.'
+        );
     }
 
     public static function getCategory(): string { return 'db'; }
