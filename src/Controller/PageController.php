@@ -214,7 +214,7 @@ class PageController extends InertiaController
             'image' => 'image/%',
             'video' => 'video/%',
             'audio' => 'audio/%',
-            'document' => ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.%', 'application/vnd.ms-%', 'application/vnd.oasis.%'],
+            'document' => ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.%', 'application/vnd.ms-%', 'application/vnd.oasis.%', 'text/plain', 'text/csv'],
         ];
         if ($type !== '' && $type !== 'all') {
             if ($type === 'document') {

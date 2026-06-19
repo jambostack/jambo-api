@@ -212,7 +212,7 @@ export default function AssetGrid({
 								className={cn('relative aspect-[4/3] overflow-hidden', styles.thumbBg)}
 								onClick={(e) => handleThumbnailClick(asset, e)}
 							>
-								{asset.thumbnail_url ? (
+								{asset.mime_type?.startsWith('image/') && asset.thumbnail_url ? (
 									<img
 										src={asset.thumbnail_url}
 										alt={asset.metadata?.alt_text || asset.original_filename}
@@ -220,7 +220,7 @@ export default function AssetGrid({
 									/>
 								) : (
 									<div className="flex h-full items-center justify-center">
-										<Icon className={cn('h-10 w-10 opacity-50', styles.iconClass)} />
+										<Icon className={cn('h-10 w-10 opacity-70', styles.iconClass)} />
 									</div>
 								)}
 

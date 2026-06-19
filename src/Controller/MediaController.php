@@ -77,10 +77,12 @@ class MediaController extends AbstractController
                 $where .= ' AND m.mimeType LIKE :type';
                 $params['type'] = 'audio/%';
             } elseif ($type === 'document') {
-                $where .= " AND (m.mimeType LIKE :type1 OR m.mimeType LIKE :type2 OR m.mimeType LIKE :type3)";
+                $where .= " AND (m.mimeType LIKE :type1 OR m.mimeType LIKE :type2 OR m.mimeType LIKE :type3 OR m.mimeType LIKE :type4 OR m.mimeType LIKE :type5)";
                 $params['type1'] = 'application/pdf';
                 $params['type2'] = 'application/msword';
                 $params['type3'] = 'application/vnd.%';
+                $params['type4'] = 'text/plain';
+                $params['type5'] = 'text/csv';
             } else {
                 // other
                 $where .= ' AND m.mimeType NOT LIKE :timg AND m.mimeType NOT LIKE :tvid AND m.mimeType NOT LIKE :taud';
