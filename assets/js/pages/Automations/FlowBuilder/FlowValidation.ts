@@ -3,7 +3,8 @@ import { FlowGraph } from './FlowStore';
 export interface ValidationError {
     nodeId?: string;
     edgeId?: string;
-    message: string;
+    code: string;
+    params?: Record<string, string>;
     severity: 'error' | 'warning';
 }
 
@@ -13,14 +14,14 @@ export function validateFlowGraph(graph: FlowGraph): ValidationError[] {
 
     // 1. Au moins un node
     if (nodes.length === 0) {
-        errors.push({ message: 'Ajoutez au moins un node au flow', severity: 'error' });
+        errors.push({ code: 'flow.validate_no_nodes', severity: 'error' });
         return errors;
     }
 
     // 2. Au moins un trigger
     const triggers = nodes.filter((n) => n.type.startsWith('trigger.'));
     if (triggers.length === 0) {
-        errors.push({ message: 'Ajoutez au moins un déclencheur (trigger)', severity: 'error' });
+        errors.push({ code: 'flow.validate_no_trigger', severity: 'error' });
     }
 
     // 3. Détection de cycles (DFS)
@@ -35,7 +36,7 @@ export function validateFlowGraph(graph: FlowGraph): ValidationError[] {
 
     const hasCycle = detectCycle(nodes.map((n) => n.id), adj);
     if (hasCycle) {
-        errors.push({ message: 'Le graphe contient un cycle — les flows doivent être acycliques', severity: 'error' });
+        errors.push({ code: 'flow.validate_cycle', severity: 'error' });
     }
 
     // 4. Nodes orphelins (pas d'entrée, pas trigger)
@@ -44,7 +45,8 @@ export function validateFlowGraph(graph: FlowGraph): ValidationError[] {
         if (!node.type.startsWith('trigger.') && !targetIds.has(node.id)) {
             errors.push({
                 nodeId: node.id,
-                message: `"${node.data.label}" n'a pas d'entrée et n'est pas un déclencheur`,
+                code: 'flow.validate_no_input',
+                params: { label: node.data.label },
                 severity: 'warning',
             });
         }
@@ -57,7 +59,8 @@ export function validateFlowGraph(graph: FlowGraph): ValidationError[] {
         if (!terminalTypes.includes(node.type) && !sourceIds.has(node.id)) {
             errors.push({
                 nodeId: node.id,
-                message: `"${node.data.label}" n'a pas de sortie — connectez-le à un autre node`,
+                code: 'flow.validate_no_output',
+                params: { label: node.data.label },
                 severity: 'warning',
             });
         }

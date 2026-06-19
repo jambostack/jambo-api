@@ -10,6 +10,7 @@ import AppLayout from '@/layouts/app-layout';
 import ProjectSettingsLayout from '../layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useTranslation } from '@/lib/i18n';
 import AutomationForm from './AutomationForm';
 import AutomationRuns from './AutomationRuns';
 import FlowBuilderPage from '../../../Automations/FlowBuilder/FlowBuilderPage';
@@ -31,12 +32,13 @@ interface Props {
 }
 
 export default function AutomationsSettings({ project }: Props) {
+    const t = useTranslation();
     const can = usePage().props.userCan as UserCan;
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: project.name, href: route('projects.show', project.id) },
-        { title: 'Paramètres', href: route('projects.settings.project', project.id) },
-        { title: 'Automatisations', href: route('projects.settings.automations', project.id) },
+        { title: t('flow.breadcrumb_settings'), href: route('projects.settings.project', project.id) },
+        { title: t('flow.breadcrumb'), href: route('projects.settings.automations', project.id) },
     ];
 
     const [automations, setAutomations] = useState<Automation[]>([]);
@@ -52,7 +54,7 @@ export default function AutomationsSettings({ project }: Props) {
             const r = await axios.get(`/api/projects/${project.uuid}/automations`);
             setAutomations(r.data.data || []);
         } catch {
-            toast.error('Erreur de chargement des automatisations');
+            toast.error(t('flow.load_error'));
         } finally {
             setLoading(false);
         }
@@ -61,13 +63,13 @@ export default function AutomationsSettings({ project }: Props) {
     useEffect(() => { load(); }, [project.uuid]);
 
     const handleDelete = async (id: number) => {
-        if (!confirm('Supprimer cette automatisation ?')) return;
+        if (!confirm(t('flow.delete_confirm'))) return;
         try {
             await axios.delete(`/api/projects/${project.uuid}/automations/${id}`);
-            toast.success('Automatisation supprimée');
+            toast.success(t('flow.deleted_success'));
             load();
         } catch {
-            toast.error('Échec de la suppression');
+            toast.error(t('flow.delete_error'));
         }
     };
 
@@ -76,7 +78,7 @@ export default function AutomationsSettings({ project }: Props) {
             await axios.put(`/api/projects/${project.uuid}/automations/${a.id}`, { is_active: !a.is_active });
             load();
         } catch {
-            toast.error('Échec');
+            toast.error(t('flow.toggle_error'));
         }
     };
 
@@ -96,7 +98,7 @@ export default function AutomationsSettings({ project }: Props) {
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm text-muted-foreground">Flows visuels avec nodes, branches, boucles et actions</p>
+                                <p className="text-sm text-muted-foreground">{t('flow.heading_desc')}</p>
                             </div>
                             <div className="flex items-center gap-2">
                                 <Button
@@ -104,10 +106,10 @@ export default function AutomationsSettings({ project }: Props) {
                                     size="sm"
                                     onClick={() => { setBuilderId(null); setBuilderOpen(true); }}
                                 >
-                                    <Workflow className="h-3.5 w-3.5 mr-1" /> Flow Builder
+                                    <Workflow className="h-3.5 w-3.5 mr-1" /> {t('flow.builder_btn')}
                                 </Button>
                                 <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
-                                    <Plus className="h-3.5 w-3.5 mr-1" /> Assistant
+                                    <Plus className="h-3.5 w-3.5 mr-1" /> {t('flow.assistant_btn')}
                                 </Button>
                             </div>
                         </div>
@@ -118,19 +120,19 @@ export default function AutomationsSettings({ project }: Props) {
                             </div>
                         ) : automations.length === 0 ? (
                             <div className="text-center py-12 text-muted-foreground text-sm">
-                                Aucune automatisation. Créez-en une pour automatiser vos tâches.
+                                {t('flow.empty_list')}
                             </div>
                         ) : (
                             <div className="border rounded-lg overflow-hidden">
                                 <table className="w-full text-sm">
                                     <thead className="bg-muted/50">
                                         <tr>
-                                            <th className="text-left px-4 py-2 font-medium">Nom</th>
-                                            <th className="text-left px-4 py-2 font-medium">Déclencheur</th>
-                                            <th className="text-left px-4 py-2 font-medium">Action</th>
-                                            <th className="text-left px-4 py-2 font-medium">Statut</th>
-                                            <th className="text-left px-4 py-2 font-medium">Dernière exécution</th>
-                                            <th className="text-right px-4 py-2 font-medium">Actions</th>
+                                            <th className="text-left px-4 py-2 font-medium">{t('flow.col_name')}</th>
+                                            <th className="text-left px-4 py-2 font-medium">{t('flow.col_trigger')}</th>
+                                            <th className="text-left px-4 py-2 font-medium">{t('flow.col_action')}</th>
+                                            <th className="text-left px-4 py-2 font-medium">{t('flow.col_status')}</th>
+                                            <th className="text-left px-4 py-2 font-medium">{t('flow.col_last_run')}</th>
+                                            <th className="text-right px-4 py-2 font-medium">{t('flow.col_actions')}</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y">
@@ -145,7 +147,7 @@ export default function AutomationsSettings({ project }: Props) {
                                                 </td>
                                                 <td className="px-4 py-2.5">
                                                     <Badge variant={a.is_active ? 'default' : 'secondary'} className="cursor-pointer text-xs" onClick={() => handleToggle(a)}>
-                                                        {a.is_active ? 'Actif' : 'Inactif'}
+                                                        {a.is_active ? t('flow.active_status') : t('flow.inactive_status')}
                                                     </Badge>
                                                 </td>
                                                 <td className="px-4 py-2.5 text-xs text-muted-foreground">
