@@ -62,7 +62,7 @@ const nodeTypes: NodeTypes = {
 function FlowCanvasInner() {
     const {
         nodes, edges, onNodesChange, onEdgesChange, onConnect,
-        addNode,
+        addNode, minimapVisible,
     } = useFlowStore();
 
     const { screenToFlowPosition } = useReactFlow();
@@ -110,14 +110,20 @@ function FlowCanvasInner() {
                 snapToGrid
                 snapGrid={[15, 15]}
             >
-                <Background gap={15} size={0.5} />
-                <Controls />
-                <MiniMap
-                    nodeStrokeWidth={2}
-                    pannable
-                    zoomable
-                    style={{ width: 180, height: 120 }}
+                <Background gap={15} size={0.5} color="var(--border)" />
+                <Controls
+                    className="[&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground [&>button>svg]:!fill-foreground hover:[&>button]:!bg-accent"
                 />
+                {minimapVisible && (
+                    <MiniMap
+                        nodeStrokeWidth={2}
+                        pannable
+                        zoomable
+                        className="!bg-card !border-border"
+                        maskColor="hsl(var(--background) / 0.7)"
+                        style={{ width: 180, height: 120 }}
+                    />
+                )}
             </ReactFlow>
         </div>
     );

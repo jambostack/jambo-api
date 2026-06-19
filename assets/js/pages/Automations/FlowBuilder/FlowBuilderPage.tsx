@@ -167,7 +167,7 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
     if (isDialog) {
         return (
             <Dialog open modal onOpenChange={() => onClose?.()}>
-                <DialogContent className="!max-w-none !w-[95vw] !h-[90vh] p-0 gap-0">
+                <DialogContent className="!max-w-none !w-[95vw] !h-[90vh] p-0 gap-0 [&>button.absolute]:hidden">
                     <DialogHeader className="sr-only">
                         <DialogTitle>
                             {automationId

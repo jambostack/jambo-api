@@ -17,7 +17,7 @@ interface FlowToolbarProps {
 
 export default function FlowToolbar({ onSave, saving, projectUuid, automationId }: FlowToolbarProps) {
     const { zoomIn, zoomOut, fitView } = useReactFlow();
-    const { getFlowGraph, loadFlowGraph, flowName, isActive, debugMode } = useFlowStore();
+    const { getFlowGraph, loadFlowGraph, flowName, isActive, debugMode, minimapVisible, setMinimapVisible } = useFlowStore();
     const [validating, setValidating] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
     const [dryRunOpen, setDryRunOpen] = useState(false);
@@ -80,8 +80,8 @@ export default function FlowToolbar({ onSave, saving, projectUuid, automationId 
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fitView()} title="Ajuster">
                     <Maximize className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" title="Minimap">
-                    <Map className="h-4 w-4" />
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMinimapVisible(!minimapVisible)} title="Minimap">
+                    <Map className={minimapVisible ? 'h-4 w-4 text-primary' : 'h-4 w-4'} />
                 </Button>
             </div>
 

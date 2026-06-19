@@ -11,6 +11,7 @@ export interface FlowState {
     flowName: string;
     isActive: boolean;
     debugMode: boolean;
+    minimapVisible: boolean;
 
     // Actions
     setNodes: (nodes: Node[]) => void;
@@ -26,6 +27,7 @@ export interface FlowState {
     setFlowName: (name: string) => void;
     setIsActive: (active: boolean) => void;
     setDebugMode: (debug: boolean) => void;
+    setMinimapVisible: (visible: boolean) => void;
     getFlowGraph: () => FlowGraph;
     loadFlowGraph: (graph: FlowGraph, name: string, active: boolean, debug: boolean) => void;
 }
@@ -53,6 +55,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     flowName: '',
     isActive: true,
     debugMode: false,
+    minimapVisible: false,
 
     setNodes: (nodes) => set({ nodes }),
     setEdges: (edges) => set({ edges }),
@@ -90,6 +93,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     setFlowName: (flowName) => set({ flowName }),
     setIsActive: (isActive) => set({ isActive }),
     setDebugMode: (debugMode) => set({ debugMode }),
+    setMinimapVisible: (minimapVisible) => set({ minimapVisible }),
 
     getFlowGraph: () => {
         const { nodes, edges, variables } = get();
