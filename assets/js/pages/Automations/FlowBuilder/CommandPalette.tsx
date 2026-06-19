@@ -5,8 +5,10 @@ import { useFlowStore } from './FlowStore';
 import { useNodeCatalog } from './useNodeCatalog';
 import * as Icons from 'lucide-react';
 import { categoryStyles } from './nodes/nodeStyles';
+import { useTranslation } from '@/lib/i18n';
 
 export default function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+    const t = useTranslation();
     const { catalog } = useNodeCatalog();
     const addNode = useFlowStore((s) => s.addNode);
     const { screenToFlowPosition } = useReactFlow();
@@ -54,7 +56,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
                     <Command>
                         <CommandInput
                             ref={inputRef}
-                            placeholder="Ajouter un node..."
+                            placeholder={t('flow.cmdk_placeholder')}
                             className="text-sm"
                         />
                         <CommandList className="max-h-[400px] overflow-y-auto p-2">

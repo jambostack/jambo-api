@@ -4,6 +4,7 @@ import { Search, ChevronDown } from 'lucide-react';
 import axios from 'axios';
 import { categoryStyles } from './nodes/nodeStyles';
 import * as Icons from 'lucide-react';
+import { useTranslation } from '@/lib/i18n';
 
 interface NodeCatalogItem {
     type: string;
@@ -21,6 +22,7 @@ interface NodeCategory {
 }
 
 export default function NodePanel() {
+    const t = useTranslation();
     const [catalog, setCatalog] = useState<NodeCategory[]>([]);
     const [search, setSearch] = useState('');
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -60,7 +62,7 @@ export default function NodePanel() {
                 <div className="relative">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Filtrer les nodes..."
+                        placeholder={t('flow.node_filter_placeholder')}
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="pl-7 h-8 text-sm"

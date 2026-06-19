@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Play, CheckCircle, XCircle, Clock } from 'lucide-react';
 import axios from 'axios';
 import { useFlowStore, FlowGraph } from './FlowStore';
+import { useTranslation } from '@/lib/i18n';
 
 interface DryRunStep {
     nodeId: string;
@@ -31,6 +32,7 @@ export default function FlowDryRun({ projectUuid, automationId, open, onClose }:
     open: boolean;
     onClose: () => void;
 }) {
+    const t = useTranslation();
     const [payload, setPayload] = useState(JSON.stringify({
         entry: { title: 'Test', status: 'published', slug: 'test', uuid: '00000000-0000-0000-0000-000000000000' },
     }, null, 2));
@@ -60,13 +62,13 @@ export default function FlowDryRun({ projectUuid, automationId, open, onClose }:
         <Dialog open={open} onOpenChange={() => onClose()}>
             <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Dry-Run — Test du flow</DialogTitle>
+                    <DialogTitle>{t('flow.dryrun_title')}</DialogTitle>
                 </DialogHeader>
 
                 <div className="space-y-4">
                     {/* Payload editor */}
                     <div>
-                        <label className="text-sm font-medium">Payload simulé</label>
+                        <label className="text-sm font-medium">{t('flow.dryrun_payload_label')}</label>
                         <Textarea
                             className="font-mono text-xs min-h-[120px] mt-1"
                             value={payload}
@@ -76,7 +78,7 @@ export default function FlowDryRun({ projectUuid, automationId, open, onClose }:
 
                     <Button onClick={handleRun} disabled={running} size="sm">
                         <Play className="h-3.5 w-3.5 mr-1" />
-                        {running ? 'Exécution...' : 'Exécuter'}
+                        {running ? t('flow.dryrun_running') : t('flow.dryrun_run')}
                     </Button>
 
                     {/* Résultats */}
@@ -89,7 +91,7 @@ export default function FlowDryRun({ projectUuid, automationId, open, onClose }:
                                     <XCircle className="h-4 w-4 text-destructive" />
                                 )}
                                 <span className="font-medium">
-                                    {result.status === 'success' ? 'SUCCESS' : result.status === 'partial' ? 'PARTIEL' : 'ÉCHEC'}
+                                    {result.status === 'success' ? t('flow.dryrun_status_success') : result.status === 'partial' ? t('flow.dryrun_status_partial') : t('flow.dryrun_status_failure')}
                                 </span>
                                 <span className="text-xs text-muted-foreground">{result.total_duration_ms}ms</span>
                             </div>
