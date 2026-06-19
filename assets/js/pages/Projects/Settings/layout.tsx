@@ -1,6 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
 import Heading from '@/components/heading';
-import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { NavItem, Project, UserCan } from '@/types/index.d';
@@ -43,39 +42,64 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
         { title: 'Jambo Studio', href: `${basePath}/studio`, icon: Wand2, permission: 'access_project_settings' },
     ];
 
+    const filteredItems = sidebarNavItems.filter((item) => can[item.permission]);
+
     return (
         <div>
             <Heading title={t('projects.settings.heading')} description={t('projects.settings.heading_desc')} />
 
-            <div className="flex flex-col lg:flex-row lg:space-y-0 lg:space-x-12 rtl:lg:space-x-reverse">
-                <aside className="w-full lg:w-48 sticky top-16 max-h-[calc(100vh-5rem)] overflow-y-auto">
-                    <nav className="flex flex-col space-y-1">
-                        {sidebarNavItems
-                            .filter((item) => can[item.permission])
-                            .map((item, index) => (
-                                <Button
-                                    key={`${item.href}-${index}`}
-                                    size="sm"
-                                    variant="ghost"
-                                    asChild
-                                    className={cn('w-full justify-start', {
-                                        'bg-muted': currentPath === item.href,
-                                    })}
-                                >
-                                    <Link href={item.href}>
-                                        {item.icon && <item.icon className="mr-2 h-4 w-4 rtl:ml-2 rtl:mr-0" />}
-                                        {item.title}
-                                    </Link>
-                                </Button>
-                            ))}
+            {/* ── Desktop (lg+) : sidebar verticale ──────────────────── */}
+            <div className="hidden lg:flex lg:flex-row lg:space-y-0 lg:space-x-12 rtl:lg:space-x-reverse">
+                <aside className="w-48 shrink-0 sticky top-16 self-start max-h-[calc(100vh-5rem)] overflow-y-auto">
+                    <nav className="flex flex-col space-y-1 pb-4">
+                        {filteredItems.map((item, index) => (
+                            <Link
+                                key={`${item.href}-${index}`}
+                                href={item.href}
+                                className={cn(
+                                    'flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors',
+                                    currentPath === item.href
+                                        ? 'bg-accent text-accent-foreground font-medium'
+                                        : 'text-muted-foreground hover:text-foreground',
+                                )}
+                            >
+                                {item.icon && <item.icon className="h-4 w-4 shrink-0" />}
+                                <span className="truncate">{item.title}</span>
+                            </Link>
+                        ))}
                     </nav>
                 </aside>
 
                 <Separator className="my-6 md:hidden" />
 
-                <div className="flex-1 w-full">
+                <div className="flex-1 min-w-0">
                     <section className="w-full space-y-12">{children}</section>
                 </div>
+            </div>
+
+            {/* ── Tablet / Mobile (< lg) : barre d'onglets horizontale scrollable ── */}
+            <div className="lg:hidden space-y-6">
+                <nav className="flex items-center gap-1 overflow-x-auto pb-2 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+                    {filteredItems.map((item, index) => (
+                        <Link
+                            key={`${item.href}-${index}`}
+                            href={item.href}
+                            className={cn(
+                                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap border transition-colors shrink-0',
+                                currentPath === item.href
+                                    ? 'bg-primary text-primary-foreground border-primary'
+                                    : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground',
+                            )}
+                        >
+                            {item.icon && <item.icon className="h-3.5 w-3.5 shrink-0" />}
+                            {item.title}
+                        </Link>
+                    ))}
+                </nav>
+
+                <Separator />
+
+                <section className="w-full space-y-12">{children}</section>
             </div>
         </div>
     );
