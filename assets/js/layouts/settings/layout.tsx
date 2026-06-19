@@ -27,8 +27,8 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
             />
 
             {/* Tabs horizontaux */}
-            <div className="border-b">
-                <nav className="flex gap-0 -mb-px overflow-x-auto">
+            <div className="border-b relative">
+                <nav className="flex gap-0 -mb-px overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
                     {tabs.map(tab => {
                         const isActive = currentPath === tab.href;
                         const Icon = tab.icon;
@@ -37,18 +37,20 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                 key={tab.href}
                                 href={tab.href}
                                 className={cn(
-                                    'flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors',
+                                    'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors shrink-0',
                                     isActive
                                         ? 'border-primary text-foreground'
                                         : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground'
                                 )}
                             >
-                                <Icon className="h-4 w-4" />
+                                <Icon className="h-4 w-4 shrink-0" />
                                 {t(tab.labelKey)}
                             </Link>
                         );
                     })}
                 </nav>
+                {/* Indicateur visuel de défilement à droite */}
+                <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent" />
             </div>
 
             <div className="max-w-xl">

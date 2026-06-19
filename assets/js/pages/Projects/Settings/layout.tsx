@@ -79,23 +79,27 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
 
             {/* ── Tablet / Mobile (< lg) : barre d'onglets horizontale scrollable ── */}
             <div className="lg:hidden space-y-6">
-                <nav className="flex items-center gap-1 overflow-x-auto pb-2 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
-                    {filteredItems.map((item, index) => (
-                        <Link
-                            key={`${item.href}-${index}`}
-                            href={item.href}
-                            className={cn(
-                                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap border transition-colors shrink-0',
-                                currentPath === item.href
-                                    ? 'bg-primary text-primary-foreground border-primary'
-                                    : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground',
-                            )}
-                        >
-                            {item.icon && <item.icon className="h-3.5 w-3.5 shrink-0" />}
-                            {item.title}
-                        </Link>
-                    ))}
-                </nav>
+                <div className="relative">
+                    <nav className="flex items-center gap-1 overflow-x-auto pb-3 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+                        {filteredItems.map((item, index) => (
+                            <Link
+                                key={`${item.href}-${index}`}
+                                href={item.href}
+                                className={cn(
+                                    'flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-full whitespace-nowrap border transition-colors shrink-0',
+                                    currentPath === item.href
+                                        ? 'bg-primary text-primary-foreground border-primary'
+                                        : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground',
+                                )}
+                            >
+                                {item.icon && <item.icon className="h-3 w-3 shrink-0" />}
+                                {item.title}
+                            </Link>
+                        ))}
+                    </nav>
+                    {/* Indicateur visuel de défilement à droite */}
+                    <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
+                </div>
 
                 <Separator />
 
