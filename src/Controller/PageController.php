@@ -190,6 +190,7 @@ class PageController extends InertiaController
         $where = 'm.project = :project AND m.deletedAt IS NULL';
         $params = ['project' => $project];
 
+        // Filtre par dossier
         if ($request->query->has('folder_id')) {
             $folderId = $request->query->get('folder_id');
             if ($folderId === '' || $folderId === null || $folderId === 'null') {
@@ -200,11 +201,72 @@ class PageController extends InertiaController
             }
         }
 
+        // Filtre par recherche texte
+        $search = $request->query->get('search', '');
+        if ($search !== '') {
+            $where .= ' AND (m.originalName LIKE :search OR m.fileName LIKE :search OR m.alt LIKE :search OR m.caption LIKE :search)';
+            $params['search'] = '%' . $search . '%';
+        }
+
+        // Filtre par type (mime_type)
+        $type = $request->query->get('type', '');
+        $typeMap = [
+            'image' => 'image/%',
+            'video' => 'video/%',
+            'audio' => 'audio/%',
+            'document' => ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.%', 'application/vnd.ms-%', 'application/vnd.oasis.%'],
+        ];
+        if ($type !== '' && $type !== 'all') {
+            if ($type === 'document') {
+                $docTypes = $typeMap['document'];
+                $orParts = [];
+                foreach ($docTypes as $k => $dt) {
+                    $orParts[] = "m.mimeType LIKE :type_doc_{$k}";
+                    $params["type_doc_{$k}"] = $dt;
+                }
+                $where .= ' AND (' . implode(' OR ', $orParts) . ')';
+            } elseif (isset($typeMap[$type])) {
+                $where .= ' AND m.mimeType LIKE :type';
+                $params['type'] = $typeMap[$type];
+            } else {
+                // "other" — tout ce qui n'est pas image/video/audio/document
+                $where .= ' AND m.mimeType NOT LIKE :type_img AND m.mimeType NOT LIKE :type_vid AND m.mimeType NOT LIKE :type_aud';
+                $params['type_img'] = 'image/%';
+                $params['type_vid'] = 'video/%';
+                $params['type_aud'] = 'audio/%';
+            }
+        }
+
+        // Filtre par date
+        $dateFilter = $request->query->get('date_filter', '');
+        if ($dateFilter !== '') {
+            $since = match ($dateFilter) {
+                'today'   => new \DateTimeImmutable('today'),
+                'week'    => new \DateTimeImmutable('-7 days'),
+                'month'   => new \DateTimeImmutable('-30 days'),
+                'quarter' => new \DateTimeImmutable('-90 days'),
+                default   => null,
+            };
+            if ($since !== null) {
+                $where .= ' AND m.createdAt >= :dateSince';
+                $params['dateSince'] = $since;
+            }
+        }
+
+        // Tri
+        $sort = $request->query->get('sort', 'newest');
+        $orderParts = match ($sort) {
+            'oldest'    => ['m.createdAt', 'ASC'],
+            'name'      => ['m.originalName', 'ASC'],
+            'size'      => ['m.fileSize', 'DESC'],
+            default     => ['m.createdAt', 'DESC'],
+        };
+
         $qb = $this->em->createQueryBuilder()
             ->select('m')
             ->from(Media::class, 'm')
             ->where($where)
-            ->orderBy('m.createdAt', 'DESC')
+            ->orderBy($orderParts[0], $orderParts[1])
             ->setMaxResults($perPage)
             ->setFirstResult(($page - 1) * $perPage);
         foreach ($params as $key => $value) {

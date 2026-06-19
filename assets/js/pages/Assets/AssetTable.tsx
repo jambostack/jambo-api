@@ -5,7 +5,7 @@ import { Asset, UserCan } from '@/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { FileImage, FileText, FileVideo, FileAudio, File } from 'lucide-react';
+import { FileImage, FileText, FileVideo, FileAudio, File, FileSpreadsheet, FileArchive, FileCode, MonitorPlay, Image } from 'lucide-react';
 
 import ActionMenu from './AssetActionMenu';
 import { usePage } from '@inertiajs/react';
@@ -20,17 +20,38 @@ interface AssetTableProps {
 }
 
 const getFileIcon = (asset: Asset) => {
-    const extension = asset.extension.toLowerCase();
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension)) {
-        return <FileImage className="h-6 w-6 text-blue-500" />;
-    } else if (['mp4', 'webm', 'mov'].includes(extension)) {
-        return <FileVideo className="h-6 w-6 text-red-500" />;
-    } else if (['mp3', 'wav', 'ogg'].includes(extension)) {
-        return <FileAudio className="h-6 w-6 text-green-500" />;
-    } else if (['pdf', 'doc', 'docx', 'txt', 'rtf'].includes(extension)) {
-        return <FileText className="h-6 w-6 text-yellow-500" />;
+    const ext = asset.extension.toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico', 'tiff', 'tif', 'heic'].includes(ext)) {
+        return <FileImage className="h-6 w-6 text-sky-500" />;
     }
-    return <File className="h-6 w-6 text-gray-500" />;
+    if (['svg', 'eps', 'ai'].includes(ext)) {
+        return <Image className="h-6 w-6 text-fuchsia-500" />;
+    }
+    if (['mp4', 'webm', 'mov', 'avi', 'wmv', 'flv', 'mkv'].includes(ext)) {
+        return <FileVideo className="h-6 w-6 text-violet-500" />;
+    }
+    if (['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'].includes(ext)) {
+        return <FileAudio className="h-6 w-6 text-emerald-500" />;
+    }
+    if (ext === 'pdf') {
+        return <FileText className="h-6 w-6 text-red-500" />;
+    }
+    if (['xls', 'xlsx', 'csv', 'ods'].includes(ext)) {
+        return <FileSpreadsheet className="h-6 w-6 text-green-500" />;
+    }
+    if (['ppt', 'pptx', 'odp', 'key'].includes(ext)) {
+        return <MonitorPlay className="h-6 w-6 text-orange-500" />;
+    }
+    if (['zip', 'rar', '7z', 'gz', 'tar', 'bz2'].includes(ext)) {
+        return <FileArchive className="h-6 w-6 text-stone-500" />;
+    }
+    if (['json', 'xml', 'yaml', 'yml', 'html', 'css', 'js', 'ts', 'php', 'py', 'sql'].includes(ext)) {
+        return <FileCode className="h-6 w-6 text-cyan-500" />;
+    }
+    if (['txt', 'md', 'doc', 'docx', 'rtf', 'odt'].includes(ext)) {
+        return <FileText className="h-6 w-6 text-blue-500" />;
+    }
+    return <File className="h-6 w-6 text-slate-400" />;
 };
 
 const getFileTypeClass = (extension: string) => {
