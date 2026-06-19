@@ -91,6 +91,11 @@ services:
         arguments:
             $projectDir: '%kernel.project_dir%'
 
+    # ── Temps réel (SSE natif, fonctionne sur tout serveur) ────────────────
+    App\Service\MercurePublisher:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+
     App\Service\MediaSerializer:
         arguments:
             $profileRepo: '@App\Repository\ProjectStorageProfileRepository'

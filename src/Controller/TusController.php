@@ -12,6 +12,7 @@ use App\Repository\ProjectRepository;
 use App\Repository\ProjectStorageProfileRepository;
 use App\Repository\StorageRuleRepository;
 use App\Service\MediaSerializer;
+use App\Service\MercurePublisher;
 use App\Service\StorageDriverFactory;
 use App\Service\StorageManager;
 use App\Service\TusServer;
@@ -36,6 +37,7 @@ class TusController extends AbstractController
         private readonly StorageRuleRepository $ruleRepo,
         private readonly StorageDriverFactory $driverFactory,
         private readonly ProjectMemberRepository $memberRepo,
+        private readonly MercurePublisher $mercure,
     ) {}
 
     /** Extensions autorisées — refuse tout fichier exécutable */
@@ -294,10 +296,14 @@ class TusController extends AbstractController
         $this->em->persist($media);
         $this->em->flush();
 
+        // Notification temps réel
+        $serialized = $this->mediaSerializer->serialize($media);
+        $this->mercure->mediaUploaded($projectUuid, $serialized);
+
         // Nettoyer les fichiers temporaires TUS
         $this->tusServer->cleanup($projectUuid, $uploadId);
 
-        return $this->json(['data' => $this->mediaSerializer->serialize($media)], 201);
+        return $this->json(['data' => $serialized], 201);
     }
 
     // ─── Private ─────────────────────────────────────────────────────────
