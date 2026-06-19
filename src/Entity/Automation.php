@@ -27,25 +27,9 @@ class Automation
     #[ORM\Column]
     public bool $debugMode = false;
 
-    /** content.created | content.updated | content.deleted | content.status_changed | schedule.cron */
-    #[ORM\Column(length: 50)]
-    public string $triggerType;
-
-    /** JSON: {collection_slugs: [...], schedule: "0 9 * * *"} */
+    /** JSON: {nodes: [...], edges: [...], variables: {...}} */
     #[ORM\Column(type: 'json', nullable: true)]
-    public ?array $triggerConfig = null;
-
-    /** JSON: [{field, operator, value}] */
-    #[ORM\Column(type: 'json', nullable: true)]
-    public ?array $conditions = null;
-
-    /** send_email | call_webhook | create_entry | update_entry | send_notification */
-    #[ORM\Column(length: 50)]
-    public string $actionType;
-
-    /** JSON spécifique à l'action */
-    #[ORM\Column(type: 'json', nullable: true)]
-    public ?array $actionConfig = null;
+    public ?array $flowGraph = null;
 
     #[ORM\ManyToOne(targetEntity: Project::class)]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
