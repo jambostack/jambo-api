@@ -7,7 +7,10 @@ use App\Repository\AutomationRepository;
 use App\Repository\AutomationRunRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
-use App\Service\Automation\AutomationEngine;
+use App\Service\Flow\FlowContext;
+use App\Service\Flow\FlowInterpreter;
+use App\Service\Flow\NodeOutput;
+use App\Service\Flow\NodeRegistry;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -23,7 +26,8 @@ class AutomationController extends AbstractController
         private readonly AutomationRepository $automationRepo,
         private readonly AutomationRunRepository $runRepo,
         private readonly ProjectMemberRepository $memberRepo,
-        private readonly AutomationEngine $engine,
+        private readonly FlowInterpreter $flowInterpreter,
+        private readonly NodeRegistry $nodeRegistry,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -50,15 +54,11 @@ class AutomationController extends AbstractController
         $data = $request->toArray();
 
         $automation = new Automation();
-        $automation->project       = $project;
-        $automation->name          = $data['name'] ?? 'Sans nom';
-        $automation->triggerType   = $data['trigger_type'] ?? '';
-        $automation->triggerConfig = $data['trigger_config'] ?? null;
-        $automation->conditions    = $data['conditions'] ?? [];
-        $automation->actionType    = $data['action_type'] ?? '';
-        $automation->actionConfig  = $data['action_config'] ?? null;
-        $automation->isActive      = $data['is_active'] ?? true;
-        $automation->debugMode     = $data['debug_mode'] ?? false;
+        $automation->project    = $project;
+        $automation->name       = $data['name'] ?? 'Sans nom';
+        $automation->flowGraph  = $data['flow_graph'] ?? null;
+        $automation->isActive   = $data['is_active'] ?? true;
+        $automation->debugMode  = $data['debug_mode'] ?? false;
 
         $this->em->persist($automation);
         $this->em->flush();
@@ -91,14 +91,10 @@ class AutomationController extends AbstractController
 
         $data = $request->toArray();
 
-        if (isset($data['name']))           $automation->name          = $data['name'];
-        if (isset($data['trigger_type']))   $automation->triggerType   = $data['trigger_type'];
-        if (isset($data['trigger_config'])) $automation->triggerConfig = $data['trigger_config'];
-        if (isset($data['conditions']))     $automation->conditions    = $data['conditions'];
-        if (isset($data['action_type']))    $automation->actionType    = $data['action_type'];
-        if (isset($data['action_config']))  $automation->actionConfig  = $data['action_config'];
-        if (isset($data['is_active']))      $automation->isActive      = $data['is_active'];
-        if (isset($data['debug_mode']))     $automation->debugMode     = $data['debug_mode'];
+        if (isset($data['name']))        $automation->name      = $data['name'];
+        if (isset($data['flow_graph']))  $automation->flowGraph  = $data['flow_graph'];
+        if (isset($data['is_active']))   $automation->isActive   = $data['is_active'];
+        if (isset($data['debug_mode']))  $automation->debugMode  = $data['debug_mode'];
 
         $this->em->flush();
 
@@ -121,7 +117,7 @@ class AutomationController extends AbstractController
         return $this->json(null, 204);
     }
 
-    /** Dry-run : teste l'automatisation avec un payload simulé */
+    /** Dry-run : exécute le flow en mode debug avec un payload simulé */
     #[Route('/{id}/test', name: 'test', methods: ['POST'])]
     public function test(string $projectUuid, int $id): JsonResponse
     {
@@ -134,7 +130,6 @@ class AutomationController extends AbstractController
 
         // Payload simulé
         $payload = [
-            'trigger'      => $automation->triggerType,
             'project_uuid' => $projectUuid,
             'timestamp'    => time(),
             'entry' => [
@@ -146,23 +141,131 @@ class AutomationController extends AbstractController
             ],
         ];
 
-        $conditionsPass = $this->engine->evaluateConditions($automation->conditions, $payload);
-        $resolvedConfig = $this->engine->resolveTemplates($automation->actionConfig, $payload);
-
-        // Résultats par condition
-        $conditionDetail = [];
-        if ($automation->conditions) {
-            foreach ($automation->conditions as $cond) {
-                $actual = $this->engine->getNestedValue($payload, $cond['field'] ?? '');
-                $result = $this->engine->evaluateSingle($actual, $cond['operator'] ?? 'eq', $cond['value'] ?? null);
-                $conditionDetail[] = ['field' => $cond['field'], 'operator' => $cond['operator'], 'value' => $cond['value'], 'actual' => $actual, 'pass' => $result];
-            }
+        $graph = $automation->flowGraph;
+        if (!$graph) {
+            return $this->json(['error' => 'Automation has no flow graph'], 400);
         }
 
+        $ctx = new FlowContext(
+            automationId: $automation->id,
+            projectUuid: $projectUuid,
+            debugMode: true,
+        );
+
+        $result = $this->flowInterpreter->executeFlow($graph, $payload, $ctx);
+
         return $this->json([
-            'conditions_pass'  => $conditionsPass,
-            'condition_detail' => $conditionDetail,
-            'action_config'    => $resolvedConfig,
+            'success'           => $result->status !== 'failed',
+            'status'            => $result->status,
+            'step_log'          => $result->stepLog,
+            'total_duration_ms' => $result->totalDurationMs,
+            'error'             => $result->error,
+        ]);
+    }
+
+    /** Exécute le flow pour de vrai (run) */
+    #[Route('/{id}/run', name: 'run', methods: ['POST'])]
+    public function run(string $projectUuid, int $id): JsonResponse
+    {
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) return $this->json(['error' => 'Project not found'], 404);
+        $this->denyProjectAccess($project);
+
+        $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
+        if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
+
+        $graph = $automation->flowGraph;
+        if (!$graph) return $this->json(['error' => 'Automation has no flow graph'], 400);
+
+        if (!$automation->isActive) return $this->json(['error' => 'Automation is not active'], 400);
+
+        $payload = [
+            'project_uuid' => $projectUuid,
+            'timestamp'    => time(),
+        ];
+
+        $ctx = new FlowContext(
+            automationId: $automation->id,
+            projectUuid: $projectUuid,
+            debugMode: $automation->debugMode,
+        );
+
+        $result = $this->flowInterpreter->executeFlow($graph, $payload, $ctx);
+
+        $automation->lastRunAt = new \DateTimeImmutable();
+        $this->em->flush();
+
+        return $this->json([
+            'success'           => $result->status !== 'failed',
+            'status'            => $result->status,
+            'step_log'          => $result->stepLog,
+            'total_duration_ms' => $result->totalDurationMs,
+            'error'             => $result->error,
+        ]);
+    }
+
+    /** Dry-run : exécute le flow avec un payload fourni par l'utilisateur */
+    #[Route('/{id}/dry-run', name: 'dry_run', methods: ['POST'])]
+    public function dryRun(string $projectUuid, int $id, Request $request): JsonResponse
+    {
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) return $this->json(['error' => 'Project not found'], 404);
+        $this->denyProjectAccess($project);
+
+        $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
+        if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
+
+        $graph = $automation->flowGraph;
+        if (!$graph) return $this->json(['error' => 'Automation has no flow graph'], 400);
+
+        $payload = $request->toArray()['payload'] ?? [];
+
+        $ctx = new FlowContext(
+            automationId: $automation->id,
+            projectUuid: $projectUuid,
+            debugMode: true,
+        );
+
+        $result = $this->flowInterpreter->executeFlow($graph, $payload, $ctx);
+
+        return $this->json([
+            'success'           => $result->status !== 'failed',
+            'status'            => $result->status,
+            'step_log'          => $result->stepLog,
+            'total_duration_ms' => $result->totalDurationMs,
+            'error'             => $result->error,
+        ]);
+    }
+
+    /** Teste un node isolé */
+    #[Route('/{id}/test-node', name: 'test_node', methods: ['POST'])]
+    public function testNode(string $projectUuid, int $id, Request $request): JsonResponse
+    {
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) return $this->json(['error' => 'Project not found'], 404);
+        $this->denyProjectAccess($project);
+
+        $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
+        if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
+
+        $data = $request->toArray();
+        $nodeId   = $data['node_id'] ?? '';
+        $nodeType = $data['node_type'] ?? '';
+        $config   = $data['config'] ?? [];
+        $input    = $data['input'] ?? [];
+
+        $handler = $this->nodeRegistry->resolve($nodeType);
+        if (!$handler) return $this->json(['error' => "Node type '$nodeType' not found"], 404);
+
+        $ctx = new FlowContext($automation->id, $projectUuid, true);
+        $ctx->variables['_node_config'] = $config;
+
+        $nodeInput = ['test' => new NodeOutput(data: $input)];
+        $output = $handler->execute($nodeInput, $ctx);
+
+        return $this->json([
+            'success' => !isset($output->data['error']),
+            'output'  => $output->data,
         ]);
     }
 
@@ -217,19 +320,15 @@ class AutomationController extends AbstractController
     private function serialize(Automation $a): array
     {
         return [
-            'id'             => $a->id,
-            'uuid'          => $a->uuid?->toRfc4122(),
-            'name'          => $a->name,
-            'is_active'     => $a->isActive,
-            'debug_mode'    => $a->debugMode,
-            'trigger_type'  => $a->triggerType,
-            'trigger_config' => $a->triggerConfig,
-            'conditions'    => $a->conditions,
-            'action_type'   => $a->actionType,
-            'action_config' => $a->actionConfig,
-            'last_run_at'   => $a->lastRunAt?->format('c'),
-            'created_at'    => $a->createdAt->format('c'),
-            'updated_at'    => $a->updatedAt->format('c'),
+            'id'         => $a->id,
+            'uuid'       => $a->uuid?->toRfc4122(),
+            'name'       => $a->name,
+            'is_active'  => $a->isActive,
+            'debug_mode' => $a->debugMode,
+            'flow_graph' => $a->flowGraph,
+            'last_run_at' => $a->lastRunAt?->format('c'),
+            'created_at' => $a->createdAt->format('c'),
+            'updated_at' => $a->updatedAt->format('c'),
         ];
     }
 }
