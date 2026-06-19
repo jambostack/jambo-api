@@ -11,7 +11,9 @@ import RealtimeNotifier from '@/components/realtime-notifier';
 
 export default function AppSidebarLayout({ children, breadcrumbs = [] }: PropsWithChildren<{ breadcrumbs?: BreadcrumbItem[] }>) {
     // Active le temps réel automatiquement pour toute page ayant un projet
-    const { project } = usePage<SharedData>().props;
+    // project est passé comme prop de page par les contrôleurs (ex: PageController::assets)
+    const props = usePage<SharedData>().props;
+    const project = props.project as { uuid?: string } | undefined;
 
     return (
         <AppShell variant="sidebar">
@@ -22,7 +24,7 @@ export default function AppSidebarLayout({ children, breadcrumbs = [] }: PropsWi
             </AppContent>
             <AppMobileNav />
             <SonnerToaster position="top-center" closeButton />
-            <RealtimeNotifier projectUuid={(project as any)?.uuid} />
+            <RealtimeNotifier projectUuid={project?.uuid} />
         </AppShell>
     );
 }
