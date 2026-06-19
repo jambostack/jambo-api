@@ -45,14 +45,19 @@ class CallWebhookHandler implements FlowNodeHandler
             throw new \RuntimeException('Invalid webhook URL: only http/https allowed');
         }
 
-        // Bloquer les IPs internes/réservées
-        $ip = gethostbyname($host);
-        if ($ip === $host) {
+        // Bloquer les IPs internes/reservees (IPv4 + IPv6)
+        $records = dns_get_record($host, DNS_A | DNS_AAAA);
+        if (empty($records)) {
             throw new \RuntimeException('Cannot resolve webhook host');
         }
 
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-            throw new \RuntimeException('Webhook URL resolves to private/internal IP');
+        foreach ($records as $record) {
+            $ip = $record['ip'] ?? $record['ipv6'] ?? '';
+            if ($ip === '') continue;
+
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+                throw new \RuntimeException('Webhook URL resolves to private/internal IP');
+            }
         }
     }
 
