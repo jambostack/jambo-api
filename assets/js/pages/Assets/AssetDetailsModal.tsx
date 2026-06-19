@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {  Dialog,  DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { FileImage, FileText, FileVideo, FileAudio, File, Download, Crop, Lock, Unlock, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileImage, FileText, FileVideo, FileAudio, File, Download, Crop, Lock, Unlock, Copy, Check, ChevronDown, ChevronUp, FileSpreadsheet, FileArchive, FileCode, MonitorPlay, Image } from 'lucide-react';
 import ReactCrop, { Crop as CropType, centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import InputError from '@/components/input-error';
@@ -78,22 +78,47 @@ export default function AssetDetailsModal({
     }, [isOpen]);
 
     const getFileIcon = (asset: Asset) => {
-        const extension = asset.extension.toLowerCase();
+        const ext = asset.extension.toLowerCase();
 
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(extension)) {
-            return <FileImage className="h-10 w-10 text-blue-500" />;
+        // Images
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico', 'tiff', 'tif', 'heic'].includes(ext)) {
+            return <FileImage className="h-10 w-10 text-sky-500" />;
         }
-
-        if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'flv'].includes(extension)) {
-            return <FileVideo className="h-10 w-10 text-purple-500" />;
+        // Vecteurs
+        if (['svg', 'eps', 'ai'].includes(ext)) {
+            return <Image className="h-10 w-10 text-fuchsia-500" />;
         }
-
-        if (['mp3', 'wav', 'ogg', 'aac', 'flac'].includes(extension)) {
-            return <FileAudio className="h-10 w-10 text-green-500" />;
+        // Vidéos
+        if (['mp4', 'webm', 'mov', 'avi', 'wmv', 'flv', 'mkv'].includes(ext)) {
+            return <FileVideo className="h-10 w-10 text-violet-500" />;
         }
-
-        if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'].includes(extension)) {
-            return <FileText className="h-10 w-10 text-yellow-500" />;
+        // Audio
+        if (['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'].includes(ext)) {
+            return <FileAudio className="h-10 w-10 text-emerald-500" />;
+        }
+        // PDF
+        if (ext === 'pdf') {
+            return <FileText className="h-10 w-10 text-red-500" />;
+        }
+        // Tableurs
+        if (['xls', 'xlsx', 'csv', 'ods'].includes(ext)) {
+            return <FileSpreadsheet className="h-10 w-10 text-green-500" />;
+        }
+        // Présentations
+        if (['ppt', 'pptx', 'odp', 'key'].includes(ext)) {
+            return <MonitorPlay className="h-10 w-10 text-orange-500" />;
+        }
+        // Archives
+        if (['zip', 'rar', '7z', 'gz', 'tar', 'bz2'].includes(ext)) {
+            return <FileArchive className="h-10 w-10 text-stone-500" />;
+        }
+        // Code / JSON
+        if (['json', 'xml', 'yaml', 'yml', 'html', 'css', 'js', 'ts', 'php', 'py', 'sql'].includes(ext)) {
+            return <FileCode className="h-10 w-10 text-cyan-500" />;
+        }
+        // Texte / Documents
+        if (['txt', 'md', 'doc', 'docx', 'rtf', 'odt'].includes(ext)) {
+            return <FileText className="h-10 w-10 text-blue-500" />;
         }
 
         return <File className="h-10 w-10 text-muted-foreground" />;

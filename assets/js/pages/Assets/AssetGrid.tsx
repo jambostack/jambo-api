@@ -6,7 +6,7 @@ import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 import { Checkbox } from '@/components/ui/checkbox';
-import { FileImage, FileText, FileVideo, FileAudio, File } from 'lucide-react';
+import { FileImage, FileText, FileVideo, FileAudio, File, FileSpreadsheet, FileArchive, FileCode, MonitorPlay, Image } from 'lucide-react';
 
 import AssetDetailsModal from './AssetDetailsModal';
 import AssetActionMenu from './AssetActionMenu';
@@ -20,54 +20,136 @@ interface AssetGridProps {
 	selectOnClick?: boolean;
 }
 
-type FileCategory = 'image' | 'video' | 'audio' | 'document' | 'other';
+type FileCategory = 'image' | 'vector' | 'video' | 'audio' | 'pdf' | 'spreadsheet' | 'presentation' | 'archive' | 'code' | 'text' | 'other';
 
-function getFileCategory(extension: string): FileCategory {
-	const ext = extension.toLowerCase();
-	if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)) return 'image';
-	if (['mp4', 'webm', 'mov', 'avi', 'wmv', 'flv', 'mkv'].includes(ext)) return 'video';
-	if (['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'].includes(ext)) return 'audio';
-	if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf'].includes(ext)) return 'document';
-	return 'other';
-}
-
-const categoryStyles: Record<FileCategory, {
+interface FileTypeStyle {
 	chipClass: string;
 	thumbBg: string;
 	iconClass: string;
 	Icon: React.FC<{ className?: string }>;
-}> = {
-	image: {
-		chipClass: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-		thumbBg: 'bg-sky-50 dark:bg-sky-950/20',
-		iconClass: 'text-sky-400',
-		Icon: FileImage,
-	},
-	video: {
-		chipClass: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-		thumbBg: 'bg-violet-50 dark:bg-violet-950/20',
-		iconClass: 'text-violet-400',
-		Icon: FileVideo,
-	},
-	audio: {
-		chipClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-		thumbBg: 'bg-emerald-50 dark:bg-emerald-950/20',
-		iconClass: 'text-emerald-400',
-		Icon: FileAudio,
-	},
-	document: {
-		chipClass: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-		thumbBg: 'bg-amber-50 dark:bg-amber-950/20',
-		iconClass: 'text-amber-400',
-		Icon: FileText,
-	},
-	other: {
+}
+
+function getFileStyle(extension: string): FileTypeStyle {
+	const ext = extension.toLowerCase();
+
+	// Images
+	if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico', 'tiff', 'tif', 'heic', 'heif'].includes(ext)) {
+		return {
+			chipClass: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+			thumbBg: 'bg-sky-50 dark:bg-sky-950/20',
+			iconClass: 'text-sky-400',
+			Icon: FileImage,
+		};
+	}
+
+	// Vecteurs
+	if (['svg', 'eps', 'ai'].includes(ext)) {
+		return {
+			chipClass: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/40 dark:text-fuchsia-300',
+			thumbBg: 'bg-fuchsia-50 dark:bg-fuchsia-950/20',
+			iconClass: 'text-fuchsia-400',
+			Icon: Image,
+		};
+	}
+
+	// Vidéos
+	if (['mp4', 'webm', 'mov', 'avi', 'wmv', 'flv', 'mkv', 'm4v'].includes(ext)) {
+		return {
+			chipClass: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+			thumbBg: 'bg-violet-50 dark:bg-violet-950/20',
+			iconClass: 'text-violet-400',
+			Icon: FileVideo,
+		};
+	}
+
+	// Audio
+	if (['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a', 'wma', 'opus'].includes(ext)) {
+		return {
+			chipClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+			thumbBg: 'bg-emerald-50 dark:bg-emerald-950/20',
+			iconClass: 'text-emerald-400',
+			Icon: FileAudio,
+		};
+	}
+
+	// PDF
+	if (['pdf'].includes(ext)) {
+		return {
+			chipClass: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+			thumbBg: 'bg-red-50 dark:bg-red-950/20',
+			iconClass: 'text-red-400',
+			Icon: FileText,
+		};
+	}
+
+	// Tableurs
+	if (['xls', 'xlsx', 'csv', 'ods', 'numbers'].includes(ext)) {
+		return {
+			chipClass: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+			thumbBg: 'bg-green-50 dark:bg-green-950/20',
+			iconClass: 'text-green-400',
+			Icon: FileSpreadsheet,
+		};
+	}
+
+	// Présentations
+	if (['ppt', 'pptx', 'odp', 'key'].includes(ext)) {
+		return {
+			chipClass: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+			thumbBg: 'bg-orange-50 dark:bg-orange-950/20',
+			iconClass: 'text-orange-400',
+			Icon: MonitorPlay,
+		};
+	}
+
+	// Archives
+	if (['zip', 'rar', '7z', 'gz', 'tar', 'bz2', 'xz'].includes(ext)) {
+		return {
+			chipClass: 'bg-stone-100 text-stone-700 dark:bg-stone-800/60 dark:text-stone-300',
+			thumbBg: 'bg-stone-50 dark:bg-stone-900/20',
+			iconClass: 'text-stone-400',
+			Icon: FileArchive,
+		};
+	}
+
+	// Code / données
+	if (['json', 'xml', 'yaml', 'yml', 'html', 'css', 'js', 'ts', 'jsx', 'tsx', 'php', 'py', 'sql', 'graphql'].includes(ext)) {
+		return {
+			chipClass: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
+			thumbBg: 'bg-cyan-50 dark:bg-cyan-950/20',
+			iconClass: 'text-cyan-400',
+			Icon: FileCode,
+		};
+	}
+
+	// Texte
+	if (['txt', 'md', 'rtf', 'log'].includes(ext)) {
+		return {
+			chipClass: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+			thumbBg: 'bg-blue-50 dark:bg-blue-950/20',
+			iconClass: 'text-blue-400',
+			Icon: FileText,
+		};
+	}
+
+	// Doc (Word)
+	if (['doc', 'docx', 'odt', 'pages'].includes(ext)) {
+		return {
+			chipClass: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+			thumbBg: 'bg-blue-50 dark:bg-blue-950/20',
+			iconClass: 'text-blue-400',
+			Icon: FileText,
+		};
+	}
+
+	// Fallback
+	return {
 		chipClass: 'bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300',
 		thumbBg: 'bg-slate-50 dark:bg-slate-900/20',
 		iconClass: 'text-slate-400',
 		Icon: File,
-	},
-};
+	};
+}
 
 export default function AssetGrid({
 	assets,
@@ -110,8 +192,7 @@ export default function AssetGrid({
 		<div className="space-y-4">
 			<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
 				{assets.map((asset) => {
-					const category = getFileCategory(asset.extension);
-					const styles = categoryStyles[category];
+					const styles = getFileStyle(asset.extension);
 					const { Icon } = styles;
 					const isSelected = selectedAssets.includes(asset.id);
 
