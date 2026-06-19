@@ -4,8 +4,10 @@ namespace App\Controller;
 
 use App\Entity\Media;
 use App\Entity\MediaFolder;
+use App\Entity\Project;
 use App\Repository\MediaFolderRepository;
 use App\Repository\MediaRepository;
+use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\ProjectStorageProfileRepository;
 use App\Repository\StorageRuleRepository;
@@ -33,7 +35,18 @@ class TusController extends AbstractController
         private readonly ProjectStorageProfileRepository $profileRepo,
         private readonly StorageRuleRepository $ruleRepo,
         private readonly StorageDriverFactory $driverFactory,
+        private readonly ProjectMemberRepository $memberRepo,
     ) {}
+
+    /** Extensions autorisées — refuse tout fichier exécutable */
+    private const ALLOWED_EXTENSIONS = [
+        'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg',
+        'mp4', 'webm', 'mov', 'avi',
+        'mp3', 'wav', 'ogg', 'aac', 'flac',
+        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+        'txt', 'csv', 'json', 'xml', 'yaml', 'yml',
+        'zip', 'gz', 'tar',
+    ];
 
     /**
      * POST — Crée un upload TUS.
@@ -50,6 +63,7 @@ class TusController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+        $this->denyProjectAccess($project);
 
         // Vérifier le header obligatoire
         if ($request->headers->get('Tus-Resumable') !== '1.0.0') {
@@ -90,6 +104,12 @@ class TusController extends AbstractController
         if ($request->headers->get('Tus-Resumable') !== '1.0.0') {
             return $this->json(['error' => 'Missing Tus-Resumable header'], 400);
         }
+
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+        $this->denyProjectAccess($project);
 
         if (!$this->tusServer->exists($projectUuid, $uploadId)) {
             return $this->json(['error' => 'Upload not found'], 404);
@@ -132,6 +152,12 @@ class TusController extends AbstractController
     #[Route('/{uploadId}', name: 'head', methods: ['HEAD'])]
     public function head(string $projectUuid, string $uploadId, Request $request): Response
     {
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            return new Response('', 404, ['Tus-Resumable' => '1.0.0']);
+        }
+        $this->denyProjectAccess($project);
+
         if (!$this->tusServer->exists($projectUuid, $uploadId)) {
             return new Response('', 404, ['Tus-Resumable' => '1.0.0']);
         }
@@ -154,6 +180,12 @@ class TusController extends AbstractController
     #[Route('/{uploadId}', name: 'delete', methods: ['DELETE'])]
     public function delete(string $projectUuid, string $uploadId): Response
     {
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+        $this->denyProjectAccess($project);
+
         if (!$this->tusServer->exists($projectUuid, $uploadId)) {
             return $this->json(['error' => 'Upload not found'], 404);
         }
@@ -172,6 +204,7 @@ class TusController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+        $this->denyProjectAccess($project);
 
         $info = $this->tusServer->getInfo($projectUuid, $uploadId);
         if ($info === null) {
@@ -179,19 +212,29 @@ class TusController extends AbstractController
         }
 
         $metadata = $info['metadata'] ?? [];
-        $filename = $metadata['filename'] ?? 'file';
-        $mimeType = $metadata['filetype'] ?? 'application/octet-stream';
+        $filename = $this->sanitizeFilename($metadata['filename'] ?? 'file');
 
+        // Validation de l'extension
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if ($ext === '' || !in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
+            return $this->json(['error' => 'File type not allowed'], 400);
+        }
+
+        // Validation du contenu réel (MIME magique)
         $sourcePath = $this->tusServer->getFilePath($projectUuid, $uploadId);
+        if (!file_exists($sourcePath)) {
+            return $this->json(['error' => 'Upload file missing'], 404);
+        }
+        $detectedMime = mime_content_type($sourcePath);
+        $mimeType = $detectedMime !== false ? $detectedMime : 'application/octet-stream';
 
         // Générer un nom unique (comme Vich UniqidNamer)
-        $ext = pathinfo($filename, PATHINFO_EXTENSION);
-        $uniqueName = uniqid() . ($ext !== '' && $ext !== $filename ? '.' . $ext : '');
+        $uniqueName = uniqid() . '.' . $ext;
 
         // Destination finale dans public/uploads/media/{projectUuid}/
         $publicDir = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . $projectUuid;
         if (!is_dir($publicDir)) {
-            mkdir($publicDir, 0777, true);
+            mkdir($publicDir, 0755, true);
         }
         $destPath = $publicDir . '/' . $uniqueName;
 
@@ -258,6 +301,45 @@ class TusController extends AbstractController
     }
 
     // ─── Private ─────────────────────────────────────────────────────────
+
+    /**
+     * Vérifie que l'utilisateur connecté a accès au projet.
+     * Les super-admins ont accès à tout, les autres doivent être membres.
+     */
+    private function denyProjectAccess(Project $project): void
+    {
+        $user = $this->getUser();
+        if (!$user) {
+            throw $this->createAccessDeniedException('Authentication required');
+        }
+        if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+            return;
+        }
+        $member = $this->memberRepo->findActiveByUserAndProject($user, $project);
+        if ($member === null) {
+            throw $this->createAccessDeniedException();
+        }
+    }
+
+    /**
+     * Nettoie le nom de fichier : supprime les caractères dangereux
+     * et prévient le path traversal via null bytes.
+     */
+    private function sanitizeFilename(string $name): string
+    {
+        // Rejette tout null byte (path truncation)
+        if (str_contains($name, "\0")) {
+            throw new \InvalidArgumentException('Filename contains null byte');
+        }
+        // Ne garde que le nom de base (pas de chemin)
+        $name = basename($name);
+        // Supprime les caractères non imprimables et les slashes
+        $name = preg_replace('/[\x00-\x1F\/\\\\]/', '', $name);
+        if ($name === '' || $name === '.' || $name === '..') {
+            $name = 'unnamed';
+        }
+        return $name;
+    }
 
     /**
      * Parse le header Upload-Metadata au format TUS :
