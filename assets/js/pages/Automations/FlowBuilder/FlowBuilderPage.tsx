@@ -145,7 +145,7 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
             </div>
 
             {/* Body : Panel gauche + Canvas + Inspector */}
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 min-h-0 overflow-hidden">
                 <NodePanel />
                 <FlowCanvas />
                 <InspectorPanel />
@@ -167,7 +167,7 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
     if (isDialog) {
         return (
             <Dialog open modal onOpenChange={() => onClose?.()}>
-                <DialogContent className="!max-w-none !w-[95vw] !h-[90vh] p-0 gap-0 [&>button.absolute]:hidden">
+                <DialogContent className="!max-w-none !w-[95vw] !h-[90vh] p-0 gap-0 [&>button.absolute]:hidden flex flex-col">
                     <DialogHeader className="sr-only">
                         <DialogTitle>
                             {automationId
