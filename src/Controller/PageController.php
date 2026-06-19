@@ -464,6 +464,12 @@ class PageController extends InertiaController
         return $this->settingsPage($project, $request, 'Projects/Settings/WebhookLogs');
     }
 
+    #[Route('/projects/{project}/settings/automations', name: 'projects_settings_automations', requirements: ['project' => '\d+'], priority: 10)]
+    public function settingsAutomations(int $project, Request $request): Response
+    {
+        return $this->settingsPage($project, $request, 'Projects/Settings/Automations/Index');
+    }
+
     // -------------------------------------------------------------------------
     // End Users Management
     // -------------------------------------------------------------------------
