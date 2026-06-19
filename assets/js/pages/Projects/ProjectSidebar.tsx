@@ -85,7 +85,7 @@ export default function ProjectSidebar({ project }: Props) {
 
     return (
         <div>
-            <aside className="w-full lg:w-64 space-y-4 sticky top-4 max-h-[85vh] flex flex-col overflow-hidden">
+            <aside className="w-full lg:w-64 space-y-4 sticky top-16 max-h-[calc(100vh-5rem)] flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between shrink-0">
                     <h3 className="font-medium">{t('projects.sidebar.title')}</h3>
                     {can.create_collection && (

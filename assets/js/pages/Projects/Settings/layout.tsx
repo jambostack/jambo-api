@@ -48,7 +48,7 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
             <Heading title={t('projects.settings.heading')} description={t('projects.settings.heading_desc')} />
 
             <div className="flex flex-col lg:flex-row lg:space-y-0 lg:space-x-12 rtl:lg:space-x-reverse">
-                <aside className="w-full lg:w-48 max-h-[80vh] overflow-y-auto">
+                <aside className="w-full lg:w-48 sticky top-16 max-h-[calc(100vh-5rem)] overflow-y-auto">
                     <nav className="flex flex-col space-y-1">
                         {sidebarNavItems
                             .filter((item) => can[item.permission])
