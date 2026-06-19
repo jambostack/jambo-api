@@ -140,7 +140,7 @@ export default function AssetUploader({ isOpen, onClose, projectId, projectUuid,
 		setFiles(prevFiles =>
 			prevFiles.map(file =>
 				file.status === 'uploading' || file.status === 'pending'
-					? { ...file, status: 'cancelled', error: 'Téléversement annulé' }
+					? { ...file, status: 'cancelled', error: t('assets.uploader_cancelled') }
 					: file
 			)
 		);
@@ -195,7 +195,7 @@ export default function AssetUploader({ isOpen, onClose, projectId, projectUuid,
 						updateFileProgress(fileItem.id, 100);
 						updateFileStatus(fileItem.id, 'completed');
 					} catch (finalizeErr: any) {
-						const msg = finalizeErr.response?.data?.error || 'Échec de la finalisation';
+						const msg = finalizeErr.response?.data?.error || t('assets.uploader_finalize_error');
 						updateFileStatus(fileItem.id, 'error', msg);
 					}
 					tusRefs.current.delete(fileItem.id);
@@ -519,7 +519,7 @@ export default function AssetUploader({ isOpen, onClose, projectId, projectUuid,
 														onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
 													>
 														<X className="h-3.5 w-3.5" />
-														<span className="sr-only">Remove file</span>
+														<span className="sr-only">{t('assets.uploader_remove_file')}</span>
 													</Button>
 												)}
 											</div>

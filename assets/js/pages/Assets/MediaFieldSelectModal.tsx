@@ -406,7 +406,7 @@ export function MediaLibraryModal({
                                 >
                                     <span className="flex items-center gap-2">
                                         <Folder className="h-4 w-4" />
-                                        Dossiers
+                                        {t('assets.folder_tree_title')}
                                         {selectedFolderId !== null && (
                                             <span className="inline-flex items-center justify-center h-4 min-w-4 rounded-full bg-primary/20 text-[10px] font-bold text-primary px-1">
                                                 ●
@@ -421,7 +421,7 @@ export function MediaLibraryModal({
                                 {/* Desktop header */}
                                 <div className="hidden md:flex items-center gap-2 mb-2 px-1">
                                     <Folder className="h-4 w-4 text-muted-foreground" />
-                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dossiers</span>
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('assets.folder_tree_title')}</span>
                                 </div>
                                 {/* Tree — visible desktop / toggled mobile */}
                                 <div className={`${showFolderSidebar ? 'block' : 'hidden'} md:block`}>

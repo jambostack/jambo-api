@@ -296,7 +296,7 @@ export default function Index({ project, assets, filters }: Props) {
 				<aside className="w-56 flex-shrink-0 border-r border-border pr-3 overflow-y-auto hidden md:block">
 					<div className="flex items-center gap-2 mb-2 px-1 pt-1">
 						<Folder className="h-4 w-4 text-muted-foreground" />
-						<span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dossiers</span>
+						<span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('assets.folder_tree_title')}</span>
 					</div>
 					<MediaFolderTree
 						projectUuid={project.uuid}
@@ -313,7 +313,7 @@ export default function Index({ project, assets, filters }: Props) {
 						{/* Panel */}
 						<div className="fixed inset-y-0 left-0 w-72 bg-background shadow-xl border-r border-border flex flex-col z-50">
 							<div className="flex items-center justify-between px-3 py-3 border-b border-border">
-								<span className="text-sm font-semibold">Dossiers</span>
+								<span className="text-sm font-semibold">{t('assets.folder_tree_title')}</span>
 								<button onClick={() => setMobileFolderOpen(false)} className="p-1 rounded-md hover:bg-muted">
 									<ChevronLeft className="h-4 w-4" />
 								</button>
@@ -357,7 +357,7 @@ export default function Index({ project, assets, filters }: Props) {
 
 					{/* ── Controls toolbar ─────────────────────────── */}
 					<div className="flex flex-wrap items-center gap-1.5 md:gap-2">
-						{/* Dossiers � mobile only */}
+						{/* Dossiers � mobile only */}
 							<button
 								className="md:hidden flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-border/70 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
 								onClick={() => setMobileFolderOpen(true)}
@@ -390,7 +390,7 @@ export default function Index({ project, assets, filters }: Props) {
 							/>
 						</div>
 
-						{/* Type filter pills � desktop */}
+						{/* Type filter pills � desktop */}
 							<div className="hidden md:inline-flex items-center gap-0.5 rounded-lg bg-muted p-1 flex-shrink-0">
 								{TYPE_OPTIONS.map((opt) => (
 									<button
@@ -409,7 +409,7 @@ export default function Index({ project, assets, filters }: Props) {
 								))}
 							</div>
 
-							{/* Type filter � mobile dropdown */}
+							{/* Type filter � mobile dropdown */}
 							<div className="md:hidden flex-shrink-0">
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
@@ -486,7 +486,7 @@ export default function Index({ project, assets, filters }: Props) {
 							<button
 								type="button"
 								onClick={() => handleViewModeChange('grid')}
-								aria-label="Grid View"
+								aria-label={t('assets.view_grid')}
 								className={cn(
 									'flex h-9 w-9 items-center justify-center transition-colors',
 									viewMode === 'grid'
@@ -499,7 +499,7 @@ export default function Index({ project, assets, filters }: Props) {
 							<button
 								type="button"
 								onClick={() => handleViewModeChange('list')}
-								aria-label="List View"
+								aria-label={t('assets.view_list')}
 								className={cn(
 									'flex h-9 w-9 items-center justify-center transition-colors',
 									viewMode === 'list'
