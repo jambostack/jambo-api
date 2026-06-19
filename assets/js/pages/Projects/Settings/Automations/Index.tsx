@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import AutomationForm from './AutomationForm';
 import AutomationRuns from './AutomationRuns';
-import FlowBuilderPage from '../../Automations/FlowBuilder/FlowBuilderPage';
+import FlowBuilderPage from '../../../Automations/FlowBuilder/FlowBuilderPage';
 
 interface Automation {
     id: number;
