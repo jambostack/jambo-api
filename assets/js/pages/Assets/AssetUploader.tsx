@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from '@/lib/i18n';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
+import { Upload as TusUpload } from 'tus-js-client';
 import { cn } from '@/lib/utils';
 
 import {
@@ -58,6 +59,7 @@ export default function AssetUploader({ isOpen, onClose, projectId, projectUuid,
 
 	const isStoppedRef = useRef(false);
 	const uploadingRef = useRef(false);
+	const tusRefs = useRef<Map<string, TusUpload>>(new Map()); // pour abort()
 
 	const fileRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 	const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -132,16 +134,131 @@ export default function AssetUploader({ isOpen, onClose, projectId, projectUuid,
 
 	const stopUploads = () => {
 		isStoppedRef.current = true;
+		// Abort all active TUS uploads
+		tusRefs.current.forEach((upload) => { try { upload.abort(); } catch {} });
+		tusRefs.current.clear();
 		setFiles(prevFiles =>
 			prevFiles.map(file =>
 				file.status === 'uploading' || file.status === 'pending'
-					? { ...file, status: 'cancelled', error: 'Upload cancelled' }
+					? { ...file, status: 'cancelled', error: 'Téléversement annulé' }
 					: file
 			)
 		);
 		setUploading(false);
 		uploadingRef.current = false;
 		setCurrentUploadingId(null);
+	};
+
+	/**
+	 * Upload avec TUS (résumable, chunked).
+	 * Petit fichier (< 5 Mo) : upload classique multipart en fallback.
+	 */
+	const uploadFileWithTus = (fileItem: UploadFile): Promise<void> => {
+		return new Promise((resolve) => {
+			if (isStoppedRef.current) { resolve(); return; }
+
+			const tusEndpoint = `/api/projects/${projectUuid}/files/tus`;
+			const metadata: Record<string, string> = {
+				filename: fileItem.file.name,
+				filetype: fileItem.file.type || 'application/octet-stream',
+			};
+			if (folderId != null) {
+				metadata.folder_id = String(folderId);
+			}
+
+			const upload = new TusUpload(fileItem.file, {
+				endpoint: tusEndpoint,
+				metadata,
+				chunkSize: 2 * 1024 * 1024, // 2 Mo chunks
+				retryDelays: [0, 3000, 10000],
+				onProgress: (bytesUploaded, bytesTotal) => {
+					if (isStoppedRef.current) return;
+					const pct = Math.round((bytesUploaded / bytesTotal) * 100);
+					updateFileProgress(fileItem.id, pct);
+				},
+				onSuccess: async () => {
+					if (isStoppedRef.current) { resolve(); return; }
+
+					// Extraire l'uploadId de l'URL retournée
+					const uploadUrl = upload.url;
+					const uploadId = uploadUrl?.split('/').pop();
+					if (!uploadId) {
+						updateFileStatus(fileItem.id, 'error', 'Impossible de finaliser (ID manquant)');
+						resolve();
+						return;
+					}
+
+					try {
+						updateFileProgress(fileItem.id, 99);
+						// Finaliser côté serveur (créer Media + sync storage)
+						await axios.post(`${tusEndpoint}/${uploadId}/finalize`);
+						updateFileProgress(fileItem.id, 100);
+						updateFileStatus(fileItem.id, 'completed');
+					} catch (finalizeErr: any) {
+						const msg = finalizeErr.response?.data?.error || 'Échec de la finalisation';
+						updateFileStatus(fileItem.id, 'error', msg);
+					}
+					tusRefs.current.delete(fileItem.id);
+					resolve();
+				},
+				onError: (err: Error) => {
+					if (isStoppedRef.current) { resolve(); return; }
+					// Tentative de fallback classique pour les petits fichiers
+					if (fileItem.file.size < 5 * 1024 * 1024) {
+						uploadFileClassic(fileItem).then(resolve);
+					} else {
+						updateFileStatus(fileItem.id, 'error', err.message || t('assets.uploader_failed_default'));
+						tusRefs.current.delete(fileItem.id);
+						resolve();
+					}
+				},
+			});
+
+			tusRefs.current.set(fileItem.id, upload);
+			upload.start();
+		});
+	};
+
+	/** Fallback : upload multipart classique (compatibilité / petits fichiers) */
+	const uploadFileClassic = async (fileItem: UploadFile): Promise<void> => {
+		const formData = new FormData();
+		formData.append('file', fileItem.file);
+		if (folderId != null) {
+			formData.append('folder_id', String(folderId));
+		}
+
+		try {
+			await axios.post(`/api/projects/${projectUuid}/media`, formData, {
+				headers: { 'Content-Type': 'multipart/form-data' },
+				onUploadProgress: (progressEvent) => {
+					if (isStoppedRef.current) return;
+					if (progressEvent.total) {
+						const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+						updateFileProgress(fileItem.id, progress);
+					}
+				},
+			});
+			if (isStoppedRef.current) {
+				updateFileStatus(fileItem.id, 'cancelled');
+			} else {
+				updateFileProgress(fileItem.id, 100);
+				updateFileStatus(fileItem.id, 'completed');
+			}
+		} catch (error: any) {
+			let errorMessage = t('assets.uploader_failed_default');
+			if (error.response) {
+				if (error.response.status === 413) {
+					errorMessage = t('assets.uploader_too_large');
+				} else if (error.response.data?.error) {
+					errorMessage = error.response.data.error;
+				}
+			}
+			if (isStoppedRef.current) {
+				updateFileStatus(fileItem.id, 'cancelled');
+			} else {
+				updateFileStatus(fileItem.id, 'error', errorMessage);
+			}
+		}
 	};
 
 	const uploadFiles = async () => {
@@ -152,7 +269,7 @@ export default function AssetUploader({ isOpen, onClose, projectId, projectUuid,
 		uploadingRef.current = true;
 
 		try {
-			const pendingFiles = files.filter(file => file.status === 'pending');
+			const pendingFiles = files.filter(f => f.status === 'pending');
 
 			for (let i = 0; i < pendingFiles.length; i++) {
 				if (isStoppedRef.current) break;
@@ -161,59 +278,7 @@ export default function AssetUploader({ isOpen, onClose, projectId, projectUuid,
 				setCurrentUploadingId(fileItem.id);
 				updateFileStatus(fileItem.id, 'uploading');
 
-				const formData = new FormData();
-				formData.append('file', fileItem.file);
-				if (folderId != null) {
-					formData.append('folder_id', String(folderId));
-				}
-
-				try {
-					await axios.post(`/api/projects/${projectUuid}/media`, formData, {
-						headers: { 'Content-Type': 'multipart/form-data' },
-						onUploadProgress: (progressEvent) => {
-							if (isStoppedRef.current) return;
-							if (progressEvent.total) {
-								const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
-								updateFileProgress(fileItem.id, progress);
-							}
-						},
-					});
-
-					if (isStoppedRef.current) {
-						updateFileStatus(fileItem.id, 'cancelled');
-						break;
-					}
-
-					updateFileProgress(fileItem.id, 100);
-					updateFileStatus(fileItem.id, 'completed');
-
-				} catch (error: any) {
-					let errorMessage = t('assets.uploader_failed_default');
-
-					if (error.response) {
-						if (error.response.data?.message) {
-							errorMessage = error.response.data.message;
-							if (error.response.data.errors?.file) {
-								const fileErrors = error.response.data.errors.file;
-								if (Array.isArray(fileErrors) && fileErrors.length > 0) {
-									errorMessage += `: ${fileErrors.join(', ')}`;
-								}
-							}
-							if (error.response.data.file_size_limit) {
-								errorMessage += ` (Max size: ${error.response.data.file_size_limit})`;
-							}
-						} else if (error.response.status === 413) {
-							errorMessage = t('assets.uploader_too_large');
-						}
-					}
-
-					if (isStoppedRef.current) {
-						updateFileStatus(fileItem.id, 'cancelled');
-						break;
-					} else {
-						updateFileStatus(fileItem.id, 'error', errorMessage);
-					}
-				}
+				await uploadFileWithTus(fileItem);
 			}
 		} finally {
 			setUploading(false);
@@ -225,6 +290,8 @@ export default function AssetUploader({ isOpen, onClose, projectId, projectUuid,
 
 	useEffect(() => {
 		if (!isOpen) {
+			tusRefs.current.forEach(u => { try { u.abort(); } catch {} });
+			tusRefs.current.clear();
 			setFiles([]);
 			setOverallProgress(0);
 			setCurrentUploadingId(null);
