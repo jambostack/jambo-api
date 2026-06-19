@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Edit, Trash, Play, Clock, List } from 'lucide-react';
+import { Plus, Edit, Trash, Play, Clock, List, Workflow } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import AutomationForm from './AutomationForm';
 import AutomationRuns from './AutomationRuns';
+import FlowBuilderPage from '../../Automations/FlowBuilder/FlowBuilderPage';
 
 interface Automation {
     id: number;
@@ -49,6 +50,8 @@ export default function AutomationsIndex({ projectUuid }: Props) {
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Automation | null>(null);
     const [runsFor, setRunsFor] = useState<Automation | null>(null);
+    const [builderOpen, setBuilderOpen] = useState(false);
+    const [builderId, setBuilderId] = useState<number | null>(null);
 
     const load = async () => {
         try {
@@ -83,6 +86,17 @@ export default function AutomationsIndex({ projectUuid }: Props) {
         }
     };
 
+    if (builderOpen) {
+        return (
+            <FlowBuilderPage
+                projectUuid={projectUuid}
+                automationId={builderId}
+                onClose={() => { setBuilderOpen(false); load(); }}
+                onSaved={() => { setBuilderOpen(false); load(); }}
+            />
+        );
+    }
+
     if (runsFor) {
         return <AutomationRuns projectUuid={projectUuid} automation={runsFor} onBack={() => setRunsFor(null)} />;
     }
@@ -94,9 +108,18 @@ export default function AutomationsIndex({ projectUuid }: Props) {
                     <h3 className="text-lg font-semibold">Automatisations</h3>
                     <p className="text-sm text-muted-foreground">Déclencheur → Conditions → Action</p>
                 </div>
-                <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Nouvelle automatisation
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => { setBuilderId(null); setBuilderOpen(true); }}
+                    >
+                        <Workflow className="h-3.5 w-3.5 mr-1" /> Flow Builder
+                    </Button>
+                    <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Nouvelle automatisation
+                    </Button>
+                </div>
             </div>
 
             {loading ? (
@@ -136,6 +159,9 @@ export default function AutomationsIndex({ projectUuid }: Props) {
                                         <div className="flex items-center justify-end gap-1">
                                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setRunsFor(a); }}>
                                                 <List className="h-3.5 w-3.5" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setBuilderId(a.id); setBuilderOpen(true); }}>
+                                                <Workflow className="h-3.5 w-3.5" />
                                             </Button>
                                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(a); setFormOpen(true); }}>
                                                 <Edit className="h-3.5 w-3.5" />
