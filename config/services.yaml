@@ -86,6 +86,11 @@ services:
             $appSecret: '%kernel.secret%'
             $projectDir: '%kernel.project_dir%'
 
+    # ── TUS Resumable Upload ─────────────────────────────────────────────────
+    App\Service\TusServer:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+
     App\Service\MediaSerializer:
         arguments:
             $profileRepo: '@App\Repository\ProjectStorageProfileRepository'
