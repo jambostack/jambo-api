@@ -152,7 +152,7 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
             </div>
 
             {/* Toolbar */}
-            <FlowToolbar onSave={handleSave} saving={saving} />
+            <FlowToolbar onSave={handleSave} saving={saving} projectUuid={projectUuid} automationId={automationId} />
 
             {/* Command Palette */}
             {cmdOpen && (

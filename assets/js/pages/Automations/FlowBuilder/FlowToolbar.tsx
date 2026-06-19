@@ -4,19 +4,23 @@ import { useReactFlow } from '@xyflow/react';
 import { useFlowStore } from './FlowStore';
 import { createFlowHistory } from './FlowHistory';
 import { useState } from 'react';
+import FlowDryRun from './FlowDryRun';
 
 const history = createFlowHistory();
 
 interface FlowToolbarProps {
     onSave?: () => void;
     saving?: boolean;
+    projectUuid: string;
+    automationId?: number | null;
 }
 
-export default function FlowToolbar({ onSave, saving }: FlowToolbarProps) {
+export default function FlowToolbar({ onSave, saving, projectUuid, automationId }: FlowToolbarProps) {
     const { zoomIn, zoomOut, fitView } = useReactFlow();
     const { getFlowGraph, loadFlowGraph, flowName, isActive, debugMode } = useFlowStore();
     const [validating, setValidating] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
+    const [dryRunOpen, setDryRunOpen] = useState(false);
 
     const handleUndo = () => {
         const prev = history.undo();
@@ -97,13 +101,22 @@ export default function FlowToolbar({ onSave, saving }: FlowToolbarProps) {
                 <Button variant="outline" size="sm" onClick={handleValidate} className="h-8 text-xs">
                     Valider
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleSaveSnapshot} className="h-8 text-xs">
+                <Button variant="outline" size="sm" onClick={() => setDryRunOpen(true)} disabled={!automationId} className="h-8 text-xs">
                     <Play className="h-3 w-3 mr-1" /> Tester
                 </Button>
                 <Button size="sm" className="h-8 text-xs" onClick={onSave} disabled={saving}>
                     <Save className="h-3 w-3 mr-1" /> {saving ? '...' : 'Enregistrer'}
                 </Button>
             </div>
+
+            {automationId && (
+                <FlowDryRun
+                    projectUuid={projectUuid}
+                    automationId={automationId}
+                    open={dryRunOpen}
+                    onClose={() => setDryRunOpen(false)}
+                />
+            )}
         </div>
     );
 }
