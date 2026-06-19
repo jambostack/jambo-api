@@ -32,7 +32,7 @@ class TusServer
         $dir = $this->uploadDir($projectUuid);
 
         if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
+            mkdir($dir, 0700, true);
         }
 
         $info = [
@@ -163,6 +163,10 @@ class TusServer
 
     private function uploadDir(string $projectUuid): string
     {
+        // Protection path traversal : n'accepte que les UUID valides
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            throw new \InvalidArgumentException('Invalid project UUID');
+        }
         return $this->projectDir . '/var/tus/' . $projectUuid;
     }
 
