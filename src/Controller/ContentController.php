@@ -249,6 +249,7 @@ class ContentController extends AbstractController
             }
             $entry->locale = $data['locale'];
         }
+        $previousStatus = $entry->status;
         if (isset($data['status'])) {
             $entry->status = $data['status'];
         }
@@ -346,6 +347,13 @@ class ContentController extends AbstractController
         }
 
         $this->dispatcher->dispatch(new ContentEvent(ContentEvent::UPDATED, $entry->project, $entry));
+
+        // Dispatch STATUS_CHANGED si le statut a changé
+        if ($previousStatus !== $entry->status) {
+            $statusEvent = new ContentEvent(ContentEvent::STATUS_CHANGED, $entry->project, $entry);
+            $statusEvent->previousStatus = $previousStatus;
+            $this->dispatcher->dispatch($statusEvent);
+        }
 
         return $this->json(['data' => $this->formatter->formatEntry($entry)]);
     }
