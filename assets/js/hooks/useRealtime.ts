@@ -1,9 +1,31 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
+const STORAGE_PREFIX = 'rt_since_';
+
+function getStoredSince(projectUuid: string): number {
+    try {
+        const v = sessionStorage.getItem(STORAGE_PREFIX + projectUuid);
+        return v !== null ? parseInt(v, 10) || 0 : 0;
+    } catch {
+        return 0;
+    }
+}
+
+function storeSince(projectUuid: string, since: number): void {
+    try {
+        sessionStorage.setItem(STORAGE_PREFIX + projectUuid, String(since));
+    } catch {
+        // sessionStorage indisponible (navigation privée, quota...) — ignoré
+    }
+}
+
 /**
  * Hook temps réel par short polling (compatible tout serveur).
  * Interroge le serveur toutes les 3 secondes pour les nouveaux événements.
+ *
+ * Le curseur `since` est persisté dans sessionStorage pour éviter
+ * de re-jouer les anciens événements après un rafraîchissement Inertia.
  *
  * Usage dans n'importe quelle page projet :
  *   useRealtime(project.uuid);
@@ -11,17 +33,22 @@ import { toast } from 'sonner';
  * Aucune configuration — juste cet appel. Fonctionne sur Apache/CGI, Nginx, etc.
  */
 export function useRealtime(projectUuid?: string) {
-    const sinceRef = useRef(0);
+    // SinceRef persisté pour éviter les doublons après rafraîchissement Inertia.
+    // Initialisé depuis sessionStorage ; mis à jour après chaque poll.
+    const sinceRef = useRef(projectUuid ? getStoredSince(projectUuid) : 0);
     const timerRef = useRef<ReturnType<typeof setInterval>>();
 
     useEffect(() => {
         if (!projectUuid) return;
 
+        // Rattrape le curseur sauvegardé d'un précédent cycle de vie du hook.
+        sinceRef.current = getStoredSince(projectUuid);
+
         const poll = async () => {
             try {
                 const r = await fetch(
                     `/api/projects/${encodeURIComponent(projectUuid)}/realtime?since=${sinceRef.current}`,
-                    { credentials: 'same-origin' }
+                    { credentials: 'same-origin' },
                 );
                 if (!r.ok) return;
                 const json = await r.json();
@@ -29,7 +56,7 @@ export function useRealtime(projectUuid?: string) {
 
                 for (const evt of json.events) {
                     if (evt._id !== undefined) {
-                        sinceRef.current = evt._id + 1;
+                        sinceRef.current = Math.max(sinceRef.current, evt._id + 1);
                     }
                     switch (evt.event) {
                         case 'media.uploaded':
@@ -62,6 +89,10 @@ export function useRealtime(projectUuid?: string) {
                             break;
                     }
                 }
+
+                // Persiste le curseur pour ne pas re-jouer ces événements
+                // après un rafraîchissement Inertia.
+                storeSince(projectUuid, sinceRef.current);
             } catch {
                 // Silencieux — réessaiera au prochain cycle
             }
