@@ -55,8 +55,8 @@ export default function NodePanel() {
         .filter((cat) => cat.nodes.length > 0);
 
     return (
-        <div className="w-64 border-r bg-background flex flex-col h-full overflow-hidden shrink-0">
-            <div className="p-3 border-b">
+        <div className="w-64 border-r bg-background flex flex-col min-h-0 shrink-0">
+            <div className="p-3 border-b shrink-0">
                 <div className="relative">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -68,7 +68,7 @@ export default function NodePanel() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto">
                 {filtered.map((cat) => {
                     const catColor =
                         categoryStyles[cat.key]?.border ?? cat.color ?? '#6b7280';

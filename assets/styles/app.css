@@ -340,3 +340,39 @@
     cursor: pointer;
     border-radius: 4px;
 }
+
+/* ─── ReactFlow Dark Mode ──────────────────────────────────────── */
+.dark .react-flow__controls-button {
+    background: var(--card);
+    border-color: var(--border);
+    fill: var(--foreground);
+}
+
+.dark .react-flow__controls-button:hover {
+    background: var(--accent);
+}
+
+.dark .react-flow__controls-button svg {
+    fill: var(--foreground);
+}
+
+.dark .react-flow__minimap {
+    background: var(--card);
+    border: 1px solid var(--border);
+}
+
+.dark .react-flow__minimap-mask {
+    fill: hsl(var(--background) / 0.7);
+}
+
+.dark .react-flow__attribution {
+    background: var(--card);
+}
+
+.dark .react-flow__attribution a {
+    color: var(--muted-foreground);
+}
+
+.dark .react-flow__background pattern circle {
+    fill: var(--border);
+}
