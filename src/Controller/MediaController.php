@@ -9,6 +9,7 @@ use App\Repository\MediaFolderRepository;
 use App\Repository\MediaRepository;
 use App\Repository\ProjectRepository;
 use App\Service\MediaSerializer;
+use App\Service\MercurePublisher;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -27,6 +28,7 @@ class MediaController extends AbstractController
         private ProjectRepository $projectRepository,
         private MediaRepository $mediaRepository,
         private MediaFolderRepository $folderRepository,
+        private MercurePublisher $mercure,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -118,7 +120,11 @@ class MediaController extends AbstractController
         $this->em->persist($media);
         $this->em->flush();
 
-        return $this->json(['data' => $this->mediaSerializer->serialize($media)], 201);
+        // Notification temps réel
+        $serialized = $this->mediaSerializer->serialize($media);
+        $this->mercure->mediaUploaded($projectUuid, $serialized);
+
+        return $this->json(['data' => $serialized], 201);
     }
 
     #[Route('/bulk-destroy', name: 'bulk_destroy', methods: ['DELETE'], priority: 10)]

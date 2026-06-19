@@ -30,4 +30,4 @@ yarn-error.log
 deploy.py
 /.kilo/
 /.claude/
-/.ultraplan/
+/.ultraplan/var/realtime/
