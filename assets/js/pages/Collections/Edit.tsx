@@ -85,7 +85,7 @@ export default function Edit({ project, collection }: Props) {
 
                 <Separator className="my-6 md:hidden" />
 
-                <div className="flex-1 max-w-full md:w-2xl lg:w-xl xl:w-3xl">
+                <div className="flex-1 max-w-full md:w-2xl lg:w-xl xl:w-full">
                     <section className="space-y-12">
                         <div className="flex flex-col lg:flex-row gap-4">
                             <FieldList
