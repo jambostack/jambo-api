@@ -57,11 +57,69 @@ class MediaController extends AbstractController
             }
         }
 
+        // Filtre par recherche texte
+        $search = $request->query->get('search', '');
+        if ($search !== '') {
+            $where .= ' AND (m.originalName LIKE :search OR m.fileName LIKE :search OR m.alt LIKE :search OR m.caption LIKE :search)';
+            $params['search'] = '%' . $search . '%';
+        }
+
+        // Filtre par type (mime_type)
+        $type = $request->query->get('type', '');
+        if ($type !== '' && $type !== 'all') {
+            if ($type === 'image') {
+                $where .= ' AND m.mimeType LIKE :type';
+                $params['type'] = 'image/%';
+            } elseif ($type === 'video') {
+                $where .= ' AND m.mimeType LIKE :type';
+                $params['type'] = 'video/%';
+            } elseif ($type === 'audio') {
+                $where .= ' AND m.mimeType LIKE :type';
+                $params['type'] = 'audio/%';
+            } elseif ($type === 'document') {
+                $where .= " AND (m.mimeType LIKE :type1 OR m.mimeType LIKE :type2 OR m.mimeType LIKE :type3)";
+                $params['type1'] = 'application/pdf';
+                $params['type2'] = 'application/msword';
+                $params['type3'] = 'application/vnd.%';
+            } else {
+                // other
+                $where .= ' AND m.mimeType NOT LIKE :timg AND m.mimeType NOT LIKE :tvid AND m.mimeType NOT LIKE :taud';
+                $params['timg'] = 'image/%';
+                $params['tvid'] = 'video/%';
+                $params['taud'] = 'audio/%';
+            }
+        }
+
+        // Filtre par date
+        $dateFilter = $request->query->get('date_filter', '');
+        if ($dateFilter !== '') {
+            $since = match ($dateFilter) {
+                'today'   => new \DateTimeImmutable('today'),
+                'week'    => new \DateTimeImmutable('-7 days'),
+                'month'   => new \DateTimeImmutable('-30 days'),
+                'quarter' => new \DateTimeImmutable('-90 days'),
+                default   => null,
+            };
+            if ($since !== null) {
+                $where .= ' AND m.createdAt >= :dateSince';
+                $params['dateSince'] = $since;
+            }
+        }
+
+        // Tri
+        $sort = $request->query->get('sort', 'newest');
+        $orderParts = match ($sort) {
+            'oldest'    => ['m.createdAt', 'ASC'],
+            'name'      => ['m.originalName', 'ASC'],
+            'size'      => ['m.fileSize', 'DESC'],
+            default     => ['m.createdAt', 'DESC'],
+        };
+
         $qb = $this->em->createQueryBuilder()
             ->select('m')
             ->from(Media::class, 'm')
             ->where($where)
-            ->orderBy('m.createdAt', 'DESC')
+            ->orderBy($orderParts[0], $orderParts[1])
             ->setMaxResults($perPage)
             ->setFirstResult(($page - 1) * $perPage);
         foreach ($params as $key => $value) {
