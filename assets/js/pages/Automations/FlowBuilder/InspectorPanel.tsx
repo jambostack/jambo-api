@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import SchemaForm from './SchemaForm';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useTranslation } from '@/lib/i18n';
 
 interface NodeCatalogItem {
     type: string;
@@ -18,6 +19,7 @@ interface NodeCatalogItem {
 }
 
 export default function InspectorPanel() {
+    const t = useTranslation();
     const nodes = useFlowStore((s) => s.nodes);
     const selectedNodes = nodes.filter((n) => n.selected);
     const selectedNode = selectedNodes.length === 1 ? selectedNodes[0] : null;
@@ -103,7 +105,7 @@ export default function InspectorPanel() {
         return (
             <div className="w-72 border-l bg-background flex flex-col h-full shrink-0">
                 <div className="p-4 text-sm text-muted-foreground text-center mt-12">
-                    Sélectionnez un node pour le configurer
+                    {t('flow.inspector_select_node')}
                 </div>
             </div>
         );
@@ -114,7 +116,7 @@ export default function InspectorPanel() {
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b">
                 <span className="text-sm font-medium truncate">
-                    {nodeInfo?.label ?? 'Node'}
+                    {nodeInfo?.label ?? t('flow.inspector_node')}
                 </span>
                 <Button
                     variant="ghost"
@@ -134,7 +136,7 @@ export default function InspectorPanel() {
             <div className="flex-1 overflow-y-auto p-3 space-y-4">
                 {/* Nom du node */}
                 <div>
-                    <Label className="text-xs">Nom</Label>
+                    <Label className="text-xs">{t('flow.inspector_name')}</Label>
                     <Input
                         className="h-8 text-xs mt-1"
                         value={label}
@@ -147,7 +149,7 @@ export default function InspectorPanel() {
                 {/* Configuration */}
                 <div>
                     <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Configuration
+                        {t('flow.inspector_config')}
                     </Label>
                     {nodeInfo?.configSchema && (
                         <div className="mt-2">
@@ -165,15 +167,15 @@ export default function InspectorPanel() {
                 {/* Infos */}
                 <div className="text-xs space-y-1 text-muted-foreground">
                     <div>
-                        <span className="font-medium">Node ID:</span>{' '}
+                        <span className="font-medium">{t('flow.inspector_node_id')}:</span>{' '}
                         {selectedNode.id}
                     </div>
                     <div>
-                        <span className="font-medium">Type:</span>{' '}
+                        <span className="font-medium">{t('flow.inspector_type')}:</span>{' '}
                         {selectedNode.type}
                     </div>
                     <div>
-                        <span className="font-medium">Sorties:</span>{' '}
+                        <span className="font-medium">{t('flow.inspector_outputs')}:</span>{' '}
                         {nodeInfo?.outputPorts?.join(', ') ?? 'default'}
                     </div>
                 </div>
@@ -187,7 +189,7 @@ export default function InspectorPanel() {
                     className="flex-1 h-8 text-xs"
                     onClick={handleDuplicate}
                 >
-                    <Copy className="h-3 w-3 mr-1" /> Dupliquer
+                    <Copy className="h-3 w-3 mr-1" /> {t('flow.inspector_duplicate')}
                 </Button>
                 <Button
                     variant="outline"
@@ -195,7 +197,7 @@ export default function InspectorPanel() {
                     className="flex-1 h-8 text-xs text-destructive"
                     onClick={handleDelete}
                 >
-                    <Trash2 className="h-3 w-3 mr-1" /> Supprimer
+                    <Trash2 className="h-3 w-3 mr-1" /> {t('flow.inspector_delete')}
                 </Button>
             </div>
         </div>

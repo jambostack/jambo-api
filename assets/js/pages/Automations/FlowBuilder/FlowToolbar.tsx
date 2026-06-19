@@ -5,6 +5,9 @@ import { useFlowStore } from './FlowStore';
 import { createFlowHistory } from './FlowHistory';
 import { useState } from 'react';
 import FlowDryRun from './FlowDryRun';
+import { useTranslation } from '@/lib/i18n';
+import { validateFlowGraph } from './FlowValidation';
+import type { ValidationError } from './FlowValidation';
 
 const history = createFlowHistory();
 
@@ -16,10 +19,11 @@ interface FlowToolbarProps {
 }
 
 export default function FlowToolbar({ onSave, saving, projectUuid, automationId }: FlowToolbarProps) {
+    const t = useTranslation();
     const { zoomIn, zoomOut, fitView } = useReactFlow();
     const { getFlowGraph, loadFlowGraph, flowName, isActive, debugMode, minimapVisible, setMinimapVisible } = useFlowStore();
     const [validating, setValidating] = useState(false);
-    const [errors, setErrors] = useState<string[]>([]);
+    const [errors, setErrors] = useState<ValidationError[]>([]);
     const [dryRunOpen, setDryRunOpen] = useState(false);
 
     const handleUndo = () => {
@@ -42,21 +46,7 @@ export default function FlowToolbar({ onSave, saving, projectUuid, automationId 
 
     const handleValidate = () => {
         const graph = getFlowGraph();
-        const errs: string[] = [];
-
-        if (graph.nodes.length === 0) errs.push('Aucun node dans le flow');
-        if (!graph.nodes.some((n) => n.type.startsWith('trigger.'))) {
-            errs.push('Ajoutez au moins un déclencheur (trigger)');
-        }
-
-        const targetIds = new Set(graph.edges.map((e) => e.target));
-
-        for (const node of graph.nodes) {
-            if (!node.type.startsWith('trigger.') && !targetIds.has(node.id)) {
-                errs.push(`Le node "${node.data.label}" n'a pas d'entrée`);
-            }
-        }
-
+        const errs = validateFlowGraph(graph);
         setErrors(errs);
         setValidating(true);
     };
@@ -64,23 +54,23 @@ export default function FlowToolbar({ onSave, saving, projectUuid, automationId 
     return (
         <div className="h-12 border-t bg-background flex items-center justify-between px-3 shrink-0">
             <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleUndo} disabled={!history.canUndo()} title="Annuler (Ctrl+Z)">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleUndo} disabled={!history.canUndo()} title={t('flow.toolbar_undo')}>
                     <Undo2 className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRedo} disabled={!history.canRedo()} title="Rétablir (Ctrl+Y)">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRedo} disabled={!history.canRedo()} title={t('flow.toolbar_redo')}>
                     <Redo2 className="h-4 w-4" />
                 </Button>
                 <div className="w-px h-5 bg-border mx-1" />
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => zoomIn()} title="Zoom +">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => zoomIn()} title={t('flow.toolbar_zoom_in')}>
                     <ZoomIn className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => zoomOut()} title="Zoom -">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => zoomOut()} title={t('flow.toolbar_zoom_out')}>
                     <ZoomOut className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fitView()} title="Ajuster">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fitView()} title={t('flow.toolbar_fit')}>
                     <Maximize className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMinimapVisible(!minimapVisible)} title="Minimap">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMinimapVisible(!minimapVisible)} title={t('flow.toolbar_minimap')}>
                     <Map className={minimapVisible ? 'h-4 w-4 text-primary' : 'h-4 w-4'} />
                 </Button>
             </div>
@@ -89,23 +79,23 @@ export default function FlowToolbar({ onSave, saving, projectUuid, automationId 
                 {validating && errors.length > 0 && (
                     <div className="flex items-center gap-1 text-xs text-destructive">
                         <XCircle className="h-3 w-3" />
-                        {errors[0]}
+                        {t(errors[0].code, errors[0].params ?? {})}
                     </div>
                 )}
                 {validating && errors.length === 0 && (
                     <div className="flex items-center gap-1 text-xs text-emerald-500">
                         <CheckCircle className="h-3 w-3" />
-                        Flow valide
+                        {t('flow.toolbar_valid')}
                     </div>
                 )}
                 <Button variant="outline" size="sm" onClick={handleValidate} className="h-8 text-xs">
-                    Valider
+                    {t('flow.toolbar_validate')}
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => setDryRunOpen(true)} disabled={!automationId} className="h-8 text-xs">
-                    <Play className="h-3 w-3 mr-1" /> Tester
+                    <Play className="h-3 w-3 mr-1" /> {t('flow.toolbar_test')}
                 </Button>
                 <Button size="sm" className="h-8 text-xs" onClick={onSave} disabled={saving}>
-                    <Save className="h-3 w-3 mr-1" /> {saving ? '...' : 'Enregistrer'}
+                    <Save className="h-3 w-3 mr-1" /> {saving ? t('flow.saving_btn') : t('flow.save_btn')}
                 </Button>
             </div>
 

@@ -36,7 +36,7 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
         { title: t('projects.settings.nav_api_docs'), href: `${basePath}/api-docs`, icon: FileText, permission: 'access_api_access_settings' },
         { title: t('projects.settings.nav_mcp_access'), href: `${basePath}/mcp-access`, icon: Plug, permission: 'access_api_access_settings' },
         { title: t('projects.settings.nav_webhooks'), href: `${basePath}/webhooks`, icon: Share2, permission: 'access_webhooks_settings' },
-        { title: 'Automatisations', href: `${basePath}/automations`, icon: Zap, permission: 'access_project_settings' },
+        { title: t('flow.sidebar'), href: `${basePath}/automations`, icon: Zap, permission: 'access_project_settings' },
         { title: t('projects.settings.nav_mailer'), href: `${basePath}/mailer`, icon: Mail, permission: 'access_project_settings' },
         { title: t('projects.settings.nav_security'), href: `${basePath}/security`, icon: Shield, permission: 'access_project_settings' },
         { title: t('projects.settings.nav_end_users'), href: `${basePath}/end-users`, icon: UserCog, permission: 'access_end_users_settings' },

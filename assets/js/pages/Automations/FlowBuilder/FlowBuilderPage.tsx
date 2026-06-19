@@ -10,6 +10,7 @@ import InspectorPanel from './InspectorPanel';
 import FlowToolbar from './FlowToolbar';
 import CommandPalette from './CommandPalette';
 import { useFlowStore } from './FlowStore';
+import { useTranslation } from '@/lib/i18n';
 
 interface FlowBuilderPageProps {
     projectUuid: string;
@@ -20,6 +21,7 @@ interface FlowBuilderPageProps {
 
 function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: FlowBuilderPageProps) {
     const { getFlowGraph, loadFlowGraph, flowName, setFlowName, isActive, setIsActive, debugMode, setDebugMode } = useFlowStore();
+    const t = useTranslation();
     const [cmdOpen, setCmdOpen] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -38,7 +40,7 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
                     );
                 })
                 .catch(() =>
-                    toast.error("Erreur de chargement de l'automatisation"),
+                    toast.error(t('flow.load_automation_error')),
                 );
         }
     }, [automationId, projectUuid]);
@@ -59,7 +61,7 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
         setSaving(true);
         const graph = getFlowGraph();
         const payload = {
-            name: flowName || 'Sans nom',
+            name: flowName || t('flow.unnamed'),
             flow_graph: graph,
             is_active: isActive,
             debug_mode: debugMode,
@@ -76,11 +78,11 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
                     payload,
                 );
             }
-            toast.success('Automatisation enregistrée');
+            toast.success(t('flow.saved_success'));
             onSaved?.();
         } catch (e: any) {
             const errors = e.response?.data?.errors ?? [e.message];
-            toast.error('Erreur de validation', {
+            toast.error(t('flow.save_error'), {
                 description: Array.isArray(errors) ? errors.join('\n') : errors,
             });
         } finally {
@@ -97,14 +99,14 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
                 <div className="flex items-center gap-3">
                     {!isDialog && (
                         <h3 className="text-sm font-semibold">
-                            Automatisations
+                            {t('flow.heading')}
                         </h3>
                     )}
                     <input
                         className="text-sm font-medium bg-transparent border-b border-transparent hover:border-border focus:border-primary outline-none"
                         value={flowName}
                         onChange={(e) => setFlowName(e.target.value)}
-                        placeholder="Nom de l'automatisation"
+                        placeholder={t('flow.name_placeholder')}
                     />
                     <label className="flex items-center gap-1.5 text-xs cursor-pointer">
                         <input
@@ -113,7 +115,7 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
                             checked={isActive}
                             onChange={(e) => setIsActive(e.target.checked)}
                         />
-                        Actif
+                        {t('flow.active_label')}
                     </label>
                     <label className="flex items-center gap-1.5 text-xs cursor-pointer">
                         <input
@@ -122,16 +124,16 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
                             checked={debugMode}
                             onChange={(e) => setDebugMode(e.target.checked)}
                         />
-                        Debug
+                        {t('flow.debug_label')}
                     </label>
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] text-muted-foreground">
-                        Cmd+K pour ajouter un node
+                        {t('flow.cmdk_hint')}
                     </span>
                     {isDialog && (
                         <Button variant="ghost" size="sm" onClick={onClose}>
-                            Annuler
+                            {t('flow.cancel_btn')}
                         </Button>
                     )}
                     <Button
@@ -139,7 +141,7 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
                         onClick={handleSave}
                         disabled={saving}
                     >
-                        {saving ? '...' : 'Enregistrer'}
+                        {saving ? t('flow.saving_btn') : t('flow.save_btn')}
                     </Button>
                 </div>
             </div>
@@ -171,8 +173,8 @@ function FlowBuilderContent({ projectUuid, automationId, onClose, onSaved }: Flo
                     <DialogHeader className="sr-only">
                         <DialogTitle>
                             {automationId
-                                ? "Modifier l'automatisation"
-                                : 'Nouvelle automatisation'}
+                                ? t('flow.edit_title')
+                                : t('flow.new_title')}
                         </DialogTitle>
                     </DialogHeader>
                     {content}
