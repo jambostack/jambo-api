@@ -62,6 +62,15 @@ class FrontendRouteManifestService
         'assets.folders.move'                   => 'api_media_folder_move',
         'assets.folders.destroy'                => 'api_media_folder_delete',
 
+        // Automations
+        'automations.index'                     => 'api_automation_index',
+        'automations.store'                     => 'api_automation_store',
+        'automations.show'                      => 'api_automation_show',
+        'automations.update'                    => 'api_automation_update',
+        'automations.destroy'                   => 'api_automation_delete',
+        'automations.test'                      => 'api_automation_test',
+        'automations.runs'                      => 'api_automation_runs',
+
         // Project pages
         'projects.workbench'                    => 'workbench_page',
 
