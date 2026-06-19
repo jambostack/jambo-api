@@ -26,3 +26,4 @@ framework:
             App\Message\SendWebhookMessage: async
             App\Message\SendProjectEmailMessage: async
             App\Message\ExecuteAutomationMessage: async
+            App\Message\ExecuteSubFlowMessage: async
