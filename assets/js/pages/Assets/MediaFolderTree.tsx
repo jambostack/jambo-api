@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import axios from 'axios';
 import { Folder, FolderOpen, Plus, MoreHorizontal, Check, X, GripVertical } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useTranslation } from '@/lib/i18n';
 import type { MediaFolder } from '@/types';
 
 interface MediaFolderTreeProps {
@@ -12,6 +13,7 @@ interface MediaFolderTreeProps {
 }
 
 export default function MediaFolderTree({ projectUuid, selectedFolderId, onSelectFolder }: MediaFolderTreeProps) {
+    const t = useTranslation();
     const [folders, setFolders] = useState<MediaFolder[]>([]);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editName, setEditName] = useState('');
@@ -39,9 +41,9 @@ export default function MediaFolderTree({ projectUuid, selectedFolderId, onSelec
             setShowNewInput(null);
             setNewName('');
             loadTree();
-            toast.success('Dossier créé');
+            toast.success(t('assets.folder_created'));
         } catch {
-            toast.error('Échec de la création du dossier');
+            toast.error(t('assets.folder_create_error'));
         }
     };
 
@@ -52,21 +54,21 @@ export default function MediaFolderTree({ projectUuid, selectedFolderId, onSelec
             await axios.put(route('assets.folders.update', [projectUuid, folderId]), { name });
             setEditingId(null);
             loadTree();
-            toast.success('Dossier renommé');
+            toast.success(t('assets.folder_renamed'));
         } catch {
-            toast.error('Échec du renommage');
+            toast.error(t('assets.folder_rename_error'));
         }
     };
 
     const handleDelete = async (folderId: number) => {
-        if (!confirm('Supprimer ce dossier ? Les fichiers qu\'il contient ne seront pas supprimés.')) return;
+        if (!confirm(t('assets.folder_confirm_delete') + ' ' + t('assets.folder_confirm_delete_desc'))) return;
         try {
             await axios.delete(route('assets.folders.destroy', [projectUuid, folderId]));
             if (selectedFolderId === folderId) onSelectFolder(null);
             loadTree();
-            toast.success('Dossier supprimé');
+            toast.success(t('assets.folder_deleted'));
         } catch {
-            toast.error('Échec de la suppression');
+            toast.error(t('assets.folder_delete_error'));
         }
     };
 
@@ -118,20 +120,20 @@ export default function MediaFolderTree({ projectUuid, selectedFolderId, onSelec
                             <DropdownMenuContent align="start" className="w-36">
                                 <DropdownMenuItem onClick={e => { e.stopPropagation(); setShowNewInput(folder.id); }}>
                                     <Plus className="h-3.5 w-3.5 mr-2" />
-                                    Sous-dossier
+                                    {t('assets.folder_sub')}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={e => {
                                     e.stopPropagation();
                                     setEditName(folder.name);
                                     setEditingId(folder.id);
                                 }}>
-                                    Renommer
+                                    {t('assets.folder_rename')}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                     className="text-destructive"
                                     onClick={e => { e.stopPropagation(); handleDelete(folder.id); }}
                                 >
-                                    Supprimer
+                                    {t('assets.folder_delete')}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -143,7 +145,7 @@ export default function MediaFolderTree({ projectUuid, selectedFolderId, onSelec
                     <div className="flex items-center gap-1 px-2 py-1" style={{ paddingLeft: `${8 + (depth + 1) * 16}px` }}>
                         <input
                             className="flex-1 bg-background border rounded px-1.5 py-0.5 text-xs outline-none focus:border-primary"
-                            placeholder="Nom du dossier..."
+                            placeholder={t('assets.folder_name_ph')}
                             value={newName}
                             onChange={e => setNewName(e.target.value)}
                             onKeyDown={e => {
@@ -179,7 +181,7 @@ export default function MediaFolderTree({ projectUuid, selectedFolderId, onSelec
                     ? <FolderOpen className="h-4 w-4 text-primary" />
                     : <Folder className="h-4 w-4 text-muted-foreground" />
                 }
-                <span>Tous les fichiers</span>
+                <span>{t('assets.folder_all_files')}</span>
             </div>
 
             {/* Arbre des dossiers */}
@@ -192,7 +194,7 @@ export default function MediaFolderTree({ projectUuid, selectedFolderId, onSelec
                     onClick={() => setShowNewInput(null)}
                 >
                     <Plus className="h-3.5 w-3.5" />
-                    Nouveau dossier
+                    {t('assets.folder_new')}
                 </button>
             ) : (
                 <div className="flex items-center gap-1 px-2 py-1 mt-1">
