@@ -1,0 +1,12 @@
+mercure:
+    hubs:
+        default:
+            # URL interne : le hub embedded de Symfony écoute sur .well-known/mercure
+            url: '%env(MERCURE_URL)%'
+            public_url: '%env(MERCURE_PUBLIC_URL)%'
+            jwt:
+                secret: '%env(MERCURE_JWT_SECRET)%'
+                # publish: '*' autorise la publication sur tous les topics
+                publish: '*'
+                # subscribe: '*' autorise la souscription à tous les topics
+                subscribe: '*'
