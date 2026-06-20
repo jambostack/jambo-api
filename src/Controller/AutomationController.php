@@ -7,6 +7,7 @@ use App\Repository\AutomationRepository;
 use App\Repository\AutomationRunRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
+use App\Service\Automation\AutomationEngine;
 use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowInterpreter;
 use App\Service\Flow\NodeOutput;
@@ -28,6 +29,7 @@ class AutomationController extends AbstractController
         private readonly ProjectMemberRepository $memberRepo,
         private readonly FlowInterpreter $flowInterpreter,
         private readonly NodeRegistry $nodeRegistry,
+        private readonly AutomationEngine $engine,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -163,7 +165,7 @@ class AutomationController extends AbstractController
         ]);
     }
 
-    /** Exécute le flow pour de vrai (run) */
+    /** Exécute le flow pour de vrai (run) — persiste un AutomationRun */
     #[Route('/{id}/run', name: 'run', methods: ['POST'])]
     public function run(string $projectUuid, int $id): JsonResponse
     {
@@ -174,9 +176,6 @@ class AutomationController extends AbstractController
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
 
-        $graph = $automation->flowGraph;
-        if (!$graph) return $this->json(['error' => 'Automation has no flow graph'], 400);
-
         if (!$automation->isActive) return $this->json(['error' => 'Automation is not active'], 400);
 
         $payload = [
@@ -184,24 +183,23 @@ class AutomationController extends AbstractController
             'timestamp'    => time(),
         ];
 
-        $ctx = new FlowContext(
-            automationId: $automation->id,
-            projectUuid: $projectUuid,
-            debugMode: $automation->debugMode,
-        );
+        try {
+            $run = $this->engine->execute($automation, $payload);
 
-        $result = $this->flowInterpreter->executeFlow($graph, $payload, $ctx);
-
-        $automation->lastRunAt = new \DateTimeImmutable();
-        $this->em->flush();
-
-        return $this->json([
-            'success'           => $result->status !== 'failed',
-            'status'            => $result->status,
-            'step_log'          => $result->stepLog,
-            'total_duration_ms' => $result->totalDurationMs,
-            'error'             => $result->error,
-        ]);
+            return $this->json([
+                'success' => $run->status !== 'failed',
+                'status' => $run->status,
+                'run_id' => $run->id,
+                'duration_ms' => $run->durationMs,
+                'error' => $run->errorMessage,
+                'action_output' => $run->actionOutput,
+            ]);
+        } catch (\Throwable $e) {
+            return $this->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /** Dry-run : exécute le flow avec un payload fourni par l'utilisateur */

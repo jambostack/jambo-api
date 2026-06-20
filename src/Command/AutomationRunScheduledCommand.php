@@ -26,7 +26,16 @@ class AutomationRunScheduledCommand extends Command
         $executed = 0;
 
         foreach ($automations as $automation) {
-            $schedule = $automation->triggerConfig['schedule'] ?? null;
+            $graph = $automation->flowGraph;
+            if (!$graph || empty($graph['nodes'])) continue;
+
+            // Cherche le trigger dans tous les nœuds (pas seulement nodes[0])
+            $triggerInfo = AutomationRepository::findTriggerNode($graph);
+            $triggerNode = $triggerInfo['node'];
+
+            if (!$triggerNode) continue;
+
+            $schedule = $triggerNode['data']['config']['schedule'] ?? null;
             if ($schedule === null || $schedule === '') continue;
 
             try {
@@ -38,7 +47,7 @@ class AutomationRunScheduledCommand extends Command
                         'schedule'     => $schedule,
                     ];
 
-                    $this->engine->dispatchAsync($automation, $payload);
+                    $this->engine->execute($automation, $payload);
                     $executed++;
                 }
             } catch (\Throwable $e) {
@@ -51,8 +60,8 @@ class AutomationRunScheduledCommand extends Command
     }
 
     /**
-     * Parser cron minimal (5 champs : minute heure jour mois jour-semaine).
-     * Supporte etoile, etoile/N, N, N,N,N.
+     * Parser cron (5 champs : minute heure jour mois jour-semaine).
+     * Supporte : *, step/N, N, N,N,N, N-N, noms de jours (mon,tue,...,sun).
      */
     private function cronMatches(string $expression, \DateTimeImmutable $now): bool
     {
@@ -69,17 +78,24 @@ class AutomationRunScheduledCommand extends Command
             'dow'   => (int) $now->format('w'),
         ];
 
-        return $this->fieldMatches($min, $current['min'])
-            && $this->fieldMatches($hour, $current['hour'])
-            && $this->fieldMatches($day, $current['day'])
-            && $this->fieldMatches($month, $current['month'])
-            && $this->fieldMatches($dow, $current['dow']);
+        return $this->fieldMatches($min, $current['min'], 0, 59)
+            && $this->fieldMatches($hour, $current['hour'], 0, 23)
+            && $this->fieldMatches($day, $current['day'], 1, 31)
+            && $this->fieldMatches($month, $current['month'], 1, 12)
+            && $this->fieldMatches($dow, $current['dow'], 0, 7);
     }
 
-    private function fieldMatches(string $pattern, int $value): bool
+    private function fieldMatches(string $pattern, int $value, int $min, int $max): bool
     {
         // * = toujours
         if ($pattern === '*') return true;
+
+        // Noms de jours (0=dim, 1=lun, ..., 6=sam, 7=dim)
+        $dayNames = ['sun' => 0, 'mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7];
+        $lower = strtolower($pattern);
+        if (isset($dayNames[$lower])) {
+            return $value === $dayNames[$lower];
+        }
 
         // */N = tous les N
         if (str_starts_with($pattern, '*/')) {
@@ -87,16 +103,28 @@ class AutomationRunScheduledCommand extends Command
             return $step > 0 && ($value % $step) === 0;
         }
 
+        // N-N = plage
+        if (str_contains($pattern, '-') && !str_contains($pattern, ',')) {
+            $parts = explode('-', $pattern);
+            if (count($parts) === 2) {
+                $lo = (int) trim($parts[0]);
+                $hi = (int) trim($parts[1]);
+                return $value >= $lo && $value <= $hi;
+            }
+        }
+
         // N,N,N = liste
         if (str_contains($pattern, ',')) {
             $items = explode(',', $pattern);
             foreach ($items as $item) {
-                if ($this->fieldMatches(trim($item), $value)) return true;
+                if ($this->fieldMatches(trim($item), $value, $min, $max)) return true;
             }
             return false;
         }
 
-        // N = valeur exacte
-        return (int) $pattern === $value;
+        // N = valeur exacte (valide la plage)
+        $num = (int) $pattern;
+        if ($num < $min || $num > $max) return false;
+        return $num === $value;
     }
 }

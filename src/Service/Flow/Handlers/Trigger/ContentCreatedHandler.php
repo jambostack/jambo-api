@@ -11,7 +11,8 @@ class ContentCreatedHandler implements FlowNodeHandler
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
         $firstInput = array_values($input)[0] ?? [];
-        return new NodeOutput(data: $firstInput);
+        $data = $firstInput instanceof NodeOutput ? $firstInput->data : (is_array($firstInput) ? $firstInput : []);
+        return new NodeOutput(data: $data);
     }
 
     public static function getCategory(): string { return 'trigger'; }
