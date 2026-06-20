@@ -40,7 +40,8 @@ export default function Show({ project, collection, contentEntry, formData, isEd
     const isContentCreatePage = page.url.includes('content/create');
     const isContentEditPage = page.url.includes('content') && page.url.includes('edit');
     const showContentForm = isContentCreatePage || isContentEditPage || isEditMode;
-    const [liveFormData, setLiveFormData] = useState<Record<string, any>>(null);
+    const [liveFormData, setLiveFormData] = useState<Record<string, any> | null>(null);
+    const [highlightedField, setHighlightedField] = useState<string | null>(null);
 
     // Add appropriate breadcrumb
     if (isContentCreatePage) {
@@ -78,6 +79,7 @@ export default function Show({ project, collection, contentEntry, formData, isEd
                             formData={formData}
                             isEditMode={isEditMode}
                             onFieldChange={setLiveFormData}
+                            highlightedField={highlightedField}
                         />
                     )}
 
@@ -88,8 +90,13 @@ export default function Show({ project, collection, contentEntry, formData, isEd
                             collection={collection}
                             entryUuid={contentEntry.uuid}
                             locale={contentEntry.locale || project.default_locale || 'en'}
-                            formData={liveFormData || {}}
+                            formData={liveFormData || formData || {}}
                             previewUrl={project.previewUrl}
+                            onFieldHover={(slug) => setHighlightedField(slug || null)}
+                            onFieldSelect={(slug) => {
+                                setHighlightedField(slug);
+                                setTimeout(() => setHighlightedField(null), 3000);
+                            }}
                         />
                     )}
                 </div>
