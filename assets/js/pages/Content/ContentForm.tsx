@@ -34,6 +34,7 @@ interface Props {
     formData?: Record<string, any>;
     isEditMode?: boolean;
     onFieldChange?: (formData: Record<string, any>) => void;
+    highlightedField?: string | null;  // NOUVEAU - v1.14b
 }
 
 type SaveAction = 'stay' | 'close' | 'new';
@@ -81,12 +82,22 @@ function buildInitialFormData(fields: Field[]): Record<string, any> {
     return data;
 }
 
-export default function ContentForm({ project, collection, contentEntry, formData: initialFormData, isEditMode, onFieldChange }: Props) {
+export default function ContentForm({ project, collection, contentEntry, formData: initialFormData, isEditMode, onFieldChange, highlightedField }: Props) {
     const t = useTranslation();
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [processing, setProcessing] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     
+    // v1.14b — Scroll vers le champ surligne
+    useEffect(() => {
+        if (highlightedField) {
+            const el = document.querySelector(`[data-field-slug="${highlightedField}"]`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    }, [highlightedField]);
+
     // Dialog states
     const [showUnpublishDialog, setShowUnpublishDialog] = useState(false);
     const [showTrashDialog, setShowTrashDialog] = useState(false);
@@ -412,7 +423,10 @@ useEffect(() => {
                         )}
                         {collection.fields.map(field => (
                             <ConditionalFieldWrapper key={field.id} field={field} formData={formData}>
-                                <div className="border border-gray-200 dark:border-gray-800 border-dashed w-full p-4 rounded-md">
+                                <div
+                                    data-field-slug={field.slug}
+                                    className={`border border-gray-200 dark:border-gray-800 border-dashed w-full p-4 rounded-md transition-shadow duration-300 ${highlightedField === field.slug ? 'ring-2 ring-[#58a6ff] ring-offset-2 shadow-[0_0_0_3px_rgba(88,166,255,0.4)] animate-pulse' : ''}`}
+                                >
                                     <React.Fragment>
                                         {renderField({
                                             field,
