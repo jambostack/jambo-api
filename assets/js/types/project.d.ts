@@ -17,6 +17,9 @@ export interface Project {
     settings: Record<string, any> | null;
     security?: ProjectSecurity;
     public_api: boolean;
+    previewEnabled?: boolean;
+    previewUrl?: string | null;
+    previewMode?: string;
     created_at: string;
     updated_at: string;
     collections?: Collection[];
