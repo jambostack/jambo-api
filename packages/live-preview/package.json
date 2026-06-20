@@ -1,0 +1,17 @@
+{
+  "name": "@jambostack/live-preview",
+  "version": "1.0.0-alpha.1",
+  "license": "MIT",
+  "exports": {
+    "./core": "./core/index.js",
+    "./next": "./next/index.js"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
+}
