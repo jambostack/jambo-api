@@ -5,7 +5,6 @@ namespace App\Tests\EventSubscriber;
 use App\Entity\Collection;
 use App\Entity\ContentEntry;
 use App\Entity\Media;
-use App\Entity\MediaFolder;
 use App\Entity\Project;
 use App\EventSubscriber\MercureEntitySubscriber;
 use App\Service\MercurePublisher;
