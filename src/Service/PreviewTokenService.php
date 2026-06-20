@@ -3,10 +3,10 @@
 namespace App\Service;
 
 use App\Entity\ContentEntry;
+use DateInterval;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
-use Lcobucci\JWT\Validation\Constraint\Leeway;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
 use Lcobucci\JWT\Validation\Constraint\StrictValidAt;
 use Psr\Clock\ClockInterface;
@@ -57,8 +57,9 @@ class PreviewTokenService
 
         return $this->config->builder()
             ->issuedAt($now)
+            ->canOnlyBeUsedAfter($now)
             ->expiresAt($now->modify('+' . self::TTL . ' seconds'))
-            ->withClaim('sub', 'preview')
+            ->relatedTo('preview')
             ->withClaim('pid', $entry->project->uuid->toRfc4122())
             ->withClaim('eid', $entry->uuid->toRfc4122())
             ->withClaim('col', $entry->collection->slug)
@@ -77,7 +78,7 @@ class PreviewTokenService
 
             $constraints = [
                 new SignedWith($this->config->signer(), $this->config->signingKey()),
-                new StrictValidAt($this->clock, new Leeway(30)),
+                new StrictValidAt($this->clock, new DateInterval('PT30S')),
             ];
 
             $this->config->validator()->assert($parsedToken, ...$constraints);
@@ -90,7 +91,7 @@ class PreviewTokenService
                 'status' => $parsedToken->claims()->get('status'),
             ];
 
-            if ($claims['sub'] !== 'preview') {
+            if ($parsedToken->claims()->get('sub') !== 'preview') {
                 return null;
             }
 
