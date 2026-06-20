@@ -25,6 +25,7 @@ class SchemaGenerator
         private ContentEntryRepository $entryRepo,
         private EavDataFormatterService $formatter,
         private EavFieldHelperService $fieldHelper,
+        private readonly string $projectDir = '',
     ) {}
 
     /**
@@ -384,11 +385,50 @@ class SchemaGenerator
 
     /**
      * Build the Subscription type for the project.
-     * Returns the GraphQL Subscription type.
+     * Each resolver reads the JSONL buffer written by MercurePublisher
+     * and returns the last events (max 50, within the last hour).
      */
     private function buildSubscriptionType(array $collections): ObjectType
     {
         $fields = [];
+        $projectDir = $this->projectDir;
+
+        // Resolver commun : lit le buffer JSONL et retourne les derniers événements
+        $makeResolver = function (?array $actionFilter = null) use ($projectDir) {
+            return function ($root, array $args) use ($projectDir, $actionFilter) {
+                $projectUuid = $args['uuid'];
+                $path = $projectDir . '/var/realtime/' . $projectUuid . '.jsonl';
+
+                if (!file_exists($path)) {
+                    return [];
+                }
+
+                $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                if (!$lines) return [];
+
+                $lines = array_slice($lines, -50);
+                $cutoff = time() - 3600;
+
+                $events = [];
+                foreach (array_reverse($lines) as $line) {
+                    $event = json_decode($line, true);
+                    if (!$event) continue;
+                    if (($event['data']['time'] ?? 0) < $cutoff) continue;
+
+                    // Filtre par action si demandé
+                    $effectiveFilter = $args['actions'] ?? $actionFilter;
+                    if (!empty($effectiveFilter)) {
+                        $eventAction = $event['data']['action']
+                            ?? ($event['event'] ?? '');
+                        if (!in_array($eventAction, $effectiveFilter, true)) continue;
+                    }
+
+                    $events[] = $event;
+                }
+
+                return $events;
+            };
+        };
 
         // Champ global : tous les événements du projet
         $fields['projectEvents'] = [
@@ -396,10 +436,10 @@ class SchemaGenerator
             'args'    => [
                 'uuid' => ['type' => Type::nonNull(Type::string()), 'description' => 'UUID du projet'],
             ],
-            'resolve' => fn() => [], // Les événements sont livrés via Mercure, pas via ce resolver
+            'resolve' => $makeResolver(),
         ];
 
-        // Un champ par collection
+        // Un champ par collection (filtre content uniquement)
         foreach ($collections as $collection) {
             $fieldName = lcfirst(str_replace('_', '', ucwords($collection->slug, '_')));
             $fields[$fieldName] = [
@@ -412,7 +452,7 @@ class SchemaGenerator
                         'defaultValue' => null,
                     ],
                 ],
-                'resolve' => fn() => [], // Les événements sont livrés via Mercure
+                'resolve' => $makeResolver(['created', 'updated', 'deleted']),
             ];
         }
 
