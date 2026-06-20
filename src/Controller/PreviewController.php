@@ -92,6 +92,11 @@ class PreviewController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
+        // Verifier que la preview est activee pour ce projet
+        if (!$project->previewEnabled) {
+            return $this->json(['error' => 'Preview not enabled for this project'], 403);
+        }
+
         $entry = $this->entryRepository->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
         if (!$entry || $entry->isDeleted()) {
             return $this->json(['error' => 'Entry not found'], 404);

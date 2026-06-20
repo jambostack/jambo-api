@@ -3,6 +3,7 @@ export interface PreviewContext {
   collection: string;
   locale: string;
   token: string;
+  projectUuid: string;
 }
 
 export interface LivePreviewOptions {
@@ -26,6 +27,7 @@ export function subscribe(options: LivePreviewOptions): () => void {
   const entryUuid = params.get('jambo_entry');
   const collection = params.get('jambo_collection');
   const locale = params.get('jambo_locale') || 'en';
+  const projectUuid = params.get('jambo_project') || '';
 
   if (!previewToken || !entryUuid || !collection) {
     // Pas en mode preview — retourne un noop
@@ -37,6 +39,7 @@ export function subscribe(options: LivePreviewOptions): () => void {
     collection,
     locale,
     token: previewToken,
+    projectUuid,
   };
 
   let cleanup = false;
@@ -45,32 +48,39 @@ export function subscribe(options: LivePreviewOptions): () => void {
     if (cleanup) return;
     if (!event.data || typeof event.data !== 'object') return;
 
+    // Verifier l'origine si targetOrigin n'est pas '*'
+    if (targetOrigin !== '*' && event.origin !== targetOrigin) {
+      log(`Message ignore : origine ${event.origin} non autorisee`);
+      return;
+    }
+
     switch (event.data.type) {
       case 'jambo-init':
-        log('jambo-init reçu', event.data);
+        log('jambo-init recu', event.data);
         ctx = {
           entryUuid: event.data.entryUuid || ctx.entryUuid,
           collection: event.data.collection || ctx.collection,
           locale: event.data.locale || ctx.locale,
           token: event.data.previewToken || ctx.token,
+          projectUuid: event.data.projectUuid || ctx.projectUuid,
         };
 
         try {
           currentData = await onInit(ctx);
           onUpdate(currentData);
-          // Signaler que la preview est prête
+          // Signaler que la preview est prete
           window.parent.postMessage({ type: 'jambo-ready' }, targetOrigin);
         } catch (err: any) {
           log('Erreur onInit', err);
           window.parent.postMessage({
             type: 'jambo-error',
-            error: err?.message || 'Initialisation échouée',
+            error: err?.message || 'Initialisation echouee',
           }, targetOrigin);
         }
         break;
 
       case 'jambo-update':
-        log('jambo-update reçu', event.data);
+        log('jambo-update recu', event.data);
         if (event.data.fields) {
           // Shallow merge
           currentData = { ...currentData, ...event.data.fields };
@@ -79,7 +89,7 @@ export function subscribe(options: LivePreviewOptions): () => void {
         break;
 
       case 'jambo-navigate':
-        log('jambo-navigate reçu', event.data);
+        log('jambo-navigate recu', event.data);
         if (event.data.locale && event.data.locale !== ctx.locale) {
           ctx.locale = event.data.locale;
           window.location.search = new URLSearchParams({
