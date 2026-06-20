@@ -9,7 +9,8 @@ use Symfony\Component\Mercure\Update;
  * Publie des événements temps réel.
  *
  * Canal primaire : hub Mercure (SSE) si configuré.
- * Canal fallback : fichiers JSONL (var/realtime/{projectUuid}.jsonl) pour tout serveur sans hub.
+ * Canal fallback : fichiers JSONL (var/realtime/{projectUuid}.jsonl)
+ *   — utilisé UNIQUEMENT quand le hub est null ou en erreur.
  *
  * Topics par convention :
  *   projects/{uuid}               — tous les événements du projet
@@ -25,14 +26,17 @@ class MercurePublisher
     ) {}
 
     /**
-     * Publie un événement sur le hub Mercure (primaire) et dans le fichier JSONL (fallback).
+     * Publie un événement sur le hub Mercure (primaire).
+     * Si le hub est null ou en erreur, écrit dans le fichier JSONL (fallback).
      */
     private function publish(string $projectUuid, array $data): void
     {
-        // Pré-sérialiser une seule fois pour les deux canaux
-        $payload = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $payload = json_encode($data,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
-        // Canal primaire : hub Mercure SSE
+        $publishedToHub = false;
+
+        // 1. Canal primaire : hub Mercure SSE
         if ($this->hub !== null) {
             try {
                 $topic = $this->resolveTopic($projectUuid, $data['event'] ?? 'unknown');
@@ -42,19 +46,29 @@ class MercurePublisher
                     private: true,
                 );
                 $this->hub->publish($update);
-            } catch (\Throwable $e) {
-                // Hub inaccessible — on continue en fallback JSONL silencieusement
+                $publishedToHub = true;
+            } catch (\Throwable) {
+                // Hub inaccessible — on continue en fallback JSONL
             }
         }
 
-        // Canal fallback : fichier JSONL (compatible tout serveur)
+        // 2. Fallback JSONL UNIQUEMENT si hub non dispo ou en erreur
+        if (!$publishedToHub) {
+            $this->appendToJsonl($projectUuid, $payload);
+        }
+    }
+
+    /**
+     * Écrit une ligne JSON dans le fichier de fallback.
+     */
+    private function appendToJsonl(string $projectUuid, string $payload): void
+    {
         $dir = $this->projectDir . '/var/realtime';
         if (!is_dir($dir)) {
             mkdir($dir, 0700, true);
         }
 
         $path = $dir . '/' . $projectUuid . '.jsonl';
-
         file_put_contents($path, $payload . "\n", FILE_APPEND | LOCK_EX);
     }
 
