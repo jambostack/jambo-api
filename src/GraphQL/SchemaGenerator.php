@@ -422,12 +422,15 @@ class SchemaGenerator
         ]);
     }
 
+    private ?ObjectType $cachedProjectEventType = null;
+    private ?ObjectType $cachedContentEventType = null;
+
     /**
      * Type pour les événements globaux du projet (media, status, webhook…).
      */
     private function projectEventType(): ObjectType
     {
-        return new ObjectType([
+        return $this->cachedProjectEventType ??= new ObjectType([
             'name'   => 'ProjectEvent',
             'fields' => [
                 'event'     => ['type' => Type::nonNull(Type::string()), 'description' => 'Nom de l\'événement : entry.created, media.uploaded, status.changed…'],
@@ -443,7 +446,7 @@ class SchemaGenerator
      */
     private function contentEventType(): ObjectType
     {
-        return new ObjectType([
+        return $this->cachedContentEventType ??= new ObjectType([
             'name'   => 'ContentEvent',
             'fields' => [
                 'action'    => ['type' => Type::nonNull(Type::string()), 'description' => 'created | updated | deleted'],

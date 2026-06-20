@@ -38,8 +38,8 @@ class MercureCookieSubscriber implements EventSubscriberInterface
             return;
         }
 
-        // Si le secret Mercure n'est pas configuré, on ne fait rien
-        if ($this->mercureJwtSecret === '' || $this->mercureJwtSecret === '!ChangeThisMercureHubJWTSecretKey!') {
+        // Si le secret Mercure n'est pas configuré ou trop court, on ne fait rien
+        if (strlen($this->mercureJwtSecret) < 16) {
             return;
         }
 
@@ -67,7 +67,7 @@ class MercureCookieSubscriber implements EventSubscriberInterface
             ->withPath('/.well-known/mercure')
             ->withDomain($domain !== '' ? $domain : null)
             ->withHttpOnly(true)
-            ->withSecure(false) // true en production avec HTTPS
+            ->withSecure(!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             ->withSameSite('Strict')
             ->withExpires($now->modify('+24 hours'));
 
