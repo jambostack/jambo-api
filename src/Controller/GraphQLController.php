@@ -5,8 +5,10 @@ namespace App\Controller;
 use App\Entity\Project;
 use App\GraphQL\SchemaGenerator;
 use Doctrine\ORM\EntityManagerInterface;
+use DateTimeImmutable;
 use GraphQL\Error\DebugFlag;
 use GraphQL\GraphQL as GraphQLExecutor;
+use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\OperationDefinitionNode;
 use GraphQL\Language\Parser;
 use GraphQL\Validator\Rules\QueryDepth;
@@ -114,7 +116,7 @@ class GraphQLController extends AbstractController
             InMemory::plainText($mercureSecret),
         );
 
-        $now = new \DateTimeImmutable();
+        $now = new DateTimeImmutable();
         $token = $jwtConfig->builder()
             ->issuedAt($now)
             ->expiresAt($now->modify('+1 hour'))
@@ -153,7 +155,7 @@ class GraphQLController extends AbstractController
                 if ($def->operation !== 'subscription') continue;
 
                 foreach ($def->selectionSet->selections as $selection) {
-                    if (!($selection instanceof \GraphQL\Language\AST\FieldNode)) continue;
+                    if (!($selection instanceof FieldNode)) continue;
                     $fieldName = $selection->name->value;
 
                     if ($fieldName === 'projectEvents') {
