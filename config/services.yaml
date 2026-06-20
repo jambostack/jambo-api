@@ -62,6 +62,11 @@ services:
         arguments:
             $appSecret: '%kernel.secret%'
 
+    # ── Preview Token (Live Preview) ──────────────────────────────────────
+    App\Service\PreviewTokenService:
+        arguments:
+            $appSecret: '%kernel.secret%'
+
     App\Service\ImageTransformService:
         arguments:
             $projectDir: '%kernel.project_dir%'
