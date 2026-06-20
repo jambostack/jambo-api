@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Jambo CMS — Roadmap Stratégique v3.2 · 20 juin 2026 (tag v1.14b)</title>
+<title>Jambo CMS — Roadmap Stratégique v3.3 · 20 juin 2026 (tag v1.14b)</title>
 <style>
   :root {
     --bg: #0d1117;
@@ -117,10 +117,10 @@
 </head>
 <body>
 
-<h1>🛣️ Jambo CMS — Roadmap Stratégique v3.1</h1>
+<h1>🛣️ Jambo CMS — Roadmap Stratégique v3.3</h1>
 <p class="subtitle">
   Mise à jour basée sur l'analyse du code source réel · <strong>20 juin 2026 (tag v1.14b)</strong><br>
-  <strong>169 commits</strong> effectués depuis la roadmap v2.0 du 18 juin · État vérifié sur code source + tests navigateur<br>
+  <strong>175 commits</strong> effectués depuis la roadmap v2.0 du 18 juin · v1.12b finalisé (hub Mercure SSE + subscriber Doctrine + GraphQL last-events)<br>
   <strong>16 fichiers modifiés en v1.12b</strong> · <strong>10 en v1.14a</strong> · <strong>6 en v1.14b</strong> · <strong>11 corrigés (diagnostic)</strong><br>
   <strong>37 entités</strong> · <strong>63 contrôleurs</strong> · <strong>51 services</strong> · <strong>48 handlers Flow</strong> · <strong>211 composants React</strong> · <strong>36 fichiers de test</strong>
 </p>
@@ -165,8 +165,8 @@
       <tr><td>OpenAPI / Swagger</td><td><span class="badge ok">génération</span></td><td>Pas d'UI interactive</td></tr>
       <tr><td>Webhooks sortants</td><td><span class="badge ok">natif</span></td><td>+ logs, retry, secret sodium</td></tr>
       <tr><td>MCP (Model Context Protocol)</td><td><span class="badge ok">natif</span></td><td>✅ Différenciant majeur</td></tr>
-      <tr><td style="color:var(--teal)"><strong>🆕 Realtime / Push + Webhook</strong></td><td><span class="badge done">v1.12 ✅</span></td><td>Short-polling + WebhookInboundController, notifs toast</td></tr>
-      <tr><td>Live preview</td><td><span class="badge ko">absent</span></td><td>v1.14 prévu</td></tr>
+      <tr><td style="color:var(--teal)"><strong>🆕 Realtime / Push + Webhook</strong></td><td><span class="badge done">v1.12b ✅</span></td><td>Hub SSE Mercure + fallback JSONL + GraphQL Sub + notifs toast</td></tr>
+      <tr><td>Live preview</td><td><span class="badge ok">v1.14a ✅</span></td><td>iframe + postMessage + Visual Editing v1.14b</td></tr>
     </table>
 
     <h3 style="margin-top:1.5rem">🤖 Intelligence & Studio</h3>
@@ -402,16 +402,18 @@
 
   <div class="hr"></div>
 
-  <div class="version-row done-row" style="background: #1a1a0f">
-    <div class="version-id"><span class="tag vnum-done">v1.12</span></div>
-    <div class="version-name"><strong>🟡 Realtime / Push — Short-polling OK, Mercure à finaliser</strong></div>
-    <div class="version-effort">Partiel · ~3 commits</div>
-    <div class="impact-stars" style="color:var(--orange)">Partiel</div>
+  <div class="version-row done-row">
+    <div class="version-id"><span class="tag vnum-done">v1.12b</span></div>
+    <div class="version-name"><strong>✅ Realtime SSE + GraphQL Subscriptions — TERMINÉ</strong></div>
+    <div class="version-effort">Fait · ~14 commits (6 aujourd'hui)</div>
+    <div class="impact-stars" style="color:var(--teal)">⭐⭐⭐ Complet</div>
   </div>
   <table>
-    <tr><td style="width:180px">✅ Fait</td><td>Short-polling : endpoint <code>GET /api/{project}/realtime?since=N</code>, hook React <code>useRealtime</code> (3s), persistance curseur sessionStorage, notifications toast. Bundle Mercure installé.</td></tr>
-    <tr><td>❌ Reste à faire</td><td>Activer le vrai hub Mercure SSE (actuellement le publisher écrit dans des fichiers JSONL). Ajouter les subscriptions GraphQL. Optionnel : WebSocket.</td></tr>
-    <tr><td>📋 Effort restant</td><td>~1-2 jours — <code>MercurePublisher</code> → vrai hub SSE, schema GraphQL subscriptions, cookie mercureAuthorization.</td></tr>
+    <tr><td style="width:180px">✅ Fait</td><td>Short-polling : endpoint <code>GET /api/{project}/realtime?since=N</code>, hook React <code>useRealtime</code> (3s), persistance curseur sessionStorage, notifications toast.</td></tr>
+    <tr><td>✅ Fait</td><td>Hub Mercure SSE actif — <code>MercurePublisher</code> publie via <code>HubInterface</code> (SSE prioritaire), JSONL fallback uniquement si hub down.</td></tr>
+    <tr><td>✅ Fait</td><td><code>MercureEntitySubscriber</code> — notifications automatiques sur toutes les mutations Doctrine (CRUD ContentEntry, suppression Media, changements de statut).</td></tr>
+    <tr><td>✅ Fait</td><td>Resolvers GraphQL Subscription — lisent le buffer JSONL (50 derniers events, 1h cutoff), filtrage par actions.</td></tr>
+    <tr><td>✅ Fait</td><td>Cookie <code>mercureAuthorization</code> au login admin, auto-découverte subscriber (zéro config YAML), config Docker Mercure sur :8080.</td></tr>
   </table>
 </div>
 
