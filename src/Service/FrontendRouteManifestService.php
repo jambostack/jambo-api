@@ -84,6 +84,7 @@ class FrontendRouteManifestService
         'projects.settings.mcp-access'          => 'projects_settings_mcp_access',
         'projects.settings.webhooks'            => 'projects_settings_webhooks',
         'projects.settings.webhook-logs'        => 'projects_settings_webhook_logs',
+        'projects.settings.automations'         => 'projects_settings_automations',
         'projects.settings.storage'             => 'projects_settings_storage',
         'projects.settings.mailer'              => 'projects_settings_mailer',
         'projects.settings.jwt-ttl'             => 'projects_settings_jwt_ttl',

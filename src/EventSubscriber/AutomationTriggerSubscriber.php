@@ -5,17 +5,16 @@ namespace App\EventSubscriber;
 use App\Entity\Automation;
 use App\Event\ContentEvent;
 use App\Repository\AutomationRepository;
-use App\Service\Flow\FlowContext;
-use App\Service\Flow\FlowInterpreter;
-use Doctrine\ORM\EntityManagerInterface;
+use App\Service\Automation\AutomationEngine;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 class AutomationTriggerSubscriber implements EventSubscriberInterface
 {
     public function __construct(
         private readonly AutomationRepository $automationRepo,
-        private readonly FlowInterpreter $interpreter,
-        private readonly EntityManagerInterface $em,
+        private readonly AutomationEngine $engine,
+        private readonly LoggerInterface $logger,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -55,23 +54,18 @@ class AutomationTriggerSubscriber implements EventSubscriberInterface
 
     private function executeAutomation(Automation $automation, array $payload): void
     {
-        $graph = $automation->flowGraph;
-        if (!$graph || empty($graph['nodes'])) return;
-
-        $ctx = new FlowContext(
-            automationId: $automation->id,
-            projectUuid: $automation->project?->uuid?->toRfc4122() ?? '',
-            debugMode: $automation->debugMode,
-        );
-
-        $result = $this->interpreter->executeFlow($graph, $payload, $ctx);
-
-        // Met à jour lastRunAt
-        $automation->lastRunAt = new \DateTimeImmutable();
-        $this->em->flush();
-
-        // Note: la création d'AutomationRun avec stepLog est prévue pour v1.14
-        // (le mécanisme de Run existant reste fonctionnel)
+        try {
+            $this->engine->execute($automation, $payload);
+        } catch (\Throwable $e) {
+            // L'Engine persiste un AutomationRun même en cas d'erreur.
+            // On loggue ici pour ne pas perdre l'erreur dans les logs applicatifs.
+            $this->logger->error('Automation execution failed in subscriber', [
+                'automation_id' => $automation->id,
+                'automation_name' => $automation->name,
+                'project_uuid' => $automation->project?->uuid?->toRfc4122(),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function buildPayload(string $eventName, $project, $entry, string $previousStatus): array

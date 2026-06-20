@@ -2,7 +2,6 @@
 
 namespace App\Service\Flow;
 
-use App\Message\ExecuteSubFlowMessage;
 use Symfony\Component\Messenger\MessageBusInterface;
 
 class FlowInterpreter
@@ -29,13 +28,19 @@ class FlowInterpreter
         // 2. Initialise les variables du flow
         $ctx->variables = array_merge($ctx->variables, $graph['variables'] ?? []);
 
-        // 3. Topological sort (Kahn)
+        // 3. Construit l'index des nœuds pour les recherches
+        $nodeIndex = [];
+        foreach ($nodes as $n) {
+            $nodeIndex[$n['id']] = $n;
+        }
+
+        // 4. Topological sort (Kahn)
         $sorted = $this->topologicalSort($nodes, $edges);
 
-        // 4. Exécute séquentiellement
+        // 5. Exécute séquentiellement avec filtrage par branche
         $nodeOutputs = [];
         foreach ($sorted as $nodeId) {
-            $node = $this->findNode($nodes, $nodeId);
+            $node = $nodeIndex[$nodeId] ?? null;
             if (!$node) continue;
 
             $handler = $this->registry->resolve($node['type']);
@@ -47,7 +52,14 @@ class FlowInterpreter
             // Collecte les inputs des edges entrants
             $input = $this->collectInput($nodeId, $edges, $nodeOutputs);
 
-            // Ajoute le payload trigger pour le premier node
+            // Si le nœud n'a pas d'input actif (branche non prise ou prédécesseur sauté)
+            if ($input === null) {
+                $ctx->logStep($nodeId, $node['type'], $node['data']['label'] ?? '', 'skipped', 0, [], [], 'Branch not taken');
+                $nodeOutputs[$nodeId] = new NodeOutput(data: ['_skipped' => true], branch: 'skipped');
+                continue;
+            }
+
+            // Ajoute le payload trigger pour le premier node (pas d'input)
             if (empty($input)) {
                 $input = ['_trigger' => new NodeOutput(data: $triggerPayload)];
             }
@@ -64,7 +76,8 @@ class FlowInterpreter
             } catch (\Throwable $e) {
                 $nodeMs = (int)((microtime(true) - $nodeStart) * 1000);
                 $ctx->logStep($nodeId, $node['type'], $node['data']['label'] ?? '', 'failed', $nodeMs, $this->summarizeInput($input), [], $e->getMessage());
-                $nodeOutputs[$nodeId] = new NodeOutput(data: ['error' => $e->getMessage()]);
+                // Marque ce nœud comme erreur — les nœuds suivants seront sautés via collectInput
+                $nodeOutputs[$nodeId] = new NodeOutput(data: ['error' => $e->getMessage()], branch: 'error');
             }
         }
 
@@ -113,27 +126,67 @@ class FlowInterpreter
         return $sorted;
     }
 
-    /** @return array<string, NodeOutput> nodeId -> output */
-    private function collectInput(string $targetId, array $edges, array $nodeOutputs): array
+    /**
+     * Collecte les inputs pour un nœud cible en filtrant par branche.
+     *
+     * Chaque edge peut avoir une propriété `sourceBranch` qui indique
+     * quelle branche de sortie du nœud source est attendue.
+     *
+     * Règles de filtrage :
+     *  - sourceOutput->branch === 'skipped'  → cette connexion est ignorée
+     *  - sourceOutput->branch === 'error'    → cette connexion est ignorée (le flow s'arrête)
+     *  - edge spécifie `sourceBranch`        → seules les correspondances sont acceptées
+     *  - sinon                               → la connexion est acceptée (compatibilité)
+     *
+     * @return array|null null si le nœud doit être sauté (branche non prise ou erreur en amont)
+     */
+    private function collectInput(string $targetId, array $edges, array $nodeOutputs): ?array
     {
-        $input = [];
+        $connectedEdges = [];
+
         foreach ($edges as $edge) {
             if (($edge['target'] ?? '') === $targetId) {
-                $sourceId = $edge['source'];
-                if (isset($nodeOutputs[$sourceId])) {
-                    $input[$sourceId] = $nodeOutputs[$sourceId];
-                }
+                $connectedEdges[] = $edge;
             }
         }
-        return $input;
-    }
 
-    private function findNode(array $nodes, string $id): ?array
-    {
-        foreach ($nodes as $n) {
-            if (($n['id'] ?? '') === $id) return $n;
+        // Pas de connexion entrante = premier nœud (trigger), input vide
+        if (empty($connectedEdges)) {
+            return [];
         }
-        return null;
+
+        $input = [];
+        $hasActiveInput = false;
+
+        foreach ($connectedEdges as $edge) {
+            $sourceId = $edge['source'];
+            if (!isset($nodeOutputs[$sourceId])) continue;
+
+            $sourceOutput = $nodeOutputs[$sourceId];
+
+            // Le nœud source a été sauté → cette connexion est inactive
+            if ($sourceOutput->branch === 'skipped') continue;
+
+            // Le nœud source est en erreur → propager l'arrêt
+            if ($sourceOutput->branch === 'error') continue;
+
+            // Filtrage par branche nommée si l'edge le spécifie
+            $expectedBranch = $edge['sourceBranch'] ?? null;
+            if ($expectedBranch !== null && $expectedBranch !== 'default') {
+                if ($sourceOutput->branch !== $expectedBranch) {
+                    continue;
+                }
+            }
+
+            $hasActiveInput = true;
+            $input[$sourceId] = $sourceOutput;
+        }
+
+        if (!$hasActiveInput) {
+            return null;
+        }
+
+        return $input;
     }
 
     private function summarizeInput(array $input): array
