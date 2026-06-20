@@ -52,10 +52,17 @@ class GraphQLController extends AbstractController
         }
 
         // ── Détection subscription ───────────────────────────────────
-        $isSubscription = $this->isSubscriptionQuery($query);
+        $document = null;
+        try {
+            $document = Parser::parse($query);
+        } catch (\Throwable) {
+            // Parse error — laisser l'exécuteur GraphQL standard gérer l'erreur
+        }
+        $isSubscription = $document !== null && $this->isSubscriptionDocument($document);
 
         if ($isSubscription) {
-            return $this->handleSubscription($project, $query);
+            $projectUuid = $project->uuid->toRfc4122();
+            return $this->handleSubscription($projectUuid, $document);
         }
 
         // ── Query / Mutation standard ────────────────────────────────
@@ -81,34 +88,27 @@ class GraphQLController extends AbstractController
 
     // ─── Subscription ───────────────────────────────────────────────────
 
-    private function isSubscriptionQuery(string $query): bool
+    private function isSubscriptionDocument($document): bool
     {
-        try {
-            $document = Parser::parse($query);
-            foreach ($document->definitions as $def) {
-                if ($def instanceof OperationDefinitionNode && $def->operation === 'subscription') {
-                    return true;
-                }
+        foreach ($document->definitions as $def) {
+            if ($def instanceof OperationDefinitionNode && $def->operation === 'subscription') {
+                return true;
             }
-        } catch (\Throwable) {
-            // Parse error — laisser l'exécuteur GraphQL standard gérer l'erreur
         }
         return false;
     }
 
-    private function handleSubscription(Project $project, string $query): JsonResponse
+    private function handleSubscription(string $projectUuid, $document): JsonResponse
     {
-        $projectUuid = $project->uuid->toRfc4122();
-
         $mercureSecret = $this->getParameter('mercure_jwt_secret') ?? '';
-        if ($mercureSecret === '') {
+        if ($mercureSecret === '' || strlen($mercureSecret) < 32) {
             return new JsonResponse([
                 'errors' => [['message' => 'Mercure hub not configured. Install and start the Mercure Docker service.']],
             ], 503);
         }
 
-        // Extraire les champs souscrits pour déterminer les topics
-        $topics = $this->extractTopics($projectUuid, $query);
+        // Extraire les topics depuis l'AST déjà parsé
+        $topics = $this->extractTopicsFromDocument($projectUuid, $document);
 
         // Générer le JWT Mercure
         $jwtConfig = Configuration::forSymmetricSigner(
@@ -142,34 +142,28 @@ class GraphQLController extends AbstractController
     }
 
     /**
-     * Extrait les topics Mercure à partir des champs souscrits dans la query GraphQL.
+     * Extrait les topics Mercure à partir de l'AST GraphQL déjà parsé.
      */
-    private function extractTopics(string $projectUuid, string $query): array
+    private function extractTopicsFromDocument(string $projectUuid, $document): array
     {
-        try {
-            $document = Parser::parse($query);
-            $topics = [];
+        $topics = [];
 
-            foreach ($document->definitions as $def) {
-                if (!$def instanceof OperationDefinitionNode) continue;
-                if ($def->operation !== 'subscription') continue;
+        foreach ($document->definitions as $def) {
+            if (!$def instanceof OperationDefinitionNode) continue;
+            if ($def->operation !== 'subscription') continue;
 
-                foreach ($def->selectionSet->selections as $selection) {
-                    if (!($selection instanceof FieldNode)) continue;
-                    $fieldName = $selection->name->value;
+            foreach ($def->selectionSet->selections as $selection) {
+                if (!($selection instanceof FieldNode)) continue;
+                $fieldName = $selection->name->value;
 
-                    if ($fieldName === 'projectEvents') {
-                        $topics[] = "projects/{$projectUuid}";
-                    } else {
-                        // Champ par collection → topic content
-                        $topics[] = "projects/{$projectUuid}/content";
-                    }
+                if ($fieldName === 'projectEvents') {
+                    $topics[] = "projects/{$projectUuid}";
+                } else {
+                    $topics[] = "projects/{$projectUuid}/content";
                 }
             }
-
-            return array_values(array_unique($topics ?: ["projects/{$projectUuid}"]));
-        } catch (\Throwable) {
-            return ["projects/{$projectUuid}"];
         }
+
+        return array_values(array_unique($topics ?: ["projects/{$projectUuid}"]));
     }
 }
