@@ -63,7 +63,7 @@ export default function LivePreviewPanel({
 
   // Construire l'URL de l'iframe
   const iframeUrl = entryUuid && token
-    ? `${previewUrl}?jambo_preview=${encodeURIComponent(token)}&jambo_entry=${encodeURIComponent(entryUuid)}&jambo_collection=${encodeURIComponent(collection.slug)}&jambo_locale=${encodeURIComponent(locale)}`
+    ? `${previewUrl}?jambo_preview=${encodeURIComponent(token)}&jambo_entry=${encodeURIComponent(entryUuid)}&jambo_collection=${encodeURIComponent(collection.slug)}&jambo_locale=${encodeURIComponent(locale)}&jambo_project=${encodeURIComponent(projectUuid)}`
     : null;
 
   // Ecouter les messages postMessage de l'iframe
@@ -77,13 +77,15 @@ export default function LivePreviewPanel({
           setLoading(false);
           // Envoyer jambo-init en reponse
           if (iframeRef.current?.contentWindow && token) {
+            const targetOrigin = new URL(previewUrl).origin;
             iframeRef.current.contentWindow.postMessage({
               type: 'jambo-init',
               collection: collection.slug,
               entryUuid,
               locale,
               previewToken: token,
-            }, '*');
+              projectUuid,
+            }, targetOrigin);
           }
           break;
 
@@ -105,34 +107,39 @@ export default function LivePreviewPanel({
     if (!iframeReady || !iframeRef.current?.contentWindow) return;
 
     const currentData = JSON.stringify(formData);
-    if (currentData === prevDataRef.current) return;
+
+    // Sauvegarder le snapshot precedent AVANT de mettre a jour le ref
+    const previousData = prevDataRef.current;
+
+    if (currentData === previousData) return;
     prevDataRef.current = currentData;
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(() => {
-      // Determiner les champs modifies (comparaison superficielle)
+      // Comparer avec le snapshot sauvegarde au moment du declenchement
       const changedFields: string[] = [];
-      const prevParsed = JSON.parse(prevDataRef.current);
-      for (const key of Object.keys(formData)) {
-        if (JSON.stringify(formData[key]) !== JSON.stringify(prevParsed[key])) {
-          changedFields.push(key);
+      if (previousData) {
+        const prevParsed = JSON.parse(previousData);
+        for (const key of Object.keys(formData)) {
+          if (JSON.stringify(formData[key]) !== JSON.stringify(prevParsed[key])) {
+            changedFields.push(key);
+          }
         }
-        prevParsed[key] = formData[key];
       }
-      prevDataRef.current = JSON.stringify(prevParsed);
 
+      const targetOrigin = new URL(previewUrl).origin;
       iframeRef.current!.contentWindow!.postMessage({
         type: 'jambo-update',
         fields: formData,
         changedFields,
-      }, '*');
+      }, targetOrigin);
     }, 500);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [formData, iframeReady]);
+  }, [formData, iframeReady, previewUrl]);
 
   // Ouvrir dans un nouvel onglet
   const openInNewTab = useCallback(() => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { subscribe, type LivePreviewOptions } from '../core/index.js';
 
 interface UseLivePreviewArgs {
@@ -13,19 +13,19 @@ interface UseLivePreviewArgs {
  * Usage dans une page ou un composant client :
  *   const { data, isPreview } = useLivePreview({ initialData });
  *
- * - isPreview : true quand la page est chargée dans l'iframe admin
- * - data : fusion de initialData + mises à jour postMessage
+ * - isPreview : true quand la page est chargee dans l'iframe admin
+ * - data : fusion de initialData + mises a jour postMessage
  */
 export function useLivePreview({ initialData }: UseLivePreviewArgs) {
   const [data, setData] = useState<Record<string, any>>(initialData);
   const [isPreview, setIsPreview] = useState(false);
-  const initDataRef = useRef(initialData);
 
   useEffect(() => {
     const unsub = subscribe({
       onInit: async (ctx) => {
+        const projectUuid = ctx.projectUuid || '';
         const res = await fetch(
-          `/api/preview/content/${ctx.collection}/${ctx.entryUuid}`,
+          `/api/projects/${encodeURIComponent(projectUuid)}/preview/content/${encodeURIComponent(ctx.collection)}/${encodeURIComponent(ctx.entryUuid)}`,
           {
             headers: {
               Authorization: `Bearer ${ctx.token}`,
@@ -41,7 +41,7 @@ export function useLivePreview({ initialData }: UseLivePreviewArgs) {
       debug: process.env.NODE_ENV === 'development',
     });
 
-    // Si jambo_preview est présent dans l'URL, c'est le mode preview
+    // Si jambo_preview est present dans l'URL, c'est le mode preview
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       setIsPreview(params.has('jambo_preview'));
