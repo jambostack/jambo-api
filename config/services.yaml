@@ -116,6 +116,11 @@ services:
             $mercureJwtSecret: '%env(MERCURE_JWT_SECRET)%'
             $mercurePublicUrl: '%env(MERCURE_PUBLIC_URL)%'
 
+    # ── SchemaGenerator — projectDir pour les resolvers GraphQL Subscription ──
+    App\GraphQL\SchemaGenerator:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+
     App\Service\MediaSerializer:
         arguments:
             $profileRepo: '@App\Repository\ProjectStorageProfileRepository'
