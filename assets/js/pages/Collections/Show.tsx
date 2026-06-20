@@ -40,7 +40,7 @@ export default function Show({ project, collection, contentEntry, formData, isEd
     const isContentCreatePage = page.url.includes('content/create');
     const isContentEditPage = page.url.includes('content') && page.url.includes('edit');
     const showContentForm = isContentCreatePage || isContentEditPage || isEditMode;
-    const [liveFormData, setLiveFormData] = useState<Record<string, any>>(formData || {});
+    const [liveFormData, setLiveFormData] = useState<Record<string, any>>(null);
 
     // Add appropriate breadcrumb
     if (isContentCreatePage) {
@@ -75,7 +75,7 @@ export default function Show({ project, collection, contentEntry, formData, isEd
                             collection={collection}
                             project={project}
                             contentEntry={contentEntry}
-                            formData={liveFormData}
+                            formData={formData}
                             isEditMode={isEditMode}
                             onFieldChange={setLiveFormData}
                         />
