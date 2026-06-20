@@ -25,6 +25,28 @@ export default function BlogPost({ initialData }) {
 }
 ```
 
+## Visual Editing (v1.14b)
+
+Ajoutez `data-jambo-*` aux elements HTML avec `fieldProps()` :
+
+```tsx
+const { data, isPreview, fieldProps } = useLivePreview({ initialData });
+
+return (
+  <article>
+    <h1 {...fieldProps('title', 'text')}>{data.title}</h1>
+    <div {...fieldProps('body', 'rich-text')}>
+      <RichText content={data.body} />
+    </div>
+    <img {...fieldProps('cover', 'media')} src={data.cover} />
+  </article>
+);
+```
+
+- Survol : contour bleu dans l'iframe + surbrillance du champ dans l'admin
+- Clic sur un champ texte : popover d'edition inline
+- Clic sur un champ complexe : scroll vers le champ dans l'admin
+
 ## Usage Vanilla / Autre framework
 
 ```ts
