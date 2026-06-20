@@ -73,14 +73,72 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
 
     const update = (patch: Partial<Automation>) => setForm(f => ({ ...f, ...patch }));
 
+    /** Construit un flowGraph minimal à partir du formulaire legacy */
+    const buildFlowGraph = (): Record<string, any> => {
+        const nodes: any[] = [];
+        const edges: any[] = [];
+        let prevId = '';
+
+        // 1. Nœud trigger
+        const triggerFullType = form.trigger_type === 'schedule.cron'
+            ? 'trigger.schedule.cron'
+            : `trigger.content.${form.trigger_type.replace('content.', '')}`;
+
+        nodes.push({
+            id: 'trigger_1',
+            type: triggerFullType,
+            data: { label: TRIGGER_TYPES.find(t => t.value === form.trigger_type)?.label || 'Déclencheur', config: form.trigger_config || {} },
+        });
+        prevId = 'trigger_1';
+
+        // 2. Nœuds de condition (en chaîne)
+        form.conditions.forEach((cond, i) => {
+            const condId = `condition_${i + 1}`;
+            nodes.push({
+                id: condId,
+                type: 'logic.condition',
+                data: { label: `${cond.field} ${cond.operator} ${cond.value}`, config: { field: cond.field, operator: cond.operator, value: cond.value } },
+            });
+            edges.push({
+                id: `e_${prevId}_${condId}`,
+                source: prevId,
+                target: condId,
+                sourceBranch: 'true',
+            });
+            prevId = condId;
+        });
+
+        // 3. Nœud action
+        const actionFullType = `action.${form.action_type}`;
+        nodes.push({
+            id: 'action_1',
+            type: actionFullType,
+            data: { label: ACTION_TYPES.find(a => a.value === form.action_type)?.label || 'Action', config: form.action_config || {} },
+        });
+        edges.push({
+            id: `e_${prevId}_action_1`,
+            source: prevId,
+            target: 'action_1',
+            sourceBranch: prevId !== 'trigger_1' ? 'true' : undefined,
+        });
+
+        return { nodes, edges, variables: {} };
+    };
+
     const handleSave = async () => {
         setSaving(true);
         try {
+            const payload: Record<string, any> = {
+                name: form.name,
+                flow_graph: buildFlowGraph(),
+                is_active: form.is_active,
+                debug_mode: form.debug_mode,
+            };
             if (automation?.id) {
-                await axios.put(`/api/projects/${projectUuid}/automations/${automation.id}`, form);
+                await axios.put(`/api/projects/${projectUuid}/automations/${automation.id}`, payload);
                 toast.success('Automatisation mise à jour');
             } else {
-                await axios.post(`/api/projects/${projectUuid}/automations`, form);
+                await axios.post(`/api/projects/${projectUuid}/automations`, payload);
                 toast.success('Automatisation créée');
             }
             onSaved();

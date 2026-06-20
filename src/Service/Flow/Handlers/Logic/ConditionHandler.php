@@ -57,7 +57,7 @@ class ConditionHandler implements FlowNodeHandler
 
     private function resolveConfig(FlowContext $ctx): array
     {
-        return [];
+        return $ctx->variables['_node_config'] ?? [];
     }
 
     public static function getCategory(): string { return 'logic'; }

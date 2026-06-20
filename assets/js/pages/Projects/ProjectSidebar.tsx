@@ -87,7 +87,7 @@ export default function ProjectSidebar({ project }: Props) {
         <div>
             <aside className="w-full lg:w-64 space-y-4 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between shrink-0">
-                    <h3 className="font-medium">{t('projects.sidebar.title')}</h3>
+                    <h3 className="font-medium truncate min-w-0">{t('projects.sidebar.title')}</h3>
                     {can.create_collection && (
                     <Button
                         variant="default"
@@ -128,19 +128,19 @@ export default function ProjectSidebar({ project }: Props) {
                                             <div
                                                 ref={provided.innerRef}
                                                 {...provided.draggableProps}
-                                                className="flex items-center space-x-2 rtl:space-x-reverse"
+                                                className="flex items-center min-w-0 gap-1.5 lg:gap-2"
                                             >
                                                 {isEditPage && (
                                                     <div
                                                         {...provided.dragHandleProps}
-                                                        className="p-2 text-muted-foreground hover:text-foreground cursor-grab"
+                                                        className="p-1.5 lg:p-2 text-muted-foreground hover:text-foreground cursor-grab"
                                                     >
                                                         <GripVertical className="w-4 h-4" />
                                                     </div>
                                                 )}
                                                 <Link
                                                     href={route('projects.collections.show', [project.id, collection.id])}
-                                                    className={`flex-1 p-2 text-sm rounded-md hover:bg-accent ${
+                                                    className={`flex-1 min-w-0 truncate p-2 text-sm rounded-md hover:bg-accent ${
                                                         isCollectionActive(collection.id) ? 'bg-accent text-accent-foreground' : ''
                                                     }`}
                                                 >
@@ -149,7 +149,7 @@ export default function ProjectSidebar({ project }: Props) {
                                                 {can.access_collection_settings && (
                                                     <Link
                                                         href={route('projects.collections.edit', [project.id, collection.id])}
-                                                        className="block p-2 text-sm rounded-md hover:bg-accent"
+                                                        className="hidden lg:block p-1.5 lg:p-2 text-sm rounded-md hover:bg-accent"
                                                     >
                                                         <Settings className="w-4 h-4" />
                                                     </Link>
@@ -158,12 +158,22 @@ export default function ProjectSidebar({ project }: Props) {
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild>
                                                             <button
-                                                                className="block p-2 text-sm rounded-md hover:bg-accent"
+                                                                className="block p-1.5 lg:p-2 text-sm rounded-md hover:bg-accent"
                                                             >
                                                                 <MoreVertical className="w-4 h-4" />
                                                             </button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
+                                                            {/* Sur mobile/tablette, le lien Settings est dans le dropdown */}
+                                                            {can.access_collection_settings && (
+                                                                <DropdownMenuItem
+                                                                    className="cursor-pointer lg:hidden"
+                                                                    onClick={() => window.location.href = route('projects.collections.edit', [project.id, collection.id])}
+                                                                >
+                                                                    <Settings className="w-4 h-4 mr-2" />
+                                                                    {t('collections.edit')}
+                                                                </DropdownMenuItem>
+                                                            )}
                                                             {can.update_collection && (
                                                                 <DropdownMenuItem
                                                                     className="cursor-pointer"
@@ -207,18 +217,18 @@ export default function ProjectSidebar({ project }: Props) {
 
                 {can.access_end_users_settings && (
                     <div className="pt-2 border-t shrink-0">
-                        <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                        <div className="flex items-center min-w-0 gap-1.5 lg:gap-2">
                             <Link
                                 href={route('projects.settings.end-users', project.id)}
-                                className={`flex-1 flex items-center gap-2 p-2 text-sm rounded-md hover:bg-accent ${isEndUsersActive ? 'bg-accent text-accent-foreground' : ''}`}
+                                className={`flex-1 min-w-0 flex items-center gap-2 p-2 text-sm rounded-md hover:bg-accent ${isEndUsersActive ? 'bg-accent text-accent-foreground' : ''}`}
                             >
                                 <Users className="w-4 h-4 shrink-0 text-muted-foreground" />
-                                <span className="flex-1">{t('end_users.heading')}</span>
-                                <Lock className="w-3 h-3 text-muted-foreground/50" />
+                                <span className="flex-1 truncate">{t('end_users.heading')}</span>
+                                <Lock className="hidden sm:block w-3 h-3 text-muted-foreground/50 shrink-0" />
                             </Link>
                             <Link
                                 href={route('projects.settings.end-users.schema', project.id)}
-                                className={`p-2 text-sm rounded-md hover:bg-accent ${page.component === 'Projects/Settings/EndUsers/Schema' ? 'bg-accent text-accent-foreground' : ''}`}
+                                className={`hidden lg:block p-1.5 lg:p-2 text-sm rounded-md hover:bg-accent ${page.component === 'Projects/Settings/EndUsers/Schema' ? 'bg-accent text-accent-foreground' : ''}`}
                                 title={t('end_users.schema')}
                             >
                                 <Settings className="w-4 h-4" />

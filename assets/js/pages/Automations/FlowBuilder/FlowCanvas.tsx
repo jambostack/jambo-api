@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
 import {
     ReactFlow, Background, Controls, MiniMap, NodeTypes,
-    useReactFlow, ReactFlowProvider,
+    useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useFlowStore } from './FlowStore';
@@ -130,9 +130,5 @@ function FlowCanvasInner() {
 }
 
 export default function FlowCanvas() {
-    return (
-        <ReactFlowProvider>
-            <FlowCanvasInner />
-        </ReactFlowProvider>
-    );
+    return <FlowCanvasInner />;
 }

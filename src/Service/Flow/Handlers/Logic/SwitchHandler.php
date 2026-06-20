@@ -78,6 +78,8 @@ class SwitchHandler implements FlowNodeHandler
 
     public static function getOutputPorts(): array
     {
+        // Les ports sont dynamiques (définis dans la config 'cases').
+        // Le port par défaut est 'default', les autres sont 'case_0', 'case_1', etc.
         return ['default'];
     }
 }

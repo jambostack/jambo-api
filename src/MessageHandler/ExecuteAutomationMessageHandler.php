@@ -2,33 +2,27 @@
 
 namespace App\MessageHandler;
 
-use App\Entity\Automation;
-use App\Entity\AutomationRun;
-use App\Entity\ContentEntry;
 use App\Message\ExecuteAutomationMessage;
 use App\Repository\AutomationRepository;
 use App\Repository\AutomationRunRepository;
-use App\Repository\CollectionRepository;
-use App\Repository\ContentEntryRepository;
-use App\Repository\ProjectRepository;
-use App\Service\EavFieldHelperService;
-use App\Service\ProjectMailerService;
+use App\Service\Automation\AutomationEngine;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
+/**
+ * Handler asynchrone pour ExecuteAutomationMessage.
+ *
+ * Délègue à AutomationEngine::execute() qui gère
+ * l'exécution du flowGraph et la persistance du Run.
+ */
 #[AsMessageHandler]
 class ExecuteAutomationMessageHandler
 {
     public function __construct(
-        private readonly EntityManagerInterface $em,
         private readonly AutomationRepository $automationRepo,
         private readonly AutomationRunRepository $runRepo,
-        private readonly ProjectRepository $projectRepo,
-        private readonly CollectionRepository $collectionRepo,
-        private readonly ContentEntryRepository $entryRepo,
-        private readonly ProjectMailerService $mailerService,
-        private readonly EavFieldHelperService $eavHelper,
+        private readonly AutomationEngine $engine,
+        private readonly EntityManagerInterface $em,
     ) {}
 
     public function __invoke(ExecuteAutomationMessage $message): void
@@ -36,169 +30,25 @@ class ExecuteAutomationMessageHandler
         $run = $this->runRepo->find($message->runId);
         if ($run === null) return;
 
-        $startTime = microtime(true);
+        $automation = $this->automationRepo->find($message->automationId);
+        if ($automation === null || !$automation->isActive) {
+            $run->status = 'failed';
+            $run->errorMessage = 'Automation not found or inactive';
+            $run->finishedAt = new \DateTimeImmutable();
+            $this->em->flush();
+            return;
+        }
 
         try {
-            match ($message->actionType) {
-                'send_email'       => $this->executeSendEmail($message),
-                'call_webhook'     => $this->executeCallWebhook($message),
-                'create_entry'     => $this->executeCreateEntry($message),
-                'update_entry'     => $this->executeUpdateEntry($message),
-                'send_notification' => $this->executeSendNotification($message),
-                default            => throw new \RuntimeException("Unknown action type: {$message->actionType}"),
-            };
-
-            $run->status = 'success';
+            // Passe le Run existant pour éviter la création d'un doublon
+            $this->engine->execute($automation, $message->triggerPayload, $run);
+            $run->finishedAt = new \DateTimeImmutable();
         } catch (\Throwable $e) {
             $run->status = 'failed';
             $run->errorMessage = $e->getMessage();
+            $run->finishedAt = new \DateTimeImmutable();
         }
 
-        $run->finishedAt = new \DateTimeImmutable();
-        $run->durationMs = (int) ((microtime(true) - $startTime) * 1000);
-
-        if ($message->debugMode) {
-            $run->actionOutput = ['status' => $run->status];
-        }
-
-        $this->em->flush();
-    }
-
-    // ─── Actions ────────────────────────────────────────────────────────
-
-    private function executeSendEmail(ExecuteAutomationMessage $msg): void
-    {
-        $config = $msg->actionInput;
-        $project = $this->projectRepo->findOneBy(['uuid' => $msg->projectUuid]);
-
-        $this->mailerService->send(
-            project: $project,
-            to: $config['to'] ?? '',
-            subject: $config['subject'] ?? 'Automatisation Jambo',
-            body: $config['body'] ?? '',
-            htmlBody: $config['body'] ?? '',
-        );
-    }
-
-    private function executeCallWebhook(ExecuteAutomationMessage $msg): void
-    {
-        $config = $msg->actionInput;
-        $url    = $config['url'] ?? '';
-        $method = strtoupper($config['method'] ?? 'POST');
-        $headers = $config['headers'] ?? [];
-        $body    = $config['body'] ?? '';
-
-        // Protection SSRF : valider l'URL et bloquer les IPs internes
-        $this->validateUrl($url);
-
-        $client = HttpClient::create(['timeout' => 10, 'max_redirects' => 0]);
-        $client->request($method, $url, [
-            'headers' => $headers,
-            'body'    => $body,
-        ]);
-    }
-
-    private function validateUrl(string $url): void
-    {
-        $scheme = parse_url($url, PHP_URL_SCHEME);
-        $host   = parse_url($url, PHP_URL_HOST);
-
-        if ($host === null || $host === false || $host === '') {
-            throw new \RuntimeException('Invalid webhook URL: missing host');
-        }
-
-        if (!in_array($scheme, ['http', 'https'], true)) {
-            throw new \RuntimeException('Invalid webhook URL: only http/https allowed');
-        }
-
-        // Bloquer les IPs internes/réservées
-        $ip = gethostbyname($host);
-        if ($ip === $host) {
-            // gethostbyname() returned the input unchanged = résolution échouée
-            throw new \RuntimeException('Cannot resolve webhook host');
-        }
-
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-            throw new \RuntimeException('Webhook URL resolves to private/internal IP');
-        }
-    }
-
-    private function executeCreateEntry(ExecuteAutomationMessage $msg): void
-    {
-        $config = $msg->actionInput;
-        $collectionSlug = $config['collection_slug'] ?? '';
-        $project = $this->projectRepo->findOneBy(['uuid' => $msg->projectUuid]);
-        $collection = $this->collectionRepo->findOneBy(['slug' => $collectionSlug, 'project' => $project]);
-
-        if (!$collection) {
-            throw new \RuntimeException("Collection '$collectionSlug' not found");
-        }
-
-        $entry = new ContentEntry();
-        $entry->collection = $collection;
-        $entry->project    = $project;
-        $entry->locale     = $project->defaultLocale;
-        $entry->status     = $collection->getDefaultStatus();
-
-        $this->em->persist($entry);
-
-        // Appliquer les valeurs des champs
-        $fields = $config['fields'] ?? [];
-        foreach ($fields as $slug => $value) {
-            $field = $collection->getFieldBySlug($slug);
-            if ($field) {
-                $this->eavHelper->saveFieldValue($entry, $field, $value);
-            }
-        }
-
-        $this->em->flush();
-    }
-
-    private function executeUpdateEntry(ExecuteAutomationMessage $msg): void
-    {
-        $config = $msg->actionInput;
-        $entryUuid = $config['entry_uuid'] ?? '';
-
-        $entry = $this->entryRepo->findOneBy(['uuid' => $entryUuid]);
-        if (!$entry) {
-            throw new \RuntimeException("Entry '$entryUuid' not found");
-        }
-
-        $fields = $config['fields'] ?? [];
-        foreach ($fields as $slug => $value) {
-            $field = $entry->collection?->getFieldBySlug($slug);
-            if ($field) {
-                $this->eavHelper->saveFieldValue($entry, $field, $value);
-            }
-        }
-
-        if (!empty($config['status'])) {
-            $entry->status = $config['status'];
-        }
-
-        $entry->updatedAt = new \DateTimeImmutable();
-        $this->em->flush();
-    }
-
-    private function executeSendNotification(ExecuteAutomationMessage $msg): void
-    {
-        $config = $msg->actionInput;
-        $title = $config['title'] ?? 'Automatisation';
-        $body  = $config['body']  ?? '';
-
-        // Crée une notification pour l'utilisateur qui a déclenché l'automatisation
-        // (ou tous les admins du projet)
-        $project = $this->projectRepo->findOneBy(['uuid' => $msg->projectUuid]);
-
-        // Notification simple : on log juste, le système de notification
-        // existant est déjà branché sur les événements de contenu.
-        // Pour v1.13a, on va créer une notification basique.
-        $notification = new \App\Entity\Notification();
-        $notification->title = $title;
-        $notification->body = $body;
-        $notification->type = 'automation';
-
-        $this->em->persist($notification);
         $this->em->flush();
     }
 }

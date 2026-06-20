@@ -1,4 +1,4 @@
-import { router, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -84,6 +84,7 @@ export default function AutomationsSettings({ project }: Props) {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
+            <Head title={t('flow.breadcrumb') + ' - ' + project.name} />
             <ProjectSettingsLayout project={project}>
                 {builderOpen ? (
                     <FlowBuilderPage

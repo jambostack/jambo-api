@@ -3,7 +3,10 @@ import Heading from '@/components/heading';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { NavItem, Project, UserCan } from '@/types/index.d';
-import { Settings as SettingsIcon, Globe, Users, Key, Share2, UserCog, FileText, Wand2, Plug, Mail, HardDrive, Clock, Shield, Zap } from 'lucide-react';
+import {
+    Settings as SettingsIcon, Globe, Users, Key, Share2, UserCog, FileText,
+    Wand2, Plug, Mail, HardDrive, Clock, Shield, Zap, ChevronDown,
+} from 'lucide-react';
 import { PropsWithChildren } from 'react';
 import { useTranslation } from '@/lib/i18n';
 
@@ -43,12 +46,15 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
     ];
 
     const filteredItems = sidebarNavItems.filter((item) => can[item.permission]);
+    const currentItem = filteredItems.find((item) => currentPath === item.href);
 
     return (
         <div>
             <Heading title={t('projects.settings.heading')} description={t('projects.settings.heading_desc')} />
 
-            {/* ── Desktop (lg+) : sidebar verticale ──────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════
+                Desktop (lg+) : sidebar verticale
+               ═══════════════════════════════════════════════════════════ */}
             <div className="hidden lg:flex lg:flex-row lg:space-y-0 lg:space-x-12 rtl:lg:space-x-reverse">
                 <aside className="w-48 shrink-0 sticky top-16 self-start max-h-[calc(100vh-5rem)] overflow-y-auto">
                     <nav className="flex flex-col space-y-1 pb-4">
@@ -77,10 +83,38 @@ export default function ProjectSettingsLayout({ project, children }: ProjectSett
                 </div>
             </div>
 
-            {/* ── Tablet / Mobile (< lg) : barre d'onglets horizontale scrollable ── */}
+            {/* ═══════════════════════════════════════════════════════════
+                Tablette / Mobile (< lg)
+               ═══════════════════════════════════════════════════════════ */}
             <div className="lg:hidden space-y-6">
-                <div className="relative">
-                    <nav className="flex items-center gap-1 overflow-x-auto pb-3 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+                {/* ── Mobile (< sm) : menu déroulant ─────────────────── */}
+                <div className="sm:hidden">
+                    <div className="relative">
+                        <select
+                            value={currentItem?.href ?? currentPath}
+                            onChange={(e) => {
+                                if (e.target.value) {
+                                    window.location.href = e.target.value;
+                                }
+                            }}
+                            className="w-full appearance-none flex items-center gap-2 h-10 px-3 pr-10 text-sm font-medium rounded-lg border border-border bg-background text-foreground cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
+                        >
+                            {filteredItems.map((item, index) => (
+                                <option key={`${item.href}-${index}`} value={item.href}>
+                                    {item.title}
+                                </option>
+                            ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    </div>
+                </div>
+
+                {/* ── Tablette (sm → lg) : pills horizontales scrollables ── */}
+                <div className="hidden sm:block lg:hidden relative">
+                    <nav
+                        className="flex items-center gap-1 overflow-x-auto pb-3 -mx-1 px-1"
+                        style={{ scrollbarWidth: 'none' }}
+                    >
                         {filteredItems.map((item, index) => (
                             <Link
                                 key={`${item.href}-${index}`}

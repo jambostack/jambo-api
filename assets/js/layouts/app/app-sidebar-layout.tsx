@@ -20,7 +20,7 @@ export default function AppSidebarLayout({ children, breadcrumbs = [] }: PropsWi
             <AppSidebar />
             <AppContent variant="sidebar">
                 <AppSidebarHeader breadcrumbs={breadcrumbs} />
-                <div className="p-4 pb-24 md:p-6 md:pb-6">{children}</div>
+                <div className="flex min-h-0 flex-1 flex-col p-4 pb-24 md:p-6 md:pb-6">{children}</div>
             </AppContent>
             <AppMobileNav />
             <SonnerToaster position="top-center" closeButton />
