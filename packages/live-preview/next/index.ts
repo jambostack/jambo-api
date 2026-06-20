@@ -51,7 +51,7 @@ export function useLivePreview({ initialData }: UseLivePreviewArgs) {
 
     // Initialize visual editing
     const visCleanup = initVisualEditing({
-      allowedOrigin: window.location.ancestorOrigins?.[0] || '*',
+      allowedOrigin: window.location.ancestorOrigins?.[0] || (document.referrer ? new URL(document.referrer).origin : ''),
       inlineEditEnabled: true,
       debug: process.env.NODE_ENV === 'development',
     });
