@@ -2,39 +2,72 @@
 
 namespace App\Service;
 
+use Symfony\Component\Mercure\HubInterface;
+use Symfony\Component\Mercure\Update;
+
 /**
  * Publie des événements temps réel.
  *
- * Écrit dans des fichiers JSONL (var/realtime/{projectUuid}.jsonl).
- * Le RealtimeController les lit et les stream aux clients SSE.
- *
- * Fonctionne sur tout serveur (Apache/CGI, Nginx, etc.) sans dépendance externe.
+ * Canal primaire : hub Mercure (SSE) si configuré.
+ * Canal fallback : fichiers JSONL (var/realtime/{projectUuid}.jsonl) pour tout serveur sans hub.
  *
  * Topics par convention :
- *   project/{uuid}/content        — modifications de contenu
- *   project/{uuid}/media          — uploads, suppressions média
- *   project/{uuid}/status         — changements de statut workflow
+ *   projects/{uuid}               — tous les événements du projet
+ *   projects/{uuid}/content       — modifications de contenu
+ *   projects/{uuid}/media         — uploads, suppressions média
+ *   projects/{uuid}/status        — changements de statut workflow
  */
 class MercurePublisher
 {
     public function __construct(
         private readonly string $projectDir,
+        private ?HubInterface $hub = null,
     ) {}
 
     /**
-     * Publie un événement. L'écrit dans le fichier JSONL du projet.
+     * Publie un événement sur le hub Mercure (primaire) et dans le fichier JSONL (fallback).
      */
     private function publish(string $projectUuid, array $data): void
     {
+        // Canal primaire : hub Mercure SSE
+        if ($this->hub !== null) {
+            try {
+                $topic = $this->resolveTopic($projectUuid, $data['event'] ?? 'unknown');
+                $payload = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+                $update = new Update(
+                    topics: [$topic, "projects/{$projectUuid}"],
+                    payload: $payload,
+                    private: true,
+                );
+                $this->hub->publish($update);
+            } catch (\Throwable $e) {
+                // Hub inaccessible — on continue en fallback JSONL silencieusement
+            }
+        }
+
+        // Canal fallback : fichier JSONL (compatible tout serveur)
         $dir = $this->projectDir . '/var/realtime';
         if (!is_dir($dir)) {
             mkdir($dir, 0700, true);
         }
 
         $path = $dir . '/' . $projectUuid . '.jsonl';
-        $line = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
+        $line = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
 
         file_put_contents($path, $line, FILE_APPEND | LOCK_EX);
+    }
+
+    /**
+     * Dérive le topic Mercure à partir du préfixe d'événement.
+     */
+    private function resolveTopic(string $projectUuid, string $event): string
+    {
+        return match (true) {
+            str_starts_with($event, 'entry.')  => "projects/{$projectUuid}/content",
+            str_starts_with($event, 'media.')  => "projects/{$projectUuid}/media",
+            str_starts_with($event, 'status.') => "projects/{$projectUuid}/status",
+            default                             => "projects/{$projectUuid}",
+        };
     }
 
     // ─── Helpers métier ──────────────────────────────────────────────────
