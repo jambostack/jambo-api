@@ -1,35 +1,43 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { subscribe, type LivePreviewOptions } from '../core/index.js';
+import { useEffect, useState, useRef } from 'react';
+import { subscribe, initVisualEditing } from '../core/index.js';
 
 interface UseLivePreviewArgs {
   initialData: Record<string, any>;
 }
 
 /**
- * Hook Next.js pour le Live Preview.
+ * Hook Next.js pour le Live Preview avec edition visuelle.
  *
- * Usage dans une page ou un composant client :
- *   const { data, isPreview } = useLivePreview({ initialData });
+ * Usage :
+ *   const { data, isPreview, fieldProps } = useLivePreview({ initialData });
  *
- * - isPreview : true quand la page est chargee dans l'iframe admin
- * - data : fusion de initialData + mises a jour postMessage
+ *   <h1 {...fieldProps('title', 'text')}>{data.title}</h1>
  */
 export function useLivePreview({ initialData }: UseLivePreviewArgs) {
   const [data, setData] = useState<Record<string, any>>(initialData);
   const [isPreview, setIsPreview] = useState(false);
+  const collectionRef = useRef<string>('');
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      setIsPreview(params.has('jambo_preview'));
+      collectionRef.current = params.get('jambo_collection') || '';
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isPreview) return;
+
     const unsub = subscribe({
       onInit: async (ctx) => {
         const projectUuid = ctx.projectUuid || '';
         const res = await fetch(
           `/api/projects/${encodeURIComponent(projectUuid)}/preview/content/${encodeURIComponent(ctx.collection)}/${encodeURIComponent(ctx.entryUuid)}`,
           {
-            headers: {
-              Authorization: `Bearer ${ctx.token}`,
-            },
+            headers: { Authorization: `Bearer ${ctx.token}` },
           }
         );
         if (!res.ok) throw new Error(`Preview API returned ${res.status}`);
@@ -41,14 +49,27 @@ export function useLivePreview({ initialData }: UseLivePreviewArgs) {
       debug: process.env.NODE_ENV === 'development',
     });
 
-    // Si jambo_preview est present dans l'URL, c'est le mode preview
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      setIsPreview(params.has('jambo_preview'));
-    }
+    // Initialize visual editing
+    const visCleanup = initVisualEditing({
+      allowedOrigin: window.location.ancestorOrigins?.[0] || '*',
+      inlineEditEnabled: true,
+      debug: process.env.NODE_ENV === 'development',
+    });
 
-    return unsub;
-  }, []);
+    return () => {
+      unsub();
+      visCleanup();
+    };
+  }, [isPreview]);
 
-  return { data, isPreview };
+  /**
+   * Generate data-jambo-* attributes for visual editing.
+   */
+  const fieldProps = (slug: string, type?: string) => ({
+    'data-jambo-field': slug,
+    'data-jambo-collection': collectionRef.current,
+    ...(type ? { 'data-jambo-type': type } : {}),
+  });
+
+  return { data, isPreview, fieldProps };
 }
