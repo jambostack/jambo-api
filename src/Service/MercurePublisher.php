@@ -42,7 +42,7 @@ class MercurePublisher
                 $topic = $this->resolveTopic($projectUuid, $data['event'] ?? 'unknown');
                 $update = new Update(
                     topics: [$topic, "projects/{$projectUuid}"],
-                    payload: $payload,
+                    data: $payload,
                     private: true,
                 );
                 $this->hub->publish($update);
