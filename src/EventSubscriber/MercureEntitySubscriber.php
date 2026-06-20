@@ -5,12 +5,13 @@ namespace App\EventSubscriber;
 use App\Entity\ContentEntry;
 use App\Entity\Media;
 use App\Service\MercurePublisher;
+use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\ORM\Event\OnFlushEventArgs;
 use Doctrine\ORM\Event\PostFlushEventArgs;
 use Doctrine\ORM\Event\PostPersistEventArgs;
 use Doctrine\ORM\Event\PostUpdateEventArgs;
 use Doctrine\ORM\Event\PreRemoveEventArgs;
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Doctrine\ORM\Events;
 
 /**
  * Publie automatiquement les événements temps réel sur mutations Doctrine.
@@ -21,8 +22,18 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  * Les uploads média sont gérés explicitement par MediaController et
  * TusController (payload enrichi via MediaSerializer). Ce subscriber
  * ne traite que la suppression média (preRemove).
+ *
+ * Utilise les attributs #[AsDoctrineListener] (pattern du projet)
+ * plutôt que EventSubscriberInterface — les événements Doctrine ORM
+ * passent par l'EventManager de Doctrine, pas par l'EventDispatcher
+ * de Symfony.
  */
-class MercureEntitySubscriber implements EventSubscriberInterface
+#[AsDoctrineListener(Events::postPersist)]
+#[AsDoctrineListener(Events::postUpdate)]
+#[AsDoctrineListener(Events::preRemove)]
+#[AsDoctrineListener(Events::onFlush)]
+#[AsDoctrineListener(Events::postFlush)]
+class MercureEntitySubscriber
 {
     /**
      * Événements de statut accumulés pendant onFlush, publiés dans postFlush.
@@ -34,17 +45,6 @@ class MercureEntitySubscriber implements EventSubscriberInterface
     public function __construct(
         private readonly MercurePublisher $mercure,
     ) {}
-
-    public static function getSubscribedEvents(): array
-    {
-        return [
-            \Doctrine\ORM\Events::postPersist => 'postPersist',
-            \Doctrine\ORM\Events::postUpdate  => 'postUpdate',
-            \Doctrine\ORM\Events::preRemove   => 'preRemove',
-            \Doctrine\ORM\Events::onFlush     => 'onFlush',
-            \Doctrine\ORM\Events::postFlush   => 'postFlush',
-        ];
-    }
 
     // ─── Content ──────────────────────────────────────────────────────
 
