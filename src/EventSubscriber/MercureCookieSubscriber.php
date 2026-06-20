@@ -7,6 +7,7 @@ use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\Cookie;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 
 /**
@@ -21,6 +22,7 @@ class MercureCookieSubscriber implements EventSubscriberInterface
     public function __construct(
         private readonly string $mercureJwtSecret,
         private readonly string $mercurePublicUrl,
+        private readonly RequestStack $requestStack,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -39,7 +41,7 @@ class MercureCookieSubscriber implements EventSubscriberInterface
         }
 
         // Si le secret Mercure n'est pas configuré ou trop court, on ne fait rien
-        if (strlen($this->mercureJwtSecret) < 16) {
+        if (strlen($this->mercureJwtSecret) < 32) {
             return;
         }
 
@@ -67,7 +69,7 @@ class MercureCookieSubscriber implements EventSubscriberInterface
             ->withPath('/.well-known/mercure')
             ->withDomain($domain !== '' ? $domain : null)
             ->withHttpOnly(true)
-            ->withSecure(!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            ->withSecure($this->requestStack->getCurrentRequest()?->isSecure() ?? false)
             ->withSameSite('Strict')
             ->withExpires($now->modify('+24 hours'));
 

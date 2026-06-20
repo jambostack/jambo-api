@@ -34,7 +34,8 @@ interface Props {
     formData?: Record<string, any>;
     isEditMode?: boolean;
     onFieldChange?: (formData: Record<string, any>) => void;
-    highlightedField?: string | null;  // NOUVEAU - v1.14b
+    highlightedField?: string | null;  // v1.14b
+    patchField?: { fieldSlug: string; value: string } | null;  // v1.14b — inline edit
 }
 
 type SaveAction = 'stay' | 'close' | 'new';
@@ -82,7 +83,7 @@ function buildInitialFormData(fields: Field[]): Record<string, any> {
     return data;
 }
 
-export default function ContentForm({ project, collection, contentEntry, formData: initialFormData, isEditMode, onFieldChange, highlightedField }: Props) {
+export default function ContentForm({ project, collection, contentEntry, formData: initialFormData, isEditMode, onFieldChange, highlightedField, patchField }: Props) {
     const t = useTranslation();
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [processing, setProcessing] = useState(false);
@@ -97,6 +98,13 @@ export default function ContentForm({ project, collection, contentEntry, formDat
             }
         }
     }, [highlightedField]);
+
+    // v1.14b — Appliquer une modification inline (popover dans l'iframe)
+    useEffect(() => {
+        if (patchField) {
+            setFormData(prev => ({ ...prev, [patchField.fieldSlug]: patchField.value }));
+        }
+    }, [patchField]);
 
     // Dialog states
     const [showUnpublishDialog, setShowUnpublishDialog] = useState(false);

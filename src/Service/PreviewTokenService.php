@@ -28,6 +28,8 @@ class PreviewTokenService
     /** TTL du token de preview : 1 heure */
     private const TTL = 3600;
 
+    private static ?DateInterval $leeway = null;
+
     public function __construct(
         private readonly string $appSecret,
         private readonly ClockInterface $clock,
@@ -78,7 +80,7 @@ class PreviewTokenService
 
             $constraints = [
                 new SignedWith($this->config->signer(), $this->config->signingKey()),
-                new StrictValidAt($this->clock, new DateInterval('PT30S')),
+                new StrictValidAt($this->clock, self::$leeway ??= new DateInterval('PT30S')),
             ];
 
             $this->config->validator()->assert($parsedToken, ...$constraints);

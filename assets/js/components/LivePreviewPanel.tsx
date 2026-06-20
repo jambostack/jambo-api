@@ -16,6 +16,7 @@ interface LivePreviewPanelProps {
   onClose?: () => void;
   onFieldHover?: (fieldSlug: string) => void;
   onFieldSelect?: (fieldSlug: string) => void;
+  onInlineUpdate?: (fieldSlug: string, value: string) => void;
 }
 
 const DEVICE_WIDTHS: Record<Device, string> = {
@@ -34,8 +35,12 @@ export default function LivePreviewPanel({
   onClose,
   onFieldHover,
   onFieldSelect,
+  onInlineUpdate,
 }: LivePreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const targetOriginRef = useRef<string>('');
+  // Memoize targetOrigin (peut planter si previewUrl est invalide)
+  try { targetOriginRef.current = new URL(previewUrl).origin; } catch { targetOriginRef.current = '*'; }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [device, setDevice] = useState<Device>('desktop');
@@ -81,7 +86,7 @@ export default function LivePreviewPanel({
           setLoading(false);
           // Envoyer jambo-init en reponse
           if (iframeRef.current?.contentWindow && token) {
-            const targetOrigin = new URL(previewUrl).origin;
+            const targetOrigin = targetOriginRef.current;
             iframeRef.current.contentWindow.postMessage({
               type: 'jambo-init',
               collection: collection.slug,
@@ -109,9 +114,7 @@ export default function LivePreviewPanel({
           break;
 
         case 'jambo-inline-update':
-          // Relayer la mise a jour partielle au ContentForm
-          // via le meme mecanisme que les autres changements
-          // (sera gere par Show.tsx)
+          onInlineUpdate?.(event.data.fieldSlug, event.data.value);
           break;
       }
     };
@@ -149,7 +152,7 @@ export default function LivePreviewPanel({
         }
       }
 
-      const targetOrigin = new URL(previewUrl).origin;
+      const targetOrigin = targetOriginRef.current;
       iframeRef.current!.contentWindow!.postMessage({
         type: 'jambo-update',
         fields: formData,

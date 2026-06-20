@@ -209,7 +209,11 @@ export function initVisualEditing(options: VisualEditingOptions): () => void {
   }
 
   // Attach listeners to all [data-jambo-field] elements
-  const observer = new MutationObserver(() => attachListeners());
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const observer = new MutationObserver(() => {
+    if (debounceTimer !== null) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => attachListeners(), 50);
+  });
   observer.observe(document.body, { childList: true, subtree: true });
 
   const cleanupFns: Array<() => void> = [];
@@ -276,6 +280,7 @@ export function initVisualEditing(options: VisualEditingOptions): () => void {
   window.addEventListener('message', handler);
 
   return () => {
+    if (debounceTimer !== null) clearTimeout(debounceTimer);
     observer.disconnect();
     cleanupFns.forEach(fn => fn());
     style.remove();

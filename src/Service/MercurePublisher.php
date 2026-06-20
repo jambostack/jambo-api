@@ -29,11 +29,13 @@ class MercurePublisher
      */
     private function publish(string $projectUuid, array $data): void
     {
+        // Pré-sérialiser une seule fois pour les deux canaux
+        $payload = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+
         // Canal primaire : hub Mercure SSE
         if ($this->hub !== null) {
             try {
                 $topic = $this->resolveTopic($projectUuid, $data['event'] ?? 'unknown');
-                $payload = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
                 $update = new Update(
                     topics: [$topic, "projects/{$projectUuid}"],
                     payload: $payload,
@@ -52,9 +54,8 @@ class MercurePublisher
         }
 
         $path = $dir . '/' . $projectUuid . '.jsonl';
-        $line = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
 
-        file_put_contents($path, $line, FILE_APPEND | LOCK_EX);
+        file_put_contents($path, $payload . "\n", FILE_APPEND | LOCK_EX);
     }
 
     /**

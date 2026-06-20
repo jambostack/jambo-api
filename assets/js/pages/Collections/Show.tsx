@@ -42,6 +42,7 @@ export default function Show({ project, collection, contentEntry, formData, isEd
     const showContentForm = isContentCreatePage || isContentEditPage || isEditMode;
     const [liveFormData, setLiveFormData] = useState<Record<string, any> | null>(null);
     const [highlightedField, setHighlightedField] = useState<string | null>(null);
+    const [patchField, setPatchField] = useState<{ fieldSlug: string; value: string } | null>(null);
 
     // Add appropriate breadcrumb
     if (isContentCreatePage) {
@@ -80,6 +81,7 @@ export default function Show({ project, collection, contentEntry, formData, isEd
                             isEditMode={isEditMode}
                             onFieldChange={setLiveFormData}
                             highlightedField={highlightedField}
+                            patchField={patchField}
                         />
                     )}
 
@@ -92,6 +94,7 @@ export default function Show({ project, collection, contentEntry, formData, isEd
                             locale={contentEntry.locale || project.default_locale || 'en'}
                             formData={liveFormData || formData || {}}
                             previewUrl={project.previewUrl}
+                            onInlineUpdate={(fieldSlug, value) => setPatchField({ fieldSlug, value })}
                             onFieldHover={(slug) => setHighlightedField(slug || null)}
                             onFieldSelect={(slug) => {
                                 setHighlightedField(slug);

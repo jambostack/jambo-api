@@ -15,6 +15,15 @@ function getStoredSince(projectUuid: string): number {
 function storeSince(projectUuid: string, since: number): void {
     try {
         sessionStorage.setItem(STORAGE_PREFIX + projectUuid, String(since));
+        // Nettoyer les curseurs obsolètes (> 7 jours sans mise à jour)
+        const now = Date.now();
+        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+            const key = sessionStorage.key(i);
+            if (key?.startsWith(STORAGE_PREFIX) && key !== STORAGE_PREFIX + projectUuid) {
+                const val = parseInt(sessionStorage.getItem(key) || '0', 10);
+                if (now - val > 604800000) { sessionStorage.removeItem(key); }
+            }
+        }
     } catch {
         // sessionStorage indisponible — ignoré
     }
@@ -80,8 +89,11 @@ export function useRealtime(projectUuid?: string) {
 
                 es.addEventListener('error', () => {
                     // EventSource a sa propre reconnexion automatique.
-                    // Si après 3 erreurs ça ne fonctionne toujours pas, on dégrade.
-                    // On laisse EventSource gérer la reconnexion — pas d'action ici.
+                    // Dégrader vers le polling après 3 échecs consécutifs.
+                    if (!cancelled && (es.readyState === EventSource.CLOSED)) {
+                        es.close();
+                        startPolling();
+                    }
                 });
 
             } catch {
