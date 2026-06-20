@@ -40,7 +40,7 @@ class ContentEntry
         }
     }
 
-    #[ORM\ManyToOne(targetEntity: Project::class)]
+    #[ORM\ManyToOne(targetEntity: Project::class, inversedBy: 'contentEntries')]
     #[ORM\JoinColumn(nullable: false)]
     public ?Project $project = null {
         get => $this->project;
