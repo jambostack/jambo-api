@@ -4,6 +4,9 @@ namespace App\Controller;
 
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
+use Lcobucci\JWT\Configuration;
+use Lcobucci\JWT\Signer\Hmac\Sha256;
+use Lcobucci\JWT\Signer\Key\InMemory;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -11,13 +14,10 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Endpoint temps réel par short polling (compatible tout serveur).
+ * Endpoint temps réel.
  *
- * Le frontend appelle GET /api/projects/{uuid}/realtime?since=N
- * toutes les 3 secondes. Le serveur retourne les événements depuis
- * l'ID N (ligne du fichier JSONL).
- *
- * Fonctionne sur Apache/CGI, Nginx, etc. — zéro configuration.
+ * - /realtime?since=N        → short-polling (fallback, lecture JSONL)
+ * - /realtime/token          → génère un JWT de souscription Mercure (SSE primaire)
  */
 #[Route('/api/projects/{projectUuid}/realtime', name: 'api_realtime_')]
 class RealtimeController extends AbstractController
@@ -26,6 +26,59 @@ class RealtimeController extends AbstractController
         private readonly ProjectRepository $projectRepository,
         private readonly ProjectMemberRepository $memberRepo,
     ) {}
+
+    /**
+     * Génère un token JWT pour souscrire au hub Mercure.
+     */
+    #[Route('/token', name: 'token', methods: ['GET'])]
+    public function token(string $projectUuid, Request $request): JsonResponse
+    {
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+        $this->denyProjectAccess($project);
+
+        $mercureSecret = $this->getParameter('mercure_jwt_secret') ?? '';
+        if ($mercureSecret === '') {
+            return $this->json(['error' => 'Mercure not configured'], 503);
+        }
+
+        $jwtConfig = Configuration::forSymmetricSigner(
+            new Sha256(),
+            InMemory::plainText($mercureSecret),
+        );
+
+        $now = new \DateTimeImmutable();
+        $token = $jwtConfig->builder()
+            ->issuedAt($now)
+            ->expiresAt($now->modify('+1 hour'))
+            ->withClaim('mercure', [
+                'subscribe' => [
+                    "projects/{$projectUuid}",
+                    "projects/{$projectUuid}/content",
+                    "projects/{$projectUuid}/media",
+                    "projects/{$projectUuid}/status",
+                ],
+                'publish' => [],
+            ])
+            ->getToken($jwtConfig->signer(), $jwtConfig->signingKey())
+            ->toString();
+
+        $hubUrl = $this->getParameter('mercure_public_url')
+            ?? $request->getSchemeAndHttpHost() . '/.well-known/mercure';
+
+        return $this->json([
+            'token'   => $token,
+            'hub_url' => $hubUrl,
+            'topics'  => [
+                "projects/{$projectUuid}",
+                "projects/{$projectUuid}/content",
+                "projects/{$projectUuid}/media",
+                "projects/{$projectUuid}/status",
+            ],
+        ]);
+    }
 
     #[Route('', name: 'poll', methods: ['GET'])]
     public function poll(string $projectUuid, Request $request): JsonResponse
@@ -49,7 +102,7 @@ class RealtimeController extends AbstractController
                 for ($i = $since; $i < count($lines); $i++) {
                     $data = json_decode($lines[$i], true);
                     if ($data !== null) {
-                        $data['_id'] = $i; // L'ID de ligne pour since=
+                        $data['_id'] = $i;
                         $events[] = $data;
                         $lastId = $i + 1;
                     }
@@ -63,9 +116,9 @@ class RealtimeController extends AbstractController
         }
 
         return $this->json([
-            'events'  => $events,
-            'since'   => $lastId,
-            'time'    => time(),
+            'events' => $events,
+            'since'  => $lastId,
+            'time'   => time(),
         ]);
     }
 
