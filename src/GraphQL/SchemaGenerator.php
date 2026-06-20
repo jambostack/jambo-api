@@ -432,7 +432,7 @@ class SchemaGenerator
 
         // Champ global : tous les événements du projet
         $fields['projectEvents'] = [
-            'type'    => Type::nonNull($this->projectEventType()),
+            'type'    => Type::nonNull(Type::listOf($this->projectEventType())),
             'args'    => [
                 'uuid' => ['type' => Type::nonNull(Type::string()), 'description' => 'UUID du projet'],
             ],
