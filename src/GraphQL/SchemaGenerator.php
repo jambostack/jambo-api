@@ -55,10 +55,12 @@ class SchemaGenerator
         $mutationType = !empty($mutationFields)
             ? new ObjectType(['name' => 'Mutation', 'fields' => $mutationFields])
             : null;
+        $subscriptionType = $this->buildSubscriptionType($collections);
 
         $schema = new \GraphQL\Type\Schema([
             'query' => $queryType,
             'mutation' => $mutationType,
+            'subscription' => $subscriptionType,
         ]);
 
         $this->schemaCache[$cacheKey] = $schema;
@@ -378,5 +380,79 @@ class SchemaGenerator
     private function fieldName(Collection $collection): string
     {
         return lcfirst(str_replace('_', '', ucwords($collection->slug, '_')));
+    }
+
+    /**
+     * Build the Subscription type for the project.
+     * Returns the GraphQL Subscription type.
+     */
+    private function buildSubscriptionType(array $collections): ObjectType
+    {
+        $fields = [];
+
+        // Champ global : tous les événements du projet
+        $fields['projectEvents'] = [
+            'type'    => Type::nonNull($this->projectEventType()),
+            'args'    => [
+                'uuid' => ['type' => Type::nonNull(Type::string()), 'description' => 'UUID du projet'],
+            ],
+            'resolve' => fn() => [], // Les événements sont livrés via Mercure, pas via ce resolver
+        ];
+
+        // Un champ par collection
+        foreach ($collections as $collection) {
+            $fieldName = lcfirst(str_replace('_', '', ucwords($collection->slug, '_')));
+            $fields[$fieldName] = [
+                'type'    => $this->contentEventType(),
+                'args'    => [
+                    'uuid'    => ['type' => Type::nonNull(Type::string()), 'description' => 'UUID du projet'],
+                    'actions' => [
+                        'type'         => Type::listOf(Type::string()),
+                        'description'  => 'Filtrer par actions : created, updated, deleted',
+                        'defaultValue' => null,
+                    ],
+                ],
+                'resolve' => fn() => [], // Les événements sont livrés via Mercure
+            ];
+        }
+
+        return new ObjectType([
+            'name'   => 'Subscription',
+            'fields' => $fields,
+        ]);
+    }
+
+    /**
+     * Type pour les événements globaux du projet (media, status, webhook…).
+     */
+    private function projectEventType(): ObjectType
+    {
+        return new ObjectType([
+            'name'   => 'ProjectEvent',
+            'fields' => [
+                'event'     => ['type' => Type::nonNull(Type::string()), 'description' => 'Nom de l\'événement : entry.created, media.uploaded, status.changed…'],
+                'data'      => ['type' => Type::string(), 'description' => 'Payload JSON de l\'événement'],
+                'projectId' => ['type' => Type::nonNull(Type::string()), 'description' => 'UUID du projet'],
+                'timestamp' => ['type' => Type::nonNull(Type::string()), 'description' => 'Timestamp ISO 8601'],
+            ],
+        ]);
+    }
+
+    /**
+     * Type pour les événements liés à une collection spécifique (content).
+     */
+    private function contentEventType(): ObjectType
+    {
+        return new ObjectType([
+            'name'   => 'ContentEvent',
+            'fields' => [
+                'action'    => ['type' => Type::nonNull(Type::string()), 'description' => 'created | updated | deleted'],
+                'uuid'      => ['type' => Type::nonNull(Type::string()), 'description' => 'UUID de l\'entrée concernée'],
+                'locale'    => ['type' => Type::string(), 'description' => 'Locale de l\'entrée'],
+                'status'    => ['type' => Type::string(), 'description' => 'Statut workflow'],
+                'title'     => ['type' => Type::string(), 'description' => 'Titre de l\'entrée'],
+                'timestamp' => ['type' => Type::nonNull(Type::string()), 'description' => 'Timestamp ISO 8601'],
+            ],
+        ]);
     }
 }
