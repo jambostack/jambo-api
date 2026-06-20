@@ -105,6 +105,12 @@ services:
             $projectDir: '%kernel.project_dir%'
             $hub: '@?Symfony\Component\Mercure\HubInterface'
 
+    # ── Cookie Mercure au login admin ───────────────────────────────────────
+    App\EventSubscriber\MercureCookieSubscriber:
+        arguments:
+            $mercureJwtSecret: '%env(MERCURE_JWT_SECRET)%'
+            $mercurePublicUrl: '%env(MERCURE_PUBLIC_URL)%'
+
     App\Service\MediaSerializer:
         arguments:
             $profileRepo: '@App\Repository\ProjectStorageProfileRepository'
