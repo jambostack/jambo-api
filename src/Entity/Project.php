@@ -105,6 +105,34 @@ class Project
         set { $this->jwtRefreshTtl = $value; }
     }
 
+    /**
+     * URL du frontend pour la Live Preview (ex: https://monblog.com).
+     * Null = preview désactivée au niveau du projet.
+     */
+    #[ORM\Column(length: 512, nullable: true)]
+    public ?string $previewUrl = null {
+        get => $this->previewUrl;
+        set { $this->previewUrl = $value; }
+    }
+
+    /**
+     * Mode d'affichage de la preview : 'toggle' (bouton) ou 'side-by-side' (split pane).
+     */
+    #[ORM\Column(length: 20)]
+    public string $previewMode = 'toggle' {
+        get => $this->previewMode;
+        set { $this->previewMode = $value; }
+    }
+
+    /**
+     * Active/désactive la preview pour ce projet.
+     */
+    #[ORM\Column]
+    public bool $previewEnabled = false {
+        get => $this->previewEnabled;
+        set { $this->previewEnabled = $value; }
+    }
+
     #[ORM\OneToMany(targetEntity: Collection::class, mappedBy: 'project', cascade: ['persist', 'remove'])]
     public DoctrineCollection $collections;
 
