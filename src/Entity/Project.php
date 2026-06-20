@@ -139,12 +139,16 @@ class Project
     #[ORM\OneToMany(targetEntity: ProjectMember::class, mappedBy: 'project', cascade: ['persist', 'remove'])]
     public DoctrineCollection $projectMembers;
 
+    #[ORM\OneToMany(targetEntity: ContentEntry::class, mappedBy: 'project', cascade: ['persist', 'remove'])]
+    public DoctrineCollection $contentEntries;
+
     public function __construct()
     {
         $this->collections     = new ArrayCollection();
         $this->projectMembers  = new ArrayCollection();
         $this->storageProfiles = new ArrayCollection();
         $this->storageRules    = new ArrayCollection();
+        $this->contentEntries  = new ArrayCollection();
     }
 
     public function hasMember(User $user): bool
