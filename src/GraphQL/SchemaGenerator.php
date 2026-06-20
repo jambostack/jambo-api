@@ -397,6 +397,10 @@ class SchemaGenerator
         $makeResolver = function (?array $actionFilter = null) use ($projectDir) {
             return function ($root, array $args) use ($projectDir, $actionFilter) {
                 $projectUuid = $args['uuid'];
+                // Protection path traversal : valider le format UUID avant concaténation
+                if (!preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i', $projectUuid)) {
+                    return [];
+                }
                 $path = $projectDir . '/var/realtime/' . $projectUuid . '.jsonl';
 
                 if (!file_exists($path)) {
