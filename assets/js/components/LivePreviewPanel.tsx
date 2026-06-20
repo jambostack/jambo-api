@@ -38,9 +38,10 @@ export default function LivePreviewPanel({
   onInlineUpdate,
 }: LivePreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const targetOriginRef = useRef<string>('');
-  // Memoize targetOrigin (peut planter si previewUrl est invalide)
-  try { targetOriginRef.current = new URL(previewUrl).origin; } catch { targetOriginRef.current = '*'; }
+  // Helper: extraire l'origine de la previewUrl, ou null si invalide
+  const getTargetOrigin = useCallback((): string | null => {
+    try { return new URL(previewUrl).origin; } catch { return null; }
+  }, [previewUrl]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [device, setDevice] = useState<Device>('desktop');
@@ -85,8 +86,8 @@ export default function LivePreviewPanel({
           setIframeReady(true);
           setLoading(false);
           // Envoyer jambo-init en reponse
-          if (iframeRef.current?.contentWindow && token) {
-            const targetOrigin = targetOriginRef.current;
+          const origin = getTargetOrigin();
+          if (iframeRef.current?.contentWindow && token && origin) {
             iframeRef.current.contentWindow.postMessage({
               type: 'jambo-init',
               collection: collection.slug,
@@ -94,7 +95,7 @@ export default function LivePreviewPanel({
               locale,
               previewToken: token,
               projectUuid,
-            }, targetOrigin);
+            }, origin);
           }
           break;
 
@@ -152,12 +153,13 @@ export default function LivePreviewPanel({
         }
       }
 
-      const targetOrigin = targetOriginRef.current;
+      const origin = getTargetOrigin();
+      if (!origin) return;
       iframeRef.current!.contentWindow!.postMessage({
         type: 'jambo-update',
         fields: formData,
         changedFields,
-      }, targetOrigin);
+      }, origin);
     }, 500);
 
     return () => {
