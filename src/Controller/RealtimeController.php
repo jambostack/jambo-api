@@ -40,7 +40,7 @@ class RealtimeController extends AbstractController
         $this->denyProjectAccess($project);
 
         $mercureSecret = $this->getParameter('mercure_jwt_secret') ?? '';
-        if ($mercureSecret === '') {
+        if ($mercureSecret === '' || strlen($mercureSecret) < 32) {
             return $this->json(['error' => 'Mercure not configured'], 503);
         }
 
@@ -141,6 +141,11 @@ class RealtimeController extends AbstractController
     private function trimEventFile(string $path, array $lines): void
     {
         $keep = array_slice($lines, -200);
-        file_put_contents($path, implode("\n", $keep) . "\n", LOCK_EX);
+        // Atomicite : ecrire dans un fichier temporaire puis renommer
+        $tmp = $path . '.' . bin2hex(random_bytes(4));
+        file_put_contents($tmp, implode("\n", $keep) . "\n", LOCK_EX);
+        if (!@rename($tmp, $path)) {
+            @unlink($tmp);
+        }
     }
 }
