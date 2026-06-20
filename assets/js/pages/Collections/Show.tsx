@@ -1,4 +1,5 @@
 import { Head, usePage } from '@inertiajs/react';
+import React, { useState } from 'react';
 
 import { Collection, Project, BreadcrumbItem, SharedData, Field } from '@/types/index.d';
 import { useTranslation } from '@/lib/i18n';
@@ -9,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import ProjectSidebar from '@/pages/Projects/ProjectSidebar';
 import ContentList from '@/pages/Content/ContentList';
 import ContentForm from '@/pages/Content/ContentForm';
+import LivePreviewPanel from '@/components/LivePreviewPanel';
 import ProjectsLayout from '../Projects/layout';
 
 interface Props {
@@ -38,6 +40,7 @@ export default function Show({ project, collection, contentEntry, formData, isEd
     const isContentCreatePage = page.url.includes('content/create');
     const isContentEditPage = page.url.includes('content') && page.url.includes('edit');
     const showContentForm = isContentCreatePage || isContentEditPage || isEditMode;
+    const [liveFormData, setLiveFormData] = useState<Record<string, any>>(formData || {});
 
     // Add appropriate breadcrumb
     if (isContentCreatePage) {
@@ -68,12 +71,25 @@ export default function Show({ project, collection, contentEntry, formData, isEd
                 <div className="flex-1 max-w-full md:w-2xl lg:w-xl xl:w-full">
                     {!showContentForm && <ContentList collection={collection} project={project} />}
                     {showContentForm && (
-                        <ContentForm 
-                            collection={collection} 
-                            project={project} 
+                        <ContentForm
+                            collection={collection}
+                            project={project}
                             contentEntry={contentEntry}
-                            formData={formData}
+                            formData={liveFormData}
                             isEditMode={isEditMode}
+                            onFieldChange={setLiveFormData}
+                        />
+                    )}
+
+                    {/* Live Preview Panel */}
+                    {showContentForm && project.previewEnabled && project.previewUrl && contentEntry && (
+                        <LivePreviewPanel
+                            projectUuid={project.uuid!}
+                            collection={collection}
+                            entryUuid={contentEntry.uuid}
+                            locale={contentEntry.locale || project.default_locale || 'en'}
+                            formData={liveFormData || {}}
+                            previewUrl={project.previewUrl}
                         />
                     )}
                 </div>

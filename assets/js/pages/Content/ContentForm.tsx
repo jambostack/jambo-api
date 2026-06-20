@@ -33,6 +33,7 @@ interface Props {
     contentEntry?: any;
     formData?: Record<string, any>;
     isEditMode?: boolean;
+    onFieldChange?: (formData: Record<string, any>) => void;
 }
 
 type SaveAction = 'stay' | 'close' | 'new';
@@ -80,7 +81,7 @@ function buildInitialFormData(fields: Field[]): Record<string, any> {
     return data;
 }
 
-export default function ContentForm({ project, collection, contentEntry, formData: initialFormData, isEditMode }: Props) {
+export default function ContentForm({ project, collection, contentEntry, formData: initialFormData, isEditMode, onFieldChange }: Props) {
     const t = useTranslation();
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [processing, setProcessing] = useState(false);
@@ -169,6 +170,13 @@ useEffect(() => {
 
     setFormData(buildInitialFormData(collection.fields));
 }, [collection.id, initialFormData]);
+
+    // Notifier le parent (LivePreview) des changements de formulaire
+    useEffect(() => {
+        if (onFieldChange) {
+            onFieldChange(formData);
+        }
+    }, [formData, onFieldChange]);
 
     const handleSubmit = async (action: SaveAction, status: SaveStatus, scheduledAt?: string) => {
         setProcessing(true);
