@@ -14,6 +14,8 @@ interface LivePreviewPanelProps {
   formData: Record<string, any>;
   previewUrl: string;
   onClose?: () => void;
+  onFieldHover?: (fieldSlug: string) => void;
+  onFieldSelect?: (fieldSlug: string) => void;
 }
 
 const DEVICE_WIDTHS: Record<Device, string> = {
@@ -30,6 +32,8 @@ export default function LivePreviewPanel({
   formData,
   previewUrl,
   onClose,
+  onFieldHover,
+  onFieldSelect,
 }: LivePreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [loading, setLoading] = useState(true);
@@ -91,6 +95,23 @@ export default function LivePreviewPanel({
 
         case 'jambo-error':
           setError(event.data.error || 'Erreur dans le frontend');
+          break;
+
+        // -- v1.14b : Visual Editing ------------------------------------------
+        case 'jambo-hover-field':
+          onFieldHover?.(event.data.fieldSlug);
+          break;
+
+        case 'jambo-select-field':
+          onFieldSelect?.(event.data.fieldSlug);
+          // Enlever le hover apres 1s
+          setTimeout(() => onFieldHover?.(''), 1000);
+          break;
+
+        case 'jambo-inline-update':
+          // Relayer la mise a jour partielle au ContentForm
+          // via le meme mecanisme que les autres changements
+          // (sera gere par Show.tsx)
           break;
       }
     };
