@@ -4,6 +4,10 @@
 # Files in the packages/ subdirectory configure your dependencies.
 # See also https://symfony.com/doc/current/service_container/import.html
 
+parameters:
+    mercure_jwt_secret: '%env(MERCURE_JWT_SECRET)%'
+    mercure_public_url: '%env(MERCURE_PUBLIC_URL)%'
+
 services:
     # default configuration for services in *this* file
     _defaults:
@@ -95,10 +99,11 @@ services:
         arguments:
             $projectDir: '%kernel.project_dir%'
 
-    # ── Temps réel (SSE natif, fonctionne sur tout serveur) ────────────────
+    # ── Temps réel (Mercure SSE primaire, fallback JSONL) ────────────────
     App\Service\MercurePublisher:
         arguments:
             $projectDir: '%kernel.project_dir%'
+            $hub: '@?Symfony\Component\Mercure\HubInterface'
 
     App\Service\MediaSerializer:
         arguments:
