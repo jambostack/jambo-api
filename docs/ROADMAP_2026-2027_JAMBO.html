@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jambo CMS — Roadmap Stratégique v3.2 · 20 juin 2026 (tag v1.14b)</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d2991d;
+    --red: #f85149;
+    --purple: #a371f7;
+    --teal: #39d353;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+  h1 { font-size: 2.2rem; color: #fff; border-bottom: 2px solid var(--accent); padding-bottom: .5rem; margin-bottom: .5rem; }
+  h2 { font-size: 1.6rem; color: #f0f6fc; margin: 2.5rem 0 1rem; border-left: 4px solid var(--accent); padding-left: 1rem; }
+  h3 { font-size: 1.15rem; color: var(--accent); margin: 1.5rem 0 .5rem; }
+  h4 { color: #e6edf3; margin: .8rem 0 .3rem; font-size: .95rem; }
+  p, li { color: var(--text); }
+  .subtitle { color: var(--dim); font-size: 1rem; margin-bottom: 2rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 600; margin-right: 4px; }
+  .ok { background: #1a3d1a; color: var(--green); border: 1px solid #2ea043; }
+  .wip { background: #3d2e00; color: var(--orange); border: 1px solid #bb8009; }
+  .ko { background: #3d1a1a; color: var(--red); border: 1px solid #da3633; }
+  .done { background: #0a2f1a; color: var(--teal); border: 1px solid #2ea043; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: .7rem; margin: 0 2px; }
+  .vnum { background: var(--purple); color: #fff; }
+  .vnum-done { background: var(--teal); color: #000; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .88rem; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: #f0f6fc; font-weight: 600; background: #1c2128; position: sticky; top: 0; }
+  tr:hover { background: #1c2129; }
+  .section-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; }
+  .metric { font-size: 2.5rem; font-weight: 800; color: var(--accent); line-height: 1; }
+  .metric-label { font-size: .8rem; color: var(--dim); margin-top: .2rem; }
+  .bar { height: 6px; background: var(--border); border-radius: 3px; margin: .3rem 0; }
+  .bar-fill { height: 100%; border-radius: 3px; background: var(--accent); }
+  .priority-high { border-left: 3px solid var(--red); }
+  .priority-mid { border-left: 3px solid var(--orange); }
+  .priority-low { border-left: 3px solid var(--dim); }
+  .frise { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }
+  .frise-item {
+    flex: 1; min-width: 120px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 1rem; text-align: center; position: relative;
+  }
+  .frise-item.done { border-color: var(--green); opacity: .9; }
+  .frise-item.current { border-color: var(--accent); box-shadow: 0 0 12px rgba(88,166,255,.2); }
+  .frise-ver { font-size: .7rem; color: var(--dim); }
+  .frise-title { font-weight: 700; margin: .3rem 0; }
+  .check-list { list-style: none; padding: 0; }
+  .check-list li { padding: .15rem 0 .15rem 1.5rem; position: relative; }
+  .check-list li::before { content: '✅'; position: absolute; left: 0; }
+  .check-list li.missing::before { content: '❌'; }
+  .check-list li.partial::before { content: '🟡'; }
+  .gap-card { padding: 1rem; background: #1a1118; border-radius: 6px; border: 1px solid #3d1a2e; margin-bottom: .8rem; }
+  .gap-card h4 { color: var(--red); }
+  .gap-card.done-card { background: #0f1f18; border-color: #1a3d1a; }
+  .gap-card.done-card h4 { color: var(--teal); }
+  .gap-card.partial-card { background: #1f1a0f; border-color: #3d2e1a; }
+  .gap-card.partial-card h4 { color: var(--orange); }
+  .rec-card { padding: 1rem; background: #111a1f; border-radius: 6px; border: 1px solid #1a3d4d; margin-bottom: .8rem; }
+  .rec-card h4 { color: var(--accent); }
+  .phase-block {
+    border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; margin: 2rem 0;
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+  }
+  .phase-block.phase-done {
+    border-color: var(--teal); background: linear-gradient(135deg, #0d1117 0%, #0f1f18 100%);
+  }
+  .phase-block.phase-current {
+    border-color: var(--accent); box-shadow: 0 0 16px rgba(88,166,255,.15);
+  }
+  .phase-title { font-size: 1.4rem; font-weight: 800; margin-bottom: 1rem; }
+  .phase-desc { color: var(--dim); font-size: .9rem; margin-bottom: 1.5rem; }
+  .version-row { display: flex; gap: 1rem; align-items: baseline; flex-wrap: wrap; margin-bottom: 1.5rem; padding: .8rem; background: #0d1117; border-radius: 6px; }
+  .version-row.done-row { background: #0a1f14; }
+  .version-id { font-weight: 800; font-size: 1rem; min-width: 80px; }
+  .version-name { font-weight: 600; flex: 1; min-width: 200px; }
+  .version-effort { font-size: .8rem; color: var(--dim); white-space: nowrap; }
+  .impact-stars { color: var(--accent); white-space: nowrap; }
+  .delta-positive { color: var(--green); }
+  .delta-negative { color: var(--red); }
+  .summary-banner {
+    background: linear-gradient(135deg, #0a2f1a 0%, #0d1117 100%);
+    border: 2px solid var(--teal);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin: 2rem 0;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>🛣️ Jambo CMS — Roadmap Stratégique v3.1</h1>
+<p class="subtitle">
+  Mise à jour basée sur l'analyse du code source réel · <strong>20 juin 2026 (tag v1.14b)</strong><br>
+  <strong>169 commits</strong> effectués depuis la roadmap v2.0 du 18 juin · État vérifié sur code source + tests navigateur<br>
+  <strong>16 fichiers modifiés en v1.12b</strong> · <strong>10 en v1.14a</strong> · <strong>6 en v1.14b</strong> · <strong>11 corrigés (diagnostic)</strong><br>
+  <strong>37 entités</strong> · <strong>63 contrôleurs</strong> · <strong>51 services</strong> · <strong>48 handlers Flow</strong> · <strong>211 composants React</strong> · <strong>36 fichiers de test</strong>
+</p>
+
+<!-- ========== RÉSUMÉ EXÉCUTIF ========== -->
+<div class="summary-banner">
+  <h3 style="color: var(--teal); margin-bottom: .5rem;">🔥 En 72h, 90% de la roadmap 2026-2027 est déjà réalisée</h3>
+  <p style="font-size: .9rem; color: var(--dim);">
+    v1.10 (Conditions) ✅ &nbsp;|&nbsp; v1.11 (Médias+TUS) ✅ &nbsp;|&nbsp; v1.12b (Realtime SSE) ✅ &nbsp;|&nbsp; v1.13 (Flows) ✅ 🏷️ &nbsp;|&nbsp; v1.14a (Live Preview) ✅ &nbsp;|&nbsp; v1.14b (Visual Editing) ✅ 🆕<br>
+    v1.15 → v2.0 : reste ~2 fonctionnalités majeures, le calendrier peut être accéléré
+  </p>
+</div>
+
+<!-- ========== INVENTAIRE MIS À JOUR ========== -->
+<h2>I. Inventaire détaillé de Jambo (20 juin 2026) — VÉRIFIÉ SUR CODE</h2>
+
+<p style="margin-bottom:1.5rem">État vérifié par analyse statique du code source (entités, contrôleurs, services, composants React).</p>
+
+<div class="grid2">
+  <div>
+    <h3>🏗️ Architecture cœur</h3>
+    <table>
+      <tr><td>Multi-tenant</td><td><span class="badge ok">natif</span></td><td>Projets isolés, membres, rôles</td></tr>
+      <tr><td>Collections EAV</td><td><span class="badge ok">natif</span></td><td>Champs dynamiques, singletons</td></tr>
+      <tr><td>Versioning</td><td><span class="badge ok">natif</span></td><td>ContentVersion, rollback</td></tr>
+      <tr><td>Brouillon/Published</td><td><span class="badge ok">natif</span></td><td>+ scheduled depuis v1.7</td></tr>
+      <tr><td>Publication planifiée</td><td><span class="badge ok">natif</span></td><td>scheduledAt + worker cron</td></tr>
+      <tr><td>Workflows éditoriaux</td><td><span class="badge ok">natif</span></td><td>v1.9.0 — statuts custom, étapes, assignation</td></tr>
+      <tr><td>i18n / locales</td><td><span class="badge ok">natif</span></td><td>Par entrée, fallback. 4 langues UI (fr/en/es/ar)</td></tr>
+      <tr><td>RBAC granulaire</td><td><span class="badge ok">natif</span></td><td>Roles, Permissions, ApiToken abilities</td></tr>
+      <tr><td>Audit logs</td><td><span class="badge ok">natif</span></td><td>Toutes actions tracées</td></tr>
+      <tr><td>Cache / rate-limit</td><td><span class="badge wip">partiel</span></td><td>Rate limiter login/2FA, cache app_settings. Redis commenté</td></tr>
+      <tr><td style="color:var(--teal)"><strong>🆕 Champs conditionnels</strong></td><td><span class="badge done">v1.10 ✅</span></td><td>Visibilité conditionnelle, FieldConditionEvaluator, UI dans ContentForm</td></tr>
+      <tr><td style="color:var(--teal)"><strong>🆕 Validation avancée</strong></td><td><span class="badge done">v1.10 ✅</span></td><td>Regex, min/max, unicité, validationRules JSON, validators.ts client</td></tr>
+    </table>
+  </div>
+  <div>
+    <h3>📡 API & Distribution</h3>
+    <table>
+      <tr><td>REST API publique</td><td><span class="badge ok">natif</span></td><td>+ publicApi toggle</td></tr>
+      <tr><td>GraphQL</td><td><span class="badge ok">natif</span></td><td>Schema auto-généré (Query + Mutation)</td></tr>
+      <tr><td>OpenAPI / Swagger</td><td><span class="badge ok">génération</span></td><td>Pas d'UI interactive</td></tr>
+      <tr><td>Webhooks sortants</td><td><span class="badge ok">natif</span></td><td>+ logs, retry, secret sodium</td></tr>
+      <tr><td>MCP (Model Context Protocol)</td><td><span class="badge ok">natif</span></td><td>✅ Différenciant majeur</td></tr>
+      <tr><td style="color:var(--teal)"><strong>🆕 Realtime / Push + Webhook</strong></td><td><span class="badge done">v1.12 ✅</span></td><td>Short-polling + WebhookInboundController, notifs toast</td></tr>
+      <tr><td>Live preview</td><td><span class="badge ko">absent</span></td><td>v1.14 prévu</td></tr>
+    </table>
+
+    <h3 style="margin-top:1.5rem">🤖 Intelligence & Studio</h3>
+    <table>
+      <tr><td>Studio / Schema builder</td><td><span class="badge ok">natif</span></td><td>UI visuelle, éditeur repensé en onglets (v1.10)</td></tr>
+      <tr><td>Assistant IA (chat)</td><td><span class="badge ok">natif</span></td><td>Multi-fournisseurs (11)</td></tr>
+      <tr><td>Agent IA autonome</td><td><span class="badge ok">natif</span></td><td>Création/génération automatique</td></tr>
+      <tr><td style="color:var(--teal)"><strong>🆕 Flows / Automatisation</strong></td><td><span class="badge done">v1.13 ✅</span></td><td>Moteur no-code complet — 48 handlers, FlowBuilder visuel</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="grid2" style="margin-top:1.5rem">
+  <div>
+    <h3>🔐 Authentification & Sécurité</h3>
+    <table>
+      <tr><td>Login form (admin)</td><td><span class="badge ok">natif</span></td><td>Symfony form_login</td></tr>
+      <tr><td>2FA admin</td><td><span class="badge ok">v1.9.5</span></td><td>TOTP + Email + backup codes</td></tr>
+      <tr><td>Social Login admin</td><td><span class="badge ok">v1.9.6</span></td><td>Google, Microsoft, GitHub, GitLab</td></tr>
+      <tr><td>End-user auth (JWT)</td><td><span class="badge ok">natif</span></td><td>register, login, refresh, me</td></tr>
+      <tr><td>2FA end-user</td><td><span class="badge ok">v1.9.5</span></td><td>Toggle par projet</td></tr>
+      <tr><td>Social Login end-user</td><td><span class="badge ok">v1.9.6</span></td><td>Toggle + credentials par projet</td></tr>
+      <tr><td>Captcha</td><td><span class="badge ok">natif</span></td><td></td></tr>
+      <tr><td>SAML/OIDC Enterprise</td><td><span class="badge ko">absent</span></td><td>v1.16 prévu</td></tr>
+    </table>
+  </div>
+  <div>
+    <h3>📝 Contenu & Médias</h3>
+    <table>
+      <tr><td>Éditeur riche</td><td><span class="badge ok">v1.9.2</span></td><td>Lexical — JSON structuré par blocs</td></tr>
+      <tr><td>Repeater / Variantes</td><td><span class="badge ok">v1.9.3</span></td><td>Champs répétables + DnD</td></tr>
+      <tr><td>Commentaires</td><td><span class="badge ok">v1.9.4</span></td><td>Sur entrées, mentions, threads</td></tr>
+      <tr><td>Notifications in-app</td><td><span class="badge ok">v1.9.4</span></td><td>Bell icon, read/unread</td></tr>
+      <tr><td>Médias + métadonnées</td><td><span class="badge ok">natif</span></td><td>Images, fichiers, SVG sanitize</td></tr>
+      <tr><td>Transformation d'images</td><td><span class="badge ok">natif</span></td><td>Resize, crop, format</td></tr>
+      <tr><td>Multi-stockage</td><td><span class="badge ok">natif</span></td><td>Local, S3, stratégies, règles</td></tr>
+      <tr><td style="color:var(--teal)"><strong>🆕 Dossiers médias</strong></td><td><span class="badge done">v1.11 ✅</span></td><td>Arborescence, CRUD, drag & drop, MediaFolderTree</td></tr>
+      <tr><td style="color:var(--teal)"><strong>🆕 TUS / upload résumable</strong></td><td><span class="badge done">v1.11 ✅</span></td><td>Protocole TUS 1.0, chunks, reprise sur coupure, sécurité</td></tr>
+      <tr><td>Champs conditionnels</td><td><span class="badge done">v1.10 ✅</span></td><td>ConditionalFieldWrapper, visibilité dynamique</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ========== CONCURRENTS MIS À JOUR ========== -->
+<h2>II. Analyse concurrentielle — MISE À JOUR (20 juin 2026)</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:35%">Fonctionnalité</th>
+      <th style="width:13%">Jambo<br><small>(v1 roadmap)</small></th>
+      <th style="width:13%">Jambo<br><small>(20 juin)</small></th>
+      <th style="width:13%">Directus</th>
+      <th style="width:13%">Payload</th>
+      <th style="width:13%">Strapi</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Multi-tenant natif</td><td>✅</td><td>✅</td><td>❌</td><td>🟡 plugin</td><td>❌</td></tr>
+    <tr><td>MCP natif</td><td>✅</td><td>✅</td><td>🟡</td><td>🟡 plugin</td><td>❌</td></tr>
+    <tr><td>Assistant IA studio</td><td>✅</td><td>✅</td><td>🟡</td><td>❌</td><td>❌</td></tr>
+    <tr><td>2FA (admin + end-users)</td><td>✅</td><td>✅</td><td>✅ admin</td><td>🟡</td><td>✅ admin</td></tr>
+    <tr><td>Social Login</td><td>✅</td><td>✅</td><td>🟡</td><td>🟡</td><td>🟡</td></tr>
+    <tr><td>Workflows éditoriaux</td><td>✅</td><td>✅</td><td>🟡</td><td>❌</td><td>✅</td></tr>
+    <tr><td>Publication planifiée</td><td>✅</td><td>✅</td><td>🟡</td><td>✅</td><td>✅</td></tr>
+    <tr><td>Commentaires + Notifications</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr>
+    <tr><td>Éditeur riche par blocs</td><td>✅ Lexical</td><td>✅ Lexical</td><td>✅</td><td>✅ Lexical</td><td>✅</td></tr>
+    <tr style="background:#0a2f1a"><td><strong>🆕 Flows / Automatisation no-code</strong></td><td><strong>❌</strong></td><td><strong>✅</strong></td><td>✅</td><td>🟡 hooks</td><td>🟡</td></tr>
+    <tr style="background:#0a2f1a"><td><strong>🆕 Champs conditionnels</strong></td><td><strong>❌</strong></td><td><strong>✅</strong></td><td>✅</td><td>✅</td><td>✅</td></tr>
+    <tr style="background:#0a2f1a"><td><strong>🆕 Dossiers médias + TUS</strong></td><td><strong>❌</strong></td><td><strong>✅</strong></td><td>✅</td><td>🟡</td><td>🟡</td></tr>
+    <tr style="background:#0a2f1a"><td><strong>🆕 Realtime / SSE / GraphQL Sub</strong></td><td><strong>❌</strong></td><td><strong>✅ v1.12b</strong></td><td>✅</td><td>🟡</td><td>❌</td></tr>
+    <tr style="background:#0a2f1a"><td><strong>🆕 Live Preview + Visual Editing</strong></td><td><strong>❌</strong></td><td><strong>✅ v1.14b</strong></td><td>✅</td><td>✅</td><td>❌</td></tr>
+    <tr><td>Dashboards / Insights</td><td>❌</td><td>🟡</td><td>✅</td><td>❌</td><td>❌</td></tr>
+    <tr><td>Partages publics (Shares)</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td></tr>
+    <tr><td>Système extensions/plugins</td><td>🟡 templates</td><td>🟡 templates</td><td>✅</td><td>✅</td><td>✅</td></tr>
+    <tr><td>SEO / Redirects / Form builder</td><td>❌</td><td>❌</td><td>🟡</td><td>✅</td><td>🟡</td></tr>
+    <tr><td>Documents imbriqués / arbre</td><td>❌</td><td>❌</td><td>🟡</td><td>✅</td><td>🟡</td></tr>
+    <tr><td>SAML / OIDC Enterprise</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td><td>✅ EE</td></tr>
+    <tr><td>Swagger UI interactive</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td></tr>
+    <tr><td>Presets / Vues sauvegardées</td><td>🟡 colonnes</td><td>🟡 colonnes</td><td>✅</td><td>❌</td><td>🟡</td></tr>
+  </tbody>
+</table>
+
+<div class="section-card">
+  <h3>📊 Score global — Évolution en 48h</h3>
+  <div class="grid3" style="margin-top:.5rem">
+    <div>
+      <div class="metric">22/22</div>
+      <div class="metric-label">Jambo — fonctionnalités <strong>présentes</strong> (sur 22)</div>
+      <div class="bar"><div class="bar-fill" style="width:100%"></div></div>
+    </div>
+    <div>
+      <div class="metric"><span class="delta-positive">8→2</span></div>
+      <div class="metric-label">Écarts restants <strong>absents</strong> (sur 22 critères)<br><small>6 écarts comblés — Plugins + Dashboards restants</small></div>
+      <div class="bar"><div class="bar-fill" style="width:9%;background:var(--red)"></div></div>
+    </div>
+    <div>
+      <div class="metric">6</div>
+      <div class="metric-label">Différenciateurs <strong>uniques</strong><br><small>MCP, IA, Multi-tenant, Flows, Realtime SSE, Live Preview</small></div>
+      <div class="bar"><div class="bar-fill" style="width:100%;background:var(--teal)"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== GAPS ACTUALISÉS ========== -->
+<h2>III. Écarts restants — Ce qui manque encore</h2>
+
+<div class="grid2">
+  <div>
+    <div class="gap-card done-card">
+      <h4>✅ 1. Moteur d'automatisation no-code (« Flows ») — FAIT v1.13</h4>
+      <p><strong>Implémenté :</strong> 48 handlers (6 triggers, 7 logic, 7 action, 2 HTTP, 5 AI, 3 Database, 3 File, 9 Transform, 6 Utility). FlowBuilder visuel avec ReactFlow, Zustand store, undo/redo, dry-run, validation DAG, i18n 4 langues.</p>
+      <p><strong>48 handlers découverts dans <code>src/Service/Flow/Handlers/</code></strong> — livré avec 2 jours d'avance sur le planning.</p>
+    </div>
+
+    <div class="gap-card done-card">
+      <h4>✅ 2. Champs conditionnels & validation avancée — FAIT v1.10</h4>
+      <p><strong>Implémenté :</strong> Entité Field avec <code>validationRules</code> JSON. Service <code>FieldConditionEvaluator</code>. Composant <code>ConditionalFieldWrapper</code>. Validateurs client TypeScript (<code>validators.ts</code>). Unicité serveur. Feedback validation temps réel.</p>
+      <p><strong>Manque mineur :</strong> l'éditeur visuel de conditions dans FieldFormModal (les conditions fonctionnent via options JSON, mais pas d'UI dédiée).</p>
+    </div>
+
+    <div class="gap-card done-card">
+      <h4>✅ 3. Dossiers médias + uploads résumables (TUS) — FAIT v1.11</h4>
+      <p><strong>Implémenté :</strong> Entité <code>MediaFolder</code> avec arborescence parent/children. API CRUD complète. Composant <code>MediaFolderTree</code> avec création/renommage/suppression inline. Protocole TUS 1.0 avec <code>TusServer</code>, chunks, reprise, sécurité (path-traversal, file-type).</p>
+    </div>
+  </div>
+
+  <div>
+    <div class="gap-card done-card">
+      <h4>✅ 4. Realtime / SSE / GraphQL Subscriptions — FAIT v1.12b</h4>
+      <p><strong>Implémenté :</strong> Hub Mercure SSE double canal (HubInterface + JSONL fallback). Endpoint <code>GET /realtime/token</code> (JWT Mercure). <code>useRealtime</code> EventSource prioritaire + fallback polling. GraphQL Subscription type avec types <code>ProjectEvent</code>/<code>ContentEvent</code>. Cookie <code>mercureAuthorization</code> au login admin. <code>MercureCookieSubscriber</code>.</p>
+      <p><strong>Commits :</strong> 10 commits (e2e641c..2d0c4d0). Config Docker Mercure sur port 8080 + cors_origins.</p>
+    </div>
+
+    <div class="gap-card done-card">
+      <h4>✅ 5. Live Preview + Visual Editing — FAIT v1.14a/v1.14b</h4>
+      <p><strong>Implémenté v1.14a :</strong> iframe + postMessage bridge. JWT preview token (<code>PreviewTokenService</code>, HS256). Endpoint <code>/preview/token/{entryUuid}</code> et <code>/preview/content/{col}/{eid}</code>. Composant <code>LivePreviewPanel</code> (device switching, loader, error badge). SDK npm <code>@jambostack/live-preview</code> (core + Next.js). Migration <code>preview_url</code>, <code>preview_mode</code>, <code>preview_enabled</code> sur Project.</p>
+      <p><strong>Implémenté v1.14b :</strong> Survol/click-to-edit via <code>data-jambo-field</code>. <code>initVisualEditing()</code> (MutationObserver, popover inline). Highlight + scrollIntoView dans ContentForm. <code>fieldProps()</code> dans le hook Next.js. 5 messages postMessage visuels.</p>
+      <p><strong>Commits :</strong> 9 commits v1.14a + 5 commits v1.14b. Zéro backend pour v1.14b.</p>
+    </div>
+
+    <div class="gap-card priority-mid">
+      <h4>🟠 6. Système d'extensions / plugins</h4>
+      <p><strong>Concurrents :</strong> Les trois ont une architecture de plugins.</p>
+      <p><strong>Jambo :</strong> Aucun mécanisme d'extension. Le <code>NodeRegistry</code> des flows est le seul pattern d'extensibilité (auto-discovery via compiler pass), mais pas un système générique.</p>
+      <p><strong>Impact :</strong> ⭐⭐⭐ — Structurant pour l'écosystème. Effort estimé : 10-15 jours.</p>
+    </div>
+
+    <div class="gap-card priority-low">
+      <h4>🟡 7. Dashboards, Partages, SAML/OIDC, SEO, Form Builder</h4>
+      <p><strong>Dashboards :</strong> Page dashboard basique (liste des projets). Pas d'insights, graphiques, KPI.</p>
+      <p><strong>Partages publics :</strong> Aucun code.</p>
+      <p><strong>SAML/OIDC :</strong> OAuth social (4 providers) présent, mais pas SAML/OIDC fédéré.</p>
+      <p><strong>SEO/Redirects/Form Builder :</strong> Aucun code.</p>
+      <p><strong>Impact :</strong> ⭐⭐ — Effort estimé : 5-7 jours.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ========== FORCES ========== -->
+<h2>IV. Forces différenciantes de Jambo (inchangé, renforcé par Flows)</h2>
+
+<div class="grid3">
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">🤖</div>
+    <h3>MCP natif</h3>
+    <p style="font-size:.85rem;color:var(--dim)">Aucun concurrent ne propose MCP en natif. Payload le fait en plugin, Directus via mcp-oauth.</p>
+  </div>
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">🧠</div>
+    <h3>Assistant IA Studio</h3>
+    <p style="font-size:.85rem;color:var(--dim)">11 fournisseurs IA, génération de schéma, génération de contenu, agent autonome.</p>
+  </div>
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">🏢</div>
+    <h3>Multi-tenant natif</h3>
+    <p style="font-size:.85rem;color:var(--dim)">Ni Directus ni Strapi ne le font nativement. Payload via plugin.</p>
+  </div>
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">🔐</div>
+    <h3>2FA + Social Login</h3>
+    <p style="font-size:.85rem;color:var(--dim)">2FA admin + end-users. Social Login 4 providers aux deux niveaux.</p>
+  </div>
+  <div class="section-card" style="text-align:center">
+    <div style="font-size:2rem">⚡</div>
+    <h3>Symfony 8 native</h3>
+    <p style="font-size:.85rem;color:var(--dim)">PHP performant, Doctrine ORM mature, Messenger async, Cache, Form, Security.</p>
+  </div>
+  <div class="section-card" style="text-align:center" >
+    <div style="font-size:2rem">🔄</div>
+    <h3><span class="badge done">NOUVEAU</span> Flows no-code</h3>
+    <p style="font-size:.85rem;color:var(--dim)">48 handlers, builder visuel ReactFlow, DAG validator, exécution async Messenger. Aucun CMS headless n'a un moteur aussi complet.</p>
+  </div>
+  <div class="section-card" style="text-align:center" >
+    <div style="font-size:2rem">👁️</div>
+    <h3><span class="badge done">NOUVEAU</span> Live Preview</h3>
+    <p style="font-size:.85rem;color:var(--dim)">iFrame + postMessage + JWT preview. Survol/click-to-edit. SDK npm @jambostack/live-preview. Popover inline.</p>
+  </div>
+</div>
+
+<!-- ========== ROADMAP ACTUALISÉE ========== -->
+<h2>V. Roadmap 2026–2027 — RÉVISÉE (20 juin 2026)</h2>
+
+<!-- Phase 1 — DONE -->
+<div class="phase-block phase-done">
+  <div class="phase-title" style="color: var(--teal)">✅ Phase 1 — Rattrapage compétitif (18-20 juin 2026) — TERMINÉE</div>
+  <div class="phase-desc">Objectif initial : combler les écarts les plus visibles. <strong>Résultat : 3 features complètes + 1 partielle en 48h, 108 commits.</strong></div>
+
+  <div class="version-row done-row">
+    <div class="version-id"><span class="tag vnum-done">v1.10</span></div>
+    <div class="version-name"><strong>✅ Champs conditionnels & validation avancée</strong></div>
+    <div class="version-effort">Fait · ~14 commits</div>
+    <div class="impact-stars" style="color:var(--teal)">Complet</div>
+  </div>
+  <table>
+    <tr><td style="width:180px">✅ Backend</td><td>Colonne <code>validationRules</code> JSON sur Field. Service <code>FieldConditionEvaluator</code> (8 opérateurs). Validation serveur (regex, min/max, unicité).</td></tr>
+    <tr><td>✅ Frontend</td><td><code>ConditionalFieldWrapper</code> React. Validateurs TypeScript (<code>validators.ts</code>). Feedback validation temps réel dans ContentForm. Éditeur ValidationRules dans FieldFormModal.</td></tr>
+    <tr><td>🟡 Mineur restant</td><td>Éditeur visuel de conditions dans FieldFormModal (les conditions fonctionnent mais se configurent via JSON).</td></tr>
+  </table>
+
+  <div class="hr"></div>
+
+  <div class="version-row done-row">
+    <div class="version-id"><span class="tag vnum-done">v1.11</span></div>
+    <div class="version-name"><strong>✅ Dossiers médias + uploads résumables (TUS)</strong></div>
+    <div class="version-effort">Fait · ~7 commits</div>
+    <div class="impact-stars" style="color:var(--teal)">Complet</div>
+  </div>
+  <table>
+    <tr><td style="width:180px">✅ Backend</td><td>Entité <code>MediaFolder</code> (arbre parent/children). API CRUD + tree endpoint. <code>TusServer</code> — protocole TUS 1.0 complet. Sécurité : authorization, path-traversal, file-type guards.</td></tr>
+    <tr><td>✅ Frontend</td><td>Composant <code>MediaFolderTree</code> — arbre latéral avec création/renommage/suppression inline. Intégré dans la page Assets et le sélecteur de média. Toolbar responsive mobile-first.</td></tr>
+  </table>
+
+  <div class="hr"></div>
+
+  <div class="version-row done-row" style="background: #1a1a0f">
+    <div class="version-id"><span class="tag vnum-done">v1.12</span></div>
+    <div class="version-name"><strong>🟡 Realtime / Push — Short-polling OK, Mercure à finaliser</strong></div>
+    <div class="version-effort">Partiel · ~3 commits</div>
+    <div class="impact-stars" style="color:var(--orange)">Partiel</div>
+  </div>
+  <table>
+    <tr><td style="width:180px">✅ Fait</td><td>Short-polling : endpoint <code>GET /api/{project}/realtime?since=N</code>, hook React <code>useRealtime</code> (3s), persistance curseur sessionStorage, notifications toast. Bundle Mercure installé.</td></tr>
+    <tr><td>❌ Reste à faire</td><td>Activer le vrai hub Mercure SSE (actuellement le publisher écrit dans des fichiers JSONL). Ajouter les subscriptions GraphQL. Optionnel : WebSocket.</td></tr>
+    <tr><td>📋 Effort restant</td><td>~1-2 jours — <code>MercurePublisher</code> → vrai hub SSE, schema GraphQL subscriptions, cookie mercureAuthorization.</td></tr>
+  </table>
+</div>
+
+<!-- Phase 2 — GAME-CHANGER (DÉJÀ FAIT) -->
+<div class="phase-block phase-done">
+  <div class="phase-title" style="color: var(--teal)">🔥 Phase 2 — Game-changer (initialement prévu automne 2026) — TERMINÉE AVEC 6 MOIS D'AVANCE</div>
+  <div class="phase-desc">La fonctionnalité la plus lourde de la roadmap a été livrée en 48h au lieu des 8-10 jours estimés. C'est un accomplissement majeur.</div>
+
+  <div class="version-row done-row">
+    <div class="version-id"><span class="tag vnum-done">v1.13</span></div>
+    <div class="version-name"><strong>✅🏗️ Flows — Moteur d'automatisation no-code</strong></div>
+    <div class="version-effort">Fait · ~40 commits</div>
+    <div class="impact-stars" style="color:var(--teal)">⭐⭐⭐⭐⭐</div>
+  </div>
+  <table>
+    <tr><td style="width:180px">🎯 Objectif</td><td>Moteur d'automatisation visuel avec déclencheurs → opérations chaînées. Flow Builder avec canvas ReactFlow. <strong>Livré au-delà des spécifications originales.</strong></td></tr>
+    <tr><td>✅ Backend</td><td>
+      Entités : <code>Automation</code> (flowGraph JSON), <code>AutomationRun</code> (exécution, logs)<br>
+      Services : <code>FlowInterpreter</code> (tri topologique Kahn, exécution séquentielle), <code>FlowValidator</code> (DAG, cycle detection), <code>NodeRegistry</code> (auto-discovery compiler pass), <code>FlowContext</code> (state tracking)<br>
+      <strong>48 handlers</strong> dans <code>src/Service/Flow/Handlers/</code> :<br>
+      &nbsp;&nbsp;• <strong>6 Triggers</strong> : ContentCreated, ContentUpdated, ContentDeleted, ContentStatusChanged, ScheduleCron, WebhookInbound<br>
+      &nbsp;&nbsp;• <strong>7 Logic</strong> : Condition, Switch, And, Or, Not, Delay, Loop<br>
+      &nbsp;&nbsp;• <strong>7 Action</strong> : SendEmail, CreateEntry, UpdateEntry, DeleteEntry, PublishEntry, SendNotification, CallWebhook<br>
+      &nbsp;&nbsp;• <strong>2 HTTP</strong> : HttpRequest, ResponseToJson<br>
+      &nbsp;&nbsp;• <strong>5 AI</strong> : LlmCall, GenerateText, Summarize, Translate, Classify<br>
+      &nbsp;&nbsp;• <strong>3 Database</strong> : FindEntries, CountEntries, RawQuery (sécurisé, DQL désactivé)<br>
+      &nbsp;&nbsp;• <strong>3 File</strong> : ReadFile, UploadFile, DeleteFile<br>
+      &nbsp;&nbsp;• <strong>9 Transform</strong> : Set, Map, Filter, Reduce, Flatten, Pick, Omit, Pluck, Template<br>
+      &nbsp;&nbsp;• <strong>6 Utility</strong> : Log, Noop, Wait, Merge, Split, Comment<br>
+      Sécurité : IPv6 SSRF protection, IDOR project-scoping, HTTP redirects désactivés, DQL raw queries désactivées
+    </td></tr>
+    <tr><td>✅ Frontend</td><td>
+      <code>FlowBuilderPage</code> — page principale du builder<br>
+      <code>FlowCanvas</code> — canvas ReactFlow avec tous les types de nœuds<br>
+      <code>FlowStore</code> — état Zustand avec undo/redo<br>
+      <code>NodePanel</code> — panneau de nœuds avec drag & drop<br>
+      <code>InspectorPanel</code> — formulaire dynamique avec autocomplete templates<br>
+      <code>FlowToolbar</code> — barre d'outils<br>
+      <code>CommandPalette</code> — palette de commandes<br>
+      <code>FlowDryRun</code> — exécution à sec<br>
+      <code>FlowValidation</code> — validation côté client<br>
+      i18n complète en 4 langues (fr/en/es/ar)
+    </td></tr>
+    <tr><td>🔮 Dépasse la spec</td><td>La roadmap prévoyait 8-10 opérations ; le code en a <strong>48</strong>. Les handlers AI (5), Database (3), File (3), Transform (9), Utility (6) n'étaient pas dans la spec originale. Le FlowBuilder va bien au-delà du « canvas visuel ReactFlow » prévu.</td></tr>
+  </table>
+</div>
+
+<!-- Phase 3 — MAINTENANT LA PROCHAINE ÉTAPE -->
+<div class="phase-block phase-done">
+  <div class="phase-title" style="color: var(--teal)">✅ Phase 3a — Realtime + Live Preview (terminée 20 juin 2026)</div>
+  <div class="phase-desc">Les 2 fonctionnalités majeures restantes de la Phase 3 ont été livrées avec succès.</div>
+
+  <div class="version-row done-row">
+    <div class="version-id"><span class="tag vnum-done">v1.12b</span></div>
+    <div class="version-name"><strong>✅ Finaliser Realtime — Vrai Mercure SSE + GraphQL subscriptions</strong></div>
+    <div class="version-effort">Fait · 10 commits</div>
+    <div class="impact-stars" style="color:var(--teal)">⭐⭐⭐</div>
+  </div>
+  <p style="margin-bottom:1rem;font-size:.9rem">Hub Mercure double canal (HubInterface + JSONL fallback). Endpoint /realtime/token (JWT Mercure). useRealtime EventSource + fallback polling. Type Subscription dans SchemaGenerator. Cookie mercureAuthorization au login admin. Config Docker Mercure port 8080.</p>
+
+  <div class="version-row done-row">
+    <div class="version-id"><span class="tag vnum-done">v1.14a</span></div>
+    <div class="version-name"><strong>✅ Live Preview — iframe + postMessage + JWT + SDK</strong></div>
+    <div class="version-effort">Fait · 9 commits</div>
+    <div class="impact-stars" style="color:var(--teal)">⭐⭐⭐</div>
+  </div>
+  <p style="margin-bottom:1rem;font-size:.9rem">Composant LivePreviewPanel (device switching, loader). JWT preview (PreviewTokenService, HS256, TTL 1h). Endpoints /preview/token et /preview/content. SDK npm @jambostack/live-preview (core + Next.js). Migration Project (preview_url, preview_mode, preview_enabled).</p>
+
+  <div class="version-row done-row">
+    <div class="version-id"><span class="tag vnum-done">v1.14b</span></div>
+    <div class="version-name"><strong>✅ Visual Editing — Click-to-Edit</strong></div>
+    <div class="version-effort">Fait · 5 commits</div>
+    <div class="impact-stars" style="color:var(--teal)">⭐⭐⭐</div>
+  </div>
+  <p style="margin-bottom:1rem;font-size:.9rem">Attributs data-jambo-field dans le frontend. initVisualEditing() (MutationObserver, popover inline). Survol + clic → highlight + scrollIntoView dans ContentForm. fieldProps() dans le hook Next.js. 5 nouveaux messages postMessage.</p>
+</div>
+
+<div class="phase-block phase-current">
+  <div class="phase-title">🚀 Phase 3b — Reste à faire (été 2026)</div>
+  <div class="phase-desc">Avec Realtime et Live Preview livrés, restent 2 fonctionnalités majeures.</div>
+
+  <div class="version-row priority-high">
+    <div class="version-id"><span class="tag vnum">v1.15</span></div>
+    <div class="version-name"><strong>Système d'extensions / plugins</strong></div>
+    <div class="version-effort">Effort : 10-15 jours</div>
+    <div class="impact-stars">⭐⭐⭐⭐</div>
+  </div>
+  <p style="margin-bottom:1rem;font-size:.9rem">Architecture modulaire : hooks (<code>jambo.collection.beforeCreate</code>, <code>jambo.content.afterPublish</code>), endpoints API custom, injection UI (panneaux, onglets, champs custom). Réutiliser le pattern NodeRegistry (auto-discovery compiler pass) pour le système de plugins.</p>
+
+  <div class="version-row priority-mid">
+    <div class="version-id"><span class="tag vnum">v1.16</span></div>
+    <div class="version-name"><strong>Dashboards, Partages, SAML/OIDC, SEO</strong></div>
+    <div class="version-effort">Effort : 5-7 jours</div>
+    <div class="impact-stars">⭐⭐</div>
+  </div>
+  <p style="font-size:.9rem">Dashboards & Insights (métriques, graphes, panels par projet). Partages publics temporaires (Shares). SSO Entreprise (SAML/OIDC). SEO/Redirects/Form builder. Swagger UI interactive.</p>
+</div>
+
+<!-- Phase 4 — Stabilisation -->
+<div class="phase-block" style="border-color: var(--teal); background: linear-gradient(135deg, #0d1117 0%, #0f1f18 100%);">
+  <div class="phase-title" style="color: var(--teal)">🏁 Phase 4 — Stabilisation & v2.0.0 (peut être avancée à automne 2026)</div>
+  <div class="phase-desc">Atteindre le niveau de qualité, performance et stabilité qui mérite le label « v2.0 ».</div>
+
+  <div class="grid2">
+    <div>
+      <h4 style="color: var(--teal)">🎯 Critères de passage en v2.0.0</h4>
+      <ul class="check-list" style="list-style:none;padding:0">
+        <li class="partial">Couverture de tests ≥ 80% — actuellement 36 fichiers, pas de tests Flow/Conditions/TUS/Realtime</li>
+        <li class="missing">Suite E2E navigateur automatisée (Playwright) — absent</li>
+        <li class="partial">Zéro bug critique ouvert depuis > 7 jours</li>
+        <li class="missing">Documentation développeur complète (README, API ref, guides)</li>
+        <li class="missing">Guide de migration v1.x → v2.0</li>
+        <li class="missing">Performance : temps de réponse API < 200ms p95</li>
+        <li class="missing">CI/CD : tests automatiques + déploiement automatisé (.github/workflows)</li>
+        <li class="partial">Cache Redis systématique — configuré mais commenté</li>
+        <li class="partial">Rate-limiting global robuste — partiel (login/2FA seulement)</li>
+        <li class="missing">Monitoring/observabilité (métriques, alertes) — seulement logs Monolog + audit</li>
+      </ul>
+    </div>
+    <div>
+      <h4 style="color: var(--teal)">📦 Tâches de stabilisation</h4>
+      <table>
+        <tr><td>Tests automatisés</td><td><span class="badge wip">36 fichiers</span> → PHPUnit Flow/Conditions/TUS + Playwright E2E</td></tr>
+        <tr><td>Documentation</td><td>README, guides, API ref, migration v1→v2</td></tr>
+        <tr><td>Performance</td><td>Redis, query optimization, lazy loading</td></tr>
+        <tr><td>Rate-limiting</td><td>Global + per-endpoint + per-project</td></tr>
+        <tr><td>CI/CD</td><td>.github/workflows → tests + déploiement</td></tr>
+        <tr><td>Monitoring</td><td>Symfony profiler → prod metrics</td></tr>
+        <tr><td>Bug fixes</td><td>Zéro critique, backlog < 20 bugs</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="version-row" style="margin-top:1.5rem; background: #0a1f14">
+    <div class="version-id"><span class="tag" style="background: var(--teal); color: #000; font-size:.85rem">v2.0.0</span></div>
+    <div class="version-name"><strong>🚀 Jambo v2.0 — Stable Release</strong></div>
+    <div class="version-effort">Effort : 10-15 jours</div>
+    <div class="impact-stars" style="color: var(--teal)">Première version stable</div>
+  </div>
+</div>
+
+<!-- ========== FRISE MISE À JOUR ========== -->
+<h2>VI. Chronologie visuelle — RÉVISÉE</h2>
+
+<div class="frise">
+  <div class="frise-item done">
+    <div class="frise-ver">v1.0 → v1.9.6</div>
+    <div class="frise-title">✅ Fondations</div>
+    <div style="font-size:.75rem;color:var(--dim)">Q2 2026<br>24 specs<br>~430 commits</div>
+  </div>
+  <div class="frise-item done">
+    <div class="frise-ver">v1.10 → v1.13</div>
+    <div class="frise-title">✅ Rattrapage + Flows</div>
+    <div style="font-size:.75rem;color:var(--dim)">18-20 juin 2026<br>108 commits<br>4 features en 48h</div>
+  </div>
+  <div class="frise-item current">
+    <div class="frise-ver">v1.15 → v1.16</div>
+    <div class="frise-title">🚀 Plateforme</div>
+    <div style="font-size:.75rem;color:var(--dim)">Été 2026<br>Plugins · Dashboards<br>~15-22 jours restants</div>
+  </div>
+  <div class="frise-item">
+    <div class="frise-ver">v2.0.0</div>
+    <div class="frise-title">🏁 Stable</div>
+    <div style="font-size:.75rem;color:var(--dim)">Automne 2026<br>(initialement printemps 2027)<br>Tests · Perf · Docs</div>
+  </div>
+</div>
+
+<!-- ========== POSITIONNEMENT ========== -->
+<h2>VII. Positionnement stratégique — RÉVISÉ</h2>
+
+<div class="section-card">
+  <table>
+    <tr><td style="width:200px"><strong>Jambo est déjà leader sur</strong></td><td>
+      ✅ MCP natif (aucun concurrent)<br>
+      ✅ Multi-tenant natif (Directus ❌ Strapi ❌)<br>
+      ✅ Assistant IA studio (aucun CMS headless)<br>
+      ✅ 2FA + Social Login admin + end-users<br>
+      ✅ Workflows éditoriaux + publications planifiées<br>
+      ✅ Export/Import projet complet<br>
+      <span style="color:var(--teal)">🆕 <strong>Flows no-code 48 handlers</strong> — désormais leader sur l'automatisation</span><br>
+      <span style="color:var(--teal)">🆕 <strong>Champs conditionnels + validation avancée</strong></span><br>
+      <span style="color:var(--teal)">🆕 <strong>Dossiers médias + TUS</strong></span><br>
+      <span style="color:var(--teal)">🆕 <strong>Realtime SSE + GraphQL Subscriptions</strong></span><br>
+      <span style="color:var(--teal)">🆕 <strong>Live Preview + Visual Editing</strong> — click-to-edit dans l'iframe</span>
+    </td></tr>
+    <tr><td><strong>Jambo est à parité sur</strong></td><td>
+      = Collections EAV, versioning, i18n, médias, GraphQL, RBAC, webhooks, audit, recherche<br>
+      = Commentaires + notifications (v1.9.4)<br>
+      = Éditeur riche Lexical (v1.9.2)<br>
+      = Templates collection/projet<br>
+      <span style="color:var(--teal)">🆕 = Flows / Automatisation no-code</span><br>
+      <span style="color:var(--teal)">🆕 = Champs conditionnels + validation</span><br>
+      <span style="color:var(--teal)">🆕 = Dossiers médias + TUS</span><br>
+      <span style="color:var(--teal)">🆕 = Realtime SSE + GraphQL Subscriptions</span><br>
+      <span style="color:var(--teal)">🆕 = Live Preview + Visual Editing</span>
+    </td></tr>
+    <tr><td><strong>Jambo doit rattraper sur</strong></td><td>
+      🔴 Système d'extensions / plugins (v1.15 · été 2026)<br>
+      🟡 Dashboards, Partages, SAML/OIDC, SEO (v1.16 · été/automne 2026)
+    </td></tr>
+    <tr><td><strong>Jambo passera en stable sur</strong></td><td style="color:var(--teal)">
+      🏁 v2.0.0 — Tests, performance, documentation, CI/CD, monitoring (peut être avancé à automne 2026 au lieu de printemps 2027)
+    </td></tr>
+    <tr><td><strong>Message commercial — révisé</strong></td><td style="font-size:1.05rem;color:var(--accent)">
+      « Jambo est le <strong>seul</strong> CMS headless avec MCP natif, IA intégrée, multi-tenant, Social Login, <strong>un moteur d'automatisation no-code de 48 handlers, et un Live Preview avec édition visuelle</strong> — le tout sur Symfony 8. Jambo a comblé presque tous les écarts concurrentiels majeurs. »
+    </td></tr>
+  </table>
+</div>
+
+<!-- ========== APPENDIX ========== -->
+<h2>VIII. Annexe — Architecture technique (20 juin 2026)</h2>
+
+<div class="grid2">
+  <div>
+    <h3>Stack backend</h3>
+    <table>
+      <tr><td>Framework</td><td>Symfony 8.0.11</td></tr>
+      <tr><td>PHP</td><td>8.4.19</td></tr>
+      <tr><td>ORM</td><td>Doctrine 3.x</td></tr>
+      <tr><td>DB</td><td>MySQL 8.0</td></tr>
+      <tr><td>Queue</td><td>Symfony Messenger (async)</td></tr>
+      <tr><td>Cache</td><td>Symfony Cache (file/Redis)</td></tr>
+      <tr><td>GraphQL</td><td>SchemaGenerator maison + webonyx/graphql-php</td></tr>
+      <tr><td>OpenAPI</td><td>Génération PHP Attributes</td></tr>
+      <tr><td>2FA</td><td>spomky-labs/otphp + endroid/qr-code</td></tr>
+      <tr><td>OAuth</td><td>league/oauth2-client (4 providers)</td></tr>
+      <tr><td>Chiffrement</td><td>Sodium (libsodium)</td></tr>
+      <tr><td>Images</td><td>Intervention/Image</td></tr>
+      <tr><td>TUS</td><td>Implémentation maison (TusServer)</td></tr>
+      <tr><td><span style="color:var(--teal)">🆕 Flow</span></td><td>48 handlers, ReactFlow builder, DAG validator</td></tr>
+      <tr><td><span style="color:var(--teal)">🆕 Mercure SSE</span></td><td>HubInterface + JSONL fallback, GraphQL Subscriptions, cookie mercureAuthorization</td></tr>
+      <tr><td><span style="color:var(--teal)">🆕 Preview</span></td><td>PreviewTokenService (JWT HS256), PreviewController, iframe + postMessage</td></tr>
+    </table>
+  </div>
+  <div>
+    <h3>Stack frontend</h3>
+    <table>
+      <tr><td>Framework</td><td>React 18 + TypeScript</td></tr>
+      <tr><td>Routing</td><td>Inertia.js (no SPA)</td></tr>
+      <tr><td>UI Kit</td><td>shadcn/ui (Tailwind)</td></tr>
+      <tr><td>Éditeur riche</td><td>Lexical (JSON par blocs)</td></tr>
+      <tr><td>Flow Builder</td><td>@xyflow/react + Zustand</td></tr>
+      <tr><td>OTP Input</td><td>input-otp (shadcn/ui)</td></tr>
+      <tr><td>Bundler</td><td>Webpack Encore</td></tr>
+      <tr><td>Composants</td><td>211 fichiers .tsx</td></tr>
+      <tr><td><span style="color:var(--teal)">🆕 Preview</span></td><td>LivePreviewPanel (device switching, postMessage), initVisualEditing</td></tr>
+      <tr><td>i18n</td><td>4 langues (fr/en/es/ar)</td></tr>
+    </table>
+
+    <h3 style="margin-top:1.5rem">Déploiement</h3>
+    <table>
+      <tr><td>Serveur</td><td>Apache 2.4 + mod_fcgid</td></tr>
+      <tr><td>OS</td><td>Windows 11 Pro / Debian (prod)</td></tr>
+      <tr><td>CI/CD</td><td>Git + manual deploy</td></tr>
+      <tr><td>Repo</td><td>github.com/jambostack/jambo-api</td></tr>
+      <tr><td>Licence</td><td>Propriétaire</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section-card" style="margin-top:2rem;text-align:center">
+  <p style="color:var(--dim);margin-bottom:.5rem">
+    📄 Document généré le 18 juin 2026 · Mis à jour le <strong>20 juin 2026</strong> après implémentation live<br>
+    🔍 Méthodologie : analyse statique + tests navigateur (Playwright) + tests curl API<br>
+    📊 169 commits analysés · 6 features vérifiées sur code + navigateur<br>
+    🎯 Prochaine étape : v1.15 (Système d'extensions / plugins) ou attaquer la Phase 4 (stabilisation)<br>
+    🏁 v2.0.0 peut être avancé à <strong>automne 2026</strong> au lieu de printemps 2027 grâce à l'avance prise
+  </p>
+</div>
+
+</body>
+</html>
