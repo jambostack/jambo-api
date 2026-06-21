@@ -24,15 +24,16 @@ export default function AppLogo() {
     }, []);
 
     if (isCollapsed) {
-        // Collapsed sidebar: show icon
+        // Collapsed sidebar: show uploaded icon, fallback to static PNG
         const iconUrl = isDark ? appSettings?.iconLightUrl : appSettings?.iconDarkUrl;
         if (iconUrl) {
             return <img src={iconUrl} alt={appName} className="size-8 object-contain block mx-auto" />;
         }
-        return <AppLogoIcon className="size-8 text-primary block mx-auto" />;
+        const defaultIcon = isDark ? '/images/icon-light.png' : '/images/icon-dark.png';
+        return <img src={defaultIcon} alt={appName} className="size-8 object-contain block mx-auto" />;
     }
 
-    // Expanded sidebar: show themed logo, fallback to SVG icon
+    // Expanded sidebar: show uploaded logo, fallback to static PNG
     const logoUrl = isDark ? appSettings?.logoLightUrl : appSettings?.logoDarkUrl;
 
     if (logoUrl) {
@@ -43,14 +44,10 @@ export default function AppLogo() {
         );
     }
 
+    const defaultLogo = isDark ? '/images/logo-light.png' : '/images/logo-dark.png';
     return (
-        <>
-            <div>
-                <AppLogoIcon className="size-7 text-primary block mx-auto" />
-            </div>
-            <div className="ml-1 grid flex-1 text-left text-sm">
-                <span className="mb-0.5 truncate leading-none font-semibold">{appName}</span>
-            </div>
-        </>
+        <div>
+            <img src={defaultLogo} alt={appName} className="h-7 object-contain" />
+        </div>
     );
 }
