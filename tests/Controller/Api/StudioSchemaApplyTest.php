@@ -95,4 +95,68 @@ class StudioSchemaApplyTest extends WebTestCase
         $this->assertSame(1, $ropts['relation']['type'] ?? null);
         $this->assertArrayNotHasKey('collection', $ropts['relation'] ?? []);
     }
+
+    /**
+     * Régression : ré-appliquer un schéma sur une collection existante ne doit
+     * NI renommer son slug (pas de pluralisation auto, sinon doublon + perte de
+     * données), NI perdre le nouvel ordre des champs.
+     */
+    public function testReapplyKeepsSlugStableAndPersistsFieldOrder(): void
+    {
+        $client = static::createClient();
+        $client->loginUser($this->createSuperAdmin());
+
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $project = new Project();
+        $project->name = 'Slug Stable ' . bin2hex(random_bytes(4));
+        $em->persist($project);
+
+        // Collection au nom singulier + 2 champs (a, b).
+        $col = new Collection();
+        $col->name = 'Hero';
+        $col->slug = 'hero';
+        $col->project = $project;
+        $col->order = 0;
+        $em->persist($col);
+        foreach ([['a', 0], ['b', 1]] as [$slug, $ord]) {
+            $f = new Field();
+            $f->name = $slug;
+            $f->slug = $slug;
+            $f->type = 'text';
+            $f->collection = $col;
+            $f->order = $ord;
+            $em->persist($f);
+        }
+        $em->flush();
+        $colId = $col->id;
+        $em->clear(); // charge tout depuis la DB côté requête (comme en prod)
+
+        // Ré-applique le même schéma avec les champs INVERSÉS (b puis a).
+        $client->jsonRequest('POST', '/api/projects/' . $project->uuid->toString() . '/studio/schema', [
+            'collections' => [
+                [
+                    'name' => 'Hero', 'slug' => 'hero', 'isSingleton' => false,
+                    'fields' => [
+                        ['name' => 'b', 'slug' => 'b', 'type' => 'text'],
+                        ['name' => 'a', 'slug' => 'a', 'type' => 'text'],
+                    ],
+                ],
+            ],
+        ]);
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+
+        $em->clear();
+        // Slug stable : toujours "hero", même id, et PAS de "heroes".
+        $still = $em->getRepository(Collection::class)->findOneBy(['id' => $colId, 'deletedAt' => null]);
+        $this->assertNotNull($still, 'la collection existante doit être préservée');
+        $this->assertSame('hero', $still->slug, 'le slug ne doit pas être pluralisé');
+        $this->assertNull(
+            $em->getRepository(Collection::class)->findOneBy(['project' => $project, 'slug' => 'heroes']),
+            'aucune collection dupliquée "heroes" ne doit être créée',
+        );
+
+        // Ordre des champs persisté (b avant a).
+        $fields = static::getContainer()->get(\App\Repository\FieldRepository::class)->findByCollection($still);
+        $this->assertSame(['b', 'a'], array_map(fn ($f) => $f->slug, $fields));
+    }
 }

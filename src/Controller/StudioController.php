@@ -14,8 +14,6 @@ use App\Repository\MediaRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\StudioChatMessageRepository;
 use App\Service\AiContentService;
-use Doctrine\Inflector\Inflector;
-use Doctrine\Inflector\InflectorFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\File\File as HttpFile;
@@ -80,13 +78,6 @@ EUSER;
     /** Champs système gérés automatiquement â€” jamais générés par l'IA. */
     private const RESERVED_FIELD_SLUGS = ['id', 'uuid', 'status', 'locale', 'created_at', 'updated_at', 'deleted_at'];
 
-    private ?Inflector $inflector = null;
-
-    private function inflector(): Inflector
-    {
-        return $this->inflector ??= InflectorFactory::create()->build();
-    }
-
     /**
      * Normalise un schéma généré par l'IA pour GARANTIR les conventions de
      * nommage, même si le modèle ne les respecte pas :
@@ -109,13 +100,14 @@ EUSER;
             $name = $this->toPascalCase((string) ($col['name'] ?? ''));
             if ($name === '') {
                 $name = $isSingleton ? 'Item' : 'Items';
-            } else {
-                // Forme canonique : on singularise puis on (re)pluralise au besoin,
-                // ce qui corrige aussi bien "BlogPost" que "BlogPosts".
-                $singular = $this->inflector()->singularize($name);
-                $name = $isSingleton ? $singular : $this->inflector()->pluralize($singular);
             }
-            $slug = $this->toSnakeCase($name) ?: 'collection';
+            // Slug STABLE : on respecte le slug fourni s'il existe (jamais de
+            // renommage automatique), sinon on le dérive du nom. Aucune
+            // (dé)pluralisation : renommer le slug d'une collection existante
+            // créerait un doublon et orphelinerait ses entrées (perte de données).
+            $slug = !empty($col['slug'])
+                ? ($this->toSnakeCase((string) $col['slug']) ?: 'collection')
+                : ($this->toSnakeCase($name) ?: 'collection');
             // Unicité des slugs de collection
             $base = $slug; $i = 2;
             while (isset($seenCollectionSlugs[$slug])) { $slug = $base . '_' . $i++; }
