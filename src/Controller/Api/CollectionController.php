@@ -60,7 +60,7 @@ class CollectionController extends AbstractController
                     'slug'       => $f->slug,
                     'type'       => $f->type,
                     'isRequired' => $f->isRequired,
-                ], $c->fields->filter(fn ($f) => !$f->isDeleted())->toArray()),
+                ], array_values($c->fields->filter(fn ($f) => !$f->isDeleted())->toArray())),
             ], $collections),
             'meta' => [
                 'total'    => $total,
@@ -112,7 +112,7 @@ class CollectionController extends AbstractController
                 'type'       => $f->type,
                 'isRequired' => $f->isRequired,
                 'options'    => $f->options,
-            ], $collection->fields->filter(fn ($f) => !$f->isDeleted())->toArray()),
+            ], array_values($collection->fields->filter(fn ($f) => !$f->isDeleted())->toArray())),
         ]);
     }
 }
