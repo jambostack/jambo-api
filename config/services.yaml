@@ -34,6 +34,10 @@ services:
         arguments:
             $appSecret: '%kernel.secret%'
 
+    App\Repository\PersonalAccessTokenRepository:
+        arguments:
+            $appSecret: '%kernel.secret%'
+
     App\Controller\ProjectSettingsController:
         arguments:
             $appSecret: '%kernel.secret%'
