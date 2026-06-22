@@ -29,6 +29,7 @@ class JamboApiMcpServer extends McpServer
     private EavFieldHelperService $fieldHelper;
     private SchemaProvisioner $provisioner;
     private \App\Repository\ProjectMemberRepository $memberRepo;
+    private SearchService $searchService;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -48,6 +49,7 @@ class JamboApiMcpServer extends McpServer
         $this->fieldHelper = $fieldHelperService;
         $this->provisioner = $provisioner;
         $this->memberRepo = $memberRepo;
+        $this->searchService = $searchService;
 
         $this->registerExplorationTools();
         $this->registerContentTools();
@@ -338,7 +340,7 @@ class JamboApiMcpServer extends McpServer
                 'locale' => McpTool::stringProp('Filtrer par locale'),
                 'limit' => McpTool::intProp('Nombre de résultats (défaut 20)'),
             ], ['project_uuid', 'query']),
-            function (array $args, array $ctx) use ($searchService): array {
+            function (array $args, array $ctx): array {
                 $project = $this->findProject($args['project_uuid']);
                 if (!$project) throw new McpException('Projet introuvable', 404);
 
@@ -348,7 +350,7 @@ class JamboApiMcpServer extends McpServer
                     ? $options['filter'] . " AND locale = {$args['locale']}"
                     : "locale = {$args['locale']}";
 
-                return $searchService->search($project, $args['query'], $options);
+                return $this->searchService->search($project, $args['query'], $options);
             }
         ));
     }
@@ -563,7 +565,7 @@ class JamboApiMcpServer extends McpServer
             McpTool::schema([
                 'media_uuid' => McpTool::stringProp('UUID du média', true),
             ], ['media_uuid']),
-            function (array $args, array $ctx) use ($imageService): array {
+            function (array $args, array $ctx): array {
                 $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid']]);
                 if (!$media) throw new McpException('Média introuvable', 404);
 
