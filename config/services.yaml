@@ -46,6 +46,10 @@ services:
         arguments:
             $appSecret: '%kernel.secret%'
 
+    App\Security\PersonalAccessTokenAuthenticator:
+        arguments:
+            $appSecret: '%kernel.secret%'
+
     App\Service\ExportImport\Export\MediaExportHandler:
         arguments:
             $projectDir: '%kernel.project_dir%'
