@@ -20,6 +20,19 @@ const ICON_SETS: { prefix: string; label: string }[] = [
     { prefix: 'flag', label: 'Drapeaux' },
 ];
 
+// Icônes populaires affichées par défaut (recherche vide, librairie « Toutes »).
+const DEFAULT_ICONS: string[] = [
+    'lucide:home', 'lucide:user', 'lucide:users', 'lucide:settings', 'lucide:search',
+    'lucide:heart', 'lucide:star', 'lucide:check', 'lucide:bell', 'lucide:mail',
+    'lucide:phone', 'lucide:calendar', 'lucide:clock', 'lucide:file', 'lucide:folder',
+    'lucide:image', 'lucide:camera', 'lucide:video', 'lucide:map-pin', 'lucide:globe',
+    'lucide:shield', 'lucide:lock', 'lucide:key', 'lucide:credit-card', 'lucide:shopping-cart',
+    'lucide:trending-up', 'lucide:bar-chart-3', 'lucide:zap', 'lucide:rocket', 'lucide:headset',
+    'lucide:message-circle', 'lucide:thumbs-up', 'lucide:share-2', 'lucide:download', 'lucide:upload',
+    'lucide:trash-2', 'lucide:pencil', 'lucide:plus', 'lucide:arrow-right', 'lucide:brain-circuit',
+    'lucide:leaf', 'lucide:megaphone', 'lucide:building-2', 'lucide:briefcase',
+];
+
 // Normalise une valeur héritée (sans préfixe) en nom Iconify lucide.
 function toIconifyName(value: string): string {
     if (!value) return '';
@@ -44,15 +57,44 @@ export default function IconField({ field, value, onChange, processing, errors }
 
     useEffect(() => {
         if (!open) return;
-        if (query.trim().length < 2) {
-            setResults([]);
-            return;
-        }
-        setLoading(true);
+        const q = query.trim();
         window.clearTimeout(debounce.current);
+
+        // Recherche vide → icônes par défaut (faciliter la sélection).
+        if (q.length < 2) {
+            if (!setPrefix) {
+                setResults(DEFAULT_ICONS);
+                setLoading(false);
+                return;
+            }
+            // Librairie choisie sans recherche → échantillon de cette librairie.
+            setLoading(true);
+            debounce.current = window.setTimeout(async () => {
+                try {
+                    const r = await fetch(`https://api.iconify.design/collection?prefix=${setPrefix}`);
+                    const j = await r.json();
+                    const names: string[] = [];
+                    if (Array.isArray(j.uncategorized)) names.push(...j.uncategorized);
+                    if (j.categories) {
+                        for (const arr of Object.values(j.categories)) {
+                            if (Array.isArray(arr)) names.push(...(arr as string[]));
+                        }
+                    }
+                    setResults(names.slice(0, 96).map((n) => `${setPrefix}:${n}`));
+                } catch {
+                    setResults(DEFAULT_ICONS);
+                } finally {
+                    setLoading(false);
+                }
+            }, 150);
+            return () => window.clearTimeout(debounce.current);
+        }
+
+        // Recherche active.
+        setLoading(true);
         debounce.current = window.setTimeout(async () => {
             try {
-                const params = new URLSearchParams({ query: query.trim(), limit: '120' });
+                const params = new URLSearchParams({ query: q, limit: '120' });
                 if (setPrefix) params.set('prefixes', setPrefix);
                 const r = await fetch(`https://api.iconify.design/search?${params}`);
                 const j = await r.json();
@@ -97,7 +139,12 @@ export default function IconField({ field, value, onChange, processing, errors }
                             </select>
                         </div>
                         <ScrollArea className="mt-3 h-56">
-                            {loading && <p className="px-1 py-2 text-xs text-muted-foreground">Recherche…</p>}
+                            {loading && <p className="px-1 py-2 text-xs text-muted-foreground">Chargement…</p>}
+                            {!loading && query.trim().length < 2 && results.length > 0 && (
+                                <p className="px-1 pb-2 text-xs text-muted-foreground">
+                                    {setPrefix ? 'Icônes de la librairie' : 'Icônes populaires'} — ou tapez pour rechercher
+                                </p>
+                            )}
                             {!loading && query.trim().length >= 2 && results.length === 0 && (
                                 <p className="px-1 py-2 text-xs text-muted-foreground">Aucune icône.</p>
                             )}
