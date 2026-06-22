@@ -50,6 +50,10 @@ services:
         arguments:
             $appSecret: '%kernel.secret%'
 
+    App\Controller\AdminApi\TokenController:
+        arguments:
+            $appSecret: '%kernel.secret%'
+
     App\Service\ExportImport\Export\MediaExportHandler:
         arguments:
             $projectDir: '%kernel.project_dir%'
