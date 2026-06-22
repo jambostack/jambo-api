@@ -27,6 +27,13 @@ security:
             custom_authenticators:
                 - App\Security\EndUserJwtAuthenticator
 
+        admin_api:
+            pattern: ^/admin-api
+            stateless: true
+            provider: app_user_provider
+            custom_authenticators:
+                - App\Security\PersonalAccessTokenAuthenticator
+
         main:
             lazy: true
             provider: app_user_provider
@@ -56,6 +63,7 @@ security:
         - { path: ^/reset-password, roles: PUBLIC_ACCESS }
         - { path: ^/public-api, roles: PUBLIC_ACCESS }
         - { path: '^/api/[\w-]{36}/auth/(register|login|forgot-password|reset-password)', roles: PUBLIC_ACCESS }
+        - { path: ^/admin-api, roles: ROLE_USER }
         - { path: ^/api, roles: PUBLIC_ACCESS }
         - { path: ^/cdn, roles: PUBLIC_ACCESS }
         - { path: ^/, roles: ROLE_USER }

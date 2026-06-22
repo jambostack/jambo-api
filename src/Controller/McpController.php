@@ -101,6 +101,19 @@ class McpController extends AbstractController
     {
         $context = ['user' => $this->getUser()];
 
+        // PAT user-scopé (Admin API) : authentifie en tant qu'utilisateur + scopes.
+        if ($token && str_starts_with($token, 'jbo_pat_')) {
+            $pat = $this->em->getRepository(\App\Entity\PersonalAccessToken::class)
+                ->findByPlainToken($token);
+            if ($pat && !$pat->isExpired()) {
+                $context['user'] = $pat->user;
+                $context['scopes'] = $pat->scopes;
+                $context['authenticated'] = true;
+            }
+
+            return $context;
+        }
+
         // Si un token API est fourni, trouver le projet associé
         if ($token) {
             $apiToken = $this->em->getRepository(\App\Entity\ApiToken::class)

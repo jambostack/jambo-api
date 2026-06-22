@@ -15,6 +15,7 @@ use App\Service\AiContentService;
 use App\Service\EavDataFormatterService;
 use App\Service\EavFieldHelperService;
 use App\Service\ImageTransformService;
+use App\Service\SchemaProvisioner;
 use App\Service\SearchService;
 use App\Service\VersioningService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -26,6 +27,8 @@ class JamboApiMcpServer extends McpServer
     private EavDataFormatterService $formatter;
 
     private EavFieldHelperService $fieldHelper;
+    private SchemaProvisioner $provisioner;
+    private \App\Repository\ProjectMemberRepository $memberRepo;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -35,12 +38,16 @@ class JamboApiMcpServer extends McpServer
         VersioningService $versioningService,
         ImageTransformService $imageService,
         EavFieldHelperService $fieldHelperService,
+        SchemaProvisioner $provisioner,
+        \App\Repository\ProjectMemberRepository $memberRepo,
     ) {
         parent::__construct('JamboApi CMS', '2.0.0');
 
         $this->em = $entityManager;
         $this->formatter = $formatterService;
         $this->fieldHelper = $fieldHelperService;
+        $this->provisioner = $provisioner;
+        $this->memberRepo = $memberRepo;
 
         $this->registerExplorationTools();
         $this->registerContentTools();
@@ -361,19 +368,17 @@ class JamboApiMcpServer extends McpServer
                 'is_singleton' => McpTool::boolProp('Collection singleton (une seule entrée)'),
             ], ['project_uuid', 'name']),
             function (array $args, array $ctx): array {
-                $project = $this->findProject($args['project_uuid']);
-                if (!$project) throw new McpException('Projet introuvable', 404);
-
-                $collection = new Collection();
-                $collection->name = $args['name'];
-                $collection->slug = $args['slug'] ?? $this->slugify($args['name']);
-                $collection->description = $args['description'] ?? null;
-                $collection->isSingleton = $args['is_singleton'] ?? false;
-                $collection->project = $project;
-                $collection->order = count($project->collections->toArray());
-
-                $this->em->persist($collection);
-                $this->em->flush();
+                $project = $this->assertCanWriteSchema($args, $ctx);
+                try {
+                    $collection = $this->provisioner->createCollection($project, [
+                        'name' => $args['name'],
+                        'slug' => $args['slug'] ?? null,
+                        'description' => $args['description'] ?? null,
+                        'is_singleton' => $args['is_singleton'] ?? false,
+                    ]);
+                } catch (\App\Exception\SchemaException $e) {
+                    throw new McpException($e->getMessage(), $e->statusCode());
+                }
 
                 return [
                     'uuid' => $collection->uuid->toRfc4122(),
@@ -400,26 +405,62 @@ class JamboApiMcpServer extends McpServer
                 'options' => ['type' => 'object', 'description' => 'Options du champ (ex: {"choices": ["a","b"]})'],
             ], ['project_uuid', 'collection_slug', 'name', 'type']),
             function (array $args, array $ctx): array {
+                $this->assertCanWriteSchema($args, $ctx);
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug']);
                 if (!$collection) throw new McpException('Collection introuvable', 404);
 
-                $field = new Field();
-                $field->name = $args['name'];
-                $field->slug = $args['slug'] ?? $this->slugify($args['name']);
-                $field->type = $args['type'];
-                $field->isRequired = $args['is_required'] ?? false;
-                $field->options = $args['options'] ?? null;
-                $field->collection = $collection;
-                $field->order = $collection->fields->count();
-
-                $this->em->persist($field);
-                $this->em->flush();
+                try {
+                    $field = $this->provisioner->addField($collection, [
+                        'name' => $args['name'],
+                        'slug' => $args['slug'] ?? null,
+                        'type' => $args['type'],
+                        'is_required' => $args['is_required'] ?? false,
+                        'options' => $args['options'] ?? null,
+                    ]);
+                } catch (\App\Exception\SchemaException $e) {
+                    throw new McpException($e->getMessage(), $e->statusCode());
+                }
 
                 return [
                     'name' => $field->name,
                     'slug' => $field->slug,
                     'type' => $field->type,
                     'isRequired' => $field->isRequired,
+                ];
+            }
+        ));
+
+        $this->registerTool(new McpTool(
+            'create_project',
+            'Crée un nouveau projet (l\'utilisateur authentifié en devient membre owner)',
+            McpTool::schema([
+                'name' => McpTool::stringProp('Nom du projet', true),
+                'description' => McpTool::stringProp('Description'),
+                'default_locale' => McpTool::stringProp('Locale par défaut (ex: fr)'),
+            ], ['name']),
+            function (array $args, array $ctx): array {
+                $user = $ctx['user'] ?? null;
+                if (!$user instanceof \App\Entity\User) {
+                    throw new McpException('Authentification requise', 401);
+                }
+                $scopes = $ctx['scopes'] ?? null;
+                if ($scopes !== null && !in_array('projects:write', $scopes, true)) {
+                    throw new McpException('Scope insuffisant', 403);
+                }
+                try {
+                    $project = $this->provisioner->createProject($user, [
+                        'name' => $args['name'],
+                        'description' => $args['description'] ?? null,
+                        'default_locale' => $args['default_locale'] ?? 'en',
+                    ]);
+                } catch (\App\Exception\SchemaException $e) {
+                    throw new McpException($e->getMessage(), $e->statusCode());
+                }
+
+                return [
+                    'uuid' => $project->uuid->toRfc4122(),
+                    'name' => $project->name,
+                    'defaultLocale' => $project->defaultLocale,
                 ];
             }
         ));
@@ -804,6 +845,51 @@ class JamboApiMcpServer extends McpServer
     private function findProject(string $uuid): ?Project
     {
         return $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+    }
+
+    /**
+     * Garde d'écriture de structure : vérifie que le contexte (ApiToken projet
+     * ou utilisateur de session/PAT) a le droit d'écrire dans le projet ciblé.
+     * Empêche l'écriture cross-projet (faille IDOR) et l'absence de capacité.
+     */
+    private function assertCanWriteSchema(array $args, array $ctx): Project
+    {
+        $project = $this->findProject($args['project_uuid'] ?? '');
+        if (!$project) {
+            throw new McpException('Projet introuvable', 404);
+        }
+
+        // Contexte ApiToken / endpoint projet-scopé : doit cibler CE projet + capacité d'écriture.
+        $ctxProjectId = $ctx['project_id'] ?? ($ctx['_project']->id ?? null);
+        if ($ctxProjectId !== null) {
+            if ($ctxProjectId !== $project->id) {
+                throw new McpException('Accès refusé à ce projet', 403);
+            }
+            $abilities = $ctx['token_abilities'] ?? [];
+            if (!array_intersect(['create', 'write', 'schema:write'], $abilities)) {
+                throw new McpException('Scope insuffisant', 403);
+            }
+            return $project;
+        }
+
+        // Contexte utilisateur (session admin ou PAT) : appartenance active requise.
+        $user = $ctx['user'] ?? null;
+        if (!$user instanceof \App\Entity\User) {
+            throw new McpException('Authentification requise', 401);
+        }
+        if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)
+            && $this->memberRepo->findActiveByUserAndProject($user, $project) === null) {
+            throw new McpException('Accès refusé à ce projet', 403);
+        }
+        // Si le contexte porte des scopes (PAT), exiger un scope d'écriture de structure.
+        $scopes = $ctx['scopes'] ?? null;
+        if ($scopes !== null
+            && !in_array('schema:write', $scopes, true)
+            && !in_array('projects:write', $scopes, true)) {
+            throw new McpException('Scope insuffisant', 403);
+        }
+
+        return $project;
     }
 
     private function findCollection(string $projectUuid, string $slug): ?Collection
