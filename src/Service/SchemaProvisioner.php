@@ -1,0 +1,141 @@
+<?php
+
+namespace App\Service;
+
+use App\Entity\Collection;
+use App\Entity\Field;
+use App\Entity\Project;
+use App\Exception\SchemaException;
+use Doctrine\ORM\EntityManagerInterface;
+
+/**
+ * Source de vérité du provisioning de structure Jambo (projets, collections,
+ * champs). Réutilisé par les façades REST /admin-api, MCP et studio afin de ne
+ * pas dupliquer les conventions et la validation.
+ */
+class SchemaProvisioner
+{
+    private const ALLOWED_TYPES = [
+        'text', 'longtext', 'richtext', 'wysiwyg', 'markdown', 'number', 'decimal', 'rating',
+        'boolean', 'checkbox', 'date', 'datetime', 'email', 'url', 'slug', 'color', 'icon',
+        'code', 'json', 'array', 'repeater', 'enumeration', 'tags', 'media', 'relation',
+    ];
+
+    public function __construct(private EntityManagerInterface $em) {}
+
+    public function createCollection(Project $project, array $dto): Collection
+    {
+        if (empty($dto['name'])) {
+            throw new SchemaException('name is required', 422);
+        }
+        $slug = NamingConvention::toSnakeCase($dto['slug'] ?? $dto['name']);
+        $dup = $this->em->getRepository(Collection::class)->findOneBy(['project' => $project, 'slug' => $slug]);
+        if ($dup !== null) {
+            throw new SchemaException("Collection slug '$slug' already exists", 409);
+        }
+
+        $c = new Collection();
+        $c->name = NamingConvention::toPascalCase($dto['name']);
+        $c->slug = $slug;
+        $c->description = $dto['description'] ?? null;
+        $c->isSingleton = (bool) ($dto['is_singleton'] ?? false);
+        $c->order = $dto['order'] ?? count($project->collections->toArray());
+        $c->project = $project;
+
+        $this->em->persist($c);
+        $this->em->flush();
+        return $c;
+    }
+
+    public function updateCollection(Collection $c, array $dto): Collection
+    {
+        if (isset($dto['name'])) {
+            $c->name = NamingConvention::toPascalCase($dto['name']);
+        }
+        if (array_key_exists('description', $dto)) {
+            $c->description = $dto['description'];
+        }
+        if (isset($dto['is_singleton'])) {
+            $c->isSingleton = (bool) $dto['is_singleton'];
+        }
+        $this->em->flush();
+        return $c;
+    }
+
+    public function deleteCollection(Collection $c): void
+    {
+        $this->em->remove($c);
+        $this->em->flush();
+    }
+
+    public function addField(Collection $c, array $dto): Field
+    {
+        if (empty($dto['name']) || empty($dto['type'])) {
+            throw new SchemaException('name and type are required', 422);
+        }
+        if (!in_array($dto['type'], self::ALLOWED_TYPES, true)) {
+            throw new SchemaException("Unknown field type '{$dto['type']}'", 422);
+        }
+        $slug = NamingConvention::toSnakeCase($dto['slug'] ?? $dto['name']);
+        if (in_array($slug, NamingConvention::RESERVED_FIELD_SLUGS, true)) {
+            throw new SchemaException("Field slug '$slug' is reserved", 422);
+        }
+        foreach ($c->fields as $existing) {
+            if ($existing->slug === $slug) {
+                throw new SchemaException("Field slug '$slug' already exists", 409);
+            }
+        }
+
+        $f = new Field();
+        $f->name = $dto['name'];
+        $f->slug = $slug;
+        $f->type = $dto['type'];
+        $f->isRequired = (bool) ($dto['is_required'] ?? false);
+        $f->options = $this->normalizeOptions($dto['type'], $dto['options'] ?? null);
+        $f->collection = $c;
+        $f->order = $c->fields->count();
+
+        $this->em->persist($f);
+        $this->em->flush();
+        return $f;
+    }
+
+    public function updateField(Field $f, array $dto): Field
+    {
+        if (isset($dto['name'])) {
+            $f->name = $dto['name'];
+        }
+        if (isset($dto['type'])) {
+            if (!in_array($dto['type'], self::ALLOWED_TYPES, true)) {
+                throw new SchemaException("Unknown field type '{$dto['type']}'", 422);
+            }
+            $f->type = $dto['type'];
+        }
+        if (array_key_exists('options', $dto)) {
+            $f->options = $this->normalizeOptions($f->type, $dto['options']);
+        }
+        if (isset($dto['is_required'])) {
+            $f->isRequired = (bool) $dto['is_required'];
+        }
+        $this->em->flush();
+        return $f;
+    }
+
+    public function deleteField(Field $f): void
+    {
+        $this->em->remove($f);
+        $this->em->flush();
+    }
+
+    /** Normalise les options de champ (validation légère, format canonique). */
+    private function normalizeOptions(string $type, ?array $options): ?array
+    {
+        if ($options === null) {
+            return null;
+        }
+        if ($type === 'enumeration' && isset($options['choices']) && !is_array($options['choices'])) {
+            throw new SchemaException('enumeration.choices must be an array', 422);
+        }
+        return $options;
+    }
+}
