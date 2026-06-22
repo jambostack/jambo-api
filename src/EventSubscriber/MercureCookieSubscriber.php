@@ -40,6 +40,12 @@ class MercureCookieSubscriber implements EventSubscriberInterface
             return;
         }
 
+        // Authentification stateless (ex. firewall admin_api / token) : aucune
+        // réponse n'est attachée à l'événement — rien à quoi accrocher le cookie.
+        if ($event->getResponse() === null) {
+            return;
+        }
+
         // Si le secret Mercure n'est pas configuré ou trop court, on ne fait rien
         if (strlen($this->mercureJwtSecret) < 32) {
             return;
