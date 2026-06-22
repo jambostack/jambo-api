@@ -5,6 +5,9 @@ namespace App\Service;
 use App\Entity\Collection;
 use App\Entity\Field;
 use App\Entity\Project;
+use App\Entity\ProjectMember;
+use App\Entity\User;
+use App\Enum\ProjectMemberStatus;
 use App\Exception\SchemaException;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -21,7 +24,66 @@ class SchemaProvisioner
         'code', 'json', 'array', 'repeater', 'enumeration', 'tags', 'media', 'relation',
     ];
 
-    public function __construct(private EntityManagerInterface $em) {}
+    public function __construct(
+        private EntityManagerInterface $em,
+        private EndUserSchemaSeeder $endUserSchemaSeeder,
+    ) {}
+
+    public function createProject(User $owner, array $dto): Project
+    {
+        if (empty($dto['name'])) {
+            throw new SchemaException('name is required', 422);
+        }
+
+        $project = new Project();
+        $project->name = $dto['name'];
+        $project->description = $dto['description'] ?? null;
+        $project->defaultLocale = $dto['default_locale'] ?? 'en';
+        $project->locales = $dto['locales'] ?? ['en'];
+        $project->disk = $dto['disk'] ?? 'public';
+        $project->publicApi = (bool) ($dto['public_api'] ?? false);
+        $this->em->persist($project);
+
+        $member = new ProjectMember();
+        $member->project = $project;
+        $member->user = $owner;
+        $member->email = $owner->email;
+        $member->status = ProjectMemberStatus::Active;
+        $member->joinedAt = new \DateTimeImmutable();
+        $this->em->persist($member);
+
+        $this->endUserSchemaSeeder->seed($project);
+        $this->em->flush();
+
+        return $project;
+    }
+
+    public function updateProject(Project $project, array $dto): Project
+    {
+        if (isset($dto['name'])) {
+            $project->name = $dto['name'];
+        }
+        if (array_key_exists('description', $dto)) {
+            $project->description = $dto['description'];
+        }
+        if (isset($dto['default_locale'])) {
+            $project->defaultLocale = $dto['default_locale'];
+        }
+        if (isset($dto['locales']) && is_array($dto['locales'])) {
+            $project->locales = $dto['locales'];
+        }
+        if (isset($dto['public_api'])) {
+            $project->publicApi = (bool) $dto['public_api'];
+        }
+        $this->em->flush();
+        return $project;
+    }
+
+    public function deleteProject(Project $project): void
+    {
+        $this->em->remove($project);
+        $this->em->flush();
+    }
 
     public function createCollection(Project $project, array $dto): Collection
     {

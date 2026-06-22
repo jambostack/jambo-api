@@ -17,7 +17,7 @@ class SchemaProvisionerTest extends KernelTestCase
     {
         self::bootKernel();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
-        $this->svc = new SchemaProvisioner($this->em);
+        $this->svc = new SchemaProvisioner($this->em, new \App\Service\EndUserSchemaSeeder($this->em));
     }
 
     private function project(): Project
