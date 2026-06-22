@@ -116,7 +116,7 @@ class JamboApiMcpServer extends McpServer
                             'type' => $f->type,
                             'isRequired' => $f->isRequired,
                             'options' => $f->options,
-                        ], $c->fields->filter(fn(Field $f) => !$f->isDeleted())->toArray());
+                        ], array_values($c->fields->filter(fn(Field $f) => !$f->isDeleted())->toArray()));
                     }
                     return $data;
                 }, $collections);
