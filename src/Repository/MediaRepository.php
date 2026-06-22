@@ -5,7 +5,6 @@ namespace App\Repository;
 use App\Entity\Media;
 use App\Entity\Project;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
-use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Uid\Uuid;
 
@@ -57,12 +56,30 @@ class MediaRepository extends ServiceEntityRepository
             return [];
         }
 
+        $binaries = [];
+        foreach ($uuids as $u) {
+            try {
+                $binaries[] = Uuid::fromString((string) $u)->toBinary();
+            } catch (\Exception) {
+                // ignore malformed UUIDs
+            }
+        }
+
+        if ($binaries === []) {
+            return [];
+        }
+
         $conn = $this->getEntityManager()->getConnection();
-        $binaryUuids = array_map(fn ($u) => Uuid::fromString($u)->toBinary(), $uuids);
+        $placeholders = implode(',', array_fill(0, \count($binaries), '?'));
 
-        $sql = 'SELECT BIN_TO_UUID(m.uuid) as uuid FROM media m WHERE m.project_id = :pid AND m.uuid IN (:uuids) AND m.deleted_at IS NULL';
-        $stmt = $conn->executeQuery($sql, ['pid' => $project->getId(), 'uuids' => $binaryUuids], ['uuids' => ArrayParameterType::STRING]);
+        $rows = $conn->executeQuery(
+            "SELECT uuid FROM media WHERE project_id = ? AND deleted_at IS NULL AND uuid IN ({$placeholders})",
+            [$project->getId(), ...$binaries],
+        )->fetchAllAssociative();
 
-        return array_column($stmt->fetchAllAssociative(), 'uuid');
+        return array_map(
+            fn ($row) => Uuid::fromBinary($row['uuid'])->toRfc4122(),
+            $rows,
+        );
     }
 }
