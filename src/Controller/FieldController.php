@@ -5,11 +5,12 @@ namespace App\Controller;
 use App\Entity\Collection;
 use App\Entity\Field;
 use App\Entity\Project;
+use App\Exception\SchemaException;
 use App\Repository\CollectionRepository;
 use App\Repository\FieldRepository;
-use App\Service\NamingConvention;
 use App\Repository\ProjectRepository;
 use App\Service\FieldRelationOptionsNormalizer;
+use App\Service\SchemaProvisioner;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -25,6 +26,7 @@ class FieldController extends AbstractController
         private ProjectRepository $projectRepository,
         private CollectionRepository $collectionRepository,
         private FieldRelationOptionsNormalizer $relationOptionsNormalizer,
+        private SchemaProvisioner $provisioner,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -50,27 +52,13 @@ class FieldController extends AbstractController
             return $collection;
         }
 
-        $data = $request->toArray();
-
-        if (empty($data['name']) || empty($data['type'])) {
-            return $this->json(['error' => 'name and type are required'], 422);
+        try {
+            // Logique centralisée dans SchemaProvisioner (conventions, validation,
+            // normalisation des options relation).
+            $field = $this->provisioner->addField($collection, $request->toArray());
+        } catch (SchemaException $e) {
+            return $this->json(['error' => $e->getMessage()], $e->statusCode());
         }
-
-        $field = new Field();
-        // Norme canonique Jambo : nom camelCase, slug snake_case dérivé.
-        $field->name = NamingConvention::toCamelCase($data['name']);
-        $field->slug = NamingConvention::toSnakeCase($data['slug'] ?? $data['name']);
-        $field->type = $data['type'];
-        $field->options = $this->normalizeOptions($field->type, $data['options'] ?? null, $collection);
-        if (isset($data['validationRules'])) {
-            $field->validationRules = $data['validationRules'];
-        }
-        $field->order = $data['order'] ?? 0;
-        $field->isRequired = $data['is_required'] ?? false;
-        $field->collection = $collection;
-
-        $this->em->persist($field);
-        $this->em->flush();
 
         return $this->json(['data' => $this->serialize($field)], 201);
     }
@@ -94,31 +82,11 @@ class FieldController extends AbstractController
             return $field;
         }
 
-        $data = $request->toArray();
-
-        if (isset($data['name'])) {
-            $field->name = NamingConvention::toCamelCase($data['name']);
+        try {
+            $this->provisioner->updateField($field, $request->toArray());
+        } catch (SchemaException $e) {
+            return $this->json(['error' => $e->getMessage()], $e->statusCode());
         }
-        if (isset($data['slug'])) {
-            $field->slug = NamingConvention::toSnakeCase($data['slug']);
-        }
-        if (isset($data['type'])) {
-            $field->type = $data['type'];
-        }
-        if (array_key_exists('options', $data)) {
-            $field->options = $this->normalizeOptions($field->type, $data['options'], $field->collection);
-        }
-        if (isset($data['validationRules'])) {
-            $field->validationRules = $data['validationRules'];
-        }
-        if (isset($data['order'])) {
-            $field->order = (int) $data['order'];
-        }
-        if (isset($data['is_required'])) {
-            $field->isRequired = (bool) $data['is_required'];
-        }
-
-        $this->em->flush();
 
         return $this->json(['data' => $this->serialize($field)]);
     }
@@ -184,16 +152,6 @@ class FieldController extends AbstractController
         }
 
         return $field;
-    }
-
-    /** Normalise les options relation au format canonique avant persistance. */
-    private function normalizeOptions(string $type, ?array $options, Collection $collection): ?array
-    {
-        if ($type !== 'relation' || $options === null) {
-            return $options;
-        }
-
-        return $this->relationOptionsNormalizer->normalize($options, $collection->project, forStorage: true);
     }
 
     private function serialize(Field $field): array

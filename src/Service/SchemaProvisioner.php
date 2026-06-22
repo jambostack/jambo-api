@@ -27,6 +27,7 @@ class SchemaProvisioner
     public function __construct(
         private EntityManagerInterface $em,
         private EndUserSchemaSeeder $endUserSchemaSeeder,
+        private FieldRelationOptionsNormalizer $relationNormalizer,
     ) {}
 
     public function createProject(User $owner, array $dto): Project
@@ -149,11 +150,15 @@ class SchemaProvisioner
         }
 
         $f = new Field();
-        $f->name = $dto['name'];
+        // Norme canonique Jambo : nom de champ en camelCase.
+        $f->name = NamingConvention::toCamelCase($dto['name']);
         $f->slug = $slug;
         $f->type = $dto['type'];
         $f->isRequired = (bool) ($dto['is_required'] ?? false);
-        $f->options = $this->normalizeOptions($dto['type'], $dto['options'] ?? null);
+        $f->options = $this->normalizeOptions($dto['type'], $dto['options'] ?? null, $c);
+        if (isset($dto['validationRules'])) {
+            $f->validationRules = $dto['validationRules'];
+        }
         $f->collection = $c;
         $f->order = $c->fields->count();
 
@@ -165,7 +170,10 @@ class SchemaProvisioner
     public function updateField(Field $f, array $dto): Field
     {
         if (isset($dto['name'])) {
-            $f->name = $dto['name'];
+            $f->name = NamingConvention::toCamelCase($dto['name']);
+        }
+        if (isset($dto['slug'])) {
+            $f->slug = NamingConvention::toSnakeCase($dto['slug']);
         }
         if (isset($dto['type'])) {
             if (!in_array($dto['type'], self::ALLOWED_TYPES, true)) {
@@ -173,8 +181,14 @@ class SchemaProvisioner
             }
             $f->type = $dto['type'];
         }
+        if (isset($dto['order'])) {
+            $f->order = (int) $dto['order'];
+        }
         if (array_key_exists('options', $dto)) {
-            $f->options = $this->normalizeOptions($f->type, $dto['options']);
+            $f->options = $this->normalizeOptions($f->type, $dto['options'], $f->collection);
+        }
+        if (array_key_exists('validationRules', $dto)) {
+            $f->validationRules = $dto['validationRules'];
         }
         if (isset($dto['is_required'])) {
             $f->isRequired = (bool) $dto['is_required'];
@@ -189,11 +203,17 @@ class SchemaProvisioner
         $this->em->flush();
     }
 
-    /** Normalise les options de champ (validation légère, format canonique). */
-    private function normalizeOptions(string $type, ?array $options): ?array
+    /**
+     * Normalise les options de champ. Pour `relation`, délègue au normalizer
+     * canonique (format de persistance). Valide `enumeration.choices`.
+     */
+    private function normalizeOptions(string $type, ?array $options, Collection $collection): ?array
     {
         if ($options === null) {
             return null;
+        }
+        if ($type === 'relation') {
+            return $this->relationNormalizer->normalize($options, $collection->project, forStorage: true);
         }
         if ($type === 'enumeration' && isset($options['choices']) && !is_array($options['choices'])) {
             throw new SchemaException('enumeration.choices must be an array', 422);
