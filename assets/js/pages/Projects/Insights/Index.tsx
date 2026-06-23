@@ -8,6 +8,7 @@ import { useTranslation } from '@/lib/i18n';
 import AppLayout from '@/layouts/app-layout';
 import ProjectSidebar from '@/pages/Projects/ProjectSidebar';
 import { FileText, HardDrive, Workflow, Users } from 'lucide-react';
+import { ContentAreaChart, ActivityBarChart, StatusDonut, RecentActivityList } from '@/pages/Projects/Insights/charts';
 
 interface InsightsData {
     range: string;
@@ -54,13 +55,18 @@ export default function Index({ project }: Props) {
     const [error, setError] = useState(false);
 
     useEffect(() => {
+        const controller = new AbortController();
         setLoading(true);
         setError(false);
         axios
-            .get(route('insights.project', project.id), { params: { range } })
+            .get(route('insights.project', project.id), { signal: controller.signal, params: { range } })
             .then((res) => setData(res.data.data))
-            .catch(() => setError(true))
+            .catch((err) => {
+                if (axios.isCancel?.(err) || err.name === 'CanceledError') return;
+                setError(true);
+            })
             .finally(() => setLoading(false));
+        return () => controller.abort();
     }, [project.id, range]);
 
     const breadcrumbs: BreadcrumbItem[] = [
@@ -81,6 +87,7 @@ export default function Index({ project }: Props) {
                         <select
                             value={range}
                             onChange={(e) => setRange(e.target.value)}
+                            aria-label={t('insights.title')}
                             className="h-9 rounded-lg border border-border bg-background px-3 text-sm"
                         >
                             <option value="7d">{t('insights.range_7d')}</option>
@@ -98,6 +105,15 @@ export default function Index({ project }: Props) {
                             <KpiCard icon={<HardDrive className="h-4 w-4" />} label={t('insights.kpi_storage')} value={formatBytes(data.media.total_size)} />
                             <KpiCard icon={<Workflow className="h-4 w-4" />} label={t('insights.kpi_flows')} value={String(data.flows.total)} />
                             <KpiCard icon={<Users className="h-4 w-4" />} label={t('insights.kpi_endusers')} value={String(data.endusers.total)} />
+                        </div>
+                    )}
+
+                    {data && !loading && (
+                        <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
+                            <ContentAreaChart data={data.content.timeseries} title={t('insights.chart_content')} />
+                            <StatusDonut byStatus={data.content.by_status} title={t('insights.chart_status')} />
+                            <ActivityBarChart data={data.activity.timeseries} title={t('insights.chart_activity')} />
+                            <RecentActivityList items={data.activity.recent} title={t('insights.recent_activity')} />
                         </div>
                     )}
                 </div>

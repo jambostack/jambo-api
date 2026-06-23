@@ -1644,5 +1644,10 @@ return [
     'insights.kpi_storage'  => 'Storage',
     'insights.kpi_flows'    => 'Flow runs',
     'insights.kpi_endusers' => 'End users',
+    'insights.chart_content'   => 'Content creation',
+    'insights.chart_status'    => 'Breakdown by status',
+    'insights.chart_activity'  => 'Activity per day',
+    'insights.recent_activity' => 'Recent activity',
+    'insights.activity_empty'  => 'No recent activity.',
 
 ];

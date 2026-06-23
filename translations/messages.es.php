@@ -1621,5 +1621,10 @@ return [
     'insights.kpi_storage'  => 'Almacenamiento',
     'insights.kpi_flows'    => 'Ejecuciones de flujos',
     'insights.kpi_endusers' => 'Usuarios finales',
+    'insights.chart_content'   => 'Creación de contenido',
+    'insights.chart_status'    => 'Distribución por estado',
+    'insights.chart_activity'  => 'Actividad por día',
+    'insights.recent_activity' => 'Actividad reciente',
+    'insights.activity_empty'  => 'Sin actividad reciente.',
 
 ];
