@@ -295,22 +295,37 @@ function SchemaChatPanel({
       })();
       if (data.error) throw new Error(data.error);
 
-      // Détecter si la réponse contient un plan d'agent (format JSON avec "plan" + "actions")
+      // Détecter si la réponse contient un plan d'agent (format JSON avec "plan" + "actions").
+      // Robuste : l'IA peut renvoyer le JSON entouré de ```json … ```, de ``` … ```,
+      // en brut (réponse entièrement JSON) ou intégré dans du texte. On essaie chaque cas.
       const rawContent = data.reply ?? '';
       let agentPlan: AgentPlan | undefined;
-      try {
-        const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[1]);
-          if (parsed.plan && Array.isArray(parsed.actions)) {
-            agentPlan = parsed;
+      const tryParsePlan = (raw: string | undefined): AgentPlan | undefined => {
+        if (!raw) return undefined;
+        try {
+          const parsed = JSON.parse(raw.trim());
+          if (parsed && typeof parsed === 'object' && parsed.plan && Array.isArray(parsed.actions)) {
+            return parsed as AgentPlan;
           }
-        }
-      } catch {}
+        } catch {}
+        return undefined;
+      };
+      const fenced = rawContent.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
+      const firstBrace = rawContent.indexOf('{');
+      const lastBrace = rawContent.lastIndexOf('}');
+      const embedded = firstBrace !== -1 && lastBrace > firstBrace
+        ? rawContent.slice(firstBrace, lastBrace + 1)
+        : undefined;
+      for (const candidate of [fenced, rawContent, embedded]) {
+        agentPlan = tryParsePlan(candidate);
+        if (agentPlan) break;
+      }
 
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: data.reply ?? t('studio.chat.default_reply'),
+        // Si un plan est détecté, on n'affiche pas le JSON brut dans la bulle :
+        // la PlanCard ci-dessous présente déjà le plan lisible + le bouton d'exécution.
+        content: agentPlan ? '' : (data.reply ?? t('studio.chat.default_reply')),
         schema: data.collections ?? undefined,
         entries: data.entries ?? undefined,
         agentPlan,
