@@ -1627,5 +1627,9 @@ return [
     'insights.chart_activity'  => 'النشاط اليومي',
     'insights.recent_activity' => 'النشاط الأخير',
     'insights.activity_empty'  => 'لا يوجد نشاط حديث.',
+    'insights.home_content'  => 'المحتويات (كل المشاريع)',
+    'insights.home_media'    => 'الوسائط (كل المشاريع)',
+    'insights.home_storage'  => 'إجمالي التخزين',
+    'insights.home_endusers' => 'المستخدمون النهائيون',
 
 ];

@@ -1627,5 +1627,9 @@ return [
     'insights.chart_activity'  => 'Actividad por día',
     'insights.recent_activity' => 'Actividad reciente',
     'insights.activity_empty'  => 'Sin actividad reciente.',
+    'insights.home_content'  => 'Contenidos (todos los proyectos)',
+    'insights.home_media'    => 'Medios (todos los proyectos)',
+    'insights.home_storage'  => 'Almacenamiento total',
+    'insights.home_endusers' => 'Usuarios finales',
 
 ];
