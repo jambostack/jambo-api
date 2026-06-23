@@ -1025,6 +1025,7 @@ return [
     'end_users.schema'              => 'Schéma',
     'end_users.schema_desc'         => 'Ajoutez des champs personnalisés à vos utilisateurs finaux. Les champs système (email, password, name, status) sont protégés.',
     'end_users.view_users'          => 'Voir les utilisateurs',
+    'insights.nav'                  => 'Insights',
     'fields.system'                 => 'Système',
     'fields.card_title'             => 'Champs',
     'fields.card_desc'              => 'Ajoutez, modifiez et réorganisez les champs pour structurer les données de votre collection.',

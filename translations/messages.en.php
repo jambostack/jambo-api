@@ -1026,6 +1026,7 @@ return [
     'end_users.schema'             => 'Schema',
     'end_users.schema_desc'        => 'Add custom fields to your end users. System fields (email, password, name, status) are protected.',
     'end_users.view_users'         => 'View users',
+    'insights.nav'                 => 'Insights',
     'fields.system'                => 'System',
     'fields.card_title'            => 'Fields',
     'fields.card_desc'             => 'Add, edit, and reorder fields to structure your collection\'s data.',
