@@ -219,7 +219,7 @@ export default function ContentTrash({ collection, project }: Props) {
                 ),
             },
             {
-                header: t('content.by'),
+                header: t('content.col_by'),
                 accessorKey: "deleted_by",
                 cell: (item: ContentEntry) => (
                     <span className="text-sm text-muted-foreground">
