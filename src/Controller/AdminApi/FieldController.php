@@ -40,6 +40,26 @@ class FieldController extends AbstractController
         return [$c, null];
     }
 
+    #[Route('', name: 'index', methods: ['GET'])]
+    public function index(string $uuid, string $slug): JsonResponse
+    {
+        [$c, $err] = $this->resolveCollection($uuid, $slug);
+        if ($err) {
+            return $err;
+        }
+        return $this->json(['data' => array_map(
+            fn (\App\Entity\Field $f) => [
+                'name'       => $f->name,
+                'slug'       => $f->slug,
+                'type'       => $f->type,
+                'isRequired' => $f->isRequired,
+                'order'      => $f->order,
+                'options'    => $f->options,
+            ],
+            $this->fields->findByCollection($c),
+        )]);
+    }
+
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(string $uuid, string $slug, Request $request): JsonResponse
     {
