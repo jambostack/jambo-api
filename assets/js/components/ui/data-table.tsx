@@ -713,7 +713,7 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
                 </div>
                 
                 {actions.length > 0 && (
-                    <div className="flex gap-2 w-full sm:w-auto justify-end">
+                    <div className="flex flex-wrap gap-2 w-full sm:w-auto min-w-0 justify-end">
                         {actions
                             .filter(action => action.show !== false)
                             .map((action, index) => (
