@@ -2,8 +2,11 @@
 
 namespace App\Controller\AdminApi;
 
+use App\Entity\Collection;
+use App\Entity\Field;
 use App\Exception\SchemaException;
 use App\Repository\CollectionRepository;
+use App\Repository\FieldRepository;
 use App\Repository\ProjectRepository;
 use App\Security\ProjectVoter;
 use App\Service\SchemaProvisioner;
@@ -20,8 +23,38 @@ class CollectionController extends AbstractController
     public function __construct(
         private ProjectRepository $projects,
         private CollectionRepository $collections,
+        private FieldRepository $fields,
         private SchemaProvisioner $provisioner,
     ) {}
+
+    #[Route('', name: 'index', methods: ['GET'])]
+    public function index(string $uuid): JsonResponse
+    {
+        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+        $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
+        return $this->json(['data' => array_map(
+            fn (Collection $c) => $this->serialize($c),
+            $this->collections->findByProject($project),
+        )]);
+    }
+
+    #[Route('/{slug}', name: 'show', methods: ['GET'])]
+    public function show(string $uuid, string $slug): JsonResponse
+    {
+        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+        $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
+        $c = $this->collections->findOneByProjectAndSlug($project, $slug);
+        if (!$c) {
+            return $this->json(['error' => 'Collection not found'], 404);
+        }
+        return $this->json(['data' => $this->serialize($c, withFields: true)]);
+    }
 
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(string $uuid, Request $request): JsonResponse
@@ -72,5 +105,30 @@ class CollectionController extends AbstractController
         }
         $this->provisioner->deleteCollection($c);
         return new JsonResponse(null, 204);
+    }
+
+    private function serialize(Collection $c, bool $withFields = false): array
+    {
+        $data = [
+            'name'        => $c->name,
+            'slug'        => $c->slug,
+            'description' => $c->description,
+            'isSingleton' => $c->isSingleton,
+            'order'       => $c->order,
+        ];
+        if ($withFields) {
+            $data['fields'] = array_map(
+                fn (Field $f) => [
+                    'name'       => $f->name,
+                    'slug'       => $f->slug,
+                    'type'       => $f->type,
+                    'isRequired' => $f->isRequired,
+                    'order'      => $f->order,
+                    'options'    => $f->options,
+                ],
+                $this->fields->findByCollection($c),
+            );
+        }
+        return $data;
     }
 }

@@ -62,6 +62,63 @@ class SchemaCrudTest extends WebTestCase
         self::assertSame('titre', $body['data']['slug']);
     }
 
+    /** Ajoute un second PAT (scopes donnés) au même user/projet qu'un setup existant. */
+    private function addPatForUser(User $user, array $scopes): string
+    {
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $plain = 'jbo_pat_' . ApiToken::generatePlainToken();
+        $pat = new PersonalAccessToken();
+        $pat->name = 'extra';
+        $pat->user = $user;
+        $pat->scopes = $scopes;
+        $pat->tokenHash = ApiToken::hashToken($plain, self::getContainer()->getParameter('kernel.secret'));
+        $pat->tokenVersion = 2;
+        $em->persist($pat);
+        $em->flush();
+
+        return $plain;
+    }
+
+    public function testReadSchemaWithGet(): void
+    {
+        $client = static::createClient();
+        [$writePlain, $uuid] = $this->setupMemberPat(['schema:write']);
+        $wh = ['HTTP_AUTHORIZATION' => 'Bearer ' . $writePlain, 'CONTENT_TYPE' => 'application/json'];
+
+        // Crée le schéma (écriture)
+        $client->request('POST', "/admin-api/projects/$uuid/collections", server: $wh, content: json_encode(['name' => 'Articles']));
+        self::assertSame(201, $client->getResponse()->getStatusCode());
+        $client->request('POST', "/admin-api/projects/$uuid/collections/articles/fields", server: $wh, content: json_encode(['name' => 'Titre', 'type' => 'text']));
+        self::assertSame(201, $client->getResponse()->getStatusCode());
+
+        // Jeton SANS scope appartenant au même membre : la lecture (GET) doit marcher.
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $member = $em->getRepository(ProjectMember::class)->findOneBy([
+            'project' => $em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]),
+        ]);
+        $readPlain = $this->addPatForUser($member->user, []);
+        $rh = ['HTTP_AUTHORIZATION' => 'Bearer ' . $readPlain];
+
+        // GET liste des collections
+        $client->request('GET', "/admin-api/projects/$uuid/collections", server: $rh);
+        self::assertSame(200, $client->getResponse()->getStatusCode());
+        self::assertSame('articles', json_decode($client->getResponse()->getContent(), true)['data'][0]['slug']);
+
+        // GET collection unique avec ses champs
+        $client->request('GET', "/admin-api/projects/$uuid/collections/articles", server: $rh);
+        self::assertSame(200, $client->getResponse()->getStatusCode());
+        self::assertSame('titre', json_decode($client->getResponse()->getContent(), true)['data']['fields'][0]['slug']);
+
+        // GET liste des champs
+        $client->request('GET', "/admin-api/projects/$uuid/collections/articles/fields", server: $rh);
+        self::assertSame(200, $client->getResponse()->getStatusCode());
+        self::assertSame('text', json_decode($client->getResponse()->getContent(), true)['data'][0]['type']);
+
+        // GET collection inexistante → 404
+        $client->request('GET', "/admin-api/projects/$uuid/collections/nope", server: $rh);
+        self::assertSame(404, $client->getResponse()->getStatusCode());
+    }
+
     public function testNonMemberGets403(): void
     {
         $client = static::createClient();
