@@ -9,7 +9,6 @@ use Symfony\Component\Uid\Uuid;
 #[ORM\Entity(repositoryClass: ShareRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\Table(name: 'share')]
-#[ORM\Index(columns: ['token_hash'])]
 class Share
 {
     #[ORM\Id]
