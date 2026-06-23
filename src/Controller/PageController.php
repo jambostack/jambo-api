@@ -98,6 +98,21 @@ class PageController extends InertiaController
         ]);
     }
 
+    #[Route('/projects/{project}/insights', name: 'projects_insights', requirements: ['project' => '\d+'], priority: 10)]
+    public function insights(int $project, Request $request): Response
+    {
+        $project = $this->projectRepository->find($project);
+        if (!$project) {
+            throw $this->createNotFoundException();
+        }
+        $this->denyProjectAccess($project);
+
+        return $this->inertia($request, 'Projects/Insights/Index', [
+            'project' => $this->serializeProject($project, true),
+            'userCan' => $this->buildUserCan($project),
+        ]);
+    }
+
     // -------------------------------------------------------------------------
     // Collection / Content pages
     // -------------------------------------------------------------------------

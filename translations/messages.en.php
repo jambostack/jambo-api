@@ -1633,4 +1633,16 @@ return [
     'flow.breadcrumb'                       => 'Automations',
     'flow.breadcrumb_settings'              => 'Settings',
 
+    // Insights
+    'insights.title'        => 'Insights',
+    'insights.loading'      => 'Loading…',
+    'insights.error'        => 'Unable to load insights.',
+    'insights.range_7d'     => '7 days',
+    'insights.range_30d'    => '30 days',
+    'insights.range_90d'    => '90 days',
+    'insights.kpi_content'  => 'Content',
+    'insights.kpi_storage'  => 'Storage',
+    'insights.kpi_flows'    => 'Flow runs',
+    'insights.kpi_endusers' => 'End users',
+
 ];

@@ -1610,4 +1610,16 @@ return [
     'flow.breadcrumb'                       => 'Automatizaciones',
     'flow.breadcrumb_settings'              => 'Configuración',
 
+    // Insights
+    'insights.title'        => 'Insights',
+    'insights.loading'      => 'Cargando…',
+    'insights.error'        => 'No se pudieron cargar los insights.',
+    'insights.range_7d'     => '7 días',
+    'insights.range_30d'    => '30 días',
+    'insights.range_90d'    => '90 días',
+    'insights.kpi_content'  => 'Contenidos',
+    'insights.kpi_storage'  => 'Almacenamiento',
+    'insights.kpi_flows'    => 'Ejecuciones de flujos',
+    'insights.kpi_endusers' => 'Usuarios finales',
+
 ];
