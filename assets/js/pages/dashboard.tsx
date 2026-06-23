@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { Head, router, usePage } from '@inertiajs/react';
 
 import { type BreadcrumbItem, type Project, type UserCan } from '@/types/index.d';
@@ -6,7 +7,7 @@ import { useTranslation } from '@/lib/i18n';
 
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Folder, Plus, Upload } from 'lucide-react';
+import { ArrowRight, FileText, Folder, HardDrive, Plus, Upload, Users } from 'lucide-react';
 import { SearchBar } from '@/components/ui/search-bar';
 
 import CreateProjectModal from '@/pages/Projects/CreateProjectModal';
@@ -43,6 +44,20 @@ export default function Dashboard({ projects }: Props) {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+
+    const [summary, setSummary] = useState<null | { projects: number; content_total: number; media_total: number; storage_bytes: number; endusers_total: number }>(null);
+
+    useEffect(() => {
+        axios.get(route('insights.summary')).then((res) => setSummary(res.data.data)).catch(() => {});
+    }, []);
+
+    const formatBytes = (bytes: number): string => {
+        if (bytes < 1024) return `${bytes} B`;
+        const units = ['KB', 'MB', 'GB', 'TB'];
+        let v = bytes / 1024, i = 0;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return `${v.toFixed(1)} ${units[i]}`;
+    };
 
     const breadcrumbs: BreadcrumbItem[] = [
         {
@@ -92,6 +107,28 @@ export default function Dashboard({ projects }: Props) {
                         </div>
                     )}
                 </div>
+
+                {/* Stats band */}
+                {summary && summary.projects > 0 && (
+                    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+                        <div className="rounded-2xl border border-border bg-card p-4">
+                            <p className="text-xs text-muted-foreground">{t('insights.home_content')}</p>
+                            <p className="mt-1 text-xl font-bold">{summary.content_total}</p>
+                        </div>
+                        <div className="rounded-2xl border border-border bg-card p-4">
+                            <p className="text-xs text-muted-foreground">{t('insights.home_media')}</p>
+                            <p className="mt-1 text-xl font-bold">{summary.media_total}</p>
+                        </div>
+                        <div className="rounded-2xl border border-border bg-card p-4">
+                            <p className="text-xs text-muted-foreground">{t('insights.home_storage')}</p>
+                            <p className="mt-1 text-xl font-bold">{formatBytes(summary.storage_bytes)}</p>
+                        </div>
+                        <div className="rounded-2xl border border-border bg-card p-4">
+                            <p className="text-xs text-muted-foreground">{t('insights.home_endusers')}</p>
+                            <p className="mt-1 text-xl font-bold">{summary.endusers_total}</p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Search */}
                 <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder={t('dashboard.search')} />
