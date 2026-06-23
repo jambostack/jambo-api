@@ -44,7 +44,10 @@ class SocialLoginService
         $providers = $settings->oauthProviders ?? [];
         $config = $providers[$provider] ?? null;
 
-        if (!$config || empty($config['clientId']) || empty($config['clientSecret'])) {
+        // Le provider doit être explicitement activé (toggle UI), pas seulement renseigné :
+        // sinon le bouton resterait visible après désactivation alors que des identifiants
+        // ont été saisis une fois.
+        if (!$config || empty($config['enabled']) || empty($config['clientId']) || empty($config['clientSecret'])) {
             return null;
         }
 
@@ -69,7 +72,8 @@ class SocialLoginService
         $providers = $security['endUserSocialProviders'] ?? [];
         $config = $providers[$provider] ?? null;
 
-        if (!$config || empty($config['clientId']) || empty($config['clientSecret'])) {
+        // Idem admin : le provider doit être explicitement activé pour le projet.
+        if (!$config || empty($config['enabled']) || empty($config['clientId']) || empty($config['clientSecret'])) {
             return null;
         }
 
