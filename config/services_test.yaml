@@ -1,8 +1,0 @@
-# Services exposés publiquement pour les tests d'intégration (KernelTestCase)
-services:
-    _defaults:
-        autowire: true
-        autoconfigure: true
-
-    App\Service\Insights\InsightsService:
-        public: true

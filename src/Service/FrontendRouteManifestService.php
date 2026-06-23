@@ -141,6 +141,10 @@ class FrontendRouteManifestService
 
         // UI locale switcher
         'settings_locale_update'                => 'settings_locale_update',
+
+        // Insights
+        'insights.project'                      => 'insights_project',
+        'insights.summary'                      => 'insights_summary',
     ];
 
     /**
