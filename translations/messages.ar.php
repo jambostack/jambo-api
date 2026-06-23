@@ -1632,4 +1632,19 @@ return [
     'insights.home_storage'  => 'إجمالي التخزين',
     'insights.home_endusers' => 'المستخدمون النهائيون',
 
+    // Shares (المشاركة العامة)
+    'shares.button'      => 'مشاركة',
+    'shares.title'       => 'مشاركة هذا المُدخل',
+    'shares.duration'    => 'المدة',
+    'shares.create'      => 'إنشاء الرابط',
+    'shares.copy_now'    => 'انسخ هذا الرابط الآن — لن يُعرض مرة أخرى.',
+    'shares.empty'       => 'لا توجد روابط مشاركة نشطة.',
+    'shares.dur_1h'      => 'ساعة واحدة',
+    'shares.dur_24h'     => '24 ساعة',
+    'shares.dur_7d'      => '7 أيام',
+    'shares.dur_30d'     => '30 يومًا',
+    'shares.dur_never'   => 'أبدًا',
+    'shares.expires_on'  => 'ينتهي في {date}',
+    'shares.views'       => '{count} مشاهدات',
+
 ];

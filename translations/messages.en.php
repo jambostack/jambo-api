@@ -1655,4 +1655,19 @@ return [
     'insights.home_storage'  => 'Total storage',
     'insights.home_endusers' => 'End users',
 
+    // Shares (public sharing)
+    'shares.button'      => 'Share',
+    'shares.title'       => 'Share this entry',
+    'shares.duration'    => 'Duration',
+    'shares.create'      => 'Create link',
+    'shares.copy_now'    => 'Copy this link now — it won\'t be shown again.',
+    'shares.empty'       => 'No active share links.',
+    'shares.dur_1h'      => '1 hour',
+    'shares.dur_24h'     => '24 hours',
+    'shares.dur_7d'      => '7 days',
+    'shares.dur_30d'     => '30 days',
+    'shares.dur_never'   => 'Never',
+    'shares.expires_on'  => 'Expires on {date}',
+    'shares.views'       => '{count} views',
+
 ];
