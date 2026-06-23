@@ -7,7 +7,7 @@ import { useTranslation } from '@/lib/i18n';
 
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, FileText, Folder, HardDrive, Plus, Upload, Users } from 'lucide-react';
+import { ArrowRight, Folder, Plus, Upload } from 'lucide-react';
 import { SearchBar } from '@/components/ui/search-bar';
 
 import CreateProjectModal from '@/pages/Projects/CreateProjectModal';
