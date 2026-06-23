@@ -13,7 +13,40 @@ class InsightsService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly CacheInterface $cache,
+        private readonly \App\Repository\ProjectRepository $projectRepository,
     ) {}
+
+    public function summaryForUser(\App\Entity\User $user): array
+    {
+        $projects = $this->projectRepository->findByMember($user);
+        if ($projects === []) {
+            return ['projects' => 0, 'content_total' => 0, 'media_total' => 0, 'storage_bytes' => 0, 'endusers_total' => 0];
+        }
+
+        $ids = array_map(static fn ($p) => $p->id, $projects);
+        $em = $this->em;
+
+        $contentTotal = (int) $em->createQuery(
+            'SELECT COUNT(c.id) FROM App\Entity\ContentEntry c WHERE c.project IN (:ids) AND c.deletedAt IS NULL'
+        )->setParameter('ids', $ids)->getSingleScalarResult();
+
+        $mediaRow = $em->createQuery(
+            'SELECT COUNT(m.id) AS cnt, COALESCE(SUM(m.fileSize), 0) AS bytes
+             FROM App\Entity\Media m WHERE m.project IN (:ids) AND m.deletedAt IS NULL'
+        )->setParameter('ids', $ids)->getSingleResult();
+
+        $endUsersTotal = (int) $em->createQuery(
+            'SELECT COUNT(e.id) FROM App\Entity\EndUser e WHERE e.project IN (:ids)'
+        )->setParameter('ids', $ids)->getSingleScalarResult();
+
+        return [
+            'projects'        => count($projects),
+            'content_total'   => $contentTotal,
+            'media_total'     => (int) $mediaRow['cnt'],
+            'storage_bytes'   => (int) $mediaRow['bytes'],
+            'endusers_total'  => $endUsersTotal,
+        ];
+    }
 
     public function forProject(Project $project, InsightsRange $range): array
     {
