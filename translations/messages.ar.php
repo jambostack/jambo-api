@@ -1610,4 +1610,16 @@ return [
     'flow.breadcrumb'                       => 'الأتمتة',
     'flow.breadcrumb_settings'              => 'الإعدادات',
 
+    // Insights
+    'insights.title'        => 'الإحصاءات',
+    'insights.loading'      => 'جارٍ التحميل…',
+    'insights.error'        => 'تعذّر تحميل الإحصاءات.',
+    'insights.range_7d'     => '7 أيام',
+    'insights.range_30d'    => '30 يومًا',
+    'insights.range_90d'    => '90 يومًا',
+    'insights.kpi_content'  => 'المحتويات',
+    'insights.kpi_storage'  => 'التخزين',
+    'insights.kpi_flows'    => 'تشغيلات التدفقات',
+    'insights.kpi_endusers' => 'المستخدمون النهائيون',
+
 ];

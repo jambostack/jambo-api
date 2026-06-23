@@ -72,6 +72,7 @@ class FrontendRouteManifestService
         'automations.runs'                      => 'api_automation_runs',
 
         // Project pages
+        'projects.insights'                     => 'projects_insights',
         'projects.workbench'                    => 'workbench_page',
 
         // Project settings — pages

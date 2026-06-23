@@ -1658,4 +1658,16 @@ return [
     'flow.breadcrumb'                       => 'Automatisations',
     'flow.breadcrumb_settings'              => 'Paramètres',
 
+    // Insights
+    'insights.title'        => 'Insights',
+    'insights.loading'      => 'Chargement…',
+    'insights.error'        => 'Impossible de charger les insights.',
+    'insights.range_7d'     => '7 jours',
+    'insights.range_30d'    => '30 jours',
+    'insights.range_90d'    => '90 jours',
+    'insights.kpi_content'  => 'Contenus',
+    'insights.kpi_storage'  => 'Stockage',
+    'insights.kpi_flows'    => 'Exécutions de flows',
+    'insights.kpi_endusers' => 'Utilisateurs finaux',
+
 ];
