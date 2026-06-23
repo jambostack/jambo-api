@@ -89,8 +89,17 @@ export default function StudioLayout({ project, collections: initialCollections 
 
           display: flex;
           flex-direction: column;
-          flex: 1;
           min-height: 0;
+          /* Page Studio standalone (pas de wrapper AppLayout) : #app n'a qu'un
+             min-height et grandit avec son contenu. Un simple height:100dvh ne
+             suffit pas car flex-grow étirerait quand même l'élément ; on retire
+             donc flex-grow et on borne DUREMENT à la hauteur du viewport
+             (max-height) pour que les zones internes (chat, éditeur) scrollent
+             au lieu d'allonger la page. */
+          flex: 0 0 auto;
+          height: 100dvh;
+          max-height: 100dvh;
+          overflow: hidden;
         }
         .studio-root .font-serif { font-family: var(--studio-serif); }
         .studio-root .font-mono { font-family: var(--studio-mono); }
@@ -317,13 +326,16 @@ export default function StudioLayout({ project, collections: initialCollections 
         </nav>
 
         {/* ── CONTENT ── */}
-        <div style={{ minWidth: 0 }}>
+        {/* Flex colonne + min-height:0 : propage la hauteur bornée du grid aux
+            panneaux (SchemaBuilder en height:100%, autres panneaux en flex:1),
+            pour que leur scroll interne fonctionne au lieu d'allonger la page. */}
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           {active === 'schema' && <SchemaBuilder project={project} />}
-          {active === 'export' && <CodeExporter project={project} collections={collections} />}
-          {active === 'search' && <SearchPage project={project} collections={collections} />}
-          {active === 'audit'  && <AuditLogsPage project={project} />}
-          {active === 'graphql' && <GraphQLExplorer projectUuid={project.uuid} />}
-          {active === 'aiguide' && <AiGuide project={project} collections={collections} />}
+          {active === 'export' && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><CodeExporter project={project} collections={collections} /></div>}
+          {active === 'search' && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><SearchPage project={project} collections={collections} /></div>}
+          {active === 'audit'  && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><AuditLogsPage project={project} /></div>}
+          {active === 'graphql' && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><GraphQLExplorer projectUuid={project.uuid} /></div>}
+          {active === 'aiguide' && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><AiGuide project={project} collections={collections} /></div>}
         </div>
       </div>
     </div>
