@@ -146,6 +146,11 @@ class FrontendRouteManifestService
         // Insights
         'insights.project'                      => 'insights_project',
         'insights.summary'                      => 'insights_summary',
+
+        // Shares
+        'shares.store'                          => 'api_shares_store',
+        'shares.index'                          => 'api_shares_index',
+        'shares.destroy'                        => 'api_shares_destroy',
     ];
 
     /**
