@@ -66,4 +66,5 @@ security:
         - { path: ^/admin-api, roles: ROLE_USER }
         - { path: ^/api, roles: PUBLIC_ACCESS }
         - { path: ^/cdn, roles: PUBLIC_ACCESS }
+        - { path: ^/share, roles: PUBLIC_ACCESS }
         - { path: ^/, roles: ROLE_USER }
