@@ -23,6 +23,31 @@ class SocialLoginServiceTest extends TestCase
         $settings = new AppSettings();
         $settings->oauthProviders = [
             'google' => [
+                'enabled'      => true,
+                'clientId'     => 'test-google-client-id',
+                'clientSecret' => 'test-google-client-secret',
+            ],
+        ];
+        $appSettingsRepo->method('getOrCreate')->willReturn($settings);
+
+        $secretService = $this->createMock(WebhookSecretService::class);
+        $secretService->method('decrypt')->willReturnArgument(0);
+
+        return new SocialLoginService($em, $userRepo, $endUserRepo, $appSettingsRepo, $secretService);
+    }
+
+    /** Identifiants présents mais provider désactivé (toggle UI off). */
+    private function createServiceWithDisabledGoogleConfig(): SocialLoginService
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $userRepo = $this->createMock(UserRepository::class);
+        $endUserRepo = $this->createMock(EndUserRepository::class);
+
+        $appSettingsRepo = $this->createMock(AppSettingsRepository::class);
+        $settings = new AppSettings();
+        $settings->oauthProviders = [
+            'google' => [
+                'enabled'      => false,
                 'clientId'     => 'test-google-client-id',
                 'clientSecret' => 'test-google-client-secret',
             ],
@@ -90,6 +115,23 @@ class SocialLoginServiceTest extends TestCase
 
         $this->assertIsArray($providers, 'getAvailableProviders doit retourner un tableau');
         $this->assertContains('google', $providers, 'google doit apparaitre dans la liste des providers disponibles');
+    }
+
+    public function testDisabledProviderIsNotReturned(): void
+    {
+        // Régression #1 : des identifiants saisis mais le provider désactivé
+        // ne doit PAS rendre le bouton de connexion disponible.
+        $service = $this->createServiceWithDisabledGoogleConfig();
+
+        $this->assertNull(
+            $service->getProviderForAdmin('google'),
+            'Un provider désactivé ne doit pas être retourné même avec des identifiants',
+        );
+        $this->assertNotContains(
+            'google',
+            $service->getAvailableProviders(),
+            'Un provider désactivé ne doit pas apparaître dans la liste',
+        );
     }
 
     public function testGetAvailableProvidersEmptyWithNoConfig(): void
