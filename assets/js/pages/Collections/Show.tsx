@@ -1,7 +1,7 @@
 import { Head, usePage } from '@inertiajs/react';
 import React, { useState } from 'react';
 
-import { Collection, Project, BreadcrumbItem, SharedData, Field } from '@/types/index.d';
+import { Collection, Project, BreadcrumbItem, SharedData, Field, UserCan } from '@/types/index.d';
 import { useTranslation } from '@/lib/i18n';
 
 import AppLayout from '@/layouts/app-layout';
@@ -11,6 +11,7 @@ import ProjectSidebar from '@/pages/Projects/ProjectSidebar';
 import ContentList from '@/pages/Content/ContentList';
 import ContentForm from '@/pages/Content/ContentForm';
 import LivePreviewPanel from '@/components/LivePreviewPanel';
+import ShareDialog from '@/pages/Content/ShareDialog';
 import ProjectsLayout from '../Projects/layout';
 
 interface Props {
@@ -37,6 +38,7 @@ export default function Show({ project, collection, contentEntry, formData, isEd
     ];
 
     const page = usePage<SharedData>();
+    const can = page.props.userCan as UserCan;
     const isContentCreatePage = page.url.includes('content/create');
     const isContentEditPage = page.url.includes('content') && page.url.includes('edit');
     const showContentForm = isContentCreatePage || isContentEditPage || isEditMode;
@@ -83,6 +85,11 @@ export default function Show({ project, collection, contentEntry, formData, isEd
                             highlightedField={highlightedField}
                             patchField={patchField}
                         />
+                    )}
+
+                    {/* Share button */}
+                    {isEditMode && contentEntry?.uuid && can.update_content && (
+                        <ShareDialog projectUuid={project.uuid!} entryUuid={contentEntry.uuid} />
                     )}
 
                     {/* Live Preview Panel */}

@@ -1632,4 +1632,19 @@ return [
     'insights.home_storage'  => 'Almacenamiento total',
     'insights.home_endusers' => 'Usuarios finales',
 
+    // Shares (uso compartido público)
+    'shares.button'      => 'Compartir',
+    'shares.title'       => 'Compartir esta entrada',
+    'shares.duration'    => 'Duración',
+    'shares.create'      => 'Crear enlace',
+    'shares.copy_now'    => 'Copia este enlace ahora — no se volverá a mostrar.',
+    'shares.empty'       => 'No hay enlaces de uso compartido activos.',
+    'shares.dur_1h'      => '1 hora',
+    'shares.dur_24h'     => '24 horas',
+    'shares.dur_7d'      => '7 días',
+    'shares.dur_30d'     => '30 días',
+    'shares.dur_never'   => 'Nunca',
+    'shares.expires_on'  => 'Caduca el {date}',
+    'shares.views'       => '{count} vistas',
+
 ];
