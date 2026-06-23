@@ -835,6 +835,12 @@ class PageController extends InertiaController
         ]);
     }
 
+    #[Route('/settings/personal-access-tokens', name: 'settings_personal_access_tokens', priority: 10)]
+    public function settingsPersonalAccessTokens(Request $request): Response
+    {
+        return $this->inertia($request, 'settings/personal-access-tokens', []);
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
