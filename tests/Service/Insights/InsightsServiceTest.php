@@ -1,0 +1,94 @@
+<?php
+
+namespace App\Tests\Service\Insights;
+
+use App\Entity\Collection;
+use App\Entity\ContentEntry;
+use App\Entity\Media;
+use App\Entity\Project;
+use App\Enum\InsightsRange;
+use App\Service\Insights\InsightsService;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+class InsightsServiceTest extends KernelTestCase
+{
+    private EntityManagerInterface $em;
+    private InsightsService $service;
+
+    protected function setUp(): void
+    {
+        self::bootKernel();
+        $this->em = self::getContainer()->get(EntityManagerInterface::class);
+        $this->service = self::getContainer()->get(InsightsService::class);
+    }
+
+    private function makeProject(): Project
+    {
+        $project = new Project();
+        $project->name = 'Insights ' . bin2hex(random_bytes(4));
+        $this->em->persist($project);
+        return $project;
+    }
+
+    private function makeCollection(Project $project, string $name): Collection
+    {
+        $c = new Collection();
+        $c->name = $name;
+        $c->slug = strtolower($name);
+        $c->project = $project;
+        $this->em->persist($c);
+        return $c;
+    }
+
+    private function makeEntry(Project $p, Collection $c, string $status): ContentEntry
+    {
+        $e = new ContentEntry();
+        $e->project = $p;
+        $e->collection = $c;
+        $e->status = $status;
+        $this->em->persist($e);
+        return $e;
+    }
+
+    public function testContentMetrics(): void
+    {
+        $p = $this->makeProject();
+        $c = $this->makeCollection($p, 'Articles');
+        $this->makeEntry($p, $c, 'draft');
+        $this->makeEntry($p, $c, 'published');
+        $this->makeEntry($p, $c, 'published');
+        $this->em->flush();
+
+        $data = $this->service->forProject($p, InsightsRange::D30);
+
+        self::assertSame('30d', $data['range']);
+        self::assertSame(3, $data['content']['total']);
+        self::assertSame(2, $data['content']['by_status']['published']);
+        self::assertSame(1, $data['content']['by_status']['draft']);
+        self::assertSame('Articles', $data['content']['top_collections'][0]['name']);
+        self::assertSame(3, $data['content']['top_collections'][0]['count']);
+    }
+
+    public function testMediaMetrics(): void
+    {
+        $p = $this->makeProject();
+        foreach ([['image/png', 100], ['video/mp4', 200], ['application/pdf', 50]] as [$mime, $size]) {
+            $m = new Media();
+            $m->project = $p;
+            $m->mimeType = $mime;
+            $m->fileSize = $size;
+            $m->fileName = 'f' . bin2hex(random_bytes(3));
+            $this->em->persist($m);
+        }
+        $this->em->flush();
+
+        $data = $this->service->forProject($p, InsightsRange::D30);
+
+        self::assertSame(3, $data['media']['total']);
+        self::assertSame(350, $data['media']['total_size']);
+        self::assertSame(1, $data['media']['by_type']['image']);
+        self::assertSame(1, $data['media']['by_type']['video']);
+        self::assertSame(1, $data['media']['by_type']['document']);
+    }
+}
