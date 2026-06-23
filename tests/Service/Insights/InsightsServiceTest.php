@@ -101,4 +101,33 @@ class InsightsServiceTest extends KernelTestCase
         self::assertSame(1, $data['media']['by_type']['video']);
         self::assertSame(1, $data['media']['by_type']['document']);
     }
+
+    public function testActivityAndEndUserMetrics(): void
+    {
+        $p = $this->makeProject();
+
+        foreach (['success', 'success', 'error'] as $status) {
+            $log = new \App\Entity\AuditLog();
+            $log->project = $p;
+            $log->toolName = 'create_collection';
+            $log->status = $status;
+            $log->source = 'mcp';
+            $this->em->persist($log);
+        }
+
+        $eu = new \App\Entity\EndUser($p, 'u' . bin2hex(random_bytes(3)) . '@e.com');
+        $eu->status = 'active';
+        $this->em->persist($eu);
+        $this->em->flush();
+
+        $data = $this->service->forProject($p, \App\Enum\InsightsRange::D30);
+
+        self::assertCount(3, $data['activity']['recent']);
+        self::assertEqualsWithDelta(2 / 3, $data['activity']['success_rate'], 0.001);
+        self::assertSame(1, $data['endusers']['total']);
+        self::assertSame(1, $data['endusers']['by_status']['active']);
+        // flows: aucun run → structure vide cohérente
+        self::assertSame(0, $data['flows']['total']);
+        self::assertNull($data['flows']['avg_duration_ms']);
+    }
 }

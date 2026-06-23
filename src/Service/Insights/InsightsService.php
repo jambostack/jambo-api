@@ -26,9 +26,9 @@ class InsightsService
                 'range'    => $range->value,
                 'content'  => $this->contentMetrics($project, $range),
                 'media'    => $this->mediaMetrics($project),
-                'activity' => ['recent' => [], 'success_rate' => null, 'timeseries' => []],
-                'flows'    => ['total' => 0, 'by_status' => [], 'avg_duration_ms' => null, 'timeseries' => []],
-                'endusers' => ['total' => 0, 'by_status' => [], 'timeseries' => []],
+                'activity' => $this->activityMetrics($project, $range),
+                'flows'    => $this->flowMetrics($project, $range),
+                'endusers' => $this->endUserMetrics($project, $range),
             ];
         });
     }
@@ -116,6 +116,114 @@ class InsightsService
             return 'document';
         }
         return 'other';
+    }
+
+    private function activityMetrics(Project $project, InsightsRange $range): array
+    {
+        $em = $this->em;
+
+        $recentRows = $em->createQuery(
+            'SELECT a.toolName AS tool, a.status AS status, a.source AS source,
+                    a.createdBy AS createdBy, a.createdAt AS createdAt
+             FROM App\Entity\AuditLog a WHERE a.project = :p ORDER BY a.createdAt DESC'
+        )->setParameter('p', $project)->setMaxResults(10)->getResult();
+
+        $recent = array_map(static fn ($r) => [
+            'tool'   => $r['tool'],
+            'status' => $r['status'],
+            'source' => $r['source'],
+            'by'     => $r['createdBy'],
+            'at'     => $r['createdAt']->format('c'),
+        ], $recentRows);
+
+        $statusRows = $em->createQuery(
+            'SELECT a.status AS status, COUNT(a.id) AS cnt FROM App\Entity\AuditLog a
+             WHERE a.project = :p AND a.createdAt >= :since GROUP BY a.status'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getResult();
+
+        $totalInRange = 0;
+        $successInRange = 0;
+        foreach ($statusRows as $r) {
+            $totalInRange += (int) $r['cnt'];
+            if ($r['status'] === 'success') {
+                $successInRange += (int) $r['cnt'];
+            }
+        }
+        $successRate = $totalInRange > 0 ? $successInRange / $totalInRange : null;
+
+        $dates = $em->createQuery(
+            'SELECT a.createdAt AS createdAt FROM App\Entity\AuditLog a
+             WHERE a.project = :p AND a.createdAt >= :since'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getResult();
+
+        return [
+            'recent'       => $recent,
+            'success_rate' => $successRate,
+            'timeseries'   => $this->bucketByDay(array_column($dates, 'createdAt')),
+        ];
+    }
+
+    private function flowMetrics(Project $project, InsightsRange $range): array
+    {
+        $em = $this->em;
+
+        $statusRows = $em->createQuery(
+            'SELECT r.status AS status, COUNT(r.id) AS cnt FROM App\Entity\AutomationRun r
+             JOIN r.automation a WHERE a.project = :p AND r.startedAt >= :since GROUP BY r.status'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getResult();
+
+        $byStatus = [];
+        $total = 0;
+        foreach ($statusRows as $r) {
+            $byStatus[$r['status']] = (int) $r['cnt'];
+            $total += (int) $r['cnt'];
+        }
+
+        $avg = $em->createQuery(
+            'SELECT AVG(r.durationMs) FROM App\Entity\AutomationRun r
+             JOIN r.automation a WHERE a.project = :p AND r.startedAt >= :since AND r.durationMs IS NOT NULL'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getSingleScalarResult();
+
+        $dates = $em->createQuery(
+            'SELECT r.startedAt AS startedAt FROM App\Entity\AutomationRun r
+             JOIN r.automation a WHERE a.project = :p AND r.startedAt >= :since'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getResult();
+
+        return [
+            'total'           => $total,
+            'by_status'       => $byStatus,
+            'avg_duration_ms' => $avg !== null ? (int) round((float) $avg) : null,
+            'timeseries'      => $this->bucketByDay(array_column($dates, 'startedAt')),
+        ];
+    }
+
+    private function endUserMetrics(Project $project, InsightsRange $range): array
+    {
+        $em = $this->em;
+
+        $total = (int) $em->createQuery(
+            'SELECT COUNT(e.id) FROM App\Entity\EndUser e WHERE e.project = :p'
+        )->setParameter('p', $project)->getSingleScalarResult();
+
+        $statusRows = $em->createQuery(
+            'SELECT e.status AS status, COUNT(e.id) AS cnt FROM App\Entity\EndUser e
+             WHERE e.project = :p GROUP BY e.status'
+        )->setParameter('p', $project)->getResult();
+        $byStatus = [];
+        foreach ($statusRows as $r) {
+            $byStatus[$r['status']] = (int) $r['cnt'];
+        }
+
+        $dates = $em->createQuery(
+            'SELECT e.createdAt AS createdAt FROM App\Entity\EndUser e
+             WHERE e.project = :p AND e.createdAt >= :since'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getResult();
+
+        return [
+            'total'      => $total,
+            'by_status'  => $byStatus,
+            'timeseries' => $this->bucketByDay(array_column($dates, 'createdAt')),
+        ];
     }
 
     /**
