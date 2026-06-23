@@ -66,8 +66,7 @@ class InsightsServiceTest extends KernelTestCase
         self::assertSame(3, $data['content']['total']);
         self::assertSame(2, $data['content']['by_status']['published']);
         self::assertSame(1, $data['content']['by_status']['draft']);
-        self::assertSame('Articles', $data['content']['top_collections'][0]['name']);
-        self::assertSame(3, $data['content']['top_collections'][0]['count']);
+        self::assertArrayNotHasKey('top_collections', $data['content']);
         self::assertIsArray($data['content']['timeseries']);
     }
 
@@ -175,5 +174,25 @@ class InsightsServiceTest extends KernelTestCase
         self::assertSame(0, $summary['media_total']);
         self::assertSame(0, $summary['storage_bytes']);
         self::assertSame(0, $summary['endusers_total']);
+    }
+
+    public function testTimeseriesIsZeroFilled(): void
+    {
+        $p = $this->makeProject();
+        $c = $this->makeCollection($p, 'ZeroFill');
+        $this->makeEntry($p, $c, 'published');
+        $this->em->flush();
+
+        $data = $this->service->forProject($p, InsightsRange::D7);
+
+        $timeseries = $data['content']['timeseries'];
+        // D7 = 7 jours en arrière jusqu'à aujourd'hui inclus = 8 points
+        self::assertCount(8, $timeseries);
+        foreach ($timeseries as $point) {
+            self::assertArrayHasKey('date', $point);
+            self::assertArrayHasKey('count', $point);
+        }
+        $total = array_sum(array_column($timeseries, 'count'));
+        self::assertSame(1, $total);
     }
 }

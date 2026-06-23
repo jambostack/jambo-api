@@ -58,7 +58,7 @@ class InsightsService
             return [
                 'range'    => $range->value,
                 'content'  => $this->contentMetrics($project, $range),
-                'media'    => $this->mediaMetrics($project),
+                'media'    => $this->mediaMetrics($project, $range),
                 'activity' => $this->activityMetrics($project, $range),
                 'flows'    => $this->flowMetrics($project, $range),
                 'endusers' => $this->endUserMetrics($project, $range),
@@ -70,57 +70,49 @@ class InsightsService
     {
         $em = $this->em;
 
+        // A. total et by_status bornés à la plage $range
         $total = (int) $em->createQuery(
-            'SELECT COUNT(c.id) FROM App\Entity\ContentEntry c WHERE c.project = :p AND c.deletedAt IS NULL'
-        )->setParameter('p', $project)->getSingleScalarResult();
+            'SELECT COUNT(c.id) FROM App\Entity\ContentEntry c
+             WHERE c.project = :p AND c.deletedAt IS NULL AND c.createdAt >= :since'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getSingleScalarResult();
 
         $byStatusRows = $em->createQuery(
             'SELECT c.status AS status, COUNT(c.id) AS cnt FROM App\Entity\ContentEntry c
-             WHERE c.project = :p AND c.deletedAt IS NULL GROUP BY c.status'
-        )->setParameter('p', $project)->getResult();
+             WHERE c.project = :p AND c.deletedAt IS NULL AND c.createdAt >= :since GROUP BY c.status'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getResult();
         $byStatus = [];
         foreach ($byStatusRows as $row) {
             $byStatus[$row['status']] = (int) $row['cnt'];
         }
 
-        $topRows = $em->createQuery(
-            'SELECT col.name AS name, COUNT(c.id) AS cnt FROM App\Entity\ContentEntry c
-             JOIN c.collection col
-             WHERE c.project = :p AND c.deletedAt IS NULL
-             GROUP BY col.id, col.name ORDER BY cnt DESC'
-        )->setParameter('p', $project)->setMaxResults(5)->getResult();
-        $topCollections = array_map(
-            static fn ($r) => ['name' => $r['name'], 'count' => (int) $r['cnt']],
-            $topRows
-        );
+        // B. top_collections supprimé
 
         $dates = $em->createQuery(
             'SELECT c.createdAt AS createdAt FROM App\Entity\ContentEntry c
              WHERE c.project = :p AND c.deletedAt IS NULL AND c.createdAt >= :since'
         )->setParameter('p', $project)->setParameter('since', $range->since())->getResult();
 
-        // total/by_status sont toutes périodes confondues (hors deletedAt) ; timeseries est borné à $range.
         return [
-            'total'           => $total,
-            'by_status'       => $byStatus,
-            'top_collections' => $topCollections,
-            'timeseries'      => $this->bucketByDay(array_column($dates, 'createdAt')),
+            'total'      => $total,
+            'by_status'  => $byStatus,
+            'timeseries' => $this->bucketByDay(array_column($dates, 'createdAt'), $range),
         ];
     }
 
-    private function mediaMetrics(Project $project): array
+    // A. mediaMetrics accepte maintenant $range
+    private function mediaMetrics(Project $project, InsightsRange $range): array
     {
         $em = $this->em;
 
         $row = $em->createQuery(
             'SELECT COUNT(m.id) AS cnt, COALESCE(SUM(m.fileSize), 0) AS bytes
-             FROM App\Entity\Media m WHERE m.project = :p AND m.deletedAt IS NULL'
-        )->setParameter('p', $project)->getSingleResult();
+             FROM App\Entity\Media m WHERE m.project = :p AND m.deletedAt IS NULL AND m.createdAt >= :since'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getSingleResult();
 
         $mimeRows = $em->createQuery(
             'SELECT m.mimeType AS mime, COUNT(m.id) AS cnt FROM App\Entity\Media m
-             WHERE m.project = :p AND m.deletedAt IS NULL GROUP BY m.mimeType'
-        )->setParameter('p', $project)->getResult();
+             WHERE m.project = :p AND m.deletedAt IS NULL AND m.createdAt >= :since GROUP BY m.mimeType'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getResult();
 
         $byType = ['image' => 0, 'video' => 0, 'document' => 0, 'other' => 0];
         foreach ($mimeRows as $r) {
@@ -155,11 +147,12 @@ class InsightsService
     {
         $em = $this->em;
 
+        // A. recent borné à la plage $range
         $recentRows = $em->createQuery(
             'SELECT a.toolName AS tool, a.status AS status, a.source AS source,
                     a.createdBy AS createdBy, a.createdAt AS createdAt
-             FROM App\Entity\AuditLog a WHERE a.project = :p ORDER BY a.createdAt DESC'
-        )->setParameter('p', $project)->setMaxResults(10)->getResult();
+             FROM App\Entity\AuditLog a WHERE a.project = :p AND a.createdAt >= :since ORDER BY a.createdAt DESC'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->setMaxResults(10)->getResult();
 
         $recent = array_map(static fn ($r) => [
             'tool'   => $r['tool'],
@@ -192,7 +185,7 @@ class InsightsService
         return [
             'recent'       => $recent,
             'success_rate' => $successRate,
-            'timeseries'   => $this->bucketByDay(array_column($dates, 'createdAt')),
+            'timeseries'   => $this->bucketByDay(array_column($dates, 'createdAt'), $range),
         ];
     }
 
@@ -226,7 +219,7 @@ class InsightsService
             'total'           => $total,
             'by_status'       => $byStatus,
             'avg_duration_ms' => $avg !== null ? (int) round((float) $avg) : null,
-            'timeseries'      => $this->bucketByDay(array_column($dates, 'startedAt')),
+            'timeseries'      => $this->bucketByDay(array_column($dates, 'startedAt'), $range),
         ];
     }
 
@@ -234,14 +227,15 @@ class InsightsService
     {
         $em = $this->em;
 
+        // A. total et by_status bornés à la plage $range
         $total = (int) $em->createQuery(
-            'SELECT COUNT(e.id) FROM App\Entity\EndUser e WHERE e.project = :p'
-        )->setParameter('p', $project)->getSingleScalarResult();
+            'SELECT COUNT(e.id) FROM App\Entity\EndUser e WHERE e.project = :p AND e.createdAt >= :since'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getSingleScalarResult();
 
         $statusRows = $em->createQuery(
             'SELECT e.status AS status, COUNT(e.id) AS cnt FROM App\Entity\EndUser e
-             WHERE e.project = :p GROUP BY e.status'
-        )->setParameter('p', $project)->getResult();
+             WHERE e.project = :p AND e.createdAt >= :since GROUP BY e.status'
+        )->setParameter('p', $project)->setParameter('since', $range->since())->getResult();
         $byStatus = [];
         foreach ($statusRows as $r) {
             $byStatus[$r['status']] = (int) $r['cnt'];
@@ -255,22 +249,35 @@ class InsightsService
         return [
             'total'      => $total,
             'by_status'  => $byStatus,
-            'timeseries' => $this->bucketByDay(array_column($dates, 'createdAt')),
+            'timeseries' => $this->bucketByDay(array_column($dates, 'createdAt'), $range),
         ];
     }
 
     /**
+     * C. Zero-fill : génère un point pour chaque jour de $range->since() jusqu'à aujourd'hui inclus.
+     *
      * @param list<\DateTimeImmutable> $dates
      * @return list<array{date:string,count:int}>
      */
-    private function bucketByDay(array $dates): array
+    private function bucketByDay(array $dates, InsightsRange $range): array
     {
+        // Initialiser tous les jours de la plage à 0
         $buckets = [];
+        $cursor = new \DateTimeImmutable($range->since()->format('Y-m-d'));
+        $today = new \DateTimeImmutable('today');
+        while ($cursor <= $today) {
+            $buckets[$cursor->format('Y-m-d')] = 0;
+            $cursor = $cursor->modify('+1 day');
+        }
+
+        // Incrémenter selon les dates réelles
         foreach ($dates as $d) {
             $key = $d->format('Y-m-d');
-            $buckets[$key] = ($buckets[$key] ?? 0) + 1;
+            if (isset($buckets[$key])) {
+                $buckets[$key]++;
+            }
         }
-        ksort($buckets);
+
         $out = [];
         foreach ($buckets as $date => $count) {
             $out[] = ['date' => $date, 'count' => $count];

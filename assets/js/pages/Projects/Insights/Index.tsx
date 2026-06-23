@@ -12,7 +12,7 @@ import { ContentAreaChart, ActivityBarChart, StatusDonut, RecentActivityList } f
 
 interface InsightsData {
     range: string;
-    content: { total: number; by_status: Record<string, number>; top_collections: { name: string; count: number }[]; timeseries: { date: string; count: number }[] };
+    content: { total: number; by_status: Record<string, number>; timeseries: { date: string; count: number }[] };
     media: { total: number; total_size: number; by_type: Record<string, number> };
     activity: { recent: { tool: string; status: string; source: string | null; by: string | null; at: string }[]; success_rate: number | null; timeseries: { date: string; count: number }[] };
     flows: { total: number; by_status: Record<string, number>; avg_duration_ms: number | null; timeseries: { date: string; count: number }[] };
