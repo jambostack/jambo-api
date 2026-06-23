@@ -1680,4 +1680,19 @@ return [
     'insights.home_storage'  => 'Stockage total',
     'insights.home_endusers' => 'Utilisateurs finaux',
 
+    // Shares (partage public)
+    'shares.button'      => 'Partager',
+    'shares.title'       => 'Partager cette entrée',
+    'shares.duration'    => 'Durée',
+    'shares.create'      => 'Créer le lien',
+    'shares.copy_now'    => 'Copiez ce lien maintenant — il ne sera plus affiché.',
+    'shares.empty'       => 'Aucun lien de partage actif.',
+    'shares.dur_1h'      => '1 heure',
+    'shares.dur_24h'     => '24 heures',
+    'shares.dur_7d'      => '7 jours',
+    'shares.dur_30d'     => '30 jours',
+    'shares.dur_never'   => 'Jamais',
+    'shares.expires_on'  => 'Expire le {date}',
+    'shares.views'       => '{count} vues',
+
 ];
