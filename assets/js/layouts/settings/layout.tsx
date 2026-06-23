@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { Link } from '@inertiajs/react';
 import { type PropsWithChildren } from 'react';
 import { useTranslation } from '@/lib/i18n';
-import { User, Lock, Palette, Shield } from 'lucide-react';
+import { User, Lock, Palette, Shield, KeyRound } from 'lucide-react';
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
     const t = useTranslation();
@@ -17,6 +17,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
         { href: '/settings/password',   labelKey: 'settings.nav.password',   icon: Lock },
         { href: '/settings/appearance', labelKey: 'settings.nav.appearance', icon: Palette },
         { href: '/settings/security',   labelKey: 'settings.nav.security',   icon: Shield },
+        { href: '/settings/personal-access-tokens', labelKey: 'settings.nav.tokens', icon: KeyRound },
     ];
 
     return (
