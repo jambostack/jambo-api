@@ -6,7 +6,7 @@ import { useTranslation } from '@/lib/i18n';
 import { Project, SharedData, Collection, UserCan } from '@/types/index.d';
 
 import { Button } from '@/components/ui/button';
-import { Plus, Settings, GripVertical, MoreVertical, Users, Lock } from 'lucide-react';
+import { Plus, Settings, GripVertical, MoreVertical, Users, Lock, BarChart3 } from 'lucide-react';
 import { SearchBar } from '@/components/ui/search-bar';
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from '@hello-pangea/dnd';
 import {
@@ -213,6 +213,16 @@ export default function ProjectSidebar({ project }: Props) {
                         )}
                     </Droppable>
                 </DragDropContext>
+                </div>
+
+                <div className="pt-2 border-t shrink-0">
+                    <Link
+                        href={route('projects.insights', project.id)}
+                        className={`flex items-center gap-2 p-2 text-sm rounded-md hover:bg-accent ${page.component === 'Projects/Insights/Index' ? 'bg-accent text-accent-foreground' : ''}`}
+                    >
+                        <BarChart3 className="w-4 h-4 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 truncate">{t('insights.nav')}</span>
+                    </Link>
                 </div>
 
                 {can.access_end_users_settings && (

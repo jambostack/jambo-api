@@ -1024,6 +1024,7 @@ return [
     'end_users.schema'               => 'Esquema',
     'end_users.schema_desc'          => 'Agrega campos personalizados a tus usuarios finales. Los campos del sistema (email, password, name, status) están protegidos.',
     'end_users.view_users'           => 'Ver usuarios',
+    'insights.nav'                   => 'Insights',
     'fields.system'                  => 'Sistema',
     'fields.card_title'              => 'Campos',
     'fields.card_desc'               => 'Agregue, edite y reordene campos para estructurar los datos de su colección.',
