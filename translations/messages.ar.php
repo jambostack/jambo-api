@@ -1621,5 +1621,10 @@ return [
     'insights.kpi_storage'  => 'التخزين',
     'insights.kpi_flows'    => 'تشغيلات التدفقات',
     'insights.kpi_endusers' => 'المستخدمون النهائيون',
+    'insights.chart_content'   => 'إنشاء المحتوى',
+    'insights.chart_status'    => 'التوزيع حسب الحالة',
+    'insights.chart_activity'  => 'النشاط اليومي',
+    'insights.recent_activity' => 'النشاط الأخير',
+    'insights.activity_empty'  => 'لا يوجد نشاط حديث.',
 
 ];
