@@ -1669,5 +1669,10 @@ return [
     'insights.kpi_storage'  => 'Stockage',
     'insights.kpi_flows'    => 'Exécutions de flows',
     'insights.kpi_endusers' => 'Utilisateurs finaux',
+    'insights.chart_content'   => 'Création de contenu',
+    'insights.chart_status'    => 'Répartition par statut',
+    'insights.chart_activity'  => 'Activité par jour',
+    'insights.recent_activity' => 'Activité récente',
+    'insights.activity_empty'  => 'Aucune activité récente.',
 
 ];
