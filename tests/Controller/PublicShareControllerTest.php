@@ -8,7 +8,6 @@ use App\Entity\Project;
 use App\Enum\ShareDuration;
 use App\Service\Share\ShareService;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 class PublicShareControllerTest extends WebTestCase
