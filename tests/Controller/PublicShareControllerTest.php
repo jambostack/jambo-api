@@ -13,7 +13,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 class PublicShareControllerTest extends WebTestCase
 {
-    private function seedShare(KernelBrowser $client, ShareDuration $duration): array
+    private function seedShare(ShareDuration $duration): array
     {
         $em = self::getContainer()->get(EntityManagerInterface::class);
         $project = new Project();
@@ -39,16 +39,26 @@ class PublicShareControllerTest extends WebTestCase
     public function testHtmlView(): void
     {
         $client = static::createClient();
-        [, $token] = $this->seedShare($client, ShareDuration::D7);
+        [, $token] = $this->seedShare(ShareDuration::D7);
         $client->request('GET', "/share/$token");
         self::assertSame(200, $client->getResponse()->getStatusCode());
         self::assertStringContainsString('text/html', (string) $client->getResponse()->headers->get('Content-Type'));
     }
 
+    public function testJsonAcceptHeaderView(): void
+    {
+        $client = static::createClient();
+        [, $token] = $this->seedShare(ShareDuration::D7);
+        $client->request('GET', "/share/$token", [], [], ['HTTP_ACCEPT' => 'application/json']);
+        self::assertSame(200, $client->getResponse()->getStatusCode());
+        $body = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('articles', $body['collection']);
+    }
+
     public function testJsonView(): void
     {
         $client = static::createClient();
-        [, $token] = $this->seedShare($client, ShareDuration::D7);
+        [, $token] = $this->seedShare(ShareDuration::D7);
         $client->request('GET', "/share/$token.json");
         self::assertSame(200, $client->getResponse()->getStatusCode());
         $body = json_decode($client->getResponse()->getContent(), true);
@@ -58,7 +68,7 @@ class PublicShareControllerTest extends WebTestCase
     public function testExpiredReturns410(): void
     {
         $client = static::createClient();
-        [$share, $token] = $this->seedShare($client, ShareDuration::D7);
+        [$share, $token] = $this->seedShare(ShareDuration::D7);
         $em = self::getContainer()->get(EntityManagerInterface::class);
         $share->expiresAt = new \DateTimeImmutable('-1 hour');
         $em->flush();
@@ -69,7 +79,7 @@ class PublicShareControllerTest extends WebTestCase
     public function testRevokedReturns404(): void
     {
         $client = static::createClient();
-        [$share, $token] = $this->seedShare($client, ShareDuration::D7);
+        [$share, $token] = $this->seedShare(ShareDuration::D7);
         $em = self::getContainer()->get(EntityManagerInterface::class);
         $share->revokedAt = new \DateTimeImmutable();
         $em->flush();
@@ -87,7 +97,7 @@ class PublicShareControllerTest extends WebTestCase
     public function testViewCountIncremented(): void
     {
         $client = static::createClient();
-        [$share, $token] = $this->seedShare($client, ShareDuration::D7);
+        [$share, $token] = $this->seedShare(ShareDuration::D7);
         $client->request('GET', "/share/$token");
         $em = self::getContainer()->get(EntityManagerInterface::class);
         $em->refresh($share);
