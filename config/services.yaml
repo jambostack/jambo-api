@@ -142,3 +142,8 @@ services:
             $profileRepo: '@App\Repository\ProjectStorageProfileRepository'
             $ruleRepo: '@App\Repository\StorageRuleRepository'
             $driverFactory: '@App\Service\StorageDriverFactory'
+
+    # ── Partages publics ───────────────────────────────────────────────────────
+    App\Service\Share\ShareService:
+        arguments:
+            $appSecret: '%kernel.secret%'
