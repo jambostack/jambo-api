@@ -68,6 +68,7 @@ class InsightsServiceTest extends KernelTestCase
         self::assertSame(1, $data['content']['by_status']['draft']);
         self::assertSame('Articles', $data['content']['top_collections'][0]['name']);
         self::assertSame(3, $data['content']['top_collections'][0]['count']);
+        self::assertIsArray($data['content']['timeseries']);
     }
 
     public function testMediaMetrics(): void
@@ -81,6 +82,15 @@ class InsightsServiceTest extends KernelTestCase
             $m->fileName = 'f' . bin2hex(random_bytes(3));
             $this->em->persist($m);
         }
+        // Média soft-deleted : ne doit pas être compté
+        $deleted = new Media();
+        $deleted->project = $p;
+        $deleted->mimeType = 'image/jpeg';
+        $deleted->fileSize = 999;
+        $deleted->fileName = 'deleted_' . bin2hex(random_bytes(3));
+        $deleted->deletedAt = new \DateTimeImmutable();
+        $this->em->persist($deleted);
+
         $this->em->flush();
 
         $data = $this->service->forProject($p, InsightsRange::D30);

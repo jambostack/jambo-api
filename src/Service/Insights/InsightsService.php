@@ -66,6 +66,7 @@ class InsightsService
              WHERE c.project = :p AND c.deletedAt IS NULL AND c.createdAt >= :since'
         )->setParameter('p', $project)->setParameter('since', $range->since())->getResult();
 
+        // total/by_status sont toutes périodes confondues (hors deletedAt) ; timeseries est borné à $range.
         return [
             'total'           => $total,
             'by_status'       => $byStatus,
@@ -80,12 +81,12 @@ class InsightsService
 
         $row = $em->createQuery(
             'SELECT COUNT(m.id) AS cnt, COALESCE(SUM(m.fileSize), 0) AS bytes
-             FROM App\Entity\Media m WHERE m.project = :p'
+             FROM App\Entity\Media m WHERE m.project = :p AND m.deletedAt IS NULL'
         )->setParameter('p', $project)->getSingleResult();
 
         $mimeRows = $em->createQuery(
             'SELECT m.mimeType AS mime, COUNT(m.id) AS cnt FROM App\Entity\Media m
-             WHERE m.project = :p GROUP BY m.mimeType'
+             WHERE m.project = :p AND m.deletedAt IS NULL GROUP BY m.mimeType'
         )->setParameter('p', $project)->getResult();
 
         $byType = ['image' => 0, 'video' => 0, 'document' => 0, 'other' => 0];
