@@ -130,4 +130,33 @@ class InsightsServiceTest extends KernelTestCase
         self::assertSame(0, $data['flows']['total']);
         self::assertNull($data['flows']['avg_duration_ms']);
     }
+
+    public function testSummaryForUserAggregatesMemberProjects(): void
+    {
+        $user = new \App\Entity\User();
+        $user->email = 's-' . bin2hex(random_bytes(4)) . '@e.com';
+        $user->password = 'x';
+        $this->em->persist($user);
+
+        $p = $this->makeProject();
+        $member = new \App\Entity\ProjectMember();
+        $member->project = $p;
+        $member->user = $user;
+        $member->email = $user->email;
+        $member->status = \App\Enum\ProjectMemberStatus::Active;
+        $member->joinedAt = new \DateTimeImmutable();
+        $this->em->persist($member);
+
+        $c = $this->makeCollection($p, 'Posts');
+        $this->makeEntry($p, $c, 'published');
+        $this->makeEntry($p, $c, 'draft');
+        $this->em->flush();
+
+        $summary = $this->service->summaryForUser($user);
+
+        self::assertSame(1, $summary['projects']);
+        self::assertSame(2, $summary['content_total']);
+        self::assertArrayHasKey('storage_bytes', $summary);
+        self::assertArrayHasKey('endusers_total', $summary);
+    }
 }
