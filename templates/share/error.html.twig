@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Lien indisponible · Jambo</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 500px; margin: 80px auto; text-align: center; color: #1a1a1a; }
+        .msg { color: #6b7280; margin: 16px 0; }
+    </style>
+</head>
+<body>
+    <h1>Lien indisponible</h1>
+    <p class="msg">
+        {% if reason == 'expired' %}
+            Ce lien de partage a expiré.
+        {% else %}
+            Ce lien de partage est invalide ou a été révoqué.
+        {% endif %}
+    </p>
+</body>
+</html>
