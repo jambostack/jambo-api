@@ -156,7 +156,24 @@ class InsightsServiceTest extends KernelTestCase
 
         self::assertSame(1, $summary['projects']);
         self::assertSame(2, $summary['content_total']);
-        self::assertArrayHasKey('storage_bytes', $summary);
-        self::assertArrayHasKey('endusers_total', $summary);
+        self::assertSame(0, $summary['storage_bytes']);
+        self::assertSame(0, $summary['endusers_total']);
+    }
+
+    public function testSummaryForUserWithNoProjectsReturnsZeroes(): void
+    {
+        $user = new \App\Entity\User();
+        $user->email = 'noproj-' . bin2hex(random_bytes(4)) . '@e.com';
+        $user->password = 'x';
+        $this->em->persist($user);
+        $this->em->flush();
+
+        $summary = $this->service->summaryForUser($user);
+
+        self::assertSame(0, $summary['projects']);
+        self::assertSame(0, $summary['content_total']);
+        self::assertSame(0, $summary['media_total']);
+        self::assertSame(0, $summary['storage_bytes']);
+        self::assertSame(0, $summary['endusers_total']);
     }
 }
