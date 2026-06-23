@@ -1024,6 +1024,7 @@ return [
     'end_users.schema'               => 'المخطط',
     'end_users.schema_desc'          => 'أضف حقولاً مخصصة للمستخدمين النهائيين. الحقول النظامية (email, password, name, status) محمية.',
     'end_users.view_users'           => 'عرض المستخدمين',
+    'insights.nav'                   => 'الإحصاءات',
     'fields.system'                  => 'نظام',
     'fields.card_title'              => 'الحقول',
     'fields.card_desc'               => 'أضف الحقول وعدّلها وأعد ترتيبها لهيكلة بيانات مجموعتك.',
