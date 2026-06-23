@@ -75,7 +75,7 @@ class EndUserAdminController extends AbstractController
             $qb->andWhere('eu.status = :status')->setParameter('status', $status);
         }
         if ($search !== '') {
-            $qb->andWhere('eu.email LIKE :search OR eu.name LIKE :search')
+            $qb->andWhere('eu.email LIKE :search OR eu.username LIKE :search')
                 ->setParameter('search', '%' . $search . '%');
         }
 
@@ -253,7 +253,7 @@ class EndUserAdminController extends AbstractController
         return [
             'uuid'          => $eu->uuid?->toString(),
             'email'         => $eu->email,
-            'name'          => $eu->name,
+            'name'          => $eu->username,
             'status'        => $eu->status,
             'avatar_url'    => $eu->avatarUrl,
             'custom_fields' => $eu->customFields,
