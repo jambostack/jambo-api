@@ -96,6 +96,120 @@ export default function AppSettingsPage() {
         }
     };
 
+    // ── OIDC ────────────────────────────────────────────────────────────
+    const [oidcEdit, setOidcEdit] = useState<Record<string, { name: string; issuer: string; clientId: string; clientSecret: string; enabled: boolean }>>({});
+    const [oidcAdding, setOidcAdding] = useState(false);
+    const [oidcNewName, setOidcNewName] = useState('');
+    const [oidcNewIssuer, setOidcNewIssuer] = useState('');
+    const [oidcNewClientId, setOidcNewClientId] = useState('');
+    const [oidcNewClientSecret, setOidcNewClientSecret] = useState('');
+    const [oidcSaving, setOidcSaving] = useState<string | null>(null); // provider id being saved, or 'new'
+    const [oidcError, setOidcError] = useState<string | null>(null);
+
+    const oidcProviders: Array<{ id: string; name: string; issuer: string; clientId: string; enabled: boolean; configured: boolean }>
+        = appSettings.oidcProviders ?? [];
+    const oidcEnabledCount = oidcProviders.filter(p => p.enabled).length;
+
+    const handleOidcToggle = async (id: string, enabled: boolean) => {
+        setOidcSaving(id);
+        setOidcError(null);
+        try {
+            const idx = oidcProviders.findIndex(p => p.id === id);
+            const p = oidcProviders[idx];
+            // On envoie l'array complet avec le toggle appliqué
+            const updated = oidcProviders.map(prov =>
+                prov.id === id ? { ...prov, enabled } : prov
+            );
+            await post(JSON.stringify({ oidcProviders: updated }), true);
+        } catch (e: any) {
+            setOidcError(e.message);
+        } finally {
+            setOidcSaving(null);
+        }
+    };
+
+    const handleOidcSaveExisting = async (id: string) => {
+        const edit = oidcEdit[id];
+        if (!edit) return;
+        setOidcSaving(id);
+        setOidcError(null);
+        try {
+            // Merge with existing: replace in array
+            const idx = oidcProviders.findIndex(p => p.id === id);
+            const updated = [...oidcProviders];
+            const payload: any = {
+                id,
+                name: edit.name,
+                issuer: edit.issuer,
+                clientId: edit.clientId,
+                enabled: edit.enabled,
+            };
+            if (edit.clientSecret.trim()) {
+                payload.clientSecret = edit.clientSecret.trim();
+            }
+            if (idx >= 0) {
+                updated[idx] = { ...updated[idx], ...payload };
+            }
+            await post(JSON.stringify({ oidcProviders: updated }), true);
+            setOidcEdit(prev => { const n = { ...prev }; delete n[id]; return n; });
+        } catch (e: any) {
+            setOidcError(e.message);
+        } finally {
+            setOidcSaving(null);
+        }
+    };
+
+    const handleOidcAdd = async () => {
+        if (!oidcNewName.trim() || !oidcNewIssuer.trim() || !oidcNewClientId.trim() || !oidcNewClientSecret.trim()) return;
+        setOidcSaving('new');
+        setOidcError(null);
+        try {
+            const newProvider: any = {
+                name: oidcNewName.trim(),
+                issuer: oidcNewIssuer.trim(),
+                clientId: oidcNewClientId.trim(),
+                clientSecret: oidcNewClientSecret.trim(),
+                enabled: true,
+            };
+            const updated = [...oidcProviders, newProvider];
+            await post(JSON.stringify({ oidcProviders: updated }), true);
+            setOidcAdding(false);
+            setOidcNewName('');
+            setOidcNewIssuer('');
+            setOidcNewClientId('');
+            setOidcNewClientSecret('');
+        } catch (e: any) {
+            setOidcError(e.message);
+        } finally {
+            setOidcSaving(null);
+        }
+    };
+
+    const handleOidcDelete = async (id: string) => {
+        if (!confirm(t('app_settings.oidc.delete_confirm'))) return;
+        setOidcSaving(id);
+        setOidcError(null);
+        try {
+            const updated = oidcProviders.filter(p => p.id !== id);
+            await post(JSON.stringify({ oidcProviders: updated }), true);
+        } catch (e: any) {
+            setOidcError(e.message);
+        } finally {
+            setOidcSaving(null);
+        }
+    };
+
+    const startOidcEdit = (p: typeof oidcProviders[0]) => {
+        setOidcEdit(prev => ({
+            ...prev,
+            [p.id]: { name: p.name, issuer: p.issuer, clientId: p.clientId, clientSecret: '', enabled: p.enabled },
+        }));
+    };
+
+    const cancelOidcEdit = (id: string) => {
+        setOidcEdit(prev => { const n = { ...prev }; delete n[id]; return n; });
+    };
+
     // ── Général ──────────────────────────────────────────────────────────
     const [appName, setAppName] = useState(appSettings.appName ?? '');
     const [saving, setSaving]   = useState(false);
@@ -501,6 +615,14 @@ export default function AppSettingsPage() {
                                 </span>
                             )}
                         </TabsTrigger>
+                        <TabsTrigger value="oidc">
+                            {t('app_settings.tab_oidc')}
+                            {oidcEnabledCount > 0 && (
+                                <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                                    {oidcEnabledCount}
+                                </span>
+                            )}
+                        </TabsTrigger>
                     </TabsList>
 
                     {/* ── Onglet Général ───────────────────────────────── */}
@@ -676,6 +798,211 @@ export default function AppSettingsPage() {
                                 </div>
                             );
                         })}
+                    </TabsContent>
+
+                    {/* ── Onglet SSO Entreprise (OIDC) ─────────────────────── */}
+                    <TabsContent value="oidc" className="space-y-4">
+                        <p className="text-sm text-muted-foreground pb-2">{t('app_settings.oidc.description')}</p>
+
+                        {oidcError && <p className="text-destructive text-xs">{oidcError}</p>}
+
+                        {/* Liste des providers existants */}
+                        {oidcProviders.map(p => {
+                            const editing = oidcEdit[p.id];
+
+                            return (
+                                <div key={p.id} className={cn(
+                                    'rounded-lg border p-4 transition-colors',
+                                    p.enabled ? 'border-primary/40 bg-primary/5' : 'border-border opacity-60',
+                                )}>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-semibold text-sm">{p.name}</span>
+                                            {p.configured && p.enabled && (
+                                                <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                    {t('app_settings.oidc.configured')}
+                                                </span>
+                                            )}
+                                            {!p.configured && p.enabled && (
+                                                <span className="inline-flex items-center gap-1 text-xs text-amber-500 font-medium">
+                                                    <Circle className="h-3.5 w-3.5" />
+                                                    {t('app_settings.oidc.not_configured')}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {oidcSaving === p.id && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                                            <Switch
+                                                checked={p.enabled}
+                                                onCheckedChange={v => handleOidcToggle(p.id, v)}
+                                                disabled={oidcSaving === p.id}
+                                                aria-label={p.name}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Infos résumées */}
+                                    <p className="text-xs text-muted-foreground mb-2">
+                                        {p.enabled ? t('app_settings.oidc.provider_active') : t('app_settings.oidc.provider_inactive')}
+                                        {p.issuer ? ` — ${p.issuer}` : ''}
+                                    </p>
+
+                                    {/* Boutons d'action */}
+                                    <div className="flex items-center gap-2">
+                                        {editing ? (
+                                            <>
+                                                <Button size="sm" variant="outline" onClick={() => cancelOidcEdit(p.id)}>
+                                                    {t('common.cancel')}
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => handleOidcSaveExisting(p.id)}
+                                                    disabled={oidcSaving === p.id || !editing.name.trim() || !editing.issuer.trim()}
+                                                >
+                                                    {oidcSaving === p.id
+                                                        ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />{t('common.loading')}</>
+                                                        : t('common.save')}
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => startOidcEdit(p)}
+                                                >
+                                                    {t('app_settings.oidc.edit_provider')}
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="destructive"
+                                                    onClick={() => handleOidcDelete(p.id)}
+                                                    disabled={oidcSaving === p.id}
+                                                >
+                                                    {t('app_settings.oidc.delete_provider')}
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Formulaire d'édition */}
+                                    {editing && (
+                                        <div className="space-y-3 pt-3 border-t mt-3">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs">{t('app_settings.oidc.name_label')}</Label>
+                                                <Input
+                                                    value={editing.name}
+                                                    onChange={e => setOidcEdit(prev => ({
+                                                        ...prev,
+                                                        [p.id]: { ...prev[p.id], name: e.target.value },
+                                                    }))}
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs">{t('app_settings.oidc.issuer_label')}</Label>
+                                                <Input
+                                                    value={editing.issuer}
+                                                    onChange={e => setOidcEdit(prev => ({
+                                                        ...prev,
+                                                        [p.id]: { ...prev[p.id], issuer: e.target.value },
+                                                    }))}
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs">{t('app_settings.oidc.client_id_label')}</Label>
+                                                <Input
+                                                    value={editing.clientId}
+                                                    onChange={e => setOidcEdit(prev => ({
+                                                        ...prev,
+                                                        [p.id]: { ...prev[p.id], clientId: e.target.value },
+                                                    }))}
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs">{t('app_settings.oidc.client_secret_label')}</Label>
+                                                <Input
+                                                    type="password"
+                                                    placeholder={p.configured ? '••••••••' : '...'}
+                                                    value={editing.clientSecret}
+                                                    onChange={e => setOidcEdit(prev => ({
+                                                        ...prev,
+                                                        [p.id]: { ...prev[p.id], clientSecret: e.target.value },
+                                                    }))}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {/* Formulaire d'ajout */}
+                        {oidcAdding && (
+                            <div className="rounded-lg border p-4 border-primary/40 bg-primary/5 space-y-3">
+                                <p className="font-semibold text-sm">{t('app_settings.oidc.add_provider')}</p>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">{t('app_settings.oidc.name_label')}</Label>
+                                    <Input
+                                        placeholder={t('app_settings.oidc.name_placeholder')}
+                                        value={oidcNewName}
+                                        onChange={e => setOidcNewName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">{t('app_settings.oidc.issuer_label')}</Label>
+                                    <Input
+                                        placeholder={t('app_settings.oidc.issuer_placeholder')}
+                                        value={oidcNewIssuer}
+                                        onChange={e => setOidcNewIssuer(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">{t('app_settings.oidc.client_id_label')}</Label>
+                                    <Input
+                                        value={oidcNewClientId}
+                                        onChange={e => setOidcNewClientId(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">{t('app_settings.oidc.client_secret_label')}</Label>
+                                    <Input
+                                        type="password"
+                                        value={oidcNewClientSecret}
+                                        onChange={e => setOidcNewClientSecret(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2 pt-1">
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => { setOidcAdding(false); setOidcError(null); }}
+                                    >
+                                        {t('common.cancel')}
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        onClick={handleOidcAdd}
+                                        disabled={oidcSaving === 'new' || !oidcNewName.trim() || !oidcNewIssuer.trim() || !oidcNewClientId.trim() || !oidcNewClientSecret.trim()}
+                                    >
+                                        {oidcSaving === 'new'
+                                            ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />{t('common.loading')}</>
+                                            : t('common.save')}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Bouton d'ajout */}
+                        {!oidcAdding && (
+                            <Button
+                                variant="outline"
+                                onClick={() => setOidcAdding(true)}
+                            >
+                                {t('app_settings.oidc.add_provider')}
+                            </Button>
+                        )}
                     </TabsContent>
                 </Tabs>
             </div>
