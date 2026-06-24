@@ -11,6 +11,7 @@ use Symfony\Component\Uid\Uuid;
 #[ORM\Entity(repositoryClass: EndUserRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\UniqueConstraint(name: 'uniq_end_user_project_email', columns: ['project_id', 'email'])]
+#[ORM\UniqueConstraint(name: 'uniq_end_user_oidc', columns: ['oidc_sub', 'oidc_issuer'])]
 class EndUser implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
@@ -81,6 +82,12 @@ class EndUser implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column(length: 255, nullable: true)]
     public ?string $gitlabId = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $oidcSub = null;
+
+    #[ORM\Column(length: 512, nullable: true)]
+    public ?string $oidcIssuer = null;
 
     public function __construct(Project $project, string $email)
     {
