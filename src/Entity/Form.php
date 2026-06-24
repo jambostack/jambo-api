@@ -4,7 +4,6 @@ namespace App\Entity;
 
 use App\Repository\FormRepository;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: FormRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -12,9 +11,6 @@ class Form
 {
     #[ORM\Id, ORM\GeneratedValue, ORM\Column]
     public ?int $id = null;
-
-    #[ORM\Column(type: 'uuid', unique: true)]
-    public ?Uuid $uuid = null;
 
     #[ORM\ManyToOne(targetEntity: Project::class)]
     #[ORM\JoinColumn(nullable: false)]
@@ -26,12 +22,6 @@ class Form
     #[ORM\Column(length: 255)]
     public string $slug = '';
 
-    #[ORM\Column(length: 255, nullable: true)]
-    public ?string $title = null;
-
-    #[ORM\Column(type: 'text', nullable: true)]
-    public ?string $description = null;
-
     #[ORM\Column(type: 'json')]
     public array $fields = [];
 
@@ -40,9 +30,6 @@ class Form
 
     #[ORM\Column(type: 'json')]
     public array $settings = [];
-
-    #[ORM\Column]
-    public bool $isPublished = false;
 
     #[ORM\Column]
     public \DateTimeImmutable $createdAt;
@@ -54,12 +41,6 @@ class Form
     {
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = new \DateTimeImmutable();
-    }
-
-    #[ORM\PrePersist]
-    public function setUuidValue(): void
-    {
-        if ($this->uuid === null) $this->uuid = Uuid::v4();
     }
 
     #[ORM\PreUpdate]
