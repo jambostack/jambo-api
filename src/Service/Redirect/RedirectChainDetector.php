@@ -32,13 +32,6 @@ class RedirectChainDetector
             $forward[$r->fromPath] = $r;
         }
 
-        // Build reverse index: toPath -> count of redirects that target it
-        $targetCount = [];
-
-        foreach ($redirects as $r) {
-            $targetCount[$r->toPath] = ($targetCount[$r->toPath] ?? 0) + 1;
-        }
-
         // Redirects we already consumed as part of a chain started elsewhere
         $consumedFromPaths = [];
 
