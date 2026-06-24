@@ -37,6 +37,7 @@ class FormController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $project);
 
         $forms = $this->formRepo->findByProject($project);
 
@@ -64,6 +65,7 @@ class FormController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $project);
 
         $data = $request->toArray();
 
@@ -97,6 +99,7 @@ class FormController extends AbstractController
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Form not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $form->project);
 
         return $this->json($this->serializeForm($form));
     }
@@ -110,6 +113,7 @@ class FormController extends AbstractController
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Form not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $form->project);
 
         $data = $request->toArray();
 
@@ -147,6 +151,7 @@ class FormController extends AbstractController
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Form not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $form->project);
 
         $this->em->remove($form);
         $this->em->flush();
@@ -163,6 +168,7 @@ class FormController extends AbstractController
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Form not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $form->project);
 
         $page = max(1, (int) $request->query->get('page', 1));
         $perPage = min(100, max(1, (int) $request->query->get('per_page', 25)));
@@ -204,6 +210,7 @@ class FormController extends AbstractController
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Form not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $form->project);
 
         $submission = $this->submissionRepo->find($submissionId);
         if (!$submission || $submission->form?->id !== $form->id) {
