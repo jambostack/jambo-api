@@ -13,6 +13,7 @@ use Symfony\Component\Uid\Uuid;
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\Table(name: '`user`')]
+#[ORM\UniqueConstraint(name: 'uniq_user_oidc', columns: ['oidc_sub', 'oidc_issuer'])]
 class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
@@ -67,6 +68,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column(length: 255, nullable: true)]
     public ?string $gitlabId = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $oidcSub = null;
+
+    #[ORM\Column(length: 512, nullable: true)]
+    public ?string $oidcIssuer = null;
 
     #[ORM\ManyToMany(targetEntity: Role::class, inversedBy: 'users')]
     #[ORM\JoinTable(name: 'user_roles')]
