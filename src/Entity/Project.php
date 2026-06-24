@@ -133,6 +133,25 @@ class Project
         set { $this->previewEnabled = $value; }
     }
 
+    /**
+     * @return array{defaultTitleTemplate: string, siteName: string, defaultOgImage: ?string, twitterHandle: ?string, robotsDefault: string, googleSiteVerification: ?string, enableSitemap: bool, enableImageSitemap: bool, sitemapExcludeCollections: string[]}
+     */
+    public function getSeoSettings(): array
+    {
+        $s = $this->settings['seo'] ?? [];
+        return [
+            'defaultTitleTemplate' => $s['defaultTitleTemplate'] ?? '{title} | {siteName}',
+            'siteName' => $s['siteName'] ?? $this->name,
+            'defaultOgImage' => $s['defaultOgImage'] ?? null,
+            'twitterHandle' => $s['twitterHandle'] ?? null,
+            'robotsDefault' => $s['robotsDefault'] ?? 'index, follow',
+            'googleSiteVerification' => $s['googleSiteVerification'] ?? null,
+            'enableSitemap' => $s['enableSitemap'] ?? true,
+            'enableImageSitemap' => $s['enableImageSitemap'] ?? true,
+            'sitemapExcludeCollections' => $s['sitemapExcludeCollections'] ?? [],
+        ];
+    }
+
     #[ORM\OneToMany(targetEntity: Collection::class, mappedBy: 'project', cascade: ['persist', 'remove'])]
     public DoctrineCollection $collections;
 
