@@ -73,7 +73,8 @@ class RedirectResolverTest extends TestCase
         $result = $resolver->resolve('/blog/mon-article', new Project());
 
         $this->assertNotNull($result);
-        $this->assertSame('/articles/mon-article', $result->toPath);
+        // Entity toPath is preserved (not mutated to the resolved value)
+        $this->assertSame('/articles/$1', $result->toPath);
     }
 
     public function testExactMatchTakesPriorityOverPattern(): void
@@ -142,7 +143,8 @@ class RedirectResolverTest extends TestCase
         $result = $resolver->resolve('/old-post', new Project());
 
         $this->assertNotNull($result);
-        $this->assertSame('/latest-post', $result->toPath);
+        // Entity toPath is preserved (not mutated to the resolved value)
+        $this->assertSame('/latest-$1', $result->toPath);
     }
 
     public function testResolveLoopDetection(): void
