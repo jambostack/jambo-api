@@ -49,4 +49,9 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             ->getQuery()
             ->getResult();
     }
+
+    public function findOneByOidc(string $sub, string $issuer): ?User
+    {
+        return $this->findOneBy(['oidcSub' => $sub, 'oidcIssuer' => $issuer]);
+    }
 }
