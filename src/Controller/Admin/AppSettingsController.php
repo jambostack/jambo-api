@@ -6,6 +6,7 @@ use App\Repository\AppSettingsRepository;
 use App\Service\WebhookSecretService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\Uid\Uuid;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -276,6 +277,55 @@ class AppSettingsController extends AbstractController
                 $settings->oauthProviders = $current;
                 $changed = true;
             }
+
+            // OIDC providers (JSON body with key "oidcProviders")
+            if (array_key_exists('oidcProviders', $data) && is_array($data['oidcProviders'])) {
+                $current = $settings->oauthProviders['oidcProviders'] ?? [];
+                $incoming = $data['oidcProviders'];
+
+                foreach ($incoming as $index => $p) {
+                    $id = $p['id'] ?? (string) Uuid::v4();
+
+                    // Merge avec l'existant si l'ID correspond
+                    $existing = null;
+                    foreach ($current as $ei => $ec) {
+                        if (($ec['id'] ?? '') === $id) {
+                            $existing = $ei;
+                            break;
+                        }
+                    }
+
+                    $entry = $existing !== null ? $current[$existing] : ['id' => $id];
+
+                    if (array_key_exists('name', $p)) {
+                        $entry['name'] = trim((string) $p['name']);
+                    }
+                    if (array_key_exists('issuer', $p)) {
+                        $entry['issuer'] = trim((string) $p['issuer']);
+                    }
+                    if (array_key_exists('clientId', $p)) {
+                        $entry['clientId'] = trim((string) $p['clientId']) ?: null;
+                    }
+                    if (array_key_exists('clientSecret', $p)) {
+                        $val = trim((string) $p['clientSecret']);
+                        $entry['clientSecret'] = $val !== ''
+                            ? 'enc:' . $this->secretService->encrypt($val)
+                            : null;
+                    }
+                    if (array_key_exists('enabled', $p)) {
+                        $entry['enabled'] = (bool) $p['enabled'];
+                    }
+
+                    if ($existing !== null) {
+                        $current[$existing] = $entry;
+                    } else {
+                        $current[] = $entry;
+                    }
+                }
+
+                $settings->oauthProviders['oidcProviders'] = $current;
+                $changed = true;
+            }
         }
 
         if ($changed) {
@@ -393,6 +443,7 @@ class AppSettingsController extends AbstractController
                 ],
             ],
             'oauthProviders' => $this->serializeOauthProviders($s->oauthProviders ?? []),
+            'oidcProviders' => $this->serializeOidcProviders($s->oauthProviders['oidcProviders'] ?? []),
         ];
     }
 
@@ -406,6 +457,27 @@ class AppSettingsController extends AbstractController
                 'enabled'    => (bool) ($cfg['enabled'] ?? false),
                 'configured' => !empty($cfg['clientId']) && !empty($cfg['clientSecret']),
                 'redirectUri'=> ($cfg['enabled'] ?? false) ? '/connect/' . $p . '/check' : null,
+            ];
+        }
+        return $result;
+    }
+
+    /** @return array<array{id: string, name: string, issuer: string, clientId: string, enabled: bool, configured: bool}> */
+    private function serializeOidcProviders(?array $providers): array
+    {
+        if (!$providers) {
+            return [];
+        }
+        $result = [];
+        foreach ($providers as $p) {
+            $result[] = [
+                'id' => $p['id'] ?? '',
+                'name' => $p['name'] ?? '',
+                'issuer' => $p['issuer'] ?? '',
+                'clientId' => $p['clientId'] ?? '',
+                // JAMAIS renvoyer le clientSecret (meme chiffre) au frontend
+                'enabled' => (bool) ($p['enabled'] ?? false),
+                'configured' => !empty($p['clientId']) && !empty($p['clientSecret']),
             ];
         }
         return $result;
