@@ -2,6 +2,7 @@
 
 namespace App\Service\Form;
 
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -13,6 +14,7 @@ class AntiSpamService
     ];
 
     public function __construct(
+        #[Autowire(service: 'limiter.form_submit')]
         private RateLimiterFactory $formSubmitLimiter,
         private ?HttpClientInterface $httpClient = null,
     ) {}
