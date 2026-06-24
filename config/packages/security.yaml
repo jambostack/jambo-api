@@ -65,6 +65,10 @@ security:
         - { path: ^/reset-password, roles: PUBLIC_ACCESS }
         - { path: ^/public-api, roles: PUBLIC_ACCESS }
         - { path: '^/api/[\w-]{36}/auth/(register|login|forgot-password|reset-password)', roles: PUBLIC_ACCESS }
+        # ── Routes publiques SEO / Redirects / Forms (v1.19) ──
+        - { path: '^/[\w-]{36}/(sitemap\.xml|sitemap-images\.xml|robots\.txt)', roles: PUBLIC_ACCESS }
+        - { path: '^/[\w-]{36}/redirects/resolve', roles: PUBLIC_ACCESS }
+        - { path: '^/[\w-]{36}/forms/', roles: PUBLIC_ACCESS }
         - { path: ^/admin-api, roles: ROLE_USER }
         - { path: ^/api, roles: PUBLIC_ACCESS }
         - { path: ^/cdn, roles: PUBLIC_ACCESS }
