@@ -157,3 +157,8 @@ services:
     App\EventListener\SlugChangeRedirectListener:
         tags:
             - { name: 'doctrine.orm.entity_listener', entity: 'App\Entity\ContentEntry', event: 'preUpdate' }
+
+    # ── Historique SEO — snapshot SeoRevision à chaque changement SEO ───────
+    App\EventListener\SeoRevisionListener:
+        tags:
+            - { name: 'doctrine.orm.entity_listener', entity: 'App\Entity\ContentEntry', event: 'preUpdate' }
