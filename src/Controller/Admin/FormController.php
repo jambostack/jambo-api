@@ -153,6 +153,12 @@ class FormController extends AbstractController
         }
         $this->denyAccessUnlessGranted('project.view', $form->project);
 
+        // Supprimer d'abord les soumissions pour éviter la violation FK
+        $submissions = $this->submissionRepo->findByForm($form);
+        foreach ($submissions as $submission) {
+            $this->em->remove($submission);
+        }
+
         $this->em->remove($form);
         $this->em->flush();
 
