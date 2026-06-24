@@ -5,6 +5,7 @@ namespace App\Security\Oidc;
 use App\Dto\OidcConfig;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Contracts\Cache\CacheInterface;
+use Symfony\Contracts\Cache\ItemInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class OidcProviderManager
@@ -23,7 +24,8 @@ class OidcProviderManager
         $cacheKey = 'oidc_discovery_'.md5($issuer);
 
         if ($this->cache) {
-            $cached = $this->cache->get($cacheKey, function () use ($issuer) {
+            $cached = $this->cache->get($cacheKey, function (ItemInterface $item) use ($issuer) {
+                $item->expiresAfter(3600);
                 return $this->doDiscover($issuer);
             });
             if ($cached instanceof OidcConfig) {
@@ -36,9 +38,19 @@ class OidcProviderManager
 
     private function doDiscover(string $issuer): OidcConfig
     {
+        // SSRF protection: validate URL, enforce HTTPS, reject loopback/private/link-local
         $wellKnownUrl = rtrim($issuer, '/').'/.well-known/openid-configuration';
-        $response = $this->httpClient->request('GET', $wellKnownUrl);
+        $this->validateDiscoveryUrl($wellKnownUrl);
+
+        $response = $this->httpClient->request('GET', $wellKnownUrl, [
+            'max_redirects' => 0,
+        ]);
         $data = $response->toArray();
+
+        // OIDC Discovery spec (RFC 8414): issuer in response must match requested issuer
+        if (isset($data['issuer']) && $data['issuer'] !== rtrim($issuer, '/')) {
+            throw new \RuntimeException('Discovery issuer mismatch.');
+        }
 
         return new OidcConfig(
             issuer: $data['issuer'] ?? $issuer,
@@ -164,6 +176,7 @@ class OidcProviderManager
         string $codeVerifier,
     ): array {
         $response = $this->httpClient->request('POST', $config->tokenEndpoint, [
+            'auth_basic' => $clientId.':'.$clientSecret,
             'body' => [
                 'grant_type' => 'authorization_code',
                 'code' => $code,
@@ -239,8 +252,9 @@ class OidcProviderManager
             if (!hash_equals($expectedSig, $parts[2])) {
                 throw new \RuntimeException('id_token signature mismatch.');
             }
+        } else {
+            throw new \RuntimeException('Unsupported id_token signing algorithm: '.$config->idTokenSigningAlg.'. Only HS256 is supported in v1.');
         }
-        // RS256 → non vérifié ici (nécessite JWKS fetch, simplifié pour v1)
 
         return [
             'sub' => (string) ($payload['sub'] ?? ''),
@@ -255,5 +269,63 @@ class OidcProviderManager
     private function base64url_encode(string $data): string
     {
         return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
+    private function validateDiscoveryUrl(string $url): void
+    {
+        $parts = parse_url($url);
+        if (!$parts || !isset($parts['scheme'], $parts['host'])) {
+            throw new \RuntimeException('Invalid discovery URL.');
+        }
+
+        if (strtolower($parts['scheme']) !== 'https') {
+            throw new \RuntimeException('Discovery URL must use HTTPS.');
+        }
+
+        $host = $parts['host'];
+
+        // Resolve hostname to IP addresses
+        $ips = [];
+        $records = dns_get_record($host, DNS_A | DNS_AAAA);
+        if ($records === false || count($records) === 0) {
+            throw new \RuntimeException('Discovery hostname could not be resolved.');
+        }
+
+        foreach ($records as $record) {
+            $ip = $record['ip'] ?? ($record['ipv6'] ?? null);
+            if ($ip !== null) {
+                $ips[] = $ip;
+            }
+        }
+
+        if (empty($ips)) {
+            throw new \RuntimeException('Discovery hostname could not be resolved.');
+        }
+
+        foreach ($ips as $ip) {
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+                // Check loopback (127.0.0.0/8)
+                if (ip2long($ip) >= ip2long('127.0.0.0') && ip2long($ip) <= ip2long('127.255.255.255')) {
+                    throw new \RuntimeException('Discovery URL must not point to loopback address.');
+                }
+                // Check RFC1918 private ranges
+                if (
+                    (ip2long($ip) >= ip2long('10.0.0.0') && ip2long($ip) <= ip2long('10.255.255.255'))
+                    || (ip2long($ip) >= ip2long('172.16.0.0') && ip2long($ip) <= ip2long('172.31.255.255'))
+                    || (ip2long($ip) >= ip2long('192.168.0.0') && ip2long($ip) <= ip2long('192.168.255.255'))
+                ) {
+                    throw new \RuntimeException('Discovery URL must not point to a private IP address.');
+                }
+                // Check link-local (169.254.0.0/16)
+                if (ip2long($ip) >= ip2long('169.254.0.0') && ip2long($ip) <= ip2long('169.254.255.255')) {
+                    throw new \RuntimeException('Discovery URL must not point to a link-local address.');
+                }
+            } elseif (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
+                // Reject IPv6 loopback (::1)
+                if (strtolower($ip) === '::1') {
+                    throw new \RuntimeException('Discovery URL must not point to loopback address.');
+                }
+            }
+        }
     }
 }
