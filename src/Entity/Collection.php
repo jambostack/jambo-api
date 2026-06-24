@@ -89,6 +89,23 @@ class Collection
         return $statuses;
     }
 
+    /**
+     * @return array{indexable: bool, sitemapPriority: float, sitemapChangefreq: string, autoGenerateSlug: bool, slugSourceField: ?string, defaultOgImage: ?string, structuredDataType: string}
+     */
+    public function getSeoSettings(): array
+    {
+        $s = $this->settings['seo'] ?? [];
+        return [
+            'indexable' => $s['indexable'] ?? true,
+            'sitemapPriority' => (float) ($s['sitemapPriority'] ?? 0.5),
+            'sitemapChangefreq' => $s['sitemapChangefreq'] ?? 'weekly',
+            'autoGenerateSlug' => $s['autoGenerateSlug'] ?? true,
+            'slugSourceField' => $s['slugSourceField'] ?? 'title',
+            'defaultOgImage' => $s['defaultOgImage'] ?? null,
+            'structuredDataType' => $s['structuredDataType'] ?? 'Article',
+        ];
+    }
+
     public function getDefaultStatus(): string
     {
         if ($this->settings === null || !isset($this->settings['workflow'])) {
