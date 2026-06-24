@@ -1647,4 +1647,7 @@ return [
     'shares.expires_on'  => 'Caduca el {date}',
     'shares.views'       => '{count} vistas',
 
+    // OIDC / SSO
+    'oidc.error_failed'  => 'Error de inicio de sesión SSO. Inténtelo de nuevo.',
+
 ];
