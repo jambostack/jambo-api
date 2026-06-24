@@ -10,6 +10,7 @@ use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: ContentEntryRepository::class)]
 #[ORM\HasLifecycleCallbacks]
+#[ORM\UniqueConstraint(name: 'UNIQ_COLLECTION_SLUG_LOCALE', columns: ['collection_id', 'slug', 'locale'])]
 class ContentEntry
 {
     #[ORM\Id]
@@ -90,11 +91,8 @@ class ContentEntry
     #[ORM\Column(type: 'text', nullable: true)]
     public ?string $metaDescription = null;
 
-    #[ORM\Column(length: 255)]
-    public string $slug = '' {
-        get => $this->slug;
-        set { $this->slug = $value; }
-    }
+    #[ORM\Column(length: 255, options: ['default' => ''])]
+    public string $slug = '';
 
     #[ORM\Column(length: 512, nullable: true)]
     public ?string $canonicalUrl = null;
