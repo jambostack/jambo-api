@@ -1695,4 +1695,7 @@ return [
     'shares.expires_on'  => 'Expire le {date}',
     'shares.views'       => '{count} vues',
 
+    // OIDC / SSO
+    'oidc.error_failed'  => 'Échec de la connexion SSO. Veuillez réessayer.',
+
 ];

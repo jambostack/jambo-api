@@ -1647,4 +1647,7 @@ return [
     'shares.expires_on'  => 'ينتهي في {date}',
     'shares.views'       => '{count} مشاهدات',
 
+    // OIDC / SSO
+    'oidc.error_failed'  => 'فشل تسجيل الدخول الموحد. يرجى المحاولة مرة أخرى.',
+
 ];
