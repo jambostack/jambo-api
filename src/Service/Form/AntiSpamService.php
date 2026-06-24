@@ -45,7 +45,7 @@ class AntiSpamService
 
     private function verifyTurnstile(string $token, string $secret): bool
     {
-        if (!$this->httpClient) return true; // skip en test
+        if (!$this->httpClient) return false; // pas de client HTTP => verification impossible
         $response = $this->httpClient->request('POST', 'https://challenges.cloudflare.com/turnstile/v0/siteverify', [
             'body' => ['secret' => $secret, 'response' => $token],
         ]);
@@ -55,7 +55,7 @@ class AntiSpamService
 
     private function verifyRecaptcha(string $token, string $secret): bool
     {
-        if (!$this->httpClient) return true;
+        if (!$this->httpClient) return false;
         $response = $this->httpClient->request('POST', 'https://www.google.com/recaptcha/api/siteverify', [
             'body' => ['secret' => $secret, 'response' => $token],
         ]);
@@ -65,7 +65,7 @@ class AntiSpamService
 
     private function verifyHcaptcha(string $token, string $secret): bool
     {
-        if (!$this->httpClient) return true;
+        if (!$this->httpClient) return false;
         $response = $this->httpClient->request('POST', 'https://hcaptcha.com/siteverify', [
             'body' => ['secret' => $secret, 'response' => $token],
         ]);

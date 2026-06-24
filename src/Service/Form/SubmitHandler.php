@@ -7,6 +7,8 @@ use App\Entity\FormSubmission;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Validator\ConstraintViolationList;
+use Symfony\Component\Validator\Exception\ValidationFailedException;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 class SubmitHandler
@@ -50,12 +52,7 @@ class SubmitHandler
         }
 
         if (count($relevantViolations) > 0) {
-            $errors = [];
-            foreach ($relevantViolations as $violation) {
-                $fieldName = trim($violation->getPropertyPath(), '[]');
-                $errors[$fieldName] = $violation->getMessage();
-            }
-            throw new \RuntimeException(json_encode(['validation_errors' => $errors]));
+            throw new ValidationFailedException($data, new ConstraintViolationList($relevantViolations));
         }
 
         // 3. Prepare metadata
@@ -81,7 +78,6 @@ class SubmitHandler
 
         // Captcha (if configured in form settings)
         $captchaConfig = $form->settings['captcha'] ?? [];
-        $captchaToken = $data['_captcha'] ?? '';
         if (!empty($captchaConfig['enabled']) && !empty($captchaConfig['secret'])) {
             $captchaToken = $data['_captcha'] ?? $data['cf-turnstile-response'] ?? '';
             if (!$this->antiSpamService->verifyCaptcha($captchaToken, $captchaConfig)) {
