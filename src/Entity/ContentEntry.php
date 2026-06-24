@@ -84,6 +84,30 @@ class ContentEntry
     #[ORM\Column(nullable: true)]
     public ?\DateTimeImmutable $scheduledAt = null;
 
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $metaTitle = null;
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    public ?string $metaDescription = null;
+
+    #[ORM\Column(length: 255)]
+    public string $slug = '' {
+        get => $this->slug;
+        set { $this->slug = $value; }
+    }
+
+    #[ORM\Column(length: 512, nullable: true)]
+    public ?string $canonicalUrl = null;
+
+    #[ORM\Column(length: 36, nullable: true)]
+    public ?string $ogImage = null;
+
+    #[ORM\Column(nullable: true)]
+    public ?int $seoScore = null;
+
+    #[ORM\Column(nullable: true)]
+    public ?\DateTimeImmutable $seoScoredAt = null;
+
     public function __construct()
     {
         $this->fieldValues = new ArrayCollection();
