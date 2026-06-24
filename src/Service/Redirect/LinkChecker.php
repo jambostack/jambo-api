@@ -53,7 +53,7 @@ class LinkChecker
     public function checkLinks(Project $project): array
     {
         $entries = $this->entryRepository->findBy(['project' => $project]);
-        $allSlugs = $this->buildSlugIndex($project);
+        $allSlugs = $this->buildSlugIndex($entries);
         $results = [];
 
         foreach ($entries as $entry) {
@@ -73,11 +73,12 @@ class LinkChecker
     }
 
     /**
+     * @param ContentEntry[] $entries
+     *
      * @return string[]
      */
-    private function buildSlugIndex(Project $project): array
+    private function buildSlugIndex(array $entries): array
     {
-        $entries = $this->entryRepository->findBy(['project' => $project]);
         $slugs = [];
 
         foreach ($entries as $entry) {

@@ -69,7 +69,6 @@ class RedirectResolver
                 ? $this->resolvePattern($currentPath, $match)
                 : $match->toPath;
 
-            $match->toPath = $resolvedTo;
             $lastUsed = $match;
             $currentPath = $resolvedTo;
         }
