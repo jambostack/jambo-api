@@ -29,6 +29,11 @@ class EndUserRepository extends ServiceEntityRepository
         return $this->findBy($criteria, ['createdAt' => 'DESC']);
     }
 
+    public function findOneByOidc(string $sub, string $issuer): ?EndUser
+    {
+        return $this->findOneBy(['oidcSub' => $sub, 'oidcIssuer' => $issuer]);
+    }
+
     /** @return string[] — UUIDs RFC4122 des end-users appartenant au projet dont l'UUID est dans $uuids */
     public function findProjectEndUserUuids(Project $project, array $uuids): array
     {
