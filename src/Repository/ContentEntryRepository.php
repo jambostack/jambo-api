@@ -110,25 +110,25 @@ class ContentEntryRepository extends ServiceEntityRepository
     }
 
     /**
-     * Trouve une entrée publiée par le slug stocké dans le champ EAV 'slug'.
+     * Trouve une entrée publiée par la colonne native slug.
      */
-    public function findOneByCollectionAndSlug(Collection $collection, string $slug): ?ContentEntry
+    public function findOneByCollectionAndSlug(Collection $collection, string $slug, ?string $locale = null): ?ContentEntry
     {
-        return $this->createQueryBuilder('e')
-            ->join('e.fieldValues', 'fv')
-            ->join('fv.field', 'f')
+        $qb = $this->createQueryBuilder('e')
             ->where('e.collection = :collection')
             ->andWhere('e.deletedAt IS NULL')
             ->andWhere('e.status = :status')
-            ->andWhere('f.slug = :fieldSlug')
-            ->andWhere('fv.textValue = :slugValue')
+            ->andWhere('e.slug = :slug')
             ->setParameter('collection', $collection)
             ->setParameter('status', 'published')
-            ->setParameter('fieldSlug', 'slug')
-            ->setParameter('slugValue', $slug)
-            ->setMaxResults(1)
-            ->getQuery()
-            ->getOneOrNullResult();
+            ->setParameter('slug', $slug)
+            ->setMaxResults(1);
+
+        if ($locale !== null) {
+            $qb->andWhere('e.locale = :locale')->setParameter('locale', $locale);
+        }
+
+        return $qb->getQuery()->getOneOrNullResult();
     }
 
     public function hasNonDeletedEntryForCollection(Collection $collection): bool
