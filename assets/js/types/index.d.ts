@@ -35,6 +35,15 @@ export interface AiProviderStatus {
     url?: string | null;
 }
 
+export interface OidcProviderStatus {
+    id: string;
+    name: string;
+    issuer: string;
+    clientId: string;
+    enabled: boolean;
+    configured: boolean;
+}
+
 export interface AppSettings {
     appName: string;
     logoUrl: string | null;
@@ -43,6 +52,8 @@ export interface AppSettings {
     iconDarkUrl: string | null;
     iconLightUrl: string | null;
     faviconUrl: string | null;
+    oauthProviders?: Record<string, { enabled: boolean; configured: boolean; redirectUri?: string | null }>;
+    oidcProviders?: OidcProviderStatus[];
     aiProviders?: {
         openai:    AiProviderStatus;
         anthropic: AiProviderStatus;

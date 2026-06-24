@@ -1240,6 +1240,23 @@ return [
     'app_settings.oauth.gitlab'         => 'GitLab',
     'app_settings.oauth.gitlab_uri'     => '/connect/gitlab/check',
 
+    'app_settings.tab_oidc'        => 'SSO المؤسسات (OIDC)',
+    'app_settings.oidc.description'     => 'إدارة موفري OIDC للدخول الموحد للمؤسسات. قم بتكوين موفر الهوية الخاص بك للسماح للمستخدمين بتسجيل الدخول عبر OIDC.',
+    'app_settings.oidc.configured'      => 'مهيأ',
+    'app_settings.oidc.not_configured'  => 'غير مهيأ',
+    'app_settings.oidc.provider_active' => 'الموفر نشط',
+    'app_settings.oidc.provider_inactive' => 'الموفر غير نشط',
+    'app_settings.oidc.add_provider'    => 'إضافة موفر',
+    'app_settings.oidc.edit_provider'   => 'تعديل',
+    'app_settings.oidc.delete_provider' => 'حذف',
+    'app_settings.oidc.delete_confirm'  => 'هل أنت متأكد أنك تريد حذف هذا الموفر؟',
+    'app_settings.oidc.name_label'      => 'اسم الموفر',
+    'app_settings.oidc.name_placeholder' => 'SSO شركتي',
+    'app_settings.oidc.issuer_label'    => 'رابط المصدر',
+    'app_settings.oidc.issuer_placeholder' => 'https://accounts.example.com',
+    'app_settings.oidc.client_id_label' => 'Client ID',
+    'app_settings.oidc.client_secret_label' => 'Client Secret',
+
     // مزودي الذكاء الاصطناعي
     'app_settings.ai.description'      => 'قم بتكوين مفاتيح API لمزودي الذكاء الاصطناعي. هذه الإعدادات لها أولوية على متغيرات البيئة.',
     'app_settings.ai.api_key'          => 'مفتاح API',

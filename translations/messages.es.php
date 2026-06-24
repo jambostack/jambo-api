@@ -1240,6 +1240,23 @@ return [
     'app_settings.oauth.gitlab'         => 'GitLab',
     'app_settings.oauth.gitlab_uri'     => '/connect/gitlab/check',
 
+    'app_settings.tab_oidc'        => 'SSO Empresarial (OIDC)',
+    'app_settings.oidc.description'     => 'Administre los proveedores OIDC para inicio de sesion unico empresarial. Configure su proveedor de identidad para permitir que los usuarios accedan via OIDC.',
+    'app_settings.oidc.configured'      => 'Configurado',
+    'app_settings.oidc.not_configured'  => 'No configurado',
+    'app_settings.oidc.provider_active' => 'Proveedor activo',
+    'app_settings.oidc.provider_inactive' => 'Proveedor inactivo',
+    'app_settings.oidc.add_provider'    => 'Anadir proveedor',
+    'app_settings.oidc.edit_provider'   => 'Editar',
+    'app_settings.oidc.delete_provider' => 'Eliminar',
+    'app_settings.oidc.delete_confirm'  => 'Esta seguro de que desea eliminar este proveedor?',
+    'app_settings.oidc.name_label'      => 'Nombre del proveedor',
+    'app_settings.oidc.name_placeholder' => 'Mi SSO empresarial',
+    'app_settings.oidc.issuer_label'    => 'URL del emisor',
+    'app_settings.oidc.issuer_placeholder' => 'https://cuentas.example.com',
+    'app_settings.oidc.client_id_label' => 'Client ID',
+    'app_settings.oidc.client_secret_label' => 'Client Secret',
+
     // Proveedores IA
     'app_settings.ai.description'      => 'Configura las claves API de tus proveedores de IA. Estos ajustes tienen prioridad sobre las variables de entorno.',
     'app_settings.ai.api_key'          => 'Clave API',
