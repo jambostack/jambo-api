@@ -21,6 +21,8 @@ class EavDataFormatterService
 
     public function __construct(
         private LoggerInterface $logger = new NullLogger(),
+        private ?\App\Service\Seo\StructuredDataGenerator $structuredDataGenerator = null,
+        private ?\App\Service\Seo\HreflangGenerator $hreflangGenerator = null,
     ) {}
 
     /**
@@ -77,6 +79,44 @@ class EavDataFormatterService
 
             $data[$fieldName] = $value;
         }
+
+        // ── Bloc SEO natif ──
+        $collectionSeo = $entry->collection?->settings['seo'] ?? [];
+        $projectSeo = $entry->project?->settings['seo'] ?? [];
+        $siteName = $projectSeo['siteName'] ?? 'Jambo';
+        $structuredDataType = $collectionSeo['structuredDataType'] ?? 'Article';
+
+        $ogTitle = $entry->metaTitle ?? $data['title'] ?? $siteName;
+        $ogDesc = $entry->metaDescription ?? $data['description'] ?? '';
+        $ogImage = $entry->ogImage ?? $projectSeo['defaultOgImage'] ?? null;
+
+        $data['_seo'] = [
+            'metaTitle'       => $entry->metaTitle,
+            'metaDescription' => $entry->metaDescription,
+            'slug'            => $entry->slug,
+            'canonicalUrl'    => $entry->canonicalUrl,
+            'ogImage'         => $ogImage,
+            'score'           => $entry->seoScore,
+            'openGraph'       => [
+                'title'       => $ogTitle,
+                'description' => $ogDesc,
+                'image'       => $ogImage,
+                'type'        => 'article',
+                'siteName'    => $siteName,
+            ],
+            'twitter' => [
+                'card'        => !empty($ogImage) ? 'summary_large_image' : 'summary',
+                'title'       => $ogTitle,
+                'description' => $ogDesc,
+                'image'       => $ogImage,
+            ],
+            'structuredData' => $this->structuredDataGenerator
+                ? $this->structuredDataGenerator->generate($entry, $structuredDataType)
+                : null,
+            'hreflang' => $this->hreflangGenerator
+                ? $this->hreflangGenerator->generateHreflang($entry)
+                : [],
+        ];
 
         return $data;
     }
