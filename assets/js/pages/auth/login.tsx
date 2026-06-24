@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react';
-import { LoaderCircle } from 'lucide-react';
+import { Building2, LoaderCircle } from 'lucide-react';
 import { FormEventHandler, useRef, useState } from 'react';
 
 import InputError from '@/components/input-error';
@@ -18,6 +18,7 @@ interface LoginProps {
     error?: string;
     lastUsername?: string;
     socialProviders?: string[];
+    oidcProviders?: Array<{ id: string; name: string }>;
 }
 
 const SOCIAL_BUTTONS: Record<string, { label: string; icon: string; bg: string }> = {
@@ -27,7 +28,7 @@ const SOCIAL_BUTTONS: Record<string, { label: string; icon: string; bg: string }
     gitlab:    { label: 'GitLab',    icon: 'Gi', bg: '#FC6D26' },
 };
 
-export default function Login({ status, canResetPassword, csrfToken, error, lastUsername, socialProviders }: LoginProps) {
+export default function Login({ status, canResetPassword, csrfToken, error, lastUsername, socialProviders, oidcProviders }: LoginProps) {
     const [processing, setProcessing] = useState(false);
     const formRef = useRef<HTMLFormElement>(null);
     const t = useTranslation();
@@ -44,7 +45,7 @@ export default function Login({ status, canResetPassword, csrfToken, error, last
 
             {error && (
                 <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
-                    {error}
+                    {error === 'oidc_failed' ? t('oidc.error_failed') : error}
                 </div>
             )}
 
@@ -75,6 +76,31 @@ export default function Login({ status, canResetPassword, csrfToken, error, last
                             <span className="bg-card px-2 text-muted-foreground">{t('auth.social.or')}</span>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {oidcProviders && oidcProviders.length > 0 && (
+                <div className="flex flex-col gap-2 mb-6">
+                    {!hasSocial && (
+                        <div className="relative my-2">
+                            <div className="absolute inset-0 flex items-center">
+                                <span className="w-full border-t border-border" />
+                            </div>
+                            <div className="relative flex justify-center text-xs uppercase">
+                                <span className="bg-card px-2 text-muted-foreground">{t('auth.social.or')}</span>
+                            </div>
+                        </div>
+                    )}
+                    {oidcProviders.map((p) => (
+                        <a
+                            key={p.id}
+                            href={`/oidc/start/${p.id}`}
+                            className="flex items-center justify-center gap-3 rounded-md border border-border px-4 py-3 text-sm font-semibold transition-colors hover:bg-muted"
+                        >
+                            <Building2 className="h-5 w-5" />
+                            {p.name}
+                        </a>
+                    ))}
                 </div>
             )}
 

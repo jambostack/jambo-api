@@ -1670,4 +1670,7 @@ return [
     'shares.expires_on'  => 'Expires on {date}',
     'shares.views'       => '{count} views',
 
+    // OIDC / SSO
+    'oidc.error_failed'  => 'SSO login failed. Please try again.',
+
 ];
