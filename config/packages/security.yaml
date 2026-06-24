@@ -73,4 +73,5 @@ security:
         - { path: ^/api, roles: PUBLIC_ACCESS }
         - { path: ^/cdn, roles: PUBLIC_ACCESS }
         - { path: ^/share, roles: PUBLIC_ACCESS }
+        - { path: ^/forms/embed.js, roles: PUBLIC_ACCESS }
         - { path: ^/, roles: ROLE_USER }
