@@ -33,6 +33,7 @@ class RedirectController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $project);
 
         $page = max(1, (int) $request->query->get('page', 1));
         $perPage = min(100, max(1, (int) $request->query->get('per_page', 25)));
@@ -65,6 +66,7 @@ class RedirectController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $project);
 
         $data = $request->toArray();
 
@@ -92,6 +94,7 @@ class RedirectController extends AbstractController
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Redirect not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $redirect->project);
 
         return $this->json($this->serializeRedirect($redirect));
     }
@@ -105,6 +108,7 @@ class RedirectController extends AbstractController
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Redirect not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $redirect->project);
 
         $data = $request->toArray();
 
@@ -140,6 +144,7 @@ class RedirectController extends AbstractController
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Redirect not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $redirect->project);
 
         $this->em->remove($redirect);
         $this->em->flush();
@@ -156,6 +161,7 @@ class RedirectController extends AbstractController
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Redirect not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $redirect->project);
 
         $redirect->isEnabled = !$redirect->isEnabled;
         $redirect->updatedBy = $this->getUser();

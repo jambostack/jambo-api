@@ -33,6 +33,7 @@ class SeoController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $project);
 
         $collectionSlug = $request->query->get('collection');
         $scoreFilter = $request->query->get('score_filter'); // 'poor' (< 50), 'ok' (50-79), 'good' (>= 80)
@@ -97,6 +98,7 @@ class SeoController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
+        $this->denyAccessUnlessGranted('project.view', $project);
 
         $data = $request->toArray();
         $entries = $data['entries'] ?? [];
@@ -131,6 +133,12 @@ class SeoController extends AbstractController
     #[Route('/admin-api/{projectUuid}/seo/audit/{entryUuid}', name: 'admin_seo_audit', methods: ['GET'])]
     public function audit(string $projectUuid, string $entryUuid): JsonResponse
     {
+        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found.'], 404);
+        }
+        $this->denyAccessUnlessGranted('project.view', $project);
+
         $entry = $this->entryRepo->findOneBy(['uuid' => $entryUuid]);
         if (!$entry || $entry->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Entry not found.'], 404);
