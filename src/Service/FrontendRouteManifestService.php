@@ -151,6 +151,9 @@ class FrontendRouteManifestService
         'shares.store'                          => 'api_shares_store',
         'shares.index'                          => 'api_shares_index',
         'shares.destroy'                        => 'api_shares_destroy',
+
+        // OIDC
+        'oidc.start'                            => 'oidc_start',
     ];
 
     /**
