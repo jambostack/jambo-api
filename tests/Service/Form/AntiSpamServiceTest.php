@@ -79,9 +79,9 @@ class AntiSpamServiceTest extends TestCase
 
     public function testVerifyCaptchaSkipsWithoutHttpClient(): void
     {
-        $this->assertTrue($this->service->verifyCaptcha('token', ['provider' => 'turnstile', 'secret' => 's']));
-        $this->assertTrue($this->service->verifyCaptcha('token', ['provider' => 'recaptcha', 'secret' => 's']));
-        $this->assertTrue($this->service->verifyCaptcha('token', ['provider' => 'hcaptcha', 'secret' => 's']));
+        $this->assertFalse($this->service->verifyCaptcha('token', ['provider' => 'turnstile', 'secret' => 's']));
+        $this->assertFalse($this->service->verifyCaptcha('token', ['provider' => 'recaptcha', 'secret' => 's']));
+        $this->assertFalse($this->service->verifyCaptcha('token', ['provider' => 'hcaptcha', 'secret' => 's']));
     }
 
     public function testVerifyCaptchaWithHttpClientSuccess(): void

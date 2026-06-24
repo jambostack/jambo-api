@@ -67,8 +67,7 @@ class SubmitHandlerTest extends TestCase
 
     public function testHandleThrowsOnValidationFailure(): void
     {
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('validation_errors');
+        $this->expectException(\Symfony\Component\Validator\Exception\ValidationFailedException::class);
 
         $request = new Request([], [], [], [], [], ['REMOTE_ADDR' => '127.0.0.1']);
 
