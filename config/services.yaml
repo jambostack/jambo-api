@@ -143,6 +143,11 @@ services:
             $ruleRepo: '@App\Repository\StorageRuleRepository'
             $driverFactory: '@App\Service\StorageDriverFactory'
 
+    # ── SSO OIDC ────────────────────────────────────────────────────────────────
+    App\Security\Oidc\OidcProviderManager:
+        arguments:
+            $appSecret: '%kernel.secret%'
+
     # ── Partages publics ───────────────────────────────────────────────────────
     App\Service\Share\ShareService:
         arguments:
