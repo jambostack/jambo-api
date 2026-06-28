@@ -2327,13 +2327,13 @@ function FieldRow({
       }}
     >
       {/* ── Main row ── */}
-      <div style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 10px', background:'var(--studio-raised)', cursor:'default' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 10px', background:'var(--studio-raised)', cursor:'default', flexWrap:'wrap' }}>
         <div style={{ cursor:'grab', color:'var(--studio-text-muted)', padding:'0 2px' }} title="Glisser pour réordonner">
           <GripVertical className="w-3.5 h-3.5" />
         </div>
         <span style={{ fontFamily:'var(--studio-mono)', fontSize:'9px', color:'var(--studio-text-muted)', minWidth:'14px', textAlign:'center' }}>{index + 1}</span>
 
-        <div style={{ flex:1, minWidth:0, position:'relative' }}>
+        <div style={{ flex:'1 1 120px', minWidth:'80px', position:'relative' }}>
           <Input
             placeholder="Nom du champ"
             value={field.name}
@@ -2350,13 +2350,13 @@ function FieldRow({
         </div>
 
         <Select value={field.type} onValueChange={v => updateField(selectedIdx, field.key, { type: v })}>
-          <SelectTrigger style={{ width:'110px', height:'28px', fontSize:'10px', background:'var(--studio-bg)', borderColor:'var(--studio-border)', color:'var(--studio-text)' }}>
+          <SelectTrigger style={{ flex:'0 1 auto', minWidth:'90px', maxWidth:'130px', height:'28px', fontSize:'10px', background:'var(--studio-bg)', borderColor:'var(--studio-border)', color:'var(--studio-text)' }}>
             <Icon className="w-2.5 h-2.5 mr-1" /><SelectValue />
           </SelectTrigger>
           <SelectContent>{FIELD_TYPES.map(ft => (<SelectItem key={ft.type} value={ft.type}><span style={{display:'flex',alignItems:'center',gap:'6px'}}>{(ICON_MAP[ft.type] && React.createElement(ICON_MAP[ft.type], {className:'w-3 h-3'}))}{ft.label}</span></SelectItem>))}</SelectContent>
         </Select>
 
-        <div style={{ display:'flex', alignItems:'center', gap:'3px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'3px', flexShrink:0 }}>
           <Switch checked={field.isRequired} onCheckedChange={v => updateField(selectedIdx, field.key, { isRequired: v })} />
           <span style={{ fontSize:'10px', color:'var(--studio-text-muted)', minWidth:'40px' }}>Requis</span>
         </div>
