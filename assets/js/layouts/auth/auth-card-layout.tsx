@@ -1,6 +1,5 @@
-import AppLogoIcon from '@/components/app-logo-icon';
 import { Link } from '@inertiajs/react';
-import { type PropsWithChildren } from 'react';
+import { type PropsWithChildren, useState, useEffect } from 'react';
 
 export default function AuthCardLayout({
     children,
@@ -13,10 +12,24 @@ export default function AuthCardLayout({
 }>) {
     const appName = import.meta.env.APP_NAME ?? 'JamboAPI';
 
+    const [isDark, setIsDark] = useState(
+        () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+    );
+
+    useEffect(() => {
+        const observer = new MutationObserver(() => {
+            setIsDark(document.documentElement.classList.contains('dark'));
+        });
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        return () => observer.disconnect();
+    }, []);
+
+    const formLogo = isDark ? '/images/logo-light.png' : '/images/logo-dark.png';
+
     return (
         <div className="min-h-svh flex flex-col lg:flex-row">
             {/* ── Brand panel ───────────────────────────────── */}
-            <div className="hidden lg:flex lg:w-[440px] xl:w-[520px] flex-col justify-between p-12 bg-foreground text-background relative overflow-hidden flex-shrink-0">
+            <div className="hidden lg:flex lg:w-[440px] xl:w-[520px] flex-col justify-between p-12 bg-card border-r relative overflow-hidden flex-shrink-0">
                 {/* Grid texture */}
                 <div
                     className="absolute inset-0 pointer-events-none"
@@ -38,16 +51,12 @@ export default function AuthCardLayout({
 
                 {/* Logo */}
                 <div className="relative z-10">
-                    <Link href="/" className="inline-flex items-center gap-3 group">
-                        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/20 group-hover:bg-primary/30 transition-colors">
-                            <AppLogoIcon className="size-6 fill-current text-primary" />
-                        </div>
-                        <span
-                            className="text-lg font-bold tracking-tight text-background"
-                            style={{ fontFamily: 'Syne, sans-serif' }}
-                        >
-                            {appName}
-                        </span>
+                    <Link href="/" className="inline-flex items-center">
+                        <img
+                            src={formLogo}
+                            alt={appName}
+                            className="h-9 object-contain"
+                        />
                     </Link>
                 </div>
 
@@ -72,7 +81,7 @@ export default function AuthCardLayout({
                             <br />
                             <span className="text-primary">your API.</span>
                         </h1>
-                        <p className="text-base leading-relaxed max-w-xs opacity-55">
+                        <p className="text-base leading-relaxed max-w-xs text-muted-foreground">
                             Structure your content, build flexible schemas, and deliver data anywhere via REST API.
                         </p>
                     </div>
@@ -86,8 +95,8 @@ export default function AuthCardLayout({
                         ].map(({ label, value }) => (
                             <div
                                 key={label}
-                                className="rounded-xl p-3 text-center"
-                                style={{ background: 'oklch(1 0 0 / 0.05)', border: '1px solid oklch(1 0 0 / 0.08)' }}
+                                className="rounded-xl p-3 text-center border"
+                                style={{ background: 'oklch(1 0 0 / 0.05)', borderColor: 'oklch(1 0 0 / 0.08)' }}
                             >
                                 <div
                                     className="text-2xl font-bold text-primary"
@@ -95,7 +104,7 @@ export default function AuthCardLayout({
                                 >
                                     {value}
                                 </div>
-                                <div className="text-[10px] font-medium uppercase tracking-wider mt-1 opacity-35">
+                                <div className="text-[10px] font-medium uppercase tracking-wider mt-1 text-muted-foreground opacity-50">
                                     {label}
                                 </div>
                             </div>
@@ -104,7 +113,7 @@ export default function AuthCardLayout({
                 </div>
 
                 {/* Footer */}
-                <div className="relative z-10 text-xs opacity-25">
+                <div className="relative z-10 text-xs text-muted-foreground opacity-35">
                     © {new Date().getFullYear()} {appName}. All rights reserved.
                 </div>
             </div>
@@ -112,13 +121,12 @@ export default function AuthCardLayout({
             {/* ── Form panel ────────────────────────────────── */}
             <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-10 bg-background min-h-svh lg:min-h-0">
                 {/* Mobile logo */}
-                <div className="lg:hidden mb-10 flex items-center gap-3">
-                    <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
-                        <AppLogoIcon className="size-5 fill-current text-primary" />
-                    </div>
-                    <span className="text-lg font-bold tracking-tight" style={{ fontFamily: 'Syne, sans-serif' }}>
-                        {appName}
-                    </span>
+                <div className="lg:hidden mb-10 flex items-center justify-center">
+                    <img
+                        src={formLogo}
+                        alt={appName}
+                        className="h-8 object-contain"
+                    />
                 </div>
 
                 <div className="w-full max-w-[380px] space-y-6">

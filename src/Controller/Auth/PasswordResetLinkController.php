@@ -42,37 +42,51 @@ class PasswordResetLinkController extends InertiaController
 
         $limiter = $this->passwordResetLimiter->create($request->getClientIp());
         if (!$limiter->consume()->isAccepted()) {
-            return $this->json(['error' => 'Too many requests. Please try again later.'], 429);
+            return $this->inertia($request, 'auth/forgot-password', [
+                'error' => 'Too many requests. Please try again later.',
+            ]);
         }
 
         $email = $request->getPayload()->getString('email');
 
-        // Always return success to prevent email enumeration
         $user = $this->userRepository->findByEmail($email);
-        if ($user !== null) {
-            // Remove previous tokens for this email
-            $existing = $this->tokenRepository->findBy(['email' => $email]);
-            foreach ($existing as $old) {
-                $this->em->remove($old);
-            }
-
-            $resetToken = new PasswordResetToken($email);
-            $this->em->persist($resetToken);
-            $this->em->flush();
-
-            $resetUrl = $this->generateUrl(
-                'app_reset_password',
-                ['token' => $resetToken->token],
-                UrlGeneratorInterface::ABSOLUTE_URL
-            );
-
-            $this->mailer->send(
-                (new Email())
-                    ->to($email)
-                    ->subject('Reset your password')
-                    ->html(sprintf('<p>Click <a href="%s">here</a> to reset your password. Link expires in 1 hour.</p>', $resetUrl))
-            );
+        if ($user === null) {
+            return $this->inertia($request, 'auth/forgot-password', [
+                'errors' => ['email' => 'Aucun compte trouvé avec cet email.'],
+            ]);
         }
+
+        // Remove previous tokens for this email
+        $existing = $this->tokenRepository->findBy(['email' => $email]);
+        foreach ($existing as $old) {
+            $this->em->remove($old);
+        }
+
+        $resetToken = new PasswordResetToken(null, $email);
+        $this->em->persist($resetToken);
+        $this->em->flush();
+
+        $resetUrl = $this->generateUrl(
+            'app_reset_password',
+            ['token' => $resetToken->token],
+            UrlGeneratorInterface::ABSOLUTE_URL
+        );
+
+        $this->mailer->send(
+            (new Email())
+                ->from('noreply@jambostack.site')
+                ->to($email)
+                ->subject('Réinitialisation de votre mot de passe Jambo')
+                ->html(sprintf(
+                    '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:20px">
+                    <h2>Réinitialisation de mot de passe</h2>
+                    <p>Vous avez demandé la réinitialisation de votre mot de passe Jambo.</p>
+                    <p><a href="%s" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Réinitialiser mon mot de passe</a></p>
+                    <p style="color:#666;font-size:14px">Ce lien expire dans 1 heure. Si vous n\'êtes pas à l\'origine de cette demande, ignorez cet email.</p>
+                    </body></html>',
+                    $resetUrl
+                ))
+        );
 
         return $this->inertia($request, 'auth/forgot-password', [
             'status' => 'We have emailed your password reset link!',
