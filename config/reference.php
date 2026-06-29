@@ -1449,7 +1449,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     length?: scalar|Param|null, // Default: 5
  *     width?: scalar|Param|null, // Default: 130
  *     height?: scalar|Param|null, // Default: 50
- *     font?: scalar|Param|null, // Default: "C:\\laragon\\www\\jamboapicms\\vendor\\gregwar\\captcha-bundle\\DependencyInjection/../Generator/Font/captcha.ttf"
+ *     font?: scalar|Param|null, // Default: "/home/jprud67/web/api.jambostack.site/public_html/vendor/gregwar/captcha-bundle/DependencyInjection/../Generator/Font/captcha.ttf"
  *     keep_value?: scalar|Param|null, // Default: false
  *     charset?: scalar|Param|null, // Default: "abcdefhjkmnprstuvwxyz23456789"
  *     as_file?: scalar|Param|null, // Default: false

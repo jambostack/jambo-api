@@ -32,7 +32,7 @@ export default function ResetPassword({ token, email }: ResetPasswordProps) {
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        post(route('password.store'), {
+        post(route('password.store', { token: data.token }), {
             onFinish: () => reset('password', 'password_confirmation'),
         });
     };
