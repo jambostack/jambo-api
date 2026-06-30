@@ -33,18 +33,20 @@ services:
     App\Repository\ApiTokenRepository:
         arguments:
             $appSecret: '%kernel.secret%'
+        public: true
 
     App\Repository\PersonalAccessTokenRepository:
         arguments:
             $appSecret: '%kernel.secret%'
-
-    App\Controller\ProjectSettingsController:
-        arguments:
-            $appSecret: '%kernel.secret%'
+        public: true
 
     App\Service\ApiTokenChecker:
         arguments:
             $appSecret: '%kernel.secret%'
+        public: true
+
+    App\Service\SchemaProvisioner:
+        public: true
 
     App\Security\PersonalAccessTokenAuthenticator:
         arguments:

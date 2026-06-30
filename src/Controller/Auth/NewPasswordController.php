@@ -31,7 +31,10 @@ class NewPasswordController extends InertiaController
             ]);
         }
 
-        return $this->inertia($request, 'auth/reset-password', ['token' => $token]);
+        return $this->inertia($request, 'auth/reset-password', [
+            'token' => $token,
+            'email' => $resetToken->email,
+        ]);
     }
 
     #[Route('/reset-password/{token}', name: 'app_reset_password_store', methods: ['POST'])]
@@ -40,23 +43,38 @@ class NewPasswordController extends InertiaController
         $resetToken = $this->tokenRepository->findValidByToken($token);
 
         if ($resetToken === null) {
-            return $this->json(['errors' => ['token' => 'This link is invalid or has expired.']], 422);
+            return $this->inertia($request, 'auth/reset-password', [
+                'token' => $token,
+                'errors' => ['token' => 'This password reset link is invalid or has expired.'],
+            ]);
         }
 
         $password = $request->getPayload()->getString('password');
         $confirmation = $request->getPayload()->getString('password_confirmation');
 
         if (strlen($password) < 8) {
-            return $this->json(['errors' => ['password' => 'Password must be at least 8 characters.']], 422);
+            return $this->inertia($request, 'auth/reset-password', [
+                'token' => $token,
+                'email' => $resetToken->email,
+                'errors' => ['password' => 'Password must be at least 8 characters.'],
+            ]);
         }
 
         if ($password !== $confirmation) {
-            return $this->json(['errors' => ['password_confirmation' => 'Passwords do not match.']], 422);
+            return $this->inertia($request, 'auth/reset-password', [
+                'token' => $token,
+                'email' => $resetToken->email,
+                'errors' => ['password_confirmation' => 'Passwords do not match.'],
+            ]);
         }
 
         $user = $this->userRepository->findByEmail($resetToken->email);
         if ($user === null) {
-            return $this->json(['errors' => ['email' => 'User not found.']], 422);
+            return $this->inertia($request, 'auth/reset-password', [
+                'token' => $token,
+                'email' => $resetToken->email,
+                'errors' => ['email' => 'User not found.'],
+            ]);
         }
 
         $user->password = $this->hasher->hashPassword($user, $password);

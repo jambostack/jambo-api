@@ -149,7 +149,7 @@ export default function ProjectSidebar({ project }: Props) {
                                                 {can.access_collection_settings && (
                                                     <Link
                                                         href={route('projects.collections.edit', [project.id, collection.id])}
-                                                        className="hidden lg:block p-1.5 lg:p-2 text-sm rounded-md hover:bg-accent"
+                                                        className="block p-1.5 lg:p-2 text-sm rounded-md hover:bg-accent"
                                                     >
                                                         <Settings className="w-4 h-4" />
                                                     </Link>

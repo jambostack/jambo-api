@@ -44,6 +44,7 @@ class SecurityController extends InertiaController
             'error'           => $authUtils->getLastAuthenticationError()?->getMessageKey(),
             'lastUsername'    => $authUtils->getLastUsername(),
             'csrfToken'       => $csrfTokenManager->getToken('authenticate')->getValue(),
+            'canResetPassword' => true,
             'socialProviders' => $socialProviders,
             'oidcProviders'   => $oidcProviders,
         ]);
