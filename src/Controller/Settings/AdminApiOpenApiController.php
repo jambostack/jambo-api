@@ -51,12 +51,14 @@ class AdminApiOpenApiController extends AbstractController
                 ['name' => 'Collections', 'description' => 'Schéma : collections (scope schema:write en écriture)'],
                 ['name' => 'Champs',      'description' => 'Schéma : champs des collections (scope schema:write en écriture)'],
                 ['name' => 'Jetons',      'description' => 'Gestion de vos Personal Access Tokens'],
+                ['name' => 'Import',      'description' => 'Import CSV en masse dans une collection'],
             ],
             'paths' => array_merge(
                 $this->projectPaths(),
                 $this->collectionPaths(),
                 $this->fieldPaths(),
                 $this->tokenPaths(),
+                $this->importPaths(),
             ),
         ];
     }
@@ -296,6 +298,38 @@ class AdminApiOpenApiController extends AbstractController
                     'tags' => ['Jetons'], 'summary' => 'Révoque un jeton',
                     'parameters' => [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
                     'responses' => ['204' => ['description' => 'Révoqué']] + $this->commonErrors(),
+                ],
+            ],
+        ];
+    }
+
+    private function importPaths(): array
+    {
+        return [
+            '/projects/{uuid}/collections/{slug}/import-csv' => [
+                'post' => [
+                    'tags' => ['Import'], 'summary' => 'Import CSV en masse',
+                    'description' => 'Scope requis : `content:write`. Importe un tableau d\'enregistrements dans une collection.',
+                    'parameters' => [$this->uuidParam(), $this->slugParam()],
+                    'requestBody' => $this->jsonBody([
+                        'data' => [
+                            ['Nom' => 'Dupont SARL', 'Ville' => 'Paris', 'Email' => 'contact@dupont.fr'],
+                            ['Nom' => 'Martin SAS', 'Ville' => 'Lyon', 'Email' => 'info@martin.fr'],
+                        ],
+                        'field_mapping' => ['Nom' => 'entreprise', 'Ville' => 'ville', 'Email' => 'email'],
+                        'locale' => 'fr',
+                        'status' => 'draft',
+                    ], ['data', 'field_mapping']),
+                    'responses' => [
+                        '201' => ['description' => 'Import terminé', 'content' => ['application/json' => ['schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'created' => ['type' => 'integer', 'example' => 50],
+                                'errors'  => ['type' => 'array', 'items' => ['type' => 'object']],
+                                'total'   => ['type' => 'integer', 'example' => 50],
+                            ],
+                        ]]]],
+                    ] + $this->commonErrors(withScope: true),
                 ],
             ],
         ];
