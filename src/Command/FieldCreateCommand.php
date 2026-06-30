@@ -44,16 +44,16 @@ class FieldCreateCommand extends Command
 
         $slug = $i->getOption('slug') ?: (string)$this->slugger->slug($i->getArgument('name'))->lower();
         $field = new Field();
-        $field->setName($i->getArgument('name'));
-        $field->setSlug($slug);
-        $field->setType($i->getOption('type'));
-        $field->setCollection($collection);
-        $field->setIsRequired($i->getOption('required'));
-        $field->setSortOrder(0);
+        $field->name = $i->getArgument('name');
+        $field->slug = $slug;
+        $field->type = $i->getOption('type');
+        $field->collection = $collection;
+        $field->isRequired = $i->getOption('required');
+        $field->sortOrder = 0;
         $this->em->persist($field);
         $this->em->flush();
 
-        $io->success("Champ '{$field->getName()}' ({$field->getType()}) ajouté !");
+        $io->success("Champ '{$field->name}' ({$field->type}) ajouté !");
         return Command::SUCCESS;
     }
 }
