@@ -14,8 +14,8 @@ class PasswordResetToken
     public ?int $id = null;
 
     #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    public Project $project;
+    #[ORM\JoinColumn(nullable: true, onDelete: 'CASCADE')]
+    public ?Project $project = null;
 
     #[ORM\Column(length: 180)]
     public string $email = '';
@@ -29,7 +29,7 @@ class PasswordResetToken
     #[ORM\Column]
     public \DateTimeImmutable $createdAt;
 
-    public function __construct(Project $project, string $email)
+    public function __construct(?Project $project, string $email)
     {
         $this->project = $project;
         $this->email = $email;

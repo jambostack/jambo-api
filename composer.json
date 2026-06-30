@@ -26,7 +26,7 @@
         "gregwar/captcha-bundle": "^2.5",
         "intervention/image": "^4.1",
         "knplabs/knp-paginator-bundle": "^6.10",
-        "lcobucci/jwt": "5.5",
+        "lcobucci/jwt": "^5.5",
         "league/flysystem-aws-s3-v3": "^3.0",
         "league/flysystem-bundle": "^3.0",
         "league/oauth2-client": "^2.9",

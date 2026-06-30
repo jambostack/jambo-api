@@ -15,6 +15,7 @@ use App\Service\ApiTokenChecker;
 use App\Service\EavDataFormatterService;
 use App\Service\EavFieldHelperService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\String\Slugger\SluggerInterface;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -38,6 +39,7 @@ class ContentController extends AbstractController
         private \App\Repository\ProjectMemberRepository $memberRepo,
         private \App\Service\FieldValueHydrator $fieldValueHydrator,
         private EavFieldHelperService $fieldValidator,
+        private SluggerInterface $slugger,
     ) {}
 
     #[OA\Get(
@@ -256,6 +258,21 @@ class ContentController extends AbstractController
         }
         if (!empty($validationErrors)) {
             return $this->json(['errors' => $validationErrors], 422);
+        }
+
+        // Generate slug from data or first meaningful field value
+        if (!empty($data['slug'])) {
+            $entry->slug = (string) $this->slugger->slug($data['slug'])->lower()->truncate(50, '');
+        } elseif (!empty($data)) {
+            // Fallback: build slug from first text field value
+            $firstValue = reset($data);
+            if (is_string($firstValue) && strlen($firstValue) > 0) {
+                $entry->slug = (string) $this->slugger->slug($firstValue)->lower()->truncate(45, '');
+            } else {
+                $entry->slug = 'entry-' . bin2hex(random_bytes(4));
+            }
+        } else {
+            $entry->slug = 'entry-' . bin2hex(random_bytes(4));
         }
 
         $this->em->persist($entry);
