@@ -38,14 +38,14 @@ class CollectionCreateCommand extends Command
 
         $slug = $i->getOption('slug') ?: (string)$this->slugger->slug($i->getArgument('name'))->lower();
         $coll = new Collection();
-        $coll->setName($i->getArgument('name'));
-        $coll->setSlug($slug);
-        $coll->setProject($project);
-        $coll->setIsSingleton($i->getOption('singleton'));
+        $coll->name = $i->getArgument('name');
+        $coll->slug = $slug;
+        $coll->project = $project;
+        $coll->isSingleton = $i->getOption('singleton');
         $this->em->persist($coll);
         $this->em->flush();
 
-        $io->success("Collection '{$coll->getName()}' créée !");
+        $io->success("Collection '{$coll->name}' créée !");
         $io->writeln("Slug: $slug");
         return Command::SUCCESS;
     }
