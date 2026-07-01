@@ -115,6 +115,7 @@ class CollectionController extends AbstractController
             'description' => $c->description,
             'isSingleton' => $c->isSingleton,
             'order'       => $c->order,
+            'settings'    => $c->settings ?? [],
         ];
         if ($withFields) {
             $data['fields'] = array_map(

@@ -121,6 +121,17 @@ class SchemaProvisioner
         if (isset($dto['is_singleton'])) {
             $c->isSingleton = (bool) $dto['is_singleton'];
         }
+        // Mise à jour des settings (public_create, workflow, seo, etc.)
+        if (isset($dto['settings']) && is_array($dto['settings'])) {
+            $current = $c->settings ?? [];
+            $c->settings = array_merge($current, $dto['settings']);
+        }
+        // Raccourci pour public_create directement dans le dto
+        if (isset($dto['public_create'])) {
+            $settings = $c->settings ?? [];
+            $settings['public_create'] = (bool) $dto['public_create'];
+            $c->settings = $settings;
+        }
         $this->em->flush();
         return $c;
     }
