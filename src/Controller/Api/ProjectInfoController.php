@@ -79,6 +79,7 @@ class ProjectInfoController extends AbstractController
                 'name'        => $c->name,
                 'slug'        => $c->slug,
                 'isSingleton' => $c->isSingleton,
+                'publicCreate' => $c->settings['public_create'] ?? false,
                 'fields'      => array_map(fn ($f) => [
                     'name'       => $f->name,
                     'slug'       => $f->slug,
