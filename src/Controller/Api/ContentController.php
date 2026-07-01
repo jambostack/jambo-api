@@ -267,6 +267,11 @@ class ContentController extends AbstractController
             }
         }
 
+        // Auto-set submitted_at si non fourni (champ datetime requis)
+        if (!isset($data['submitted_at']) && !isset($data['submittedAt'])) {
+            $data['submitted_at'] = (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM);
+        }
+
         $this->hydrateFieldValues($entry, $data, $collection, $project);
 
         // Validation des champs
