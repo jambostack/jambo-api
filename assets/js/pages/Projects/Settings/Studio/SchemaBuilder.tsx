@@ -2170,6 +2170,18 @@ function EditorView({
           <Switch checked={current.isSingleton} onCheckedChange={v => updateCollection(selectedIdx!, { isSingleton: v })} />
           <Label style={{ fontSize: '12px', color: 'var(--studio-text-dim)' }}>{t('studio.schema.singleton_label')}</Label>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Switch
+            checked={current.settings?.public_create === true}
+            onCheckedChange={v => {
+              const s = { ...(current.settings || {}), public_create: v };
+              updateCollection(selectedIdx!, { settings: s } as any);
+            }}
+          />
+          <Label style={{ fontSize: '12px', color: 'var(--studio-text-dim)' }}>
+            Création publique sans token
+          </Label>
+        </div>
       </div>
 
       {/* ── Workflow ── */}
