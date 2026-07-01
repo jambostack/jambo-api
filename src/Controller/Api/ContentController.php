@@ -4,6 +4,7 @@ namespace App\Controller\Api;
 
 use App\Entity\ContentEntry;
 use App\Entity\ContentFieldValue;
+use App\Entity\Media;
 use App\Entity\Project;
 use App\Repository\CollectionRepository;
 use App\Repository\ContentEntryRepository;
@@ -21,6 +22,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 #[OA\Tag(name: 'Content')]
 #[Route('/api/{projectId}/{collectionSlug}', name: 'public_api_content_', requirements: ['projectId' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
@@ -79,13 +81,20 @@ class ContentController extends AbstractController
         $page    = max(1, $request->query->getInt('page', 1));
         $perPage = min(100, max(1, $request->query->getInt('per_page', 15)));
         $status  = $request->query->getString('status', 'published');
+        $search  = $request->query->getString('search', '');
+        $sort    = $request->query->getString('sort', 'created_at:desc');
+        $dateFrom = $request->query->getString('date_from', '');
+        $dateTo   = $request->query->getString('date_to', '');
+
         $allStatuses = array_column($collection->getWorkflowStatuses(), 'slug');
         $allStatuses[] = 'draft';
         $allStatuses[] = 'scheduled';
         $statusFilter = in_array($status, $allStatuses, true) ? $status : null;
 
-        $entries = $this->entryRepository->findByCollectionPaginated($collection, $page, $perPage, $locale, $statusFilter);
-        $total   = $this->entryRepository->countByCollection($collection, $locale, $statusFilter);
+        $entries = $this->entryRepository->findByCollectionPaginated(
+            $collection, $page, $perPage, $locale, $statusFilter, $search, $sort, $dateFrom, $dateTo
+        );
+        $total = $this->entryRepository->countByCollection($collection, $locale, $statusFilter, $search, $dateFrom, $dateTo);
 
         return $this->json([
             'data' => array_values(array_map(fn ($e) => $this->formatter->formatEntry($e), $entries)),
@@ -156,25 +165,48 @@ class ContentController extends AbstractController
     #[Route('', name: 'store', methods: ['POST'])]
     public function store(Request $request, string $projectId, string $collectionSlug): JsonResponse
     {
-        $token = $this->tokenChecker->resolve($request);
-        if ($token === null || !$token->can('create')) {
-            return $this->json(['error' => 'Unauthorized. Token requires create ability.'], 401);
+        $project = $this->resolvePublicProject($projectId);
+        if ($project instanceof JsonResponse) {
+            return $project;
         }
 
-        if ($token->project->uuid->toString() !== $projectId) {
-            return $this->json(['error' => 'Forbidden.'], 403);
-        }
-
-        $collection = $this->collectionRepository->findOneByProjectAndSlug($token->project, $collectionSlug);
+        $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
             return $this->json(['error' => 'Collection not found.'], 404);
         }
 
-        $data   = $request->toArray();
-        $locale = $data['locale'] ?? $token->project->defaultLocale;
+        // Vérifier l'authentification : soit token API, soit collection en public_create
+        $token = $this->tokenChecker->resolve($request);
+        $publicCreate = $collection->settings['public_create'] ?? false;
+
+        if ($token === null && !$publicCreate) {
+            return $this->json(['error' => 'Authentication required. Provide an API token or enable public_create on the collection.'], 401);
+        }
+
+        if ($token !== null && $token->project->uuid->toString() !== $projectId) {
+            return $this->json(['error' => 'Forbidden.'], 403);
+        }
+
+        if ($token !== null && !$token->can('create')) {
+            return $this->json(['error' => 'Unauthorized. Token requires create ability.'], 401);
+        }
+
+        // Accepter JSON ou multipart/form-data
+        $contentType = $request->headers->get('Content-Type', '');
+        $isMultipart = str_starts_with($contentType, 'multipart/form-data');
+
+        if ($isMultipart) {
+            $data = $request->request->all();
+            $uploadedFiles = $request->files->all();
+        } else {
+            $data = $request->toArray();
+            $uploadedFiles = [];
+        }
+
+        $locale = $data['locale'] ?? $token?->project->defaultLocale ?? $project->defaultLocale;
 
         $entry = new ContentEntry();
-        $entry->project    = $token->project;
+        $entry->project    = $project;
         $entry->collection = $collection;
         $entry->locale     = $locale;
         $status = $data['status'] ?? $collection->getDefaultStatus();
@@ -203,7 +235,39 @@ class ContentController extends AbstractController
             return $this->json(['error' => 'scheduledAt is required when status is scheduled.'], 422);
         }
 
-        $this->hydrateFieldValues($entry, $data, $collection, $token->project);
+        // Si multipart : uploader les fichiers et les remplacer par leurs UUIDs
+        if ($isMultipart && $uploadedFiles !== []) {
+            $fields = $this->fieldRepository->findByCollection($collection);
+            foreach ($fields as $field) {
+                $fieldSlug = $field->slug;
+                if (!isset($uploadedFiles[$fieldSlug]) || !$uploadedFiles[$fieldSlug] instanceof UploadedFile) {
+                    continue;
+                }
+                $file = $uploadedFiles[$fieldSlug];
+                if (!$file->isValid()) {
+                    continue;
+                }
+                $media = new Media();
+                $media->project = $project;
+                $media->originalName = $file->getClientOriginalName();
+                $media->setFile($file);
+                $this->em->persist($media);
+                $this->em->flush();
+
+                // Remplacer le fichier par son UUID media
+                $data[$fieldSlug] = [$media->uuid->toString()];
+
+                // Remplir les champs *_filename et *_size si présents
+                if (array_key_exists($fieldSlug . '_filename', $data)) {
+                    $data[$fieldSlug . '_filename'] = $file->getClientOriginalName();
+                }
+                if (array_key_exists($fieldSlug . '_size', $data)) {
+                    $data[$fieldSlug . '_size'] = $file->getSize();
+                }
+            }
+        }
+
+        $this->hydrateFieldValues($entry, $data, $collection, $project);
 
         // Validation des champs
         $validationErrors = [];

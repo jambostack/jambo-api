@@ -7,6 +7,7 @@ use App\Entity\ContentEntry;
 use App\Entity\Project;
 use App\Entity\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\Tools\Pagination\Paginator;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -20,8 +21,18 @@ class ContentEntryRepository extends ServiceEntityRepository
     }
 
     /** @return ContentEntry[] */
-    public function findByCollectionPaginated(Collection $collection, int $page, int $perPage, ?string $locale = null, ?string $status = null, ?int $assignedToId = null): array
-    {
+    public function findByCollectionPaginated(
+        Collection $collection,
+        int $page,
+        int $perPage,
+        ?string $locale = null,
+        ?string $status = null,
+        ?string $search = null,
+        ?string $sort = 'created_at:desc',
+        ?string $dateFrom = null,
+        ?string $dateTo = null,
+        ?int $assignedToId = null,
+    ): array {
         $qb = $this->createQueryBuilder('e')
             ->addSelect('fv', 'cb', 'ub', 'at')
             ->leftJoin('e.fieldValues', 'fv')
@@ -31,7 +42,6 @@ class ContentEntryRepository extends ServiceEntityRepository
             ->where('e.collection = :collection')
             ->andWhere('e.deletedAt IS NULL')
             ->setParameter('collection', $collection)
-            ->orderBy('e.id', 'DESC')
             ->setFirstResult(($page - 1) * $perPage)
             ->setMaxResults($perPage);
 
@@ -47,13 +57,54 @@ class ContentEntryRepository extends ServiceEntityRepository
             $qb->andWhere('e.assignedTo = :assignedTo')->setParameter('assignedTo', $assignedToId);
         }
 
-        return $qb->getQuery()->getResult();
+        // Recherche full-text dans les champs de type text
+        if ($search !== null && $search !== '') {
+            $qb->andWhere('fv.textValue LIKE :search')
+               ->setParameter('search', '%' . $search . '%');
+        }
+
+        // Filtre par date de création
+        if ($dateFrom !== null && $dateFrom !== '') {
+            $qb->andWhere('e.createdAt >= :dateFrom')
+               ->setParameter('dateFrom', new \DateTimeImmutable($dateFrom));
+        }
+        if ($dateTo !== null && $dateTo !== '') {
+            $qb->andWhere('e.createdAt <= :dateTo')
+               ->setParameter('dateTo', new \DateTimeImmutable($dateTo . ' 23:59:59'));
+        }
+
+        // Tri personnalisé
+        if ($sort !== null) {
+            $sortParts = explode(':', $sort, 2);
+            $sortField = $sortParts[0] ?? 'created_at';
+            $sortDir   = isset($sortParts[1]) && strtolower($sortParts[1]) === 'asc' ? 'ASC' : 'DESC';
+            $sortFieldMap = [
+                'created_at'  => 'e.createdAt',
+                'updated_at'  => 'e.updatedAt',
+                'published_at' => 'e.publishedAt',
+                'id'          => 'e.id',
+            ];
+            $qb->orderBy($sortFieldMap[$sortField] ?? 'e.createdAt', $sortDir);
+        } else {
+            $qb->orderBy('e.id', 'DESC');
+        }
+
+        // Use Paginator for correct pagination with joined OneToMany (EAV field values)
+        $paginator = new Paginator($qb->getQuery(), fetchJoinCollection: true);
+        return iterator_to_array($paginator);
     }
 
-    public function countByCollection(Collection $collection, ?string $locale = null, ?string $status = null): int
-    {
+    public function countByCollection(
+        Collection $collection,
+        ?string $locale = null,
+        ?string $status = null,
+        ?string $search = null,
+        ?string $dateFrom = null,
+        ?string $dateTo = null,
+    ): int {
         $qb = $this->createQueryBuilder('e')
-            ->select('COUNT(e.id)')
+            ->select('COUNT(DISTINCT e.id)')
+            ->leftJoin('e.fieldValues', 'fv')
             ->where('e.collection = :collection')
             ->andWhere('e.deletedAt IS NULL')
             ->setParameter('collection', $collection);
@@ -64,6 +115,22 @@ class ContentEntryRepository extends ServiceEntityRepository
 
         if ($status !== null) {
             $qb->andWhere('e.status = :status')->setParameter('status', $status);
+        }
+
+        // Recherche full-text
+        if ($search !== null && $search !== '') {
+            $qb->andWhere('fv.textValue LIKE :search')
+               ->setParameter('search', '%' . $search . '%');
+        }
+
+        // Filtre par date de création
+        if ($dateFrom !== null && $dateFrom !== '') {
+            $qb->andWhere('e.createdAt >= :dateFrom')
+               ->setParameter('dateFrom', new \DateTimeImmutable($dateFrom));
+        }
+        if ($dateTo !== null && $dateTo !== '') {
+            $qb->andWhere('e.createdAt <= :dateTo')
+               ->setParameter('dateTo', new \DateTimeImmutable($dateTo . ' 23:59:59'));
         }
 
         return (int) $qb->getQuery()->getSingleScalarResult();
