@@ -74,7 +74,7 @@ class MediaRepository extends ServiceEntityRepository
 
         $rows = $conn->executeQuery(
             "SELECT uuid FROM media WHERE project_id = ? AND deleted_at IS NULL AND uuid IN ({$placeholders})",
-            [$project->getId(), ...$binaries],
+            [$project->id, ...$binaries],
         )->fetchAllAssociative();
 
         return array_map(
