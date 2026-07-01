@@ -18,10 +18,10 @@ class FieldValueHydrator
                 $cfv->booleanValue = (bool) $value;
                 break;
             case 'date':
-                $cfv->dateValue = $value !== null ? new \DateTimeImmutable($value) : null;
+                $cfv->dateValue = $value !== null ? new \DateTime($value) : null;
                 break;
             case 'datetime':
-                $cfv->datetimeValue = $value !== null ? new \DateTimeImmutable($value) : null;
+                $cfv->datetimeValue = $value !== null ? new \DateTime($value) : null;
                 break;
             case 'time':
                 $cfv->textValue = (string) $value;
