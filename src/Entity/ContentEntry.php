@@ -58,6 +58,10 @@ class ContentEntry
     #[ORM\OneToMany(targetEntity: ContentFieldValue::class, mappedBy: 'contentEntry', cascade: ['persist', 'remove'])]
     public DoctrineCollection $fieldValues;
 
+    /** @var DoctrineCollection<int, ContentFieldGroup> */
+    #[ORM\OneToMany(targetEntity: ContentFieldGroup::class, mappedBy: 'contentEntry', cascade: ['persist', 'remove'], orphanRemoval: true)]
+    public DoctrineCollection $fieldGroups;
+
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(nullable: true)]
     public ?User $createdBy = null;
@@ -109,6 +113,7 @@ class ContentEntry
     public function __construct()
     {
         $this->fieldValues = new ArrayCollection();
+        $this->fieldGroups = new ArrayCollection();
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = new \DateTimeImmutable();
     }

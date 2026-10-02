@@ -14,7 +14,7 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![Database](https://img.shields.io/badge/Doctrine%20ORM-MySQL%20%7C%20PostgreSQL%20%7C%20SQLite-4479A1)](https://www.doctrine-project.org)
 
-[Website](https://jambostack.site) · [Documentation](https://docs.jambostack.site) · [Changelog](CHANGELOG.md)
+[Website](https://jambostack.site) · [Documentation](https://docs.jambostack.site) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 </div>
 
@@ -199,17 +199,20 @@ Full reference → [docs.jambostack.site/api/introduction](https://docs.jambosta
 ---
 
 ## Roadmap
-
+ 
 - [x] REST API + GraphQL + OpenAPI/Swagger
 - [x] AI Schema Studio (10 providers)
 - [x] MCP Server v2.0
-- [x] End Users + JWT
+- [x] End Users + JWT & 2FA TOTP
 - [x] Content versioning · Webhooks · Audit logs
 - [x] Meilisearch · Multi-locale · PDF export
 - [x] Project & Collection templates · Export/Import
-- [ ] Docker one-click install
+- [x] **v1.10** : Upload direct S3/R2 multipart pré-signé & Groupes de champs relationnels (`ContentFieldGroup`)
+- [x] **v1.11** : Serveur OAuth2 Client par projet (PKCE) & Assistant IA streaming inline
+- [x] **v1.12** : Pack de Starters Frontend (`jambo:template:import`), Web Setup Wizard (`/install`) & Blueprints
 - [ ] Jambo Cloud (managed hosting)
-- [ ] Plugin/extension system
+ 
+👉 **Consultez la feuille de route technique complète dans [ROADMAP.md](ROADMAP.md).**
 
 ---
 

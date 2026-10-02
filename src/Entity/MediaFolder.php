@@ -26,7 +26,7 @@ class MediaFolder
     public int $position = 0;
 
     /** Adjacency list — dossier parent (nullable = racine) */
-    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\ManyToOne(targetEntity: self::class, inversedBy: 'children')]
     #[ORM\JoinColumn(nullable: true, onDelete: 'CASCADE')]
     public ?self $parent = null;
 

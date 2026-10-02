@@ -78,6 +78,13 @@ class ContentFieldValue
     #[ORM\OneToMany(targetEntity: ContentRelationFieldRelation::class, mappedBy: 'contentFieldValue', cascade: ['persist', 'remove'])]
     public DoctrineCollection $valueRelations;
 
+    #[ORM\ManyToOne(targetEntity: ContentFieldGroup::class, inversedBy: 'values')]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'CASCADE')]
+    public ?ContentFieldGroup $groupInstance = null {
+        get => $this->groupInstance;
+        set { $this->groupInstance = $value; }
+    }
+
     public function __construct()
     {
         $this->mediaRelations = new ArrayCollection();

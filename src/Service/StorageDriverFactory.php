@@ -67,8 +67,12 @@ class StorageDriverFactory
         }
     }
 
-    private function createS3(ProjectStorageProfile $profile): FilesystemOperator
+    public function getS3Client(ProjectStorageProfile $profile): S3Client
     {
+        if ($profile->driver !== 's3') {
+            throw new \InvalidArgumentException("Storage profile {$profile->name} is not an S3 driver.");
+        }
+
         $secret = $this->decrypt($profile->s3Secret ?? '');
 
         $clientConfig = [
@@ -89,7 +93,12 @@ class StorageDriverFactory
             $clientConfig['use_path_style_endpoint'] = true;
         }
 
-        $client = new S3Client($clientConfig);
+        return new S3Client($clientConfig);
+    }
+
+    private function createS3(ProjectStorageProfile $profile): FilesystemOperator
+    {
+        $client = $this->getS3Client($profile);
 
         return new Filesystem(new AwsS3V3Adapter(
             $client,

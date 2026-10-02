@@ -12,6 +12,8 @@
 
 # Playwright MCP — captured browser artifacts, never commit
 .playwright-mcp/
+/test-results/
+/playwright-report/
 
 ###> phpunit/phpunit ###
 /phpunit.xml
