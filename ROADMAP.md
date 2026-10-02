@@ -1,6 +1,6 @@
 # 🗺️ Jambo API — Feuille de Route & Spécifications des Nouvelles Fonctionnalités
 
-Ce document définit la feuille de route technique de **Jambo API** pour les versions **v1.10 à v1.12 (cycle v1.x)**, intégrant les fonctionnalités clés identifiées lors de l'audit architectural comparatif avec ElmAPI CMS v4.0.0 ainsi que les besoins d'évolution vers une plateforme Headless & Composable CMS d'envergure entreprise.
+Ce document définit la feuille de route technique de **Jambo API** pour la version **v1.20.0 (cycle v1.x)**, intégrant les fonctionnalités clés identifiées lors de l'audit architectural comparatif avec ElmAPI CMS v4.0.0 ainsi que les besoins d'évolution vers une plateforme Headless & Composable CMS d'envergure entreprise.
 
 ---
 
@@ -8,11 +8,11 @@ Ce document définit la feuille de route technique de **Jambo API** pour les ver
 
 | Phase | Domaine | Fonctionnalité Clé | Priorité | Statut | Cible |
 | :--- | :--- | :--- | :---: | :---: | :---: |
-| **Phase 1** | Stockage | Upload Direct S3/R2 Multipart Pré-signé | 🔴 Haute | ✅ Implémenté | v1.10.0 |
-| **Phase 2** | Modèle EAV | Groupes de Champs Relationnels (`ContentFieldGroup`) | 🔴 Haute | ✅ Implémenté | v1.10.0 |
-| **Phase 3** | Sécurité / Auth | Serveur OAuth2 Client complet par projet (PKCE) | 🟡 Moyenne | ✅ Implémenté | v1.11.0 |
-| **Phase 4** | IA / Studio | Assistant IA Streaming SSE inline dans l'éditeur | 🟡 Moyenne | ✅ Implémenté | v1.11.0 |
-| **Phase 5** | Écosystème | Pack de 11 Starters Frontend & Web Setup Wizard | 🟢 Gain rapide | ✅ Implémenté | v1.12.0 |
+| **Phase 1** | Stockage | Upload Direct S3/R2 Multipart Pré-signé | 🔴 Haute | ✅ Implémenté | v1.20.0 |
+| **Phase 2** | Modèle EAV | Groupes de Champs Relationnels (`ContentFieldGroup`) | 🔴 Haute | ✅ Implémenté | v1.20.0 |
+| **Phase 3** | Sécurité / Auth | Serveur OAuth2 Client complet par projet (PKCE) | 🟡 Moyenne | ✅ Implémenté | v1.20.0 |
+| **Phase 4** | IA / Studio | Assistant IA Streaming SSE inline dans l'éditeur | 🟡 Moyenne | ✅ Implémenté | v1.20.0 |
+| **Phase 5** | Écosystème | Pack de 11 Starters Frontend & Web Setup Wizard | 🟢 Gain rapide | ✅ Implémenté | v1.20.0 |
 
 ---
 
