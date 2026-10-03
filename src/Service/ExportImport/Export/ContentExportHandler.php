@@ -10,7 +10,7 @@ use App\Service\FieldValueHydrator;
 class ContentExportHandler implements ExportHandlerInterface
 {
     public function __construct(
-        private FieldValueHydrator $fieldValueHydrator,
+        private ?FieldValueHydrator $fieldValueHydrator = null,
     ) {}
     public static function getOptionKey(): string
     {
