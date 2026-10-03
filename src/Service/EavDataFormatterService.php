@@ -3,6 +3,8 @@
 namespace App\Service;
 
 use App\Entity\ContentEntry;
+use App\Entity\Media;
+use App\Repository\MediaRepository;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
@@ -23,7 +25,64 @@ class EavDataFormatterService
         private LoggerInterface $logger = new NullLogger(),
         private ?\App\Service\Seo\StructuredDataGenerator $structuredDataGenerator = null,
         private ?\App\Service\Seo\HreflangGenerator $hreflangGenerator = null,
+        private ?MediaRepository $mediaRepository = null,
     ) {}
+
+    /**
+     * Converts a Media entity to the object shape expected by the frontend:
+     * {url, alt, caption, width, height, mimeType, uuid}
+     */
+    private function serializeMedia(Media $media): array
+    {
+        $url = $media->getPublicUrl();
+        if ($url !== null && !str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
+            $url = 'https://api.jambostack.site' . $url;
+        }
+
+        return [
+            'uuid'     => $media->uuid?->toRfc4122(),
+            'url'      => $url,
+            'alt'      => $media->alt ?: $media->originalName,
+            'caption'  => $media->caption,
+            'mimeType' => $media->mimeType,
+            'fileSize' => $media->fileSize,
+            'width'    => $media->metadata?->width ?? null,
+            'height'   => $media->metadata?->height ?? null,
+        ];
+    }
+
+    /**
+     * Expands an array of media UUIDs into an array of serialized media objects.
+     * If only one media exists, returns the single object (not wrapped in array)
+     * to match the `cover_image?: JamboMedia` frontend type.
+     *
+     * @param string[] $uuids
+     */
+    private function expandMediaUuids(array $uuids): mixed
+    {
+        if ($this->mediaRepository === null || $uuids === []) {
+            return null;
+        }
+
+        $results = [];
+        foreach ($uuids as $uuid) {
+            try {
+                $uuidObj = \Symfony\Component\Uid\Uuid::fromString((string) $uuid);
+            } catch (\Throwable) {
+                continue;
+            }
+            $media = $this->mediaRepository->findOneBy(['uuid' => $uuidObj, 'deletedAt' => null]);
+            if ($media !== null) {
+                $results[] = $this->serializeMedia($media);
+            }
+        }
+
+        if ($results === []) {
+            return null;
+        }
+
+        return count($results) === 1 ? $results[0] : $results;
+    }
 
     /**
      * Formats a ContentEntry and its EAV field values into a flat JSON-friendly array.
@@ -74,7 +133,10 @@ class EavDataFormatterService
                 'date'                                                   => $fieldValue->dateValue?->format('Y-m-d'),
                 'datetime'                                               => $fieldValue->datetimeValue?->format(\DateTimeInterface::ATOM),
                 'json', 'array', 'repeater',
-                'media', 'relation', 'enumeration', 'tags'               => $fieldValue->jsonValue,
+                'relation', 'enumeration', 'tags'                        => $fieldValue->jsonValue,
+                'media'                                                  => is_array($fieldValue->jsonValue) && $fieldValue->jsonValue !== []
+                                                                              ? $this->expandMediaUuids($fieldValue->jsonValue)
+                                                                              : null,
                 default                                                  => $fieldValue->textValue,
             };
 

@@ -29,23 +29,39 @@ class StorageDriverFactory
 
     private function createLocal(ProjectStorageProfile $profile): FilesystemOperator
     {
-        $rootPath = $profile->rootPath
-            ?? $this->projectDir . '/public/uploads/media/' . $profile->project->uuid;
+        $rootPath = $profile->rootPath;
+        if ($rootPath === null || $rootPath === '') {
+            $rootPath = $this->projectDir . '/public/uploads/media/' . $profile->project->uuid;
+        } elseif (!str_starts_with($rootPath, '/') && !str_starts_with($rootPath, '\\') && !preg_match('/^[a-zA-Z]:[\\\\\/]/', $rootPath)) {
+            // Chemin relatif -> préfixer avec projectDir
+            $rootPath = $this->projectDir . '/' . ltrim($rootPath, '/\\');
+        } elseif (str_contains($rootPath, '/public/uploads/media/')) {
+            // Si le chemin absolu contient une ancienne racine serveur, réaligner sur le projectDir actuel
+            $subPath = substr($rootPath, strpos($rootPath, '/public/uploads/media/'));
+            $rootPath = $this->projectDir . $subPath;
+        }
 
         // Comparaison normalisée en slashes « / » : sur Windows, realpath() renvoie des
-        // antislashes alors que $allowedBase contient le littéral « /public/uploads/media/ »,
-        // ce qui ferait échouer str_starts_with() pour un chemin pourtant légitime.
-        $allowedBase = str_replace('\\', '/', $this->projectDir . '/public/uploads/media/');
+        // antislashes alors que $allowedBase contient le littéral « /public/uploads/media/ ».
+        // Sur les hébergements Linux (ex. cPanel/o2switch), /home est un lien symbolique vers /homeN :
+        // realpath() résout les symlinks, il faut donc aussi résoudre la base autorisée.
+        $rawBase = rtrim(str_replace('\\', '/', $this->projectDir . '/public/uploads/media/'), '/') . '/';
+        $realBase = realpath($this->projectDir . '/public/uploads/media');
+        $allowedBase = $realBase !== false ? rtrim(str_replace('\\', '/', $realBase), '/') . '/' : $rawBase;
+
         $resolved = realpath($rootPath);
         if ($resolved === false) {
             // Dossier n'existe pas encore — on vérifie que le chemin normalisé
             // ne sort pas du répertoire autorisé
             $normalized = str_replace('\\', '/', $rootPath);
-            if (str_contains($normalized, '..') || !str_starts_with($normalized, $allowedBase)) {
+            if (str_contains($normalized, '..') || (!str_starts_with($normalized, $allowedBase) && !str_starts_with($normalized, $rawBase))) {
                 throw new \RuntimeException('Local storage rootPath must be within the allowed uploads directory.');
             }
-        } elseif (!str_starts_with(str_replace('\\', '/', $resolved), $allowedBase)) {
-            throw new \RuntimeException('Local storage rootPath must be within the allowed uploads directory.');
+        } else {
+            $resolvedNorm = str_replace('\\', '/', $resolved);
+            if (!str_starts_with($resolvedNorm, $allowedBase) && !str_starts_with($resolvedNorm, $rawBase)) {
+                throw new \RuntimeException('Local storage rootPath must be within the allowed uploads directory.');
+            }
         }
 
         return new Filesystem(new LocalFilesystemAdapter($rootPath));
