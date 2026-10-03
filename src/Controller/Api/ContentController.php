@@ -634,7 +634,6 @@ class ContentController extends AbstractController
                ->where('e.collection = :collection')
                ->andWhere('e.slug = :slug')
                ->andWhere('e.locale = :locale')
-               ->andWhere('e.deletedAt IS NULL')
                ->setParameter('collection', $collection)
                ->setParameter('slug', $slug)
                ->setParameter('locale', $locale);
