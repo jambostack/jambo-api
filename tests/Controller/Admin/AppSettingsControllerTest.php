@@ -152,7 +152,6 @@ class AppSettingsControllerTest extends WebTestCase
         $pngFile = sys_get_temp_dir() . '/test_logo.png';
         $im = imagecreatetruecolor(1, 1);
         imagepng($im, $pngFile);
-        imagedestroy($im);
 
         $client->request('POST', '/admin/api/app-settings', [], [
             'logo' => new \Symfony\Component\HttpFoundation\File\UploadedFile(
