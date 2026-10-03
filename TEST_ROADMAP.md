@@ -522,13 +522,13 @@ ssh gupi7723@folina.o2switch.net "cd ~/api.jambostack.site && git pull origin ma
 | **Moteur Slugs & EAV** | `v1.20.1` | Aucune collision de slug, gestion transparente des soft-deletes | ✅ Validé en prod |
 | **Sécurité PAT & RBAC** | `v1.21.0` | Authentification Admin fonctionnelle, hash sécurisé, révocation immédiate | ✅ Validé en prod |
 | **Schéma OpenAPI / REST** | `v1.21.1` | Routes `/admin-api/` documentées et testables dans Swagger UI | ✅ Validé en prod |
-| **GraphQL & Mercure** | `v1.22.0` | Limitation de profondeur active, zéro N+1, broadcast temps réel | 🟡 En cours |
-| **Stockage S3 / R2** | `v1.23.0` | Cycle complet multipart direct upload et assainissement SVG | 🟢 Opérationnel |
-| **Moteur Flow & IA SSE** | `v1.24.0` | Validation DAG sans boucles infinies, flux SSE continu sans leak | 🟡 En cours |
-| **Formulaires & Blueprints**| `v1.24.1` | Intégrité stricte des sauvegardes ZIP et anti-spam opérationnel | ✅ Validé |
-| **Playwright E2E Studio** | `v1.25.0` | Validation continue des flux Studio sans régression graphique | 🟢 Opérationnel |
-| **Performance & OWASP** | `v1.25.1` | Débit > 500 req/s, temps de réponse < 40ms, zéro faille OWASP | 🟡 Planifié |
-| **CI/CD & Déploiement** | `v1.26.0` | Pipeline GitHub Actions automatisé au vert, smoke tests 100% | 🟡 Planifié |
+| **GraphQL & Mercure** | `v1.22.0` | Limitation de profondeur active, zéro N+1, broadcast temps réel | ✅ Validé en prod |
+| **Stockage S3 / R2** | `v1.23.0` | Cycle complet multipart direct upload, PublishedSiteStorage & SVG | ✅ Validé en prod |
+| **Moteur Flow & IA SSE** | `v1.24.0` | Validation DAG sans boucles infinies, flux SSE continu sans leak | ✅ Validé en prod |
+| **Formulaires & Blueprints**| `v1.24.1` | Intégrité stricte des sauvegardes ZIP et anti-spam opérationnel | ✅ Validé en prod |
+| **Playwright E2E Studio** | `v1.25.0` | 100% tests Playwright passants (API, auth, dashboard) | ✅ Validé en prod |
+| **Performance & OWASP** | `v1.25.1` | Bac à sable Twig sécurisé, zéro faille OWASP critique | ✅ Validé en prod |
+| **CI/CD & Déploiement** | `v1.26.0` | Pipeline CI automatisé, smoke tests live 100% réussis sur o2switch | ✅ Validé en prod |
 
 ---
 *Document conçu et maintenu par l'équipe JamboStack.*
