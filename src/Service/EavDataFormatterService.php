@@ -14,7 +14,7 @@ class EavDataFormatterService
      * système (sinon, ex. un champ « status » masque le statut publish/draft).
      */
     private const RESERVED_KEYS = [
-        'id', 'uuid', 'locale', 'status', 'collection',
+        'id', 'uuid', 'slug', 'locale', 'status', 'collection',
         'created_at', 'updated_at', 'deleted_at', 'published_at', 'scheduled_at',
         'creator', 'updater', 'assigned_to',
     ];
@@ -33,6 +33,7 @@ class EavDataFormatterService
         $data = [
             'id'           => $entry->id,
             'uuid'         => $entry->uuid?->toRfc4122(),
+            'slug'         => $entry->slug,
             'locale'       => $entry->locale,
             'status'       => $entry->status,
             'collection'   => $entry->collection?->slug,
