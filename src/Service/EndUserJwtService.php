@@ -6,7 +6,6 @@ use App\Entity\EndUser;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
-use Lcobucci\JWT\Validation\Constraint\Leeway;
 use Lcobucci\JWT\Validation\Constraint\StrictValidAt;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
 use Psr\Clock\ClockInterface;
@@ -55,7 +54,7 @@ class EndUserJwtService
             $token = $this->config->parser()->parse($jwt);
             $constraints = [
                 new SignedWith($this->config->signer(), $this->config->signingKey()),
-                new StrictValidAt($this->clock, new Leeway(30)),
+                new StrictValidAt($this->clock, new \DateInterval('PT30S')),
             ];
             $this->config->validator()->assert($token, ...$constraints);
             return [

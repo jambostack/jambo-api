@@ -19,7 +19,6 @@ class EndUserJwtServiceTest extends TestCase
         $endUser = new EndUser($project, 'user@test.com');
         $r = new \ReflectionClass($endUser);
         $p = $r->getProperty('uuid');
-        $p->setAccessible(true);
         $p->setValue($endUser, Uuid::v4());
 
         return $endUser;
