@@ -8,13 +8,15 @@
 
 **Open-source headless CMS — Symfony 8 · PHP 8.4 · React 19**
 
+[![Version](https://img.shields.io/badge/version-1.26.0-blue.svg)](CHANGELOG.md)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-2fcf8f.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://php.net)
+[![PHP](https://img.shields.io/badge/PHP-8.4%20%7C%208.5-777BB4?logo=php&logoColor=white)](https://php.net)
 [![Symfony](https://img.shields.io/badge/Symfony-8.0-000000?logo=symfony&logoColor=white)](https://symfony.com)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![Database](https://img.shields.io/badge/Doctrine%20ORM-MySQL%20%7C%20PostgreSQL%20%7C%20SQLite-4479A1)](https://www.doctrine-project.org)
+[![Tests](https://img.shields.io/badge/tests-500%2B%20passing-brightgreen.svg)](TEST_ROADMAP.md)
 
-[Website](https://jambostack.site) · [Documentation](https://docs.jambostack.site) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+[Website](https://jambostack.site) · [Documentation](https://docs.jambostack.site) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) · [Test Roadmap](TEST_ROADMAP.md)
 
 </div>
 
@@ -88,26 +90,32 @@ Most headless CMS tools give you one project per deployment. Jambo API gives you
 - **Full-text Search** — Meilisearch, real-time indexing
 
 ### API
-- **REST** — paginated, filterable, locale-aware, status-aware
-- **GraphQL** — auto-generated schema, queries & mutations
-- **OpenAPI / Swagger UI** — auto-generated interactive docs
-- **Export / Import** — zip-based project snapshots (structure + content + media)
+- **Admin API (`/admin-api/`)** — full headless management of projects, collections, fields, and schemas
+- **Public REST API** — paginated, filterable, locale-aware, direct slug retrieval, status-aware
+- **GraphQL** — auto-generated dynamic schema, queries & mutations with query depth limiting
+- **OpenAPI / Swagger UI** — complete interactive documentation for Public & Admin APIs (`/api/docs`)
+- **Direct S3/R2 Uploads** — presigned single and multipart uploads directly to AWS S3, Cloudflare R2, or MinIO
+- **Export / Import** — zip-based project snapshots & blueprints (structure + content + media)
 
 ### Users & Security
-- **Admin users** — roles, project membership, invitations
-- **End Users** — separate front-end auth table, JWT, custom fields, password reset, cross-project IDOR protection
-- **Rate limiter**, CSRF protection, HMAC-signed API tokens
+- **Admin users** — roles, project membership, invitations, audit logs
+- **Personal Access Tokens (PAT)** — secure HMAC-SHA256 tokens (`jbo_pat_...`) for automated API access
+- **End Users** — dedicated front-end auth table, OAuth2 PKCE, JWT & 2FA TOTP, cross-project IDOR protection
+- **Security Policies** — native Twig sandbox (`NativeTwigSecurityPolicy`), anti-bruteforce lockout, rate limiter, CSRF protection
 
-### Admin Panel
+### Admin Panel & Workflows
 - React 19 + Inertia.js + Tailwind CSS 4 + shadcn/ui
 - Lexical rich text (bold, italic, tables, code, links)
+- **Inline AI Assistant** — real-time SSE streaming for summarization, translation, and text expansion
+- **Flow Automation Engine** — visual DAG workflows (Triggers, Conditions, Webhooks, Emails, AI actions)
 - Dark mode · emerald design system
 
-### DevOps
-- **Webhooks** — per-collection event triggers
+### Quality & DevOps
+- **Test Suite** — 500+ PHPUnit 13 tests & Playwright E2E browser specs (see [TEST_ROADMAP.md](TEST_ROADMAP.md))
+- **Webhooks** — per-collection event triggers and inbound webhook listeners
 - **Audit logs** — every admin action tracked
 - **Mailer** — per-project SMTP + email log
-- **Messenger** — async jobs (Doctrine transport)
+- **Messenger** — asynchronous worker queue (Doctrine / async transports)
 
 ---
 
@@ -169,18 +177,40 @@ Open `http://localhost:8000`. See the full [installation guide](https://docs.jam
 
 ## API Quick Reference
 
+### Public Content API
 ```bash
-# List published entries
-GET /api/{project-uuid}/{collection}?locale=en&page=1&per_page=20
+# List entries in collection
+GET /api/v1/projects/{projectId}/collections/{collection}/content?page=1&limit=20
 
-# Single entry
-GET /api/{project-uuid}/{collection}/{entry-uuid}
+# Single entry by UUID
+GET /api/v1/projects/{projectId}/collections/{collection}/content/{entry-uuid}
 
-# Authorization
+# Direct lookup by unique Slug
+GET /api/v1/projects/{projectId}/collections/{collection}/content/by-slug/{slug}
+
+# Project Public Bearer Token Authorization
 Authorization: Bearer YOUR_API_TOKEN
 
-# GraphQL
-POST /api/{project-uuid}/graphql
+# GraphQL Endpoint
+POST /api/v1/projects/{projectId}/graphql
+```
+
+### Admin Headless API & Personal Access Tokens (PAT)
+```bash
+# Generate a Personal Access Token via CLI
+php bin/console jambo:pat:create admin@example.com --name="ci-token" --scopes=admin
+
+# Authenticate against Admin API
+GET /admin-api/_ping
+Authorization: Bearer jbo_pat_YOUR_SECRET_TOKEN
+
+# Manage projects and schema
+GET /admin-api/projects
+GET /admin-api/projects/{projectId}/collections
+
+# OpenAPI Interactive Documentation
+GET /api/docs
+GET /api/settings/admin-api/openapi.json
 ```
 
 ---
@@ -198,8 +228,8 @@ Full reference → [docs.jambostack.site/api/introduction](https://docs.jambosta
 
 ---
 
-## Roadmap
- 
+## Roadmap & Milestones
+
 - [x] REST API + GraphQL + OpenAPI/Swagger
 - [x] AI Schema Studio (10 providers)
 - [x] MCP Server v2.0
@@ -207,12 +237,18 @@ Full reference → [docs.jambostack.site/api/introduction](https://docs.jambosta
 - [x] Content versioning · Webhooks · Audit logs
 - [x] Meilisearch · Multi-locale · PDF export
 - [x] Project & Collection templates · Export/Import
-- [x] **v1.10** : Upload direct S3/R2 multipart pré-signé & Groupes de champs relationnels (`ContentFieldGroup`)
-- [x] **v1.11** : Serveur OAuth2 Client par projet (PKCE) & Assistant IA streaming inline
-- [x] **v1.12** : Pack de Starters Frontend (`jambo:template:import`), Web Setup Wizard (`/install`) & Blueprints
+- [x] **v1.10 – v1.12** : Upload direct S3/R2 multipart, `ContentFieldGroup`, OAuth2 PKCE, Web Setup Wizard & Starters
+- [x] **v1.20** : Moteur EAV durci (unicité slugs multi-locales avec soft-deletes, validation partielle PATCH)
+- [x] **v1.21** : Admin API `/admin-api/` avec Personal Access Tokens HMAC-SHA256 & isolation IDOR multi-tenant
+- [x] **v1.22** : Sécurité GraphQL (limiteur de profondeur de requête) & diffusion temps réel Mercure SSE
+- [x] **v1.23** : Upload direct multipart S3/R2 résilient, cycle complet d'abandon & `PublishedSiteStorage`
+- [x] **v1.24** : Moteur Flow DAG avec détection de boucles, streaming IA SSE inline & formulaires anti-spam
+- [x] **v1.25** : Suite E2E Playwright automatisée & bac à sable Twig hermétique (`NativeTwigSecurityPolicy`)
+- [x] **v1.26** : Consolidation qualité, pipeline CI/CD automatisé & vérification live 100% en production
 - [ ] Jambo Cloud (managed hosting)
- 
-👉 **Consultez la feuille de route technique complète dans [ROADMAP.md](ROADMAP.md).**
+
+👉 **Spécifications fonctionnelles : [ROADMAP.md](ROADMAP.md)**  
+🧪 **Feuille de route et cahier de recette des tests : [TEST_ROADMAP.md](TEST_ROADMAP.md)**
 
 ---
 
