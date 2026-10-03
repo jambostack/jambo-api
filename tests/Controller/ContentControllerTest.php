@@ -167,6 +167,7 @@ class ContentControllerTest extends WebTestCase
         $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $this->projectUuid]);
         $projectMember = new ProjectMember();
         $projectMember->user    = $member;
+        $projectMember->email   = $member->email;
         $projectMember->project = $project;
         $projectMember->status  = ProjectMemberStatus::Active;
         $em->persist($projectMember);
@@ -178,6 +179,7 @@ class ContentControllerTest extends WebTestCase
             'title'          => 'Assigned entry',
             'status'         => 'draft',
             'assigned_to_id' => $member->id,
+            'fields'         => ['title' => 'Assigned entry'],
         ]);
 
         $this->assertSame(201, $client->getResponse()->getStatusCode());
