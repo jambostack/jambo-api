@@ -431,6 +431,9 @@ class ContentController extends AbstractController
             if ($field->isDeleted()) {
                 continue;
             }
+            if ($request->isMethod('PATCH') && !array_key_exists($field->slug, $data)) {
+                continue;
+            }
             $fieldValue = $data[$field->slug] ?? null;
             $fieldErrors = $this->fieldValidator->validateFieldValue($field, $fieldValue);
             if (!empty($fieldErrors)) {
