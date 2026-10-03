@@ -329,20 +329,15 @@ class ContentController extends AbstractController
             return $this->json(['errors' => $validationErrors], 422);
         }
 
-        // Generate slug from data or first meaningful field value
-        if (!empty($data['slug'])) {
-            $entry->slug = (string) $this->slugger->slug($data['slug'])->lower()->truncate(50, '');
-        } elseif (!empty($data)) {
-            // Fallback: build slug from first text field value
+        // Generate slug from data or first meaningful field value and ensure uniqueness
+        $rawSlug = !empty($data['slug']) && is_string($data['slug']) ? $data['slug'] : null;
+        if ($rawSlug === null && !empty($data)) {
             $firstValue = reset($data);
             if (is_string($firstValue) && strlen($firstValue) > 0) {
-                $entry->slug = (string) $this->slugger->slug($firstValue)->lower()->truncate(45, '');
-            } else {
-                $entry->slug = 'entry-' . bin2hex(random_bytes(4));
+                $rawSlug = $firstValue;
             }
-        } else {
-            $entry->slug = 'entry-' . bin2hex(random_bytes(4));
         }
+        $entry->slug = $this->ensureUniqueSlug($collection, $rawSlug ?? ('entry-' . bin2hex(random_bytes(4))), $entry->locale);
 
         $this->em->persist($entry);
         $this->em->flush();
@@ -413,6 +408,9 @@ class ContentController extends AbstractController
         }
         if (isset($data['locale'])) {
             $entry->locale = $data['locale'];
+        }
+        if (isset($data['slug']) && is_string($data['slug']) && trim($data['slug']) !== '') {
+            $entry->slug = $this->ensureUniqueSlug($collection, $data['slug'], $entry->locale, $entry->id);
         }
 
         // Handle assignment
@@ -619,4 +617,41 @@ class ContentController extends AbstractController
 
         return $ids !== [] ? $ids : null;
     }
+
+    private function ensureUniqueSlug(Collection $collection, string $baseSlug, string $locale, ?int $excludeEntryId = null): string
+    {
+        $base = (string) $this->slugger->slug($baseSlug)->lower()->truncate(50, '');
+        if ($base === '') {
+            $base = 'entry';
+        }
+        $slug = $base;
+        $counter = 1;
+
+        while (true) {
+            $qb = $this->em->createQueryBuilder();
+            $qb->select('COUNT(e.id)')
+               ->from(ContentEntry::class, 'e')
+               ->where('e.collection = :collection')
+               ->andWhere('e.slug = :slug')
+               ->andWhere('e.locale = :locale')
+               ->andWhere('e.deletedAt IS NULL')
+               ->setParameter('collection', $collection)
+               ->setParameter('slug', $slug)
+               ->setParameter('locale', $locale);
+
+            if ($excludeEntryId !== null) {
+                $qb->andWhere('e.id != :excludeId')
+                   ->setParameter('excludeId', $excludeEntryId);
+            }
+
+            if ((int) $qb->getQuery()->getSingleScalarResult() === 0) {
+                return $slug;
+            }
+
+            $suffix = '-' . $counter;
+            $slug = substr($base, 0, max(1, 50 - strlen($suffix))) . $suffix;
+            $counter++;
+        }
+    }
 }
+

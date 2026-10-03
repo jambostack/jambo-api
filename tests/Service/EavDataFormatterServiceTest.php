@@ -118,11 +118,11 @@ class EavDataFormatterServiceTest extends TestCase
     {
         $entry = $this->makeEntry();
         $date = new \DateTime('2026-01-15');
-        $entry->fieldValues->add($this->makeFieldValue($entry, 'published_at', 'date', dateValue: $date));
+        $entry->fieldValues->add($this->makeFieldValue($entry, 'event_date', 'date', dateValue: $date));
 
         $result = $this->formatter->formatEntry($entry);
 
-        $this->assertSame('2026-01-15', $result['published_at']);
+        $this->assertSame('2026-01-15', $result['event_date']);
     }
 
     public function testFormatEntryRendersTagsAsArray(): void

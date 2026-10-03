@@ -18,6 +18,10 @@ nelmio_api_doc:
                     scheme: bearer
                     bearerFormat: JWT
                     description: JWT issued by /auth/login or /auth/register (15-minute access token)
+                PersonalAccessToken:
+                    type: http
+                    scheme: bearer
+                    description: Personal Access Token for Admin API (jbo_pat_...)
             schemas:
                 Error:
                     type: object
@@ -190,3 +194,4 @@ nelmio_api_doc:
             path_patterns:
                 - ^/api/
                 - ^/public-api
+                - ^/admin-api/

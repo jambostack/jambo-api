@@ -16,6 +16,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(
     name: 'project:export',
     description: 'Export a project to a ZIP file',
+    aliases: ['jambo:project:export'],
 )]
 class ProjectExportCommand extends Command
 {
