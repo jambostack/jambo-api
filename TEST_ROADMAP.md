@@ -11,19 +11,21 @@
 1. [Vision & Philosophie de Test](#1-vision--philosophie-de-test)
 2. [Matrice Pyramidale & Objectifs de Couverture](#2-matrice-pyramidale--objectifs-de-couverture)
 3. [État des Lieux & Audit de Couverture Actuel](#3-état-des-lieux--audit-de-couverture-actuel)
-4. [Phasage du Test Roadmap](#4-phasage-du-test-roadmap)
-   - [Phase T1 : Moteur EAV & Intégrité du Contenu](#phase-t1--moteur-eav--intégrité-du-contenu)
-   - [Phase T2 : Sécurité, Authentification & Autorisations](#phase-t2--sécurité-authentification--autorisations)
-   - [Phase T3 : Admin REST API & Public REST API](#phase-t3--admin-rest-api--public-rest-api)
-   - [Phase T4 : Moteur GraphQL Dynamique & Temps Réel (Mercure)](#phase-t4--moteur-graphql-dynamique--temps-réel-mercure)
-   - [Phase T5 : Médias, Upload Direct S3/R2 & Stockage](#phase-t5--médias-upload-direct-s3r2--stockage)
-   - [Phase T6 : Moteur Flow, Automations & Assistant IA SSE](#phase-t6--moteur-flow-automations--assistant-ia-sse)
-   - [Phase T7 : Formulaires, SEO, Redirections & Blueprints](#phase-t7--formulaires-seo-redirections--blueprints)
-   - [Phase T8 : Tests E2E Interface Studio (Playwright)](#phase-t8--tests-e2e-interface-studio-playwright)
-   - [Phase T9 : Performance, Concurrence & Audit de Sécurité](#phase-t9--performance-concurrence--audit-de-sécurité)
-   - [Phase T10 : Pipeline CI/CD & Smoke Tests Production](#phase-t10--pipeline-cicd--smoke-tests-production)
-5. [Cahier de Recette Exécutable & Commandes](#5-cahier-de-recette-exécutable--commandes)
-6. [Tableau de Bord & Critères de Validation](#6-tableau-de-bord--critères-de-validation)
+4. [Stratégie de Versionnement Git (v1.*.*) & Triggers de Push](#4-stratégie-de-versionnement-git-v1---triggers-de-push)
+5. [Phasage Détaillé du Test Roadmap & Tags Associés](#5-phasage-détaillé-du-test-roadmap--tags-associés)
+   - [Phase T1 (v1.20.1) : Moteur EAV & Intégrité du Contenu](#phase-t1-v1201--moteur-eav--intégrité-du-contenu)
+   - [Phase T2 (v1.21.0) : Sécurité, Authentification & Autorisations](#phase-t2-v1210--sécurité-authentification--autorisations)
+   - [Phase T3 (v1.21.1) : Admin REST API & Public REST API](#phase-t3-v1211--admin-rest-api--public-rest-api)
+   - [Phase T4 (v1.22.0) : Moteur GraphQL Dynamique & Temps Réel (Mercure)](#phase-t4-v1220--moteur-graphql-dynamique--temps-réel-mercure)
+   - [Phase T5 (v1.23.0) : Médias, Upload Direct S3/R2 & Stockage](#phase-t5-v1230--médias-upload-direct-s3r2--stockage)
+   - [Phase T6 (v1.24.0) : Moteur Flow, Automations & Assistant IA SSE](#phase-t6-v1240--moteur-flow-automations--assistant-ia-sse)
+   - [Phase T7 (v1.24.1) : Formulaires, SEO, Redirections & Blueprints](#phase-t7-v1241--formulaires-seo-redirections--blueprints)
+   - [Phase T8 (v1.25.0) : Tests E2E Interface Studio (Playwright)](#phase-t8-v1250--tests-e2e-interface-studio-playwright)
+   - [Phase T9 (v1.25.1) : Performance, Concurrence & Audit de Sécurité](#phase-t9-v1251--performance-concurrence--audit-de-sécurité)
+   - [Phase T10 (v1.26.0) : Pipeline CI/CD & Smoke Tests Production](#phase-t10-v1260--pipeline-cicd--smoke-tests-production)
+6. [Cahier de Recette Exécutable & Commandes](#6-cahier-de-recette-exécutable--commandes)
+   - [Procédure Standard de Tagging & Push Git](#procédure-standard-de-tagging--push-git)
+7. [Tableau de Bord & Critères de Validation](#7-tableau-de-bord--critères-de-validation)
 
 ---
 
@@ -84,9 +86,36 @@ La résilience de la plateforme repose sur 4 piliers de test fondamentaux :
 
 ---
 
-## 4. Phasage du Test Roadmap
+## 4. Stratégie de Versionnement Git (v1.*.*) & Triggers de Push
 
-### Phase T1 : Moteur EAV & Intégrité du Contenu
+> ⚠️ **Directive Fondamentale de Versionnement :** Le cycle actuel de Jambo API est strictement borné à la version majeure **v1** (`v1.*.*`). La version 2 n'est **pas encore envisageable** à ce stade du cycle produit. Tous les tags créés et poussés (`git push origin <tag>`) doivent respecter strictement les spécifications SemVer au sein de la branche `v1.x.y` :
+> - **Patch releases (`v1.20.x`, `v1.21.x`, `v1.24.x`, etc.) :** Résolution de bugs critiques, corrections de régression, durcissement des validations sans rupture d'API.
+> - **Minor releases (`v1.21.0`, `v1.22.0`, `v1.23.0`, `v1.24.0`, `v1.25.0`, `v1.26.0`) :** Livraisons de modules complets testés et stabilisés, ajout de nouvelles suites d'API ou d'intégrations E2E backward-compatible.
+
+### 4.1 Matrice d'Évolution des Tags Git (`v1.*.*`) par Phase de Test
+
+| Phase de Test | Tag Git Cible | Type SemVer | Milestone Fonctionnelle | Quality Gate (Critère de Validation du Tag) | Déclencheur du Push (`git push`) |
+| :--- | :---: | :---: | :--- | :--- | :--- |
+| **Phase T1** | `v1.20.1` | Patch | Intégrité EAV, Slugs & Patch | 100% tests d'unicité slugs (avec soft-delete), cast EAV et validation `PATCH` au vert | Après validation de la suite `tests/Entity` et `ContentControllerTest` |
+| **Phase T2** | `v1.21.0` | Mineure | Sécurité, Auth PAT & OAuth2 | Tests PAT HMAC-SHA256, isolation IDOR, lockout anti-bruteforce et OAuth2 PKCE validés | Après exécution complète de `tests/Security` et `AdminApiSecurityTest` |
+| **Phase T3** | `v1.21.1` | Patch | Admin & Public REST API | Swagger UI `/api/docs` synchronisé, formatage RFC 7807 et filtres avancés conformes | Après validation de `tests/Controller/AdminApi` et `Api` |
+| **Phase T4** | `v1.22.0` | Mineure | GraphQL Dynamique & Mercure | Pas de requêtes N+1, limiteurs de profondeur/complexité actifs, SSE Mercure opérationnel | Après succès de `SchemaGeneratorTest` et `RealtimeControllerTest` |
+| **Phase T5** | `v1.23.0` | Mineure | Upload Direct S3 & Médias | Cycle complet S3 multipart (intent, sign, complete, abort) et assainissement SVG validés | Après succès de `DirectUploadServiceTest` et tests de stockage |
+| **Phase T6** | `v1.24.0` | Mineure | Moteur Flow & IA Streaming | DAG sans boucles infinies, streaming SSE sans fuite mémoire, audit des déclencheurs validé | Après validation de `FlowInterpreterTest` et `ContentAiStreamControllerTest` |
+| **Phase T7** | `v1.24.1` | Patch | Formulaires, SEO & Blueprints | Pot-de-miel anti-spam, détection de boucles de redirection et roundtrip import/export ZIP parfaits | Après validation de `SubmitHandlerTest`, `RedirectChainDetectorTest` et `BlueprintCommandsTest` |
+| **Phase T8** | `v1.25.0` | Mineure | Studio E2E (Playwright) | 100% des scénarios E2E Studio passants (auth, édition de blocs, navigation, publication) | Après validation de `npm run test:e2e` en headless CI |
+| **Phase T9** | `v1.25.1` | Patch | Performance & Audit OWASP | Débit REST > 500 req/s (p95 < 120ms), zéro alerte critique sur l'audit de sécurité OWASP | Après benchmark k6 et revue des entêtes de sécurité |
+| **Phase T10**| `v1.26.0` | Mineure | CI/CD & Recette Production | Pipeline GitHub Actions automatisé au vert, smoke tests 100% réussis sur `api.jambostack.site` | Déploiement production final et vérification live |
+
+---
+
+## 5. Phasage Détaillé du Test Roadmap & Tags Associés
+
+### Phase T1 (v1.20.1) : Moteur EAV & Intégrité du Contenu
+
+* **Tag Git Associé :** `v1.20.1` (Patch release)
+* **Commande de Push :** `git tag -a v1.20.1 -m "release: v1.20.1 - EAV slug uniqueness & partial PATCH validation fixes" && git push origin v1.20.1`
+* **Quality Gate :** 0 erreur sur l'unicité des slugs avec soft-deletes, hydratation et validation partielle `PATCH`.
 
 **Objectif :** Garantir que le modèle EAV dynamique préserve l'intégrité relationnelle, le typage des valeurs et l'unicité des accès publics.
 
@@ -117,7 +146,11 @@ La résilience de la plateforme repose sur 4 piliers de test fondamentaux :
 
 ---
 
-### Phase T2 : Sécurité, Authentification & Autorisations
+### Phase T2 (v1.21.0) : Sécurité, Authentification & Autorisations
+
+* **Tag Git Associé :** `v1.21.0` (Mineure)
+* **Commande de Push :** `git tag -a v1.21.0 -m "release: v1.21.0 - Personal Access Tokens HMAC-SHA256, IDOR multi-tenant isolation, anti-bruteforce lockout & OAuth2 PKCE" && git push origin v1.21.0`
+* **Quality Gate :** 100% de succès sur `AdminApiSecurityTest`, isolation stricte inter-projets et révocabilité immédiate des sessions.
 
 **Objectif :** Valider l'étanchéité des différents mécanismes d'accès, des jetons administratifs et des sessions utilisateurs.
 
@@ -150,7 +183,11 @@ La résilience de la plateforme repose sur 4 piliers de test fondamentaux :
 
 ---
 
-### Phase T3 : Admin REST API & Public REST API
+### Phase T3 (v1.21.1) : Admin REST API & Public REST API
+
+* **Tag Git Associé :** `v1.21.1` (Patch release)
+* **Commande de Push :** `git tag -a v1.21.1 -m "release: v1.21.1 - REST API RFC 7807 compliance, collection filtering & OpenAPI synchronization" && git push origin v1.21.1`
+* **Quality Gate :** Swagger UI `/api/docs` 100% aligné, pagination et conformité des codes d'erreurs HTTP (200, 401, 403, 404, 422).
 
 **Objectif :** Assurer la conformité des contrats d'interface, des codes d'état HTTP, du filtrage avancé et de la pagination.
 
@@ -176,7 +213,11 @@ La résilience de la plateforme repose sur 4 piliers de test fondamentaux :
 
 ---
 
-### Phase T4 : Moteur GraphQL Dynamique & Temps Réel (Mercure)
+### Phase T4 (v1.22.0) : Moteur GraphQL Dynamique & Temps Réel (Mercure)
+
+* **Tag Git Associé :** `v1.22.0` (Mineure)
+* **Commande de Push :** `git tag -a v1.22.0 -m "release: v1.22.0 - GraphQL dynamic schema security (query depth limits) & Mercure SSE real-time broadcast" && git push origin v1.22.0`
+* **Quality Gate :** Aucune régression N+1 requêtes sur les résolutions imbriquées, rejet strict des requêtes cycliques et diffusion Mercure confirmée.
 
 **Objectif :** Valider la génération dynamique du schéma GraphQL typé et la distribution temps réel des mutations de contenu.
 
@@ -202,7 +243,11 @@ La résilience de la plateforme repose sur 4 piliers de test fondamentaux :
 
 ---
 
-### Phase T5 : Médias, Upload Direct S3/R2 & Stockage
+### Phase T5 (v1.23.0) : Médias, Upload Direct S3/R2 & Stockage
+
+* **Tag Git Associé :** `v1.23.0` (Mineure)
+* **Commande de Push :** `git tag -a v1.23.0 -m "release: v1.23.0 - Cloudflare R2 / AWS S3 direct multipart upload lifecycle & SVG sanitization" && git push origin v1.23.0`
+* **Quality Gate :** Succès du cycle complet (single put, multi-part, abort, complete) et assainissement XSS des fichiers SVG.
 
 **Objectif :** Certifier le pipeline de stockage cloud direct, le découpage multipart et la sécurisation des fichiers téléversés.
 
@@ -232,7 +277,11 @@ La résilience de la plateforme repose sur 4 piliers de test fondamentaux :
 
 ---
 
-### Phase T6 : Moteur Flow, Automations & Assistant IA SSE
+### Phase T6 (v1.24.0) : Moteur Flow, Automations & Assistant IA SSE
+
+* **Tag Git Associé :** `v1.24.0` (Mineure)
+* **Commande de Push :** `git tag -a v1.24.0 -m "release: v1.24.0 - Flow DAG interpreter, loop cycle detection & resilient AI inline SSE stream" && git push origin v1.24.0`
+* **Quality Gate :** Interdiction des boucles infinies de flux, streaming SSE sans fuite mémoire et audit d'exécution complet.
 
 **Objectif :** Tester la robustesse du moteur d'exécution visuel de flux, la gestion des erreurs de noeuds et le streaming IA.
 
@@ -257,7 +306,11 @@ La résilience de la plateforme repose sur 4 piliers de test fondamentaux :
 
 ---
 
-### Phase T7 : Formulaires, SEO, Redirections & Blueprints
+### Phase T7 (v1.24.1) : Formulaires, SEO, Redirections & Blueprints
+
+* **Tag Git Associé :** `v1.24.1` (Patch release)
+* **Commande de Push :** `git tag -a v1.24.1 -m "release: v1.24.1 - Anti-spam form protection, redirect loop detection & blueprint import/export roundtrip" && git push origin v1.24.1`
+* **Quality Gate :** 0 boucle de redirection non détectée, blocage absolu du spam par pot-de-miel et parité 100% sur les exports/imports ZIP.
 
 **Objectif :** Valider les fonctionnalités publiques front-facing, la détection des boucles de redirection et la portabilité des templates.
 
@@ -285,7 +338,11 @@ La résilience de la plateforme repose sur 4 piliers de test fondamentaux :
 
 ---
 
-### Phase T8 : Tests E2E Interface Studio (Playwright)
+### Phase T8 (v1.25.0) : Tests E2E Interface Studio (Playwright)
+
+* **Tag Git Associé :** `v1.25.0` (Mineure)
+* **Commande de Push :** `git tag -a v1.25.0 -m "release: v1.25.0 - Studio E2E test suite integration & UI regression suite" && git push origin v1.25.0`
+* **Quality Gate :** 100% des tests Playwright passants (aucun échec UI, formulaires et navigation réactifs).
 
 **Objectif :** Vérifier que l'interface utilisateur web (React + Inertia + TypeScript) réagit fidèlement aux interactions utilisateur.
 
@@ -318,7 +375,11 @@ test('Création d\'un article complet avec réordonnancement de blocs et publica
 
 ---
 
-### Phase T9 : Performance, Concurrence & Audit de Sécurité
+### Phase T9 (v1.25.1) : Performance, Concurrence & Audit de Sécurité
+
+* **Tag Git Associé :** `v1.25.1` (Patch release)
+* **Commande de Push :** `git tag -a v1.25.1 -m "release: v1.25.1 - Performance optimization & OWASP security hardening" && git push origin v1.25.1`
+* **Quality Gate :** Débit > 500 req/s sous charge, p95 < 120ms, 0 vulnérabilité OWASP critique.
 
 **Objectif :** Éprouver le système sous forte charge et valider sa résistance aux attaques informatiques.
 
@@ -336,7 +397,11 @@ test('Création d\'un article complet avec réordonnancement de blocs et publica
 
 ---
 
-### Phase T10 : Pipeline CI/CD & Smoke Tests Production
+### Phase T10 (v1.26.0) : Pipeline CI/CD & Smoke Tests Production
+
+* **Tag Git Associé :** `v1.26.0` (Mineure de consolidation)
+* **Commande de Push :** `git tag -a v1.26.0 -m "release: v1.26.0 - Automated CI/CD pipeline & live production verification suite" && git push origin v1.26.0`
+* **Quality Gate :** Pipeline GitHub Actions 100% vert sur PHP 8.4 + MySQL 8.0, smoke tests réussis sur `https://api.jambostack.site`.
 
 **Objectif :** Automatiser les vérifications à chaque commit et disposer d'un scénario de recette immédiat après déploiement.
 
@@ -391,9 +456,9 @@ Script exécutable à chaque livraison sur `api.jambostack.site` :
 
 ---
 
-## 5. Cahier de Recette Exécutable & Commandes
+## 6. Cahier de Recette Exécutable & Commandes
 
-### 5.1 Commandes d'Exécution Rapide (Développeur)
+### 6.1 Commandes d'Exécution Rapide (Développeur)
 
 ```bash
 # 1. Lancer uniquement les tests unitaires (rapides, sans base)
@@ -409,7 +474,7 @@ vendor/bin/phpunit tests/Command --no-progress
 npm run test:e2e
 ```
 
-### 5.2 Scénarios cURL de Validation Production
+### 6.2 Scénarios cURL de Validation Production
 
 ```bash
 # 1. Vérification de la disponibilité et version
@@ -425,18 +490,45 @@ curl -s -X GET "https://api.jambostack.site/api/v1/projects/YOUR_PROJECT_ID/coll
   -H "Accept: application/json"
 ```
 
+### 6.3 Procédure Standard de Tagging & Push Git (Cycle v1.*.*)
+
+Pour chaque phase de test complétée, le processus de versionnement et de livraison doit suivre ce protocole strict :
+
+```bash
+# Étape 1 : S'assurer que le working tree est 100% propre
+git status --short
+
+# Étape 2 : Exécuter la suite de tests requise par la phase
+vendor/bin/phpunit --no-progress
+
+# Étape 3 : Créer le tag Git annoté correspondant strictement au cycle v1.*.*
+# Exemple pour la Phase T1 :
+git tag -a v1.20.1 -m "release: v1.20.1 - EAV slug uniqueness & partial PATCH validation fixes"
+
+# Étape 4 : Pousser les commits et le nouveau tag sur le dépôt distant GitHub
+git push origin main
+git push origin v1.20.1
+
+# Étape 5 : Répercuter sur le serveur de production (o2switch)
+ssh gupi7723@folina.o2switch.net "cd ~/api.jambostack.site && git pull origin main && git checkout v1.20.1"
+```
+
 ---
 
-## 6. Tableau de Bord & Critères de Validation
+## 7. Tableau de Bord & Critères de Validation
 
-| Domaine | Critère de Succès (Go / No-Go) | Statut Actuel |
-| :--- | :--- | :---: |
-| **Sécurité PAT** | Authentification Admin fonctionnelle, hash sécurisé, révocation immédiate | ✅ Validé en prod |
-| **Moteur Slugs** | Aucune collision de slug, gestion transparente des soft-deletes | ✅ Validé en prod |
-| **Schéma OpenAPI** | Routes `/admin-api/` documentées et testables dans Swagger UI | ✅ Validé en prod |
-| **Tests PHPUnit** | 503 tests enregistrés, suppression des avis de dépréciation PHP 8.5 | 🟡 En cours d'optimisation |
-| **Playwright E2E** | Validation continue des flux Studio sans régression graphique | 🟢 Opérationnel |
-| **Export / Import** | Intégrité stricte des sauvegardes ZIP et blueprints | ✅ Validé |
+| Domaine | Tag Cible | Critère de Succès (Go / No-Go) | Statut Actuel |
+| :--- | :---: | :--- | :---: |
+| **Moteur Slugs & EAV** | `v1.20.1` | Aucune collision de slug, gestion transparente des soft-deletes | ✅ Validé en prod |
+| **Sécurité PAT & RBAC** | `v1.21.0` | Authentification Admin fonctionnelle, hash sécurisé, révocation immédiate | ✅ Validé en prod |
+| **Schéma OpenAPI / REST** | `v1.21.1` | Routes `/admin-api/` documentées et testables dans Swagger UI | ✅ Validé en prod |
+| **GraphQL & Mercure** | `v1.22.0` | Limitation de profondeur active, zéro N+1, broadcast temps réel | 🟡 En cours |
+| **Stockage S3 / R2** | `v1.23.0` | Cycle complet multipart direct upload et assainissement SVG | 🟢 Opérationnel |
+| **Moteur Flow & IA SSE** | `v1.24.0` | Validation DAG sans boucles infinies, flux SSE continu sans leak | 🟡 En cours |
+| **Formulaires & Blueprints**| `v1.24.1` | Intégrité stricte des sauvegardes ZIP et anti-spam opérationnel | ✅ Validé |
+| **Playwright E2E Studio** | `v1.25.0` | Validation continue des flux Studio sans régression graphique | 🟢 Opérationnel |
+| **Performance & OWASP** | `v1.25.1` | Débit > 500 req/s, temps de réponse < 40ms, zéro faille OWASP | 🟡 Planifié |
+| **CI/CD & Déploiement** | `v1.26.0` | Pipeline GitHub Actions automatisé au vert, smoke tests 100% | 🟡 Planifié |
 
 ---
 *Document conçu et maintenu par l'équipe JamboStack.*
