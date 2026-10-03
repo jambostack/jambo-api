@@ -28,7 +28,7 @@ class FieldListCommand extends Command
         if (!$project) { $io->error('Projet introuvable'); return Command::FAILURE; }
         $coll = $this->collections->findOneByProjectAndSlug($project, $i->getArgument('collection-slug'));
         if (!$coll) { $io->error('Collection introuvable'); return Command::FAILURE; }
-        $ff = $this->fields->findBy(['collection' => $coll, 'deletedAt' => null], ['sortOrder' => 'ASC']);
+        $ff = $this->fields->findBy(['collection' => $coll, 'deletedAt' => null], ['order' => 'ASC']);
         $rows = [];
         foreach ($ff as $f) $rows[] = [$f->id, $f->name, $f->slug, $f->type, $f->isRequired ? 'Oui' : 'Non'];
         $io->table(['ID', 'Nom', 'Slug', 'Type', 'Requis'], $rows);
