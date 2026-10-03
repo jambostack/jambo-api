@@ -618,7 +618,7 @@ class ContentController extends AbstractController
         return $ids !== [] ? $ids : null;
     }
 
-    private function ensureUniqueSlug(Collection $collection, string $baseSlug, string $locale, ?int $excludeEntryId = null): string
+    private function ensureUniqueSlug(\App\Entity\Collection $collection, string $baseSlug, string $locale, ?int $excludeEntryId = null): string
     {
         $base = (string) $this->slugger->slug($baseSlug)->lower()->truncate(50, '');
         if ($base === '') {

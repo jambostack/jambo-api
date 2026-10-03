@@ -8,12 +8,19 @@ use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\KernelEvents;
 
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
+
 /**
  * Garantit des réponses JSON {"error": "...", "code": "..."} pour toute
  * exception levée sous /api/ (l'API publique).
  */
 class PublicApiExceptionSubscriber implements EventSubscriberInterface
 {
+    public function __construct(
+        private LoggerInterface $logger = new NullLogger(),
+    ) {}
+
     public static function getSubscribedEvents(): array
     {
         return [KernelEvents::EXCEPTION => 'onException'];
@@ -31,6 +38,12 @@ class PublicApiExceptionSubscriber implements EventSubscriberInterface
 
         $e = $event->getThrowable();
         $status = $e instanceof HttpExceptionInterface ? $e->getStatusCode() : 500;
+        if ($status >= 500) {
+            $this->logger->error('Public API 500 error: ' . $e->getMessage(), [
+                'exception' => $e,
+                'path' => $path,
+            ]);
+        }
 
         // Essayer d'extraire un code d'erreur plus spécifique
         $errorCode = match ($status) {
