@@ -1,6 +1,6 @@
 {
     "name": "jambostack/jambo-api",
-    "version": "1.26.18",
+    "version": "1.26.19",
     "devDependencies": {
         "@babel/core": "^7.17.0",
         "@babel/preset-env": "^7.16.0",
@@ -26,7 +26,7 @@
         "webpack": "^5.72",
         "webpack-cli": "^6.0.0"
     },
-    "license": "UNLICENSED",
+    "license": "AGPL-3.0-or-later",
     "private": true,
     "scripts": {
         "dev-server": "encore dev-server",

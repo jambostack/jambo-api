@@ -7,6 +7,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.19] — 2026-10-19
+
+### Added
+- **Restoration of Automated GitHub Actions CI/CD Pipeline (FIX-019 / SIM-005)**:
+  - Created `.github/workflows/ci.yml` providing automated continuous integration across three parallel/staged pipelines:
+    1. `php-tests`: PHP 8.4 matrix with MySQL 8.0 service container, strict `composer validate`, migrations execution, and complete PHPUnit test suite run.
+    2. `frontend-build`: Node.js 20 asset pipeline compiling Webpack Encore production assets (`npm ci && npm run build`).
+    3. `docker-build`: Docker Buildx verification validating production container build against `./Dockerfile`.
+  - Aligned `package.json` license metadata with project AGPL-3.0-or-later standard.
+
+---
+
 ## [1.26.18] — 2026-10-19
 
 ### Fixed
