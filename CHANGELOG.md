@@ -7,6 +7,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.14] — 2026-10-19
+
+### Added
+- **OAuth2 Authorize & Consent Endpoint Implementation (FIX-014 / SIM-003)**:
+  - Implemented the missing RFC 6749 authorization endpoint `GET|POST /api/v1/projects/{projectUuid}/oauth/authorize`.
+  - Added strict parameter validation for `client_id`, `redirect_uri` whitelist, `response_type=code`, and PKCE parameters (`code_challenge` / `code_challenge_method`).
+  - Added multi-tenant client verification ensuring OAuth2 clients are strictly bound to their parent project.
+  - Supported end-user authentication via Bearer token, credentials submission, or consent decision (`authorize` vs `deny`).
+  - Created standalone responsive Twig consent screen template `templates/oauth/authorize.html.twig`.
+  - Added comprehensive test suite `ProjectOAuthControllerTest` covering invalid clients, redirect URI mismatch, unsupported response types, login challenges, and code generation.
+
+---
+
 ## [1.26.13] — 2026-10-19
 
 ### Added

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autorisation OAuth2 — {{ client.name }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Syne:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --j-primary:   #0f766e;
+            --j-primary-d: #115e59;
+            --j-bg:        #f8fafc;
+            --j-card:      #ffffff;
+            --j-fg:        #0f172a;
+            --j-muted:     #64748b;
+            --j-border:    #e2e8f0;
+            --j-danger:    #ef4444;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--j-bg);
+            color: var(--j-fg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+        .auth-card {
+            background: var(--j-card);
+            border: 1px solid var(--j-border);
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.02);
+            width: 100%;
+            max-width: 440px;
+            padding: 2.25rem;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 1.75rem;
+        }
+        .app-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            background: rgba(15, 118, 110, 0.1);
+            color: var(--j-primary);
+            border-radius: 0.75rem;
+            margin-bottom: 1rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+        h1 {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        p.subtitle {
+            color: var(--j-muted);
+            font-size: 0.925rem;
+            line-height: 1.45;
+        }
+        .app-highlight {
+            font-weight: 600;
+            color: var(--j-fg);
+        }
+        .scopes-box {
+            background: #f1f5f9;
+            border-radius: 0.5rem;
+            padding: 0.875rem 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .scopes-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: var(--j-muted);
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+        .scope-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--j-fg);
+            margin-top: 0.35rem;
+        }
+        .scope-item::before {
+            content: "✓";
+            color: var(--j-primary);
+            font-weight: bold;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 0.35rem;
+            color: var(--j-fg);
+        }
+        input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 0.65rem 0.875rem;
+            border: 1px solid var(--j-border);
+            border-radius: 0.5rem;
+            font-size: 0.95rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        input[type="email"]:focus, input[type="password"]:focus {
+            border-color: var(--j-primary);
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+        }
+        .alert-error {
+            background: #fef2f2;
+            color: var(--j-danger);
+            border: 1px solid #fecaca;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+        .actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+        }
+        .btn {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+            transition: all 0.15s;
+            text-align: center;
+            text-decoration: none;
+        }
+        .btn-primary {
+            background: var(--j-primary);
+            color: #ffffff;
+        }
+        .btn-primary:hover {
+            background: var(--j-primary-d);
+        }
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #475569;
+        }
+        .btn-secondary:hover {
+            background: #cbd5e1;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-card">
+        <div class="header">
+            <div class="app-badge">{{ client.name|slice(0, 1)|upper }}</div>
+            <h1>Autoriser {{ client.name }}</h1>
+            <p class="subtitle">L'application <span class="app-highlight">{{ client.name }}</span> souhaite accéder à votre compte sur le projet <span class="app-highlight">{{ project.name }}</span>.</p>
+        </div>
+
+        <div class="scopes-box">
+            <div class="scopes-title">Autorisations demandées</div>
+            {% for s in scope|split(' ') %}
+                {% if s|trim is not empty %}
+                    <div class="scope-item">{{ s }}</div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        {% if login_error %}
+            <div class="alert-error">{{ login_error }}</div>
+        {% endif %}
+
+        <form method="POST">
+            <input type="hidden" name="client_id" value="{{ client.clientId }}">
+            <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
+            <input type="hidden" name="response_type" value="code">
+            {% if state %}
+                <input type="hidden" name="state" value="{{ state }}">
+            {% endif %}
+            {% if scope %}
+                <input type="hidden" name="scope" value="{{ scope }}">
+            {% endif %}
+            {% if code_challenge %}
+                <input type="hidden" name="code_challenge" value="{{ code_challenge }}">
+            {% endif %}
+            {% if code_challenge_method %}
+                <input type="hidden" name="code_challenge_method" value="{{ code_challenge_method }}">
+            {% endif %}
+
+            <div class="form-group">
+                <label for="email">Adresse e-mail</label>
+                <input type="email" id="email" name="email" required autocomplete="email" placeholder="votre@email.com">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Mot de passe</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+            </div>
+
+            <div class="actions">
+                <button type="submit" name="action" value="deny" class="btn btn-secondary">Refuser</button>
+                <button type="submit" name="action" value="authorize" class="btn btn-primary">Autoriser</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
