@@ -10,7 +10,9 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
+#[IsGranted('ROLE_USER')]
 class PasswordController extends AbstractController
 {
     public function __construct(
@@ -25,8 +27,12 @@ class PasswordController extends AbstractController
             return $this->json(['errors' => ['current_password' => 'Password changes are disabled in demo mode.']], 403);
         }
 
-        /** @var User $user */
+        /** @var User|null $user */
         $user = $this->getUser();
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'Non authentifié'], 401);
+        }
+
         $data = $request->toArray();
 
         if (!$this->hasher->isPasswordValid($user, $data['current_password'] ?? '')) {

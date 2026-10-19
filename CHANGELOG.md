@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.11] — 2026-10-19
+
+### Fixed
+- **Null Safety on User Account Settings (FIX-011 / BUG-001)**:
+  - Decorated `Settings\PasswordController` and `Settings\ProfileController` with `#[IsGranted('ROLE_USER')]`.
+  - Added defensive `instanceof User` assertions returning structured JSON 401 Unauthorized responses instead of unhandled 500 `TypeError` exceptions on unauthenticated access.
+  - Added automated test suite `SettingsSecurityTest` validating graceful denial without server errors.
+
+---
+
 ## [1.26.10] — 2026-10-19
 
 ### Security

@@ -2,6 +2,7 @@
 
 namespace App\Controller\Settings;
 
+use App\Entity\User;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -9,8 +10,10 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/settings', name: 'api_settings_')]
+#[IsGranted('ROLE_USER')]
 class ProfileController extends AbstractController
 {
     public function __construct(
@@ -22,6 +25,9 @@ class ProfileController extends AbstractController
     public function show(): JsonResponse
     {
         $user = $this->getUser();
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'Non authentifié'], 401);
+        }
 
         return $this->json([
             'id'    => $user->id,
@@ -34,6 +40,9 @@ class ProfileController extends AbstractController
     public function update(Request $request): Response
     {
         $user = $this->getUser();
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'Non authentifié'], 401);
+        }
         $data = $request->toArray();
 
         if (isset($data['name'])) {
@@ -60,6 +69,9 @@ class ProfileController extends AbstractController
         }
 
         $user = $this->getUser();
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'Non authentifié'], 401);
+        }
         $this->em->remove($user);
         $this->em->flush();
 
