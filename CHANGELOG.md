@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.1] — 2026-10-19
+
+### Security
+- **Sanitization & Secret Isolation (FIX-001)**:
+  - Untracked `.env` from git repository (`git rm --cached .env`) to prevent credential leakage.
+  - Ensured `.env` and local environment files remain strictly excluded via `.gitignore`.
+  - Replaced production credentials in local `.env` with localhost dev defaults.
+  - Redacted all credentials across audit and roadmap documentation.
+
+---
+
 ## [1.0.1] — 2026-06-04
 
 ### Fixed
