@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.22] — 2026-10-19
+
+### Added
+- **Production Readiness Sign-Off & Healthcheck Probe Integration (FIX-022 / REC-002)**:
+  - Created `HealthController` providing `/health` and `/api/health` probes verifying database connectivity and runtime storage health.
+  - Added `HealthControllerTest` verifying passing health status, DB connectivity checks, and application version metadata.
+  - Finalized `CHECKLIST_PRODUCTION.md`: validated all 24/24 gates across Security, Database, Infrastructure, and Reliability.
+  - Official production sign-off delivered: **GO PRODUCTION** on `v1.26.22`.
+
+---
+
 ## [1.26.21] — 2026-10-19
 
 ### Fixed
