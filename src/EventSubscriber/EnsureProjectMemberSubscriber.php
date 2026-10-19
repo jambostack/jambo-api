@@ -35,6 +35,9 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
 
         $request     = $event->getRequest();
         $projectUuid = $request->attributes->get('projectUuid');
+        if ($projectUuid === null && str_starts_with($request->getPathInfo(), '/api/projects/')) {
+            $projectUuid = $request->attributes->get('uuid');
+        }
 
         if ($projectUuid === null) {
             return;

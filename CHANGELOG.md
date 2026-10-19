@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.7] — 2026-10-19
+
+### Security
+- **Multi-Tenant Guard Parameter Harmonization (FIX-007 / SEC-005)**:
+  - Resolved multi-tenant authorization bypass in `EnsureProjectMemberSubscriber`.
+  - Added fallback extraction for route parameter `{uuid}` when `{projectUuid}` is not explicitly declared on routes under `/api/projects/`.
+  - Enforced project membership and tenant isolation across GraphQL, Search, Studio, and MCP routes.
+  - Added automated test suite `EnsureProjectMemberSubscriberTest` validating that unauthenticated and non-member requests to `{uuid}` routes are strictly denied.
+
+---
+
 ## [1.26.6] — 2026-10-19
 
 ### Security
