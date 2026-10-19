@@ -10,7 +10,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY webpack.config.js ./
+COPY webpack.config.js tsconfig.json postcss.config.cjs* ./
 COPY assets ./assets
 
 RUN npm run build
