@@ -46,7 +46,8 @@ RUN mkdir -p var/cache var/log public/uploads/media/cache \
     && chown -R www-data:www-data var public/uploads
 
 # Warmup du cache Symfony avec un environnement de build isolé
-RUN APP_ENV=prod APP_DEBUG=0 DATABASE_URL="sqlite:///:memory:" php bin/console cache:warmup --env=prod
+RUN cp -n .env.example .env \
+    && APP_ENV=prod APP_DEBUG=0 DATABASE_URL="sqlite:///:memory:" php bin/console cache:warmup --env=prod
 
 EXPOSE 80
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
