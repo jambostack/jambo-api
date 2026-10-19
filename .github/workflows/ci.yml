@@ -48,6 +48,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-composer-
 
+      - name: Setup environment file
+        run: cp .env.example .env
+
       - name: Install Composer dependencies
         run: composer install --prefer-dist --no-progress --no-interaction
 
