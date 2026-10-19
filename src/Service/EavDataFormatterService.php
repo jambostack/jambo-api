@@ -107,6 +107,11 @@ class EavDataFormatterService
         ];
 
         foreach ($entry->fieldValues as $fieldValue) {
+            // Ignore les valeurs appartenant à un groupe ou répéteur relationnel (traitées ci-dessous)
+            if ($fieldValue->groupInstance !== null) {
+                continue;
+            }
+
             $fieldName = $fieldValue->field?->slug;
             if (!$fieldName) {
                 $this->logger->warning('orphan field value detected: ContentFieldValue#{id} has no field relation', [
@@ -141,6 +146,44 @@ class EavDataFormatterService
             };
 
             $data[$fieldName] = $value;
+        }
+
+        // ── Répéteurs relationnels (ContentFieldGroup) ──
+        if (isset($entry->fieldGroups) && !$entry->fieldGroups->isEmpty()) {
+            $groupsByField = [];
+            foreach ($entry->fieldGroups as $group) {
+                $fieldSlug = $group->field?->slug;
+                if (!$fieldSlug) {
+                    continue;
+                }
+
+                $itemData = [];
+                foreach ($group->values as $val) {
+                    $subSlug = $val->field?->slug;
+                    if (!$subSlug) {
+                        continue;
+                    }
+
+                    $itemData[$subSlug] = match ($val->fieldType) {
+                        'number', 'decimal', 'rating'                            => $val->numberValue !== null ? (float) $val->numberValue : null,
+                        'boolean', 'checkbox'                                    => $val->booleanValue,
+                        'date'                                                   => $val->dateValue?->format('Y-m-d'),
+                        'datetime'                                               => $val->datetimeValue?->format(\DateTimeInterface::ATOM),
+                        'json', 'array', 'repeater', 'relation', 'enumeration', 'tags' => $val->jsonValue,
+                        'media'                                                  => is_array($val->jsonValue) && $val->jsonValue !== []
+                            ? $this->expandMediaUuids($val->jsonValue)
+                            : null,
+                        default                                                  => $val->textValue,
+                    };
+                }
+                $groupsByField[$fieldSlug][] = $itemData;
+            }
+
+            foreach ($groupsByField as $fieldSlug => $items) {
+                if (!isset($data[$fieldSlug]) || empty($data[$fieldSlug])) {
+                    $data[$fieldSlug] = $items;
+                }
+            }
         }
 
         // ── Bloc SEO natif ──

@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.16] — 2026-10-19
+
+### Fixed
+- **Hybrid EAV & JSON Schema Consolidation (FIX-016 / ARC-001 / Arbitrage D-01)**:
+  - Created `ContentEntryValidator` providing robust schema validation for repeaters, arrays, and JSON structures (min/max items, required subfields, JSON schema type verification).
+  - Harmonized `EavDataFormatterService` to cleanly serialize both pure JSON repeaters and relational `ContentFieldGroup` instances without root field namespace collisions.
+  - Added unit test suites `ContentEntryValidatorTest` and expanded `EavDataFormatterServiceTest` validating complex nested data structures and relational grouping.
+
+---
+
 ## [1.26.15] — 2026-10-19
 
 ### Fixed

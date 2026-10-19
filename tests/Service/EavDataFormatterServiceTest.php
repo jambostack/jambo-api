@@ -4,6 +4,7 @@ namespace App\Tests\Service;
 
 use App\Entity\Collection;
 use App\Entity\ContentEntry;
+use App\Entity\ContentFieldGroup;
 use App\Entity\ContentFieldValue;
 use App\Entity\Field;
 use App\Entity\Project;
@@ -192,6 +193,73 @@ class EavDataFormatterServiceTest extends TestCase
 
         $this->assertArrayHasKey('assigned_to', $result);
         $this->assertNull($result['assigned_to']);
+    }
+
+    public function testFormatEntrySupportsPureJsonRepeater(): void
+    {
+        $entry = $this->makeEntry();
+        $repeaterItems = [
+            ['title' => 'Item 1', 'score' => 10],
+            ['title' => 'Item 2', 'score' => 20],
+        ];
+        $entry->fieldValues->add($this->makeFieldValue($entry, 'features', 'repeater', jsonValue: $repeaterItems));
+
+        $result = $this->formatter->formatEntry($entry);
+
+        $this->assertArrayHasKey('features', $result);
+        $this->assertSame($repeaterItems, $result['features']);
+    }
+
+    public function testFormatEntrySupportsRelationalContentFieldGroup(): void
+    {
+        $entry = $this->makeEntry();
+
+        $parentField = new Field();
+        $parentField->name = 'Gallery';
+        $parentField->slug = 'gallery';
+        $parentField->type = 'repeater';
+
+        $subField1 = new Field();
+        $subField1->name = 'Caption';
+        $subField1->slug = 'caption';
+        $subField1->type = 'text';
+
+        $subField2 = new Field();
+        $subField2->name = 'Order';
+        $subField2->slug = 'order';
+        $subField2->type = 'number';
+
+        $group1 = new ContentFieldGroup();
+        $group1->field = $parentField;
+        $group1->contentEntry = $entry;
+
+        $val1 = new ContentFieldValue();
+        $val1->field = $subField1;
+        $val1->fieldType = 'text';
+        $val1->textValue = 'Sunset';
+        $group1->addValue($val1);
+
+        $val2 = new ContentFieldValue();
+        $val2->field = $subField2;
+        $val2->fieldType = 'number';
+        $val2->numberValue = '1';
+        $group1->addValue($val2);
+
+        $entry->fieldGroups->add($group1);
+        // Also attach them to fieldValues (as Doctrine does on inverse side)
+        $entry->fieldValues->add($val1);
+        $entry->fieldValues->add($val2);
+
+        $result = $this->formatter->formatEntry($entry);
+
+        // Subfields must NOT leak as root properties
+        $this->assertArrayNotHasKey('caption', $result);
+        $this->assertArrayNotHasKey('order', $result);
+
+        // Parent repeater field must contain the formatted group
+        $this->assertArrayHasKey('gallery', $result);
+        $this->assertCount(1, $result['gallery']);
+        $this->assertSame(['caption' => 'Sunset', 'order' => 1.0], $result['gallery'][0]);
     }
 
     private function makeEntry(): ContentEntry
