@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.4] — 2026-10-19
+
+### Security
+- **Path Traversal & RCE Neutralization (FIX-004)**:
+  - Fixed arbitrary file write vulnerability in `PublishedSiteStorage::publish()`.
+  - Added strict path segmentation and traversal validation preventing `..` or `.` escapes.
+  - Enforced strict canonical directory and file path boundary checking against the project publication root.
+  - Added unit test cases verifying immediate exception rejection on malicious path injection.
+
+---
+
 ## [1.26.3] — 2026-10-19
 
 ### Fixed

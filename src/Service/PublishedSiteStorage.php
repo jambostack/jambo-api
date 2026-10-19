@@ -25,14 +25,36 @@ class PublishedSiteStorage
         }
 
         mkdir($projectDir, 0755, true);
+        $realProjectDir = realpath($projectDir);
+        if ($realProjectDir === false) {
+            throw new \RuntimeException("Unable to resolve project publication directory: {$projectDir}");
+        }
 
         foreach ($files as $relativePath => $content) {
-            $filePath = $projectDir . '/' . ltrim($relativePath, '/');
+            $normalizedRelative = str_replace('\\', '/', $relativePath);
+            $parts = explode('/', trim($normalizedRelative, '/'));
+            if (in_array('..', $parts, true) || in_array('.', $parts, true)) {
+                throw new \InvalidArgumentException("Path traversal attempt detected in relative path: {$relativePath}");
+            }
+
+            $filePath = $projectDir . '/' . implode('/', $parts);
             $dir = dirname($filePath);
             if (!is_dir($dir)) {
                 mkdir($dir, 0755, true);
             }
+
+            $realDir = realpath($dir);
+            if ($realDir === false || (!str_starts_with($realDir, $realProjectDir . DIRECTORY_SEPARATOR) && $realDir !== $realProjectDir)) {
+                throw new \InvalidArgumentException("Directory path resolves outside the project publication root: {$relativePath}");
+            }
+
             file_put_contents($filePath, $content);
+
+            $realFilePath = realpath($filePath);
+            if ($realFilePath === false || !str_starts_with($realFilePath, $realProjectDir . DIRECTORY_SEPARATOR)) {
+                @unlink($filePath);
+                throw new \InvalidArgumentException("File path resolves outside the project publication root: {$relativePath}");
+            }
         }
     }
 

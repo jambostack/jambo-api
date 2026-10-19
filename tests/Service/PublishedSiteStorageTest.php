@@ -78,6 +78,20 @@ class PublishedSiteStorageTest extends TestCase
         $this->assertNull($this->storage->readFile('proj-uuid', 'subdir/../../../etc/passwd'));
     }
 
+    public function testPublishRejectsTraversalPath(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Path traversal attempt detected');
+        $this->storage->publish('proj-uuid', ['../../public/shell.php' => '<?php echo "pwned";']);
+    }
+
+    public function testPublishRejectsSubdirTraversalPath(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Path traversal attempt detected');
+        $this->storage->publish('proj-uuid', ['assets/../../evil.js' => 'alert(1);']);
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {
