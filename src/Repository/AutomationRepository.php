@@ -125,8 +125,8 @@ class AutomationRepository extends ServiceEntityRepository
                 ->setParameter('triggerType', $triggerType)
                 ->getQuery()
                 ->getResult();
-        } catch (\Exception) {
-            // Fallback PHP si le driver ne supporte pas JSON_CONTAINS
+        } catch (\Throwable) {
+            // Fallback PHP si le driver ou DQL ne supporte pas JSON_CONTAINS
         }
 
         // Fallback : récupère toutes les actives et filtre en PHP

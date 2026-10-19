@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.12] — 2026-10-19
+
+### Fixed
+- **Asynchronous Automation Execution via Messenger (FIX-012 / BUG-002)**:
+  - Refactored `AutomationTriggerSubscriber` to delegate automation pipeline execution asynchronously via Symfony Messenger (`ExecuteAutomationMessage`) instead of executing synchronously in the HTTP request lifecycle.
+  - Implemented upfront `AutomationRun` initialization in `pending` state linked to the project and dispatched message.
+  - Updated `AutomationRepository::findActiveByCondition` with `\Throwable` catch handling to support environments without native MySQL JSON DQL functions.
+  - Added automated test suite `AutomationTriggerSubscriberTest` verifying event reception, pending run persistence, message bus dispatch, and handler execution.
+
+---
+
 ## [1.26.11] — 2026-10-19
 
 ### Fixed

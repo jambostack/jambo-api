@@ -3,17 +3,21 @@
 namespace App\EventSubscriber;
 
 use App\Entity\Automation;
+use App\Entity\AutomationRun;
 use App\Event\ContentEvent;
+use App\Message\ExecuteAutomationMessage;
 use App\Repository\AutomationRepository;
-use App\Service\Automation\AutomationEngine;
+use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 class AutomationTriggerSubscriber implements EventSubscriberInterface
 {
     public function __construct(
         private readonly AutomationRepository $automationRepo,
-        private readonly AutomationEngine $engine,
+        private readonly MessageBusInterface $bus,
+        private readonly EntityManagerInterface $em,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -55,11 +59,24 @@ class AutomationTriggerSubscriber implements EventSubscriberInterface
     private function executeAutomation(Automation $automation, array $payload): void
     {
         try {
-            $this->engine->execute($automation, $payload);
+            $run = new AutomationRun();
+            $run->automation = $automation;
+            $run->status = 'pending';
+            if ($automation->debugMode) {
+                $run->triggerPayload = $payload;
+            }
+            $this->em->persist($run);
+            $this->em->flush();
+
+            $this->bus->dispatch(new ExecuteAutomationMessage(
+                automationId: $automation->id,
+                runId: $run->id,
+                triggerPayload: $payload,
+                projectUuid: $automation->project?->uuid?->toRfc4122() ?? '',
+                debugMode: (bool) $automation->debugMode,
+            ));
         } catch (\Throwable $e) {
-            // L'Engine persiste un AutomationRun même en cas d'erreur.
-            // On loggue ici pour ne pas perdre l'erreur dans les logs applicatifs.
-            $this->logger->error('Automation execution failed in subscriber', [
+            $this->logger->error('Failed to dispatch automation message in subscriber', [
                 'automation_id' => $automation->id,
                 'automation_name' => $automation->name,
                 'project_uuid' => $automation->project?->uuid?->toRfc4122(),
