@@ -127,4 +127,79 @@ class McpSchemaSecurityTest extends WebTestCase
         $member = $em->getRepository(\App\Entity\ProjectMember::class)->findOneBy(['project' => $project->id, 'email' => $user->email]);
         self::assertNotNull($member, 'creator must be a member');
     }
+
+    public function testAnonymousHandleProjectEndpointIsDenied(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $project = new Project();
+        $project->name = 'MCP Test ' . bin2hex(random_bytes(4));
+        $em->persist($project);
+        $em->flush();
+
+        $client->request('POST', '/api/projects/' . $project->uuid->toString() . '/mcp');
+        self::assertContains($client->getResponse()->getStatusCode(), [401, 302]);
+    }
+
+    public function testNonMemberHandleProjectEndpointIsDenied(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'mcp4-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'x';
+        $em->persist($user);
+
+        $project = new Project();
+        $project->name = 'MCP Other ' . bin2hex(random_bytes(4));
+        $em->persist($project);
+        $em->flush();
+
+        $client->loginUser($user);
+        $client->request('POST', '/api/projects/' . $project->uuid->toString() . '/mcp');
+        self::assertSame(403, $client->getResponse()->getStatusCode());
+    }
+
+    public function testCrossProjectListEndUsersDenied(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'mcp5-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'x';
+        $em->persist($user);
+
+        $projectA = new Project();
+        $projectA->name = 'Proj A ' . bin2hex(random_bytes(4));
+        $em->persist($projectA);
+
+        $projectB = new Project();
+        $projectB->name = 'Proj B ' . bin2hex(random_bytes(4));
+        $em->persist($projectB);
+
+        $member = new ProjectMember();
+        $member->project = $projectA;
+        $member->user = $user;
+        $member->email = $user->email;
+        $member->status = ProjectMemberStatus::Active;
+        $member->joinedAt = new \DateTimeImmutable();
+        $em->persist($member);
+        $em->flush();
+
+        $client->loginUser($user);
+
+        $rpc = [
+            'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call',
+            'params' => ['name' => 'list_end_users', 'arguments' => [
+                'project_uuid' => $projectB->uuid->toString(),
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpc));
+
+        $res = json_decode($client->getResponse()->getContent(), true);
+        self::assertTrue(isset($res['error']) || (isset($res['result']['isError']) && $res['result']['isError'] === true));
+    }
 }

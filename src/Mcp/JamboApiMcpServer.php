@@ -71,7 +71,25 @@ class JamboApiMcpServer extends McpServer
                 'search' => McpTool::stringProp('Filtre par nom'),
             ]),
             function (array $args, array $ctx): array {
+                $user = $ctx['user'] ?? null;
+                $isAuthenticated = $ctx['authenticated'] ?? false;
+
+                if (!$user instanceof \App\Entity\User && !$isAuthenticated) {
+                    throw new McpException('Authentification requise', 401);
+                }
+
                 $qb = $this->em->getRepository(Project::class)->createQueryBuilder('p');
+
+                if (isset($ctx['_project']) && $ctx['_project'] instanceof Project) {
+                    $qb->andWhere('p.id = :pid')->setParameter('pid', $ctx['_project']->id);
+                } elseif ($user instanceof \App\Entity\User && !in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+                    $qb->innerJoin(\App\Entity\ProjectMember::class, 'pm', 'WITH', 'pm.project = p')
+                       ->andWhere('pm.user = :u')
+                       ->andWhere('pm.status = :status')
+                       ->setParameter('u', $user)
+                       ->setParameter('status', \App\Enum\ProjectMemberStatus::Active);
+                }
+
                 if (!empty($args['search'])) {
                     $qb->andWhere('p.name LIKE :q')->setParameter('q', '%' . $args['search'] . '%');
                 }
@@ -94,8 +112,7 @@ class JamboApiMcpServer extends McpServer
                 'include_fields' => McpTool::boolProp('Inclure la description des champs'),
             ], ['project_uuid']),
             function (array $args, array $ctx): array {
-                $project = $this->findProject($args['project_uuid']);
-                if (!$project) throw new McpException('Projet introuvable', 404);
+                $project = $this->assertCanReadProject($args['project_uuid'], $ctx);
 
                 $collections = $this->em->getRepository(Collection::class)
                     ->findBy(['project' => $project, 'deletedAt' => null], ['order' => 'ASC']);
@@ -131,7 +148,7 @@ class JamboApiMcpServer extends McpServer
                 'collection_slug' => McpTool::stringProp('Slug de la collection', true),
             ], ['project_uuid', 'collection_slug']),
             function (array $args, array $ctx): array {
-                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug']);
+                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
                 if (!$collection) throw new McpException('Collection introuvable', 404);
 
                 $fields = [];
@@ -175,7 +192,7 @@ class JamboApiMcpServer extends McpServer
                 'offset' => McpTool::intProp('Décalage (défaut 0)'),
             ], ['project_uuid', 'collection_slug']),
             function (array $args, array $ctx): array {
-                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug']);
+                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
                 if (!$collection) throw new McpException('Collection introuvable', 404);
 
                 $limit = min($args['limit'] ?? 50, 200);
@@ -204,7 +221,7 @@ class JamboApiMcpServer extends McpServer
                 'entry_uuid' => McpTool::stringProp('UUID de l\'entrée', true),
             ], ['project_uuid', 'collection_slug', 'entry_uuid']),
             function (array $args, array $ctx): array {
-                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid']);
+                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
                 if (!$entry) throw new McpException('Entrée introuvable', 404);
 
                 return $this->formatter->formatEntry($entry);
@@ -533,8 +550,7 @@ class JamboApiMcpServer extends McpServer
                 'offset' => McpTool::intProp('Décalage (défaut 0)'),
             ], ['project_uuid']),
             function (array $args, array $ctx): array {
-                $project = $this->findProject($args['project_uuid']);
-                if (!$project) throw new McpException('Projet introuvable', 404);
+                $project = $this->assertCanReadProject($args['project_uuid'], $ctx);
 
                 $qb = $this->em->getRepository(Media::class)->createQueryBuilder('m')
                     ->where('m.project = :project')->andWhere('m.deletedAt IS NULL')
@@ -601,8 +617,7 @@ class JamboApiMcpServer extends McpServer
                 'offset' => McpTool::intProp('Décalage (défaut 0)'),
             ], ['project_uuid']),
             function (array $args, array $ctx): array {
-                $project = $this->findProject($args['project_uuid']);
-                if (!$project) throw new McpException('Projet introuvable', 404);
+                $project = $this->assertCanReadProject($args['project_uuid'], $ctx);
 
                 $qb = $this->em->getRepository(EndUser::class)->createQueryBuilder('u')
                     ->where('u.project = :project')->setParameter('project', $project)
@@ -632,8 +647,7 @@ class JamboApiMcpServer extends McpServer
                 'project_uuid' => McpTool::stringProp('UUID du projet', true),
             ], ['project_uuid']),
             function (array $args, array $ctx): array {
-                $project = $this->findProject($args['project_uuid']);
-                if (!$project) throw new McpException('Projet introuvable', 404);
+                $project = $this->assertCanReadProject($args['project_uuid'], $ctx);
 
                 $fields = $this->em->getRepository(\App\Entity\EndUserField::class)
                     ->findBy(['project' => $project], ['order' => 'ASC']);
@@ -850,6 +864,39 @@ class JamboApiMcpServer extends McpServer
     }
 
     /**
+     * Garde de lecture de structure et données : vérifie que le contexte (ApiToken projet
+     * ou utilisateur de session/PAT) a le droit d'accéder au projet ciblé.
+     */
+    private function assertCanReadProject(string $projectUuid, array $ctx): Project
+    {
+        $project = $this->findProject($projectUuid);
+        if (!$project) {
+            throw new McpException('Projet introuvable', 404);
+        }
+
+        // Contexte ApiToken / endpoint projet-scopé : doit cibler CE projet.
+        $ctxProjectId = $ctx['project_id'] ?? ($ctx['_project']->id ?? null);
+        if ($ctxProjectId !== null) {
+            if ($ctxProjectId !== $project->id) {
+                throw new McpException('Accès refusé à ce projet', 403);
+            }
+            return $project;
+        }
+
+        // Contexte utilisateur (session admin ou PAT) : appartenance active requise.
+        $user = $ctx['user'] ?? null;
+        if (!$user instanceof \App\Entity\User) {
+            throw new McpException('Authentification requise', 401);
+        }
+        if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)
+            && $this->memberRepo->findActiveByUserAndProject($user, $project) === null) {
+            throw new McpException('Accès refusé à ce projet', 403);
+        }
+
+        return $project;
+    }
+
+    /**
      * Garde d'écriture de structure : vérifie que le contexte (ApiToken projet
      * ou utilisateur de session/PAT) a le droit d'écrire dans le projet ciblé.
      * Empêche l'écriture cross-projet (faille IDOR) et l'absence de capacité.
@@ -894,9 +941,9 @@ class JamboApiMcpServer extends McpServer
         return $project;
     }
 
-    private function findCollection(string $projectUuid, string $slug): ?Collection
+    private function findCollection(string $projectUuid, string $slug, ?array $ctx = null): ?Collection
     {
-        $project = $this->findProject($projectUuid);
+        $project = $ctx !== null ? $this->assertCanReadProject($projectUuid, $ctx) : $this->findProject($projectUuid);
         if (!$project) return null;
 
         return $this->em->getRepository(Collection::class)->findOneBy([
@@ -904,9 +951,9 @@ class JamboApiMcpServer extends McpServer
         ]);
     }
 
-    private function findEntry(string $projectUuid, string $collectionSlug, string $entryUuid): ?ContentEntry
+    private function findEntry(string $projectUuid, string $collectionSlug, string $entryUuid, ?array $ctx = null): ?ContentEntry
     {
-        $collection = $this->findCollection($projectUuid, $collectionSlug);
+        $collection = $this->findCollection($projectUuid, $collectionSlug, $ctx);
         if (!$collection) return null;
 
         return $this->em->getRepository(ContentEntry::class)->findOneBy([

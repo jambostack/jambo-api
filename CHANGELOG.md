@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.6] — 2026-10-19
+
+### Security
+- **MCP Server Hardening & Tenant Isolation (FIX-006 / SEC-004)**:
+  - Enforced authentication and multi-tenant project membership checks on `McpController::handleProject()`.
+  - Added read authorization guard `assertCanReadProject()` in `JamboApiMcpServer` preventing cross-tenant access to collections, schemas, media, entries, and end-users.
+  - Filtered `list_projects` tool to return only projects where the authenticated user or token is an active member or admin.
+  - Added automated security test cases in `McpSchemaSecurityTest` verifying anonymous access rejection and cross-tenant isolation.
+
+---
+
 ## [1.26.5] — 2026-10-19
 
 ### Security

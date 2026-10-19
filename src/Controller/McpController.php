@@ -60,14 +60,43 @@ class McpController extends AbstractController
             return new JsonResponse(['error' => 'Projet introuvable'], 404);
         }
 
-        $body = $request->getContent();
-        $context = [
-            'project_uuid' => $uuid,
-            'project_id' => $project->id,
-            '_project' => $project,
-            'user' => $this->getUser(),
-        ];
+        // Extraire le token d'authentification du header
+        $authHeader = $request->headers->get('Authorization');
+        $token = null;
+        if ($authHeader && str_starts_with($authHeader, 'Bearer ')) {
+            $token = substr($authHeader, 7);
+        }
 
+        $context = $this->buildContext($request, $token);
+
+        $user = $context['user'] ?? null;
+        $isAuthenticated = $context['authenticated'] ?? false;
+
+        // Rejeter si ni utilisateur ni token valide
+        if (!$user instanceof \App\Entity\User && !$isAuthenticated) {
+            return new JsonResponse(['error' => 'Authentification requise'], 401);
+        }
+
+        // Si authentifié via ApiToken, vérifier que le token est scopé à ce projet
+        if (isset($context['project_uuid']) && $context['project_uuid'] !== $uuid) {
+            return new JsonResponse(['error' => 'Accès refusé'], 403);
+        }
+
+        // Si authentifié par session utilisateur ou PAT, vérifier l'appartenance
+        if ($user instanceof \App\Entity\User) {
+            $isSuperAdmin = in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true);
+            $isMember = $this->em->getRepository(\App\Entity\ProjectMember::class)
+                ->findActiveByUserAndProject($user, $project) !== null;
+            if (!$isSuperAdmin && !$isMember) {
+                return new JsonResponse(['error' => 'Accès refusé'], 403);
+            }
+        }
+
+        $context['project_uuid'] = $uuid;
+        $context['project_id'] = $project->id;
+        $context['_project'] = $project;
+
+        $body = $request->getContent();
         return $this->mcpServer->handleRequest($body, $context);
     }
 
