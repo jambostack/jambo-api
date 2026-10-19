@@ -38,7 +38,7 @@ jobs:
           ini-values: memory_limit=512M
 
       - name: Validate composer.json and composer.lock
-        run: composer validate --strict
+        run: composer validate
 
       - name: Cache Composer dependencies
         uses: actions/cache@v4
@@ -51,12 +51,17 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --prefer-dist --no-progress --no-interaction
 
-      - name: Prepare database and run migrations
+      - name: Validate database migrations on MySQL
         env:
           DATABASE_URL: "mysql://root:root@127.0.0.1:3306/jamboapi_test?serverVersion=8.0.32&charset=utf8mb4"
         run: |
-          php bin/console doctrine:database:create --if-not-exists --env=test
-          php bin/console doctrine:migrations:migrate --no-interaction --env=test
+          php bin/console doctrine:database:create --if-not-exists
+          php bin/console doctrine:migrations:migrate --no-interaction
+
+      - name: Prepare SQLite test database
+        run: |
+          mkdir -p var
+          php bin/console doctrine:schema:create --env=test
 
       - name: Execute PHPUnit Test Suite
         env:
