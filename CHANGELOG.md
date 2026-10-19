@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.18] — 2026-10-19
+
+### Fixed
+- **CDN Cloud Storage Abstraction (S3 / R2 / MinIO) (FIX-018 / OPS-006)**:
+  - Extended `ImageTransformController` to seamlessly resolve media hosted on remote object storage profiles (S3, Cloudflare R2, MinIO) via Flysystem `StorageDriverFactory`.
+  - Implemented local buffering into `var/media_cache/{projectUuid}/{fileName}` when a requested media file is not present on local disk, enabling dynamic on-demand image transforms on cloud-stored assets.
+  - Added unit and functional test suite `ImageTransformControllerTest` validating remote S3 streaming, local cache staging, and CDN responses.
+
+---
+
 ## [1.26.17] — 2026-10-19
 
 ### Fixed
