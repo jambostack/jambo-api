@@ -26,6 +26,10 @@ class InstallController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(): Response
     {
+        if ($this->userRepository->count([]) > 0) {
+            return new Response('<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Jambo API</title></head><body style="background:#0d1117;color:#e6edf3;font-family:sans-serif;padding:40px;"><div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;max-width:600px;margin:0 auto;"><h1 style="color:#f85149;">L\'application est déjà installée</h1><p>Un compte administrateur existe déjà sur cette instance. L\'assistant d\'installation est désactivé.</p><p><a href="/login" style="color:#58a6ff;">Se connecter au CMS</a></p></div></body></html>', 403, ['Content-Type' => 'text/html']);
+        }
+
         $diagnostics = $this->runDiagnostics();
 
         $html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Jambo API — Assistant d\'Installation</title>';
@@ -56,6 +60,10 @@ class InstallController extends AbstractController
     #[Route('/check', name: 'check', methods: ['GET'])]
     public function check(): JsonResponse
     {
+        if ($this->userRepository->count([]) > 0) {
+            return new JsonResponse(['error' => 'L\'application est déjà installée.'], 403);
+        }
+
         return new JsonResponse($this->runDiagnostics());
     }
 

@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.8] — 2026-10-19
+
+### Fixed
+- **Installation Assistant Unblocking & Post-Install Security Gate (FIX-008 / OPS-004)**:
+  - Added access control rule `- { path: ^/install, roles: PUBLIC_ACCESS }` in `security.yaml` to unblock cold setup wizard on fresh deployments.
+  - Implemented strict lockdown in `InstallController` (`index` and `check` endpoints) returning 403 Forbidden once an administrator user exists.
+  - Added automated test suite `InstallControllerTest` verifying public setup access on empty database and total lockout once initialized.
+
+---
+
 ## [1.26.7] — 2026-10-19
 
 ### Security

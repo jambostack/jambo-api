@@ -63,6 +63,7 @@ security:
         - { path: ^/register, roles: PUBLIC_ACCESS }
         - { path: ^/forgot-password, roles: PUBLIC_ACCESS }
         - { path: ^/reset-password, roles: PUBLIC_ACCESS }
+        - { path: ^/install, roles: PUBLIC_ACCESS }
         - { path: ^/public-api, roles: PUBLIC_ACCESS }
         - { path: '^/api/[\w-]{36}/auth/(register|login|forgot-password|reset-password)', roles: PUBLIC_ACCESS }
         # ── Routes publiques SEO / Redirects / Forms (v1.19) ──
