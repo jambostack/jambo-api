@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.3] — 2026-10-19
+
+### Fixed
+- **Doctrine Migrations Linearization (FIX-003)**:
+  - Resolved fatal `Table already exists` collision in `Version20260629084616.php`.
+  - Removed duplicate `CREATE TABLE` and `DROP TABLE` statements for `form`, `form_submission`, `redirect`, `redirect_revision`, and `seo_revision` that were already created in `Version20260624070523.php`.
+  - Isolated migration scope strictly to `personal_access_token` and `share` tables, enabling clean, idempotent cold database setup.
+
+---
+
 ## [1.26.2] — 2026-10-19
 
 ### Fixed
