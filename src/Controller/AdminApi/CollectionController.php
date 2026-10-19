@@ -64,7 +64,7 @@ class CollectionController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
+        $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         try {
             $c = $this->provisioner->createCollection($project, $request->toArray());
         } catch (SchemaException $e) {
@@ -81,7 +81,7 @@ class CollectionController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
+        $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         $c = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$c) {
             return $this->json(['error' => 'Collection not found'], 404);
@@ -98,7 +98,7 @@ class CollectionController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
+        $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         $c = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$c) {
             return $this->json(['error' => 'Collection not found'], 404);

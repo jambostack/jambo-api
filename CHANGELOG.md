@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.9] — 2026-10-19
+
+### Security
+- **AdminApi Mutation Privilege Enforcement (FIX-009 / SEC-006)**:
+  - Replaced overly permissive `ProjectVoter::VIEW` with strict `ProjectVoter::MANAGE` on collection creation, update, and deletion in `AdminApi\CollectionController`.
+  - Enforced `ProjectVoter::MANAGE` on project update and deletion endpoints in `AdminApi\ProjectController`.
+  - Added automated test suite `AdminApiPermissionsTest` verifying that members with read-only/viewer roles are blocked from mutating projects and collections.
+
+---
+
 ## [1.26.8] — 2026-10-19
 
 ### Fixed

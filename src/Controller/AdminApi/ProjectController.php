@@ -60,7 +60,7 @@ class ProjectController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
+        $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         $this->provisioner->updateProject($project, $request->toArray());
         return $this->json(['data' => $this->serialize($project)]);
     }
@@ -73,7 +73,7 @@ class ProjectController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
+        $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         $this->provisioner->deleteProject($project);
         return new JsonResponse(null, 204);
     }
