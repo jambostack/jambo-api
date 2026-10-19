@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.17] — 2026-10-19
+
+### Fixed
+- **Docker Multi-Stage Build & Nginx CDN Fallback (FIX-017 / OPS-003)**:
+  - Fixed Nginx `/cdn/media/` rule in `docker/nginx.conf` with dynamic fallback `try_files $uri @symfony` ensuring uncached media transformations pass to Symfony on demand instead of returning immediate 404 errors.
+  - Refactored `Dockerfile` into a clean multi-stage build: separated Node.js asset compilation (`node:20-alpine`) from the lightweight PHP-FPM runtime image (`php:8.4-fpm-alpine`), reducing production image size and attack surface.
+  - Enforced isolated database-free Symfony cache warmup during Docker build (`DATABASE_URL="sqlite:///:memory:" php bin/console cache:warmup --env=prod`).
+
+---
+
 ## [1.26.16] — 2026-10-19
 
 ### Fixed
