@@ -152,7 +152,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.26.9] — 2026-10-19
+## [1.26.09] — 2026-10-19
 
 ### Security
 - **AdminApi Mutation Privilege Enforcement (FIX-009 / SEC-006)**:
@@ -162,7 +162,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.26.8] — 2026-10-19
+## [1.26.08] — 2026-10-19
 
 ### Fixed
 - **Installation Assistant Unblocking & Post-Install Security Gate (FIX-008 / OPS-004)**:
@@ -172,7 +172,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.26.7] — 2026-10-19
+## [1.26.07] — 2026-10-19
 
 ### Security
 - **Multi-Tenant Guard Parameter Harmonization (FIX-007 / SEC-005)**:
@@ -183,7 +183,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.26.6] — 2026-10-19
+## [1.26.06] — 2026-10-19
 
 ### Security
 - **MCP Server Hardening & Tenant Isolation (FIX-006 / SEC-004)**:
@@ -194,7 +194,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.26.5] — 2026-10-19
+## [1.26.05] — 2026-10-19
 
 ### Security
 - **Access Control & User Management Lockdown (FIX-005 / SEC-003)**:
@@ -204,7 +204,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.26.4] — 2026-10-19
+## [1.26.04] — 2026-10-19
 
 ### Security
 - **Path Traversal & RCE Neutralization (FIX-004)**:
@@ -215,7 +215,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.26.3] — 2026-10-19
+## [1.26.03] — 2026-10-19
 
 ### Fixed
 - **Doctrine Migrations Linearization (FIX-003)**:
@@ -225,7 +225,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.26.2] — 2026-10-19
+## [1.26.02] — 2026-10-19
 
 ### Fixed
 - **Composer Lockfile Integrity & De-duplication (FIX-002)**:
@@ -236,7 +236,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.26.1] — 2026-10-19
+## [1.26.01] — 2026-10-19
 
 ### Security
 - **Sanitization & Secret Isolation (FIX-001)**:
