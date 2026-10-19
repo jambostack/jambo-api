@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.5] — 2026-10-19
+
+### Security
+- **Access Control & User Management Lockdown (FIX-005 / SEC-003)**:
+  - Added access control rule in `security.yaml` requiring `ROLE_USER` for `/api/(users|roles|permissions|settings)`.
+  - Decorated `UserController`, `RoleController`, and `PermissionController` with `#[IsGranted('ROLE_USER')]` class-level security attributes.
+  - Added automated test suite `UserManagementSecurityTest` verifying that anonymous requests to user management endpoints are rejected.
+
+---
+
 ## [1.26.4] — 2026-10-19
 
 ### Security

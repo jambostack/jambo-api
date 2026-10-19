@@ -14,6 +14,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/roles', name: 'api_roles_')]
+#[IsGranted('ROLE_USER')]
 class RoleController extends AbstractController
 {
     public function __construct(

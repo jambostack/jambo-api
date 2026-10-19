@@ -70,6 +70,10 @@ security:
         - { path: '^/[\w-]{36}/redirects/resolve', roles: PUBLIC_ACCESS }
         - { path: '^/[\w-]{36}/forms/', roles: PUBLIC_ACCESS }
         - { path: ^/admin-api, roles: ROLE_USER }
+        - { path: ^/api/users, roles: ROLE_USER }
+        - { path: ^/api/roles, roles: ROLE_USER }
+        - { path: ^/api/permissions, roles: ROLE_USER }
+        - { path: ^/api/settings, roles: ROLE_USER }
         - { path: ^/api, roles: PUBLIC_ACCESS }
         - { path: ^/cdn, roles: PUBLIC_ACCESS }
         - { path: ^/share, roles: PUBLIC_ACCESS }
