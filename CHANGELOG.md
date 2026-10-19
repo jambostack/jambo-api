@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.13] — 2026-10-19
+
+### Added
+- **Real SSE Streaming LLM Integration (FIX-013 / SIM-001)**:
+  - Eliminated simulated chunk mock (`array_chunk` + `usleep`) in `ContentAiStreamController`.
+  - Implemented `AiContentService::streamPrompt()` and `streamProvider()` providing genuine Server-Sent Events (SSE) streaming connected to OpenAI, Anthropic, Gemini, Mistral, Groq, Ollama, DeepSeek, and OpenRouter providers via `HttpClientInterface::stream()`.
+  - Implemented non-blocking SSE streaming with graceful error handling (`event: error`) and project isolation validation.
+  - Added unit test suites `ContentAiStreamControllerTest` and `AiContentServiceStreamTest` validating progressive SSE chunk generation, buffer safety, and failure recovery.
+
+---
+
 ## [1.26.12] — 2026-10-19
 
 ### Fixed

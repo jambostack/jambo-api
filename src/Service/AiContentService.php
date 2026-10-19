@@ -182,6 +182,214 @@ class AiContentService
         return $response->toArray()['choices'][0]['message']['content'] ?? '';
     }
 
+    /**
+     * Flux streaming en direct avec le fournisseur IA via SSE.
+     */
+    private function streamProvider(string $name, string $key, string $model, string $prompt, callable $onChunk, string $ollamaUrl = ''): void
+    {
+        if ($name === 'anthropic') {
+            $response = $this->httpClient->request('POST', self::ENDPOINTS['anthropic'], [
+                'headers' => [
+                    'x-api-key'         => $key,
+                    'anthropic-version' => '2023-06-01',
+                    'Content-Type'      => 'application/json',
+                ],
+                'json'    => [
+                    'model'      => $model,
+                    'max_tokens' => 2048,
+                    'messages'   => [['role' => 'user', 'content' => $prompt]],
+                    'stream'     => true,
+                ],
+                'timeout' => 60,
+            ]);
+
+            $statusCode = $response->getStatusCode();
+            if ($statusCode >= 400) {
+                throw new \RuntimeException("Anthropic returned HTTP $statusCode: " . $response->getContent(false));
+            }
+
+            $buffer = '';
+            foreach ($this->httpClient->stream($response) as $chunk) {
+                $buffer .= $chunk->getContent();
+                while (($pos = strpos($buffer, "\n")) !== false) {
+                    $line = trim(substr($buffer, 0, $pos));
+                    $buffer = substr($buffer, $pos + 1);
+
+                    if (!str_starts_with($line, 'data:')) {
+                        continue;
+                    }
+                    $data = trim(substr($line, 5));
+                    if ($data === '[DONE]' || $data === '') {
+                        continue;
+                    }
+                    $json = json_decode($data, true);
+                    if (!is_array($json)) {
+                        continue;
+                    }
+                    if (($json['type'] ?? '') === 'content_block_delta') {
+                        $text = $json['delta']['text'] ?? '';
+                        if ($text !== '') {
+                            $onChunk($text);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        if ($name === 'gemini') {
+            $endpoint = self::ENDPOINTS['gemini'] . $model . ':streamGenerateContent?alt=sse';
+            $response = $this->httpClient->request('POST', $endpoint, [
+                'headers' => [
+                    'Content-Type'   => 'application/json',
+                    'x-goog-api-key' => $key,
+                ],
+                'json'    => [
+                    'contents' => [
+                        ['parts' => [['text' => $prompt]]],
+                    ],
+                ],
+                'timeout' => 60,
+            ]);
+
+            $statusCode = $response->getStatusCode();
+            if ($statusCode >= 400) {
+                throw new \RuntimeException("Gemini returned HTTP $statusCode: " . $response->getContent(false));
+            }
+
+            $buffer = '';
+            foreach ($this->httpClient->stream($response) as $chunk) {
+                $buffer .= $chunk->getContent();
+                while (($pos = strpos($buffer, "\n")) !== false) {
+                    $line = trim(substr($buffer, 0, $pos));
+                    $buffer = substr($buffer, $pos + 1);
+
+                    if (!str_starts_with($line, 'data:')) {
+                        continue;
+                    }
+                    $data = trim(substr($line, 5));
+                    if ($data === '') {
+                        continue;
+                    }
+                    $json = json_decode($data, true);
+                    if (!is_array($json)) {
+                        continue;
+                    }
+                    $text = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
+                    if ($text !== '') {
+                        $onChunk($text);
+                    }
+                }
+            }
+            return;
+        }
+
+        // OpenAI / DeepSeek / Mistral / Groq / XAI / Perplexity / OpenRouter / Qwen / Ollama
+        $endpoint = match ($name) {
+            'ollama' => rtrim($ollamaUrl ?: 'http://localhost:11434', '/') . '/v1/chat/completions',
+            default  => self::ENDPOINTS[$name],
+        };
+
+        $headers = ['Content-Type' => 'application/json'];
+        if ($name !== 'ollama') {
+            $headers['Authorization'] = 'Bearer ' . $key;
+        }
+
+        $response = $this->httpClient->request('POST', $endpoint, [
+            'headers' => $headers,
+            'json'    => [
+                'model'       => $model,
+                'messages'    => [['role' => 'user', 'content' => $prompt]],
+                'temperature' => 0.7,
+                'stream'      => true,
+            ],
+            'timeout' => 60,
+        ]);
+
+        $statusCode = $response->getStatusCode();
+        if ($statusCode >= 400) {
+            throw new \RuntimeException("Provider $name returned HTTP $statusCode: " . $response->getContent(false));
+        }
+
+        $buffer = '';
+        foreach ($this->httpClient->stream($response) as $chunk) {
+            $buffer .= $chunk->getContent();
+            while (($pos = strpos($buffer, "\n")) !== false) {
+                $line = trim(substr($buffer, 0, $pos));
+                $buffer = substr($buffer, $pos + 1);
+
+                if (!str_starts_with($line, 'data:')) {
+                    continue;
+                }
+                $data = trim(substr($line, 5));
+                if ($data === '[DONE]' || $data === '') {
+                    continue;
+                }
+                $json = json_decode($data, true);
+                if (!is_array($json)) {
+                    continue;
+                }
+                $text = $json['choices'][0]['delta']['content'] ?? '';
+                if ($text !== '') {
+                    $onChunk($text);
+                }
+            }
+        }
+    }
+
+    /**
+     * Diffuse en continu la réponse d'un LLM vers un callback consommateur.
+     */
+    public function streamPrompt(string $prompt, callable $onChunk, ?string $provider = null, string $model = 'gpt-4o-mini'): void
+    {
+        $active = $this->resolveProviders();
+
+        if (empty($active)) {
+            throw new \RuntimeException('Aucun fournisseur IA activé. Configurez-en un dans Paramètres → Fournisseurs IA.');
+        }
+
+        // Fournisseur explicitement demandé
+        if ($provider !== null && isset($active[$provider])) {
+            $cfg = $active[$provider];
+            $this->streamProvider($provider, $cfg['key'], $cfg['model'], $prompt, $onChunk, $cfg['url']);
+            return;
+        }
+
+        // Déduction depuis le préfixe du modèle
+        $byModel = match (true) {
+            str_starts_with($model, 'gpt-') || str_starts_with($model, 'o1') || str_starts_with($model, 'o3') => 'openai',
+            str_starts_with($model, 'claude-')   => 'anthropic',
+            str_starts_with($model, 'deepseek-') => 'deepseek',
+            str_starts_with($model, 'gemini-')   => 'gemini',
+            str_starts_with($model, 'openai/') || str_starts_with($model, 'google/') || str_starts_with($model, 'meta-llama/') || str_starts_with($model, 'anthropic/') => 'openrouter',
+            str_starts_with($model, 'mistral-')  => 'mistral',
+            str_starts_with($model, 'grok-')     => 'xai',
+            str_starts_with($model, 'sonar-') || str_starts_with($model, 'llama-3.1-sonar') => 'perplexity',
+            str_starts_with($model, 'qwen-')     => 'qwen',
+            str_starts_with($model, 'llama') || str_starts_with($model, 'phi') || str_starts_with($model, 'codellama') => 'ollama',
+            default => null,
+        };
+
+        if ($byModel !== null && isset($active[$byModel])) {
+            $cfg = $active[$byModel];
+            $this->streamProvider($byModel, $cfg['key'], $model, $prompt, $onChunk, $cfg['url']);
+            return;
+        }
+
+        // Repli : premier fournisseur activé
+        $lastError = null;
+        foreach ($active as $name => $cfg) {
+            try {
+                $this->streamProvider($name, $cfg['key'], $cfg['model'], $prompt, $onChunk, $cfg['url']);
+                return;
+            } catch (\Throwable $e) {
+                $lastError = $e;
+            }
+        }
+
+        throw new \RuntimeException('Aucun fournisseur IA disponible pour le streaming : ' . ($lastError?->getMessage() ?? 'erreur inconnue'));
+    }
+
     public function ask(string $prompt, string $model = 'gpt-4o-mini', ?string $provider = null): string
     {
         $active = $this->resolveProviders();

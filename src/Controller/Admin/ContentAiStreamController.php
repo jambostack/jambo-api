@@ -20,11 +20,23 @@ class ContentAiStreamController extends AbstractController
     #[Route('/admin/api/content-ai/stream', name: 'admin_content_ai_stream', methods: ['POST'])]
     public function streamAction(Request $request, ?string $projectUuid = null): StreamedResponse
     {
+        if ($projectUuid !== null) {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+            if ($project === null) {
+                return new StreamedResponse(function () {
+                    echo "data: " . json_encode(['error' => 'Project not found']) . "\n\n";
+                    flush();
+                }, 404, ['Content-Type' => 'text/event-stream']);
+            }
+        }
+
         $payload = json_decode($request->getContent(), true) ?? [];
         $action = $payload['action'] ?? 'rewrite';
         $text = trim($payload['text'] ?? '');
         $tone = $payload['tone'] ?? 'professional';
         $targetLocale = $payload['target_locale'] ?? 'fr';
+        $provider = $payload['provider'] ?? null;
+        $model = $payload['model'] ?? 'gpt-4o-mini';
 
         if ($text === '') {
             return new StreamedResponse(function () {
@@ -42,10 +54,13 @@ class ContentAiStreamController extends AbstractController
             default       => "Améliore et perfectionne le texte suivant :",
         };
 
-        $response = new StreamedResponse(function () use ($systemPrompt, $text, $action) {
-            // Désactiver les buffers de sortie PHP
-            if (ob_get_level() > 0) {
-                ob_end_clean();
+        $fullPrompt = $systemPrompt . "\n\n" . $text;
+
+        $response = new StreamedResponse(function () use ($fullPrompt, $action, $provider, $model) {
+            if (PHP_SAPI !== 'cli') {
+                while (ob_get_level() > 0) {
+                    @ob_end_flush();
+                }
             }
 
             // Envoi de l'événement initial
@@ -53,29 +68,23 @@ class ContentAiStreamController extends AbstractController
             echo "data: " . json_encode(['action' => $action, 'status' => 'streaming']) . "\n\n";
             flush();
 
-            // Génération par fragments (simulation de streaming robuste compatible)
-            // Découpage en phrases / fragments pour simulation fluide si le LLM distant répond en bloc
-            $words = explode(' ', $text);
-            $chunks = array_chunk($words, 4);
-
-            foreach ($chunks as $chunkIndex => $chunkWords) {
-                $fragment = implode(' ', $chunkWords) . ' ';
-                
-                // Préfixe ou ajustement selon l'action lors du premier fragment
-                if ($chunkIndex === 0) {
-                    $prefix = match ($action) {
-                        'summarize'   => "En synthèse : ",
-                        'fix_grammar' => "",
-                        'rewrite'     => "",
-                        default       => "",
-                    };
-                    $fragment = $prefix . $fragment;
-                }
-
-                echo "event: chunk\n";
-                echo "data: " . json_encode(['chunk' => $fragment]) . "\n\n";
+            try {
+                $this->aiService->streamPrompt(
+                    prompt: $fullPrompt,
+                    onChunk: function (string $token) {
+                        if ($token !== '') {
+                            echo "event: chunk\n";
+                            echo "data: " . json_encode(['chunk' => $token]) . "\n\n";
+                            flush();
+                        }
+                    },
+                    provider: $provider,
+                    model: $model,
+                );
+            } catch (\Throwable $e) {
+                echo "event: error\n";
+                echo "data: " . json_encode(['error' => $e->getMessage()]) . "\n\n";
                 flush();
-                usleep(30000); // 30ms pour un effet streaming naturel
             }
 
             echo "event: done\n";
