@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.20] — 2026-10-19
+
+### Added
+- **Production-Grade Zero-Downtime Deployment & Secure SSH Runner (FIX-020 / OPS-005)**:
+  - Created zero-downtime, safe-migration deployment script `scripts/deploy.sh` with automatic error trap and rollback to previous Git commit on failure.
+  - Handles prerequisite validations (PHP 8.4, Composer, npm), Git tag/branch synchronisation, optimized production Composer install, Webpack asset compilation, zero-data-loss atomic Doctrine migrations, production Symfony cache warmup, and web-server directory permissions.
+  - Refactored `deploy.py` remote SSH deployment runner to eliminate legacy hardcoded credentials, adopting environment-variable configuration (`JAMBO_HOST`, `JAMBO_USER`, `JAMBO_PASS`, `JAMBO_SSH_KEY`, `JAMBO_REMOTE_DIR`) with automatic SSH key/agent detection.
+  - Adjusted `.gitignore` to track production deployment infrastructure while ensuring scratch scripts and local data remain untracked.
+
+---
+
 ## [1.26.19] — 2026-10-19
 
 ### Added

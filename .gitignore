@@ -31,8 +31,8 @@ yarn-error.log
 /.vscode/
 /docs/
 /others/
-/scripts/
-deploy.py
+/scripts/*
+!/scripts/deploy.sh
 /.kilo/
 /.claude/
 /.ultraplan/var/realtime/
