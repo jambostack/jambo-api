@@ -20,6 +20,7 @@ class SchemaCrudTest extends WebTestCase
         $user = new User();
         $user->email = 'm-' . bin2hex(random_bytes(4)) . '@example.com';
         $user->password = 'x';
+        $user->roles = ['ROLE_SUPER_ADMIN'];
         $em->persist($user);
 
         $project = new Project();

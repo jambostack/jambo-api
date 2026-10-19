@@ -47,6 +47,8 @@ class InsightsServiceTest extends KernelTestCase
         $e->project = $p;
         $e->collection = $c;
         $e->status = $status;
+        $e->slug = 'entry-' . bin2hex(random_bytes(6));
+        $e->locale = 'en';
         $this->em->persist($e);
         return $e;
     }

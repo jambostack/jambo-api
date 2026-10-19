@@ -74,6 +74,7 @@ security:
         - { path: ^/api/users, roles: ROLE_USER }
         - { path: ^/api/roles, roles: ROLE_USER }
         - { path: ^/api/permissions, roles: ROLE_USER }
+        - { path: ^/api/settings/personal-access-tokens, roles: PUBLIC_ACCESS }
         - { path: ^/api/settings, roles: ROLE_USER }
         - { path: ^/api, roles: PUBLIC_ACCESS }
         - { path: ^/cdn, roles: PUBLIC_ACCESS }

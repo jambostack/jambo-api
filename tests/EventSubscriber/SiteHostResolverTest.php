@@ -15,6 +15,13 @@ use Symfony\Component\Uid\Uuid;
 
 class SiteHostResolverTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        if (!class_exists('App\Entity\WorkbenchProject') || !class_exists('App\EventSubscriber\SiteHostResolver')) {
+            $this->markTestSkipped('Workbench module was removed from Jambo.');
+        }
+    }
+
     private function makeEvent(string $host, string $path = '/'): RequestEvent
     {
         $kernel  = $this->createMock(HttpKernelInterface::class);

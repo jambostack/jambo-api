@@ -12,6 +12,7 @@ trait EndUserSerializerTrait
             'uuid'          => $eu->uuid?->toString(),
             'email'         => $eu->email,
             'username'      => $eu->username,
+            'name'          => $eu->username,
             'status'        => $eu->status,
             'avatar_url'    => $eu->avatarUrl,
             'custom_fields' => $eu->customFields,

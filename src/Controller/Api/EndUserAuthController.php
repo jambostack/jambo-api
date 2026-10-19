@@ -71,7 +71,7 @@ class EndUserAuthController extends AbstractController
         $data = $request->toArray();
         $email = $data['email'] ?? '';
         $password = $data['password'] ?? '';
-        $username = $data['username'] ?? null;
+        $username = $data['username'] ?? $data['name'] ?? null;
 
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return $this->json(['error' => 'Valid email is required'], 422);
@@ -373,6 +373,8 @@ class EndUserAuthController extends AbstractController
 
         if (isset($data['username'])) {
             $endUser->username = $data['username'];
+        } elseif (isset($data['name'])) {
+            $endUser->username = $data['name'];
         }
         if (isset($data['custom_fields'])) {
             $endUser->customFields = $data['custom_fields'];

@@ -135,4 +135,38 @@ class EndUser implements UserInterface, PasswordAuthenticatedUserInterface
     public function eraseCredentials(): void
     {
     }
+
+    public function getName(): ?string
+    {
+        return $this->username;
+    }
+
+    public function setName(?string $name): self
+    {
+        $this->username = $name;
+        return $this;
+    }
+
+    public function __get(string $prop): mixed
+    {
+        if ($prop === 'name') {
+            return $this->username;
+        }
+        return null;
+    }
+
+    public function __set(string $prop, mixed $val): void
+    {
+        if ($prop === 'name') {
+            $this->username = $val;
+        }
+    }
+
+    public function __isset(string $prop): bool
+    {
+        if ($prop === 'name') {
+            return isset($this->username);
+        }
+        return false;
+    }
 }

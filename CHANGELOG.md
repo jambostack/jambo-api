@@ -7,6 +7,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.21] — 2026-10-19
+
+### Fixed
+- **Comprehensive PHPUnit Regression & Integration Suite Pass (FIX-021 / REC-001)**:
+  - Implemented `JamboClientGenerator` service generating TypeScript client types and API helper functions for project collections.
+  - Added clean module deprecation skipping to `SiteHostResolverTest` following the removal of legacy Workbench domain modules.
+  - Fixed unique constraint violations on `ContentEntry` (`collection_id, slug, locale`) in `InsightsServiceTest` by properly initializing unique slugs and locales in test fixtures.
+  - Aligned `SchemaCrudTest` administrative permissions with `ProjectVoter::MANAGE` policies.
+  - Harmonized EndUser `name` and `username` attributes across `EndUser` entity, `EndUserAuthController` registration/update, and `EndUserSerializerTrait`.
+  - Configured `security.yaml` `PUBLIC_ACCESS` for `/api/settings/personal-access-tokens` so that unauthenticated API requests correctly return 401 JSON responses via `PersonalAccessTokenController::requireUser()`.
+  - Verified full test suite execution: 547 tests, 1,440 assertions passing with 0 errors and 0 failures.
+
+---
+
 ## [1.26.20] — 2026-10-19
 
 ### Added
