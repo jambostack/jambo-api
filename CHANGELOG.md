@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.2] — 2026-10-19
+
+### Fixed
+- **Composer Lockfile Integrity & De-duplication (FIX-002)**:
+  - Removed duplicate package entry for `spomky-labs/otphp` that was causing Composer dependency solver crashes.
+  - Successfully regenerated and synchronized `composer.lock` with `composer.json`.
+  - Normalized package license identifier to standard SPDX `AGPL-3.0-or-later`.
+  - Validated automated zero-interaction installation (`composer validate` returns 0).
+
+---
+
 ## [1.26.1] — 2026-10-19
 
 ### Security
