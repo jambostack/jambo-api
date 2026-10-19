@@ -164,3 +164,21 @@ services:
     App\EventListener\SeoRevisionListener:
         tags:
             - { name: 'doctrine.orm.entity_listener', entity: 'App\Entity\ContentEntry', event: 'preUpdate' }
+
+    App\Service\DynamicTemplateRenderer:
+        public: true
+
+    # ── Bac à sable Twig Hermétique (Sandbox) ─────────────────────────────────
+    App\Twig\NativeTwigSecurityPolicy:
+        public: true
+
+    Twig\Sandbox\SecurityPolicyInterface:
+        alias: App\Twig\NativeTwigSecurityPolicy
+        public: true
+
+    Twig\Extension\SandboxExtension:
+        arguments:
+            $policy: '@App\Twig\NativeTwigSecurityPolicy'
+            $sandboxed: false
+        tags: ['twig.extension']
+        public: true

@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.15] — 2026-10-19
+
+### Fixed
+- **Twig Hermetic Sandbox Container Activation (FIX-015 / SIM-004)**:
+  - Registered `NativeTwigSecurityPolicy` in Symfony dependency injection container (`services.yaml`), providing alias for `Twig\Sandbox\SecurityPolicyInterface`.
+  - Registered `Twig\Extension\SandboxExtension` in Symfony Twig environment configured with `NativeTwigSecurityPolicy`.
+  - Created `DynamicTemplateRenderer` service enforcing AST token whitelist sandbox for dynamic user-generated templates.
+  - Added functional integration test suite `TwigSandboxIntegrationTest` confirming container registration, sandbox extension loading, and rejection of forbidden tags, functions, and object method invocations.
+
+---
+
 ## [1.26.14] — 2026-10-19
 
 ### Added
