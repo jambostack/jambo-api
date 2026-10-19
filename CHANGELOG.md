@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.10] — 2026-10-19
+
+### Security
+- **Anti-SSRF Hardening on AI Image Ingestion (FIX-010 / SEC-007)**:
+  - Replaced unconstrained `@file_get_contents()` in `StudioController::aiGenerateImage()` with `downloadExternalImage()`.
+  - Enforced mandatory `https://` protocol, disabled uncontrolled HTTP redirects, and restricted downloads to 10 seconds timeout and 10MB maximum payload.
+  - Added strict DNS and IP resolution filtering rejecting loopback, RFC 1918 private ranges, and cloud metadata addresses (`169.254.169.254`).
+  - Added automated test suite `StudioAntiSsrfTest` confirming instant rejection of SSRF vectors.
+
+---
+
 ## [1.26.9] — 2026-10-19
 
 ### Security

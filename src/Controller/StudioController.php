@@ -1399,8 +1399,7 @@ PROMPT;
         // Télécharger l'image et l'uploader dans la médiathèque
         $tmpFile = null;
         try {
-            $imageData = @file_get_contents($imageUrl);
-            if ($imageData === false) throw new \RuntimeException('Download failed');
+            $imageData = $this->downloadExternalImage($imageUrl);
 
             $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_ai_img_');
             file_put_contents($tmpFile, $imageData);
@@ -1428,6 +1427,87 @@ PROMPT;
         } finally {
             if ($tmpFile !== null) @unlink($tmpFile);
         }
+    }
+
+    /**
+     * Télécharge une image distante de manière sécurisée (anti-SSRF, timeout, HTTPS uniquement).
+     */
+    private function downloadExternalImage(string $url): string
+    {
+        $parts = parse_url($url);
+        if (!$parts || !isset($parts['scheme'], $parts['host'])) {
+            throw new \InvalidArgumentException('URL invalide');
+        }
+
+        // HTTPS obligatoire
+        if (strtolower($parts['scheme']) !== 'https') {
+            throw new \InvalidArgumentException('Protocole HTTPS obligatoire');
+        }
+
+        $host = $parts['host'];
+
+        // Si l'hôte est déjà une adresse IP directe
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            $resolvedIps = [$host];
+        } else {
+            // Résolution DNS et vérification anti-SSRF sur chaque IP
+            $resolvedIps = [];
+            $ips = @dns_get_record($host, DNS_A + DNS_AAAA);
+            if (!empty($ips)) {
+                foreach ($ips as $record) {
+                    if (isset($record['ip'])) $resolvedIps[] = $record['ip'];
+                    if (isset($record['ipv6'])) $resolvedIps[] = $record['ipv6'];
+                }
+            }
+            if (empty($resolvedIps)) {
+                $ip = @gethostbyname($host);
+                if ($ip && $ip !== $host) {
+                    $resolvedIps[] = $ip;
+                }
+            }
+
+            if (empty($resolvedIps)) {
+                throw new \InvalidArgumentException('Résolution DNS impossible pour l\'hôte');
+            }
+        }
+
+        foreach ($resolvedIps as $ip) {
+            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                throw new \InvalidArgumentException('Accès aux adresses privées ou réservées interdit (SSRF protection)');
+            }
+        }
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => 10,
+                'follow_location' => 0,
+                'user_agent' => 'JamboApi-CMS/1.26',
+            ],
+            'ssl' => [
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+            ],
+        ]);
+
+        $stream = @fopen($url, 'rb', false, $context);
+        if ($stream === false) {
+            throw new \RuntimeException('Échec du téléchargement de l\'image distante');
+        }
+
+        $maxBytes = 10 * 1024 * 1024; // 10 Mo
+        $content = stream_get_contents($stream, $maxBytes + 1);
+        fclose($stream);
+
+        if ($content === false || strlen($content) === 0) {
+            throw new \RuntimeException('Contenu image vide');
+        }
+
+        if (strlen($content) > $maxBytes) {
+            throw new \RuntimeException('Taille de l\'image supérieure à 10 Mo');
+        }
+
+        return $content;
     }
 
     // ═══════════════ TOOL EXECUTORS ═══════════════
