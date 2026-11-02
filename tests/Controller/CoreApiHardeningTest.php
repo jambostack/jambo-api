@@ -329,4 +329,69 @@ class CoreApiHardeningTest extends WebTestCase
         $data = json_decode($client->getResponse()->getContent(), true);
         $this->assertFalse($data['redirected']);
     }
+
+    public function testNotificationControllerRequiresAuth(): void
+    {
+        $client = static::createClient();
+
+        $client->request('GET', '/api/notifications');
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+
+        $client->request('GET', '/api/notifications/unread-count');
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+
+        $client->request('POST', '/api/notifications/read-all');
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+    }
+
+    public function testInvitationAcceptReturnsJson(): void
+    {
+        $client = static::createClient();
+
+        // Unknown token with Accept: application/json returns 404 JSON
+        $client->request(
+            'GET',
+            '/invitation/accept/unknown-token-123',
+            [],
+            [],
+            [
+                'HTTP_ACCEPT' => 'application/json',
+            ]
+        );
+
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+        $this->assertTrue($client->getResponse()->headers->contains('content-type', 'application/json'));
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('error', $data);
+
+        // API route returns JSON
+        $client->request(
+            'POST',
+            '/api/invitations/unknown-token-123/accept'
+        );
+
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+        $this->assertTrue($client->getResponse()->headers->contains('content-type', 'application/json'));
+    }
+
+    public function testMediaBulkDestroyAcceptsEmptyOrUuidList(): void
+    {
+        $client = static::createClient();
+
+        $client->request(
+            'DELETE',
+            '/api/projects/' . $this->projectUuid . '/media/bulk-destroy',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            json_encode([
+                'uuids' => ['00000000-0000-0000-0000-000000000000'],
+            ])
+        );
+
+        $this->assertSame(204, $client->getResponse()->getStatusCode());
+    }
 }

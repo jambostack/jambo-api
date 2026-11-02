@@ -16,10 +16,15 @@ class NotificationController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(Request $request): JsonResponse
     {
+        $user = $this->getAuthUser();
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
         $page = max(1, $request->query->getInt('page', 1));
         $perPage = min(50, max(1, $request->query->getInt('per_page', 20)));
         $unreadOnly = $request->query->getBoolean('unread_only');
-        $user = $this->getUser();
+
         $notifications = $this->notificationRepository->findByRecipientPaginated($user, $page, $perPage, $unreadOnly);
         $unreadCount = $this->notificationRepository->countUnreadByUser($user);
         return $this->json([
@@ -31,8 +36,13 @@ class NotificationController extends AbstractController
     #[Route('/{id}/read', name: 'read', methods: ['POST'])]
     public function read(int $id): JsonResponse
     {
+        $user = $this->getAuthUser();
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
         $notification = $this->notificationRepository->find($id);
-        if (!$notification || $notification->recipient->id !== $this->getUser()->id) {
+        if (!$notification || $notification->recipient->id !== $user->id) {
             return $this->json(['error' => 'Not found.'], 404);
         }
         if ($notification->readAt === null) {
@@ -45,14 +55,33 @@ class NotificationController extends AbstractController
     #[Route('/read-all', name: 'read_all', methods: ['POST'])]
     public function readAll(): JsonResponse
     {
-        $this->notificationRepository->markAllAsRead($this->getUser());
+        $user = $this->getAuthUser();
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        $this->notificationRepository->markAllAsRead($user);
         return $this->json(['unread_count' => 0]);
     }
 
     #[Route('/unread-count', name: 'unread_count', methods: ['GET'])]
     public function unreadCount(): JsonResponse
     {
-        return $this->json(['count' => $this->notificationRepository->countUnreadByUser($this->getUser())]);
+        $user = $this->getAuthUser();
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        return $this->json(['count' => $this->notificationRepository->countUnreadByUser($user)]);
+    }
+
+    private function getAuthUser(): \App\Entity\User|JsonResponse
+    {
+        $user = $this->getUser();
+        if (!$user instanceof \App\Entity\User) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+        return $user;
     }
 
     private function serializeNotification($n): array

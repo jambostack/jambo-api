@@ -7,6 +7,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.30] — 2026-11-02
+
+### Fixed & Improved
+- **Invitation Acceptance JSON & Public Access (`InvitationController` & `security.yaml`)**:
+  - Whitelisted `^/invitation` in `access_control` so invited users visiting links can view expiration or invalid notices without being prematurely redirected to login.
+  - Added JSON response support when `Accept: application/json` is requested and added API endpoint `POST /api/invitations/{token}/accept`.
+- **Notification Controller Authentication & Type Safety (`NotificationController`)**:
+  - Replaced unhandled null `$this->getUser()` access with strict authentication checks (`getAuthUser()`) returning 401 instead of PHP TypeErrors/FatalErrors on unauthenticated requests.
+- **Media Bulk Deletion & Mercure Real-Time Sync (`MediaController`)**:
+  - Extended `bulkDestroy` to support both integer IDs and UUID strings, with robust JSON/form body parsing.
+  - Emitted `mediaDeleted` real-time Mercure events on both single `delete` and `bulkDestroy` operations so frontend interfaces remove deleted media cards instantly.
+
+---
+
 ## [1.26.29] — 2026-11-02
 
 ### Fixed & Improved

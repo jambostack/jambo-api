@@ -195,12 +195,28 @@ class MediaController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $ids = $request->toArray()['asset_ids'] ?? [];
-        foreach ($ids as $id) {
-            $media = $this->mediaRepository->findOneBy(['id' => (int) $id, 'project' => $project]);
+        try {
+            $data = $request->toArray();
+        } catch (\Throwable) {
+            $data = $request->request->all();
+        }
+
+        $ids = $data['asset_ids'] ?? $data['ids'] ?? $data['uuids'] ?? [];
+        foreach ($ids as $identifier) {
+            $criteria = is_numeric($identifier)
+                ? ['id' => (int) $identifier, 'project' => $project]
+                : ['uuid' => Uuid::fromString((string) $identifier), 'project' => $project];
+            try {
+                $media = $this->mediaRepository->findOneBy($criteria);
+            } catch (\Throwable) {
+                $media = null;
+            }
+
             if ($media) {
+                $filename = $media->originalName ?? $media->fileName ?? (string) $identifier;
                 $this->uploadHandler->remove($media, 'file');
                 $this->em->remove($media);
+                $this->mercure->mediaDeleted($projectUuid, $filename);
             }
         }
         $this->em->flush();
@@ -298,9 +314,12 @@ class MediaController extends AbstractController
             return $media;
         }
 
+        $filename = $media->originalName ?? $media->fileName ?? $uuid;
         $this->uploadHandler->remove($media, 'file');
         $this->em->remove($media);
         $this->em->flush();
+
+        $this->mercure->mediaDeleted($projectUuid, $filename);
 
         return $this->json(null, 204);
     }
