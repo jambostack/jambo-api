@@ -423,6 +423,122 @@ class JamboApiMcpServer extends McpServer
         ));
 
         $this->registerTool(new McpTool(
+            'unpublish_entry',
+            'Dépublie une entrée (repasse le statut à draft)',
+            McpTool::schema([
+                'project_uuid' => McpTool::stringProp('UUID du projet', true),
+                'collection_slug' => McpTool::stringProp('Slug de la collection', true),
+                'entry_uuid' => McpTool::stringProp('UUID de l\'entrée', true),
+            ], ['project_uuid', 'collection_slug', 'entry_uuid']),
+            function (array $args, array $ctx): array {
+                $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
+                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
+                if (!$entry) throw new McpException('Entrée introuvable', 404);
+
+                $previousStatus = $entry->status;
+                $entry->status = 'draft';
+                $entry->publishedAt = null;
+                $entry->updatedAt = new \DateTimeImmutable();
+                $this->em->flush();
+
+                if ($this->eventDispatcher !== null) {
+                    $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
+                        \App\Event\ContentEvent::STATUS_CHANGED, $project, $entry, 'mcp', $previousStatus ?? ''
+                    ));
+                }
+
+                return ['unpublished' => true, 'uuid' => $entry->uuid?->toRfc4122(), 'status' => 'draft'];
+            }
+        ));
+
+        $this->registerTool(new McpTool(
+            'restore_entry',
+            'Restaure une entrée précédemment supprimée (soft-delete)',
+            McpTool::schema([
+                'project_uuid' => McpTool::stringProp('UUID du projet', true),
+                'collection_slug' => McpTool::stringProp('Slug de la collection', true),
+                'entry_uuid' => McpTool::stringProp('UUID de l\'entrée', true),
+            ], ['project_uuid', 'collection_slug', 'entry_uuid']),
+            function (array $args, array $ctx): array {
+                $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
+                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx, true);
+                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if ($entry->deletedAt === null) {
+                    return ['restored' => false, 'message' => 'L\'entrée n\'est pas supprimée', 'uuid' => $entry->uuid?->toRfc4122()];
+                }
+
+                $entry->deletedAt = null;
+                $entry->updatedAt = new \DateTimeImmutable();
+                $this->em->flush();
+
+                if ($this->eventDispatcher !== null) {
+                    $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
+                        \App\Event\ContentEvent::UPDATED, $project, $entry, 'mcp', $entry->status ?? ''
+                    ));
+                }
+
+                return ['restored' => true, 'entry' => $this->formatter->formatEntry($entry)];
+            }
+        ));
+
+        $this->registerTool(new McpTool(
+            'duplicate_entry',
+            'Duplique une entrée existante avec ses champs',
+            McpTool::schema([
+                'project_uuid' => McpTool::stringProp('UUID du projet', true),
+                'collection_slug' => McpTool::stringProp('Slug de la collection', true),
+                'entry_uuid' => McpTool::stringProp('UUID de l\'entrée à dupliquer', true),
+            ], ['project_uuid', 'collection_slug', 'entry_uuid']),
+            function (array $args, array $ctx): array {
+                $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
+                $source = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
+                if (!$source) throw new McpException('Entrée source introuvable', 404);
+
+                $collection = $source->collection;
+                if ($collection->isSingleton) {
+                    throw new McpException('Impossible de dupliquer une entrée dans une collection singleton', 422);
+                }
+
+                $clone = new ContentEntry();
+                $clone->collection = $source->collection;
+                $clone->project = $source->project;
+                $clone->locale = $source->locale;
+                $clone->status = 'draft';
+                if (($ctx['user'] ?? null) instanceof \App\Entity\User) {
+                    $clone->createdBy = $ctx['user'];
+                }
+
+                $rawSlug = ($source->slug ?: 'entry') . '-copy';
+                $clone->slug = $this->ensureUniqueEntrySlug($collection, $rawSlug, $clone->locale);
+
+                foreach ($source->fieldValues as $fv) {
+                    $newFv = new ContentFieldValue();
+                    $newFv->contentEntry = $clone;
+                    $newFv->field = $fv->field;
+                    $newFv->fieldType = $fv->fieldType;
+                    $newFv->textValue = $fv->textValue;
+                    $newFv->numberValue = $fv->numberValue;
+                    $newFv->booleanValue = $fv->booleanValue;
+                    $newFv->dateValue = $fv->dateValue;
+                    $newFv->datetimeValue = $fv->datetimeValue;
+                    $newFv->jsonValue = $fv->jsonValue;
+                    $clone->fieldValues->add($newFv);
+                }
+
+                $this->em->persist($clone);
+                $this->em->flush();
+
+                if ($this->eventDispatcher !== null) {
+                    $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
+                        \App\Event\ContentEvent::CREATED, $project, $clone, 'mcp', ''
+                    ));
+                }
+
+                return $this->formatter->formatEntry($clone);
+            }
+        ));
+
+        $this->registerTool(new McpTool(
             'search_content',
             'Recherche full-text dans le contenu',
             McpTool::schema([
@@ -530,6 +646,130 @@ class JamboApiMcpServer extends McpServer
                     'type' => $field->type,
                     'isRequired' => $field->isRequired,
                 ];
+            }
+        ));
+
+        $this->registerTool(new McpTool(
+            'update_collection',
+            'Met à jour une collection existante',
+            McpTool::schema([
+                'project_uuid' => McpTool::stringProp('UUID du projet', true),
+                'collection_slug' => McpTool::stringProp('Slug actuel de la collection', true),
+                'name' => McpTool::stringProp('Nouveau nom'),
+                'description' => McpTool::stringProp('Nouvelle description'),
+                'is_singleton' => McpTool::boolProp('Collection singleton'),
+            ], ['project_uuid', 'collection_slug']),
+            function (array $args, array $ctx): array {
+                $this->assertCanWriteSchema($args, $ctx);
+                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
+                if (!$collection) throw new McpException('Collection introuvable', 404);
+
+                try {
+                    $dto = [];
+                    if (isset($args['name'])) $dto['name'] = $args['name'];
+                    if (array_key_exists('description', $args)) $dto['description'] = $args['description'];
+                    if (isset($args['is_singleton'])) $dto['is_singleton'] = $args['is_singleton'];
+
+                    $updated = $this->provisioner->updateCollection($collection, $dto);
+                } catch (\App\Exception\SchemaException $e) {
+                    throw new McpException($e->getMessage(), $e->statusCode());
+                }
+
+                return [
+                    'uuid' => $updated->uuid->toRfc4122(),
+                    'name' => $updated->name,
+                    'slug' => $updated->slug,
+                    'isSingleton' => $updated->isSingleton,
+                    'description' => $updated->description,
+                ];
+            }
+        ));
+
+        $this->registerTool(new McpTool(
+            'delete_collection',
+            'Supprime une collection et son schéma',
+            McpTool::schema([
+                'project_uuid' => McpTool::stringProp('UUID du projet', true),
+                'collection_slug' => McpTool::stringProp('Slug de la collection à supprimer', true),
+            ], ['project_uuid', 'collection_slug']),
+            function (array $args, array $ctx): array {
+                $this->assertCanWriteSchema($args, $ctx);
+                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
+                if (!$collection) throw new McpException('Collection introuvable', 404);
+
+                try {
+                    $this->provisioner->deleteCollection($collection);
+                } catch (\App\Exception\SchemaException $e) {
+                    throw new McpException($e->getMessage(), $e->statusCode());
+                }
+
+                return ['deleted' => true, 'slug' => $args['collection_slug']];
+            }
+        ));
+
+        $this->registerTool(new McpTool(
+            'update_field',
+            'Met à jour un champ existant dans une collection',
+            McpTool::schema([
+                'project_uuid' => McpTool::stringProp('UUID du projet', true),
+                'collection_slug' => McpTool::stringProp('Slug de la collection', true),
+                'field_slug' => McpTool::stringProp('Slug du champ à modifier', true),
+                'name' => McpTool::stringProp('Nouveau nom du champ'),
+                'is_required' => McpTool::boolProp('Champ obligatoire'),
+                'options' => ['type' => 'object', 'description' => 'Nouvelles options du champ'],
+            ], ['project_uuid', 'collection_slug', 'field_slug']),
+            function (array $args, array $ctx): array {
+                $this->assertCanWriteSchema($args, $ctx);
+                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
+                if (!$collection) throw new McpException('Collection introuvable', 404);
+
+                $field = $this->fieldHelper->findField($collection, $args['field_slug']);
+                if (!$field) throw new McpException('Champ introuvable', 404);
+
+                try {
+                    $dto = [];
+                    if (isset($args['name'])) $dto['name'] = $args['name'];
+                    if (isset($args['is_required'])) $dto['is_required'] = $args['is_required'];
+                    if (array_key_exists('options', $args)) $dto['options'] = $args['options'];
+
+                    $updated = $this->provisioner->updateField($field, $dto);
+                } catch (\App\Exception\SchemaException $e) {
+                    throw new McpException($e->getMessage(), $e->statusCode());
+                }
+
+                return [
+                    'name' => $updated->name,
+                    'slug' => $updated->slug,
+                    'type' => $updated->type,
+                    'isRequired' => $updated->isRequired,
+                    'options' => $updated->options,
+                ];
+            }
+        ));
+
+        $this->registerTool(new McpTool(
+            'delete_field',
+            'Supprime un champ d\'une collection',
+            McpTool::schema([
+                'project_uuid' => McpTool::stringProp('UUID du projet', true),
+                'collection_slug' => McpTool::stringProp('Slug de la collection', true),
+                'field_slug' => McpTool::stringProp('Slug du champ à supprimer', true),
+            ], ['project_uuid', 'collection_slug', 'field_slug']),
+            function (array $args, array $ctx): array {
+                $this->assertCanWriteSchema($args, $ctx);
+                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
+                if (!$collection) throw new McpException('Collection introuvable', 404);
+
+                $field = $this->fieldHelper->findField($collection, $args['field_slug']);
+                if (!$field) throw new McpException('Champ introuvable', 404);
+
+                try {
+                    $this->provisioner->deleteField($field);
+                } catch (\App\Exception\SchemaException $e) {
+                    throw new McpException($e->getMessage(), $e->statusCode());
+                }
+
+                return ['deleted' => true, 'slug' => $args['field_slug']];
             }
         ));
 
@@ -705,6 +945,54 @@ class JamboApiMcpServer extends McpServer
                 ];
             }
         ));
+
+        $this->registerTool(new McpTool(
+            'update_media',
+            'Met à jour les métadonnées d\'un média (texte alternatif, légende)',
+            McpTool::schema([
+                'media_uuid' => McpTool::stringProp('UUID du média', true),
+                'alt' => McpTool::stringProp('Texte alternatif pour accessibilité et SEO'),
+                'caption' => McpTool::stringProp('Légende du média'),
+            ], ['media_uuid']),
+            function (array $args, array $ctx): array {
+                $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
+                if (!$media) throw new McpException('Média introuvable', 404);
+                if ($media->project !== null) {
+                    $this->assertCanWriteProject($media->project->uuid->toRfc4122(), $ctx);
+                }
+
+                if (array_key_exists('alt', $args)) $media->alt = $args['alt'];
+                if (array_key_exists('caption', $args)) $media->caption = $args['caption'];
+                $this->em->flush();
+
+                return [
+                    'uuid' => $media->uuid->toRfc4122(),
+                    'name' => $media->originalName ?? $media->fileName,
+                    'alt' => $media->alt,
+                    'caption' => $media->caption,
+                ];
+            }
+        ));
+
+        $this->registerTool(new McpTool(
+            'delete_media',
+            'Supprime (soft-delete) un média',
+            McpTool::schema([
+                'media_uuid' => McpTool::stringProp('UUID du média', true),
+            ], ['media_uuid']),
+            function (array $args, array $ctx): array {
+                $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
+                if (!$media) throw new McpException('Média introuvable', 404);
+                if ($media->project !== null) {
+                    $this->assertCanWriteProject($media->project->uuid->toRfc4122(), $ctx);
+                }
+
+                $media->deletedAt = new \DateTimeImmutable();
+                $this->em->flush();
+
+                return ['deleted' => true, 'uuid' => $media->uuid->toRfc4122()];
+            }
+        ));
     }
 
     // ===== USERS =====
@@ -834,6 +1122,21 @@ class JamboApiMcpServer extends McpServer
         ));
 
         $this->registerTool(new McpTool(
+            'ai_generate_alt_text',
+            'Génère un texte alternatif accessible et optimisé SEO pour une image',
+            McpTool::schema([
+                'file_name' => McpTool::stringProp('Nom du fichier image (ex: product-hero.png)', true),
+                'caption' => McpTool::stringProp('Légende contextuelle'),
+            ], ['file_name']),
+            function (array $args, array $ctx) use ($aiService): array {
+                $this->assertAuthenticated($ctx);
+                $project = isset($ctx['project_uuid']) ? $this->findProject($ctx['project_uuid']) : null;
+                $alt = $aiService->generateAltText($args['file_name'], $args['caption'] ?? null, $project);
+                return ['alt_text' => $alt];
+            }
+        ));
+
+        $this->registerTool(new McpTool(
             'ai_suggest_schema',
             'Suggère des améliorations de schéma pour une collection',
             McpTool::schema([
@@ -914,6 +1217,50 @@ class JamboApiMcpServer extends McpServer
         ));
 
         $this->registerTool(new McpTool(
+            'restore_version',
+            'Restaure une entrée à un numéro de version antérieur',
+            McpTool::schema([
+                'project_uuid' => McpTool::stringProp('UUID du projet', true),
+                'collection_slug' => McpTool::stringProp('Slug de la collection', true),
+                'entry_uuid' => McpTool::stringProp('UUID de l\'entrée', true),
+                'version_number' => McpTool::intProp('Numéro de version à restaurer', true),
+            ], ['project_uuid', 'collection_slug', 'entry_uuid', 'version_number']),
+            function (array $args, array $ctx) use ($versioningService): array {
+                $this->assertCanWriteProject($args['project_uuid'], $ctx);
+                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
+                if (!$entry) throw new McpException('Entrée introuvable', 404);
+
+                $ok = $versioningService->restoreVersion($entry, (int) $args['version_number']);
+                if (!$ok) throw new McpException("Version {$args['version_number']} introuvable pour cette entrée", 404);
+
+                return [
+                    'restored' => true,
+                    'version_number' => (int) $args['version_number'],
+                    'entry' => $this->formatter->formatEntry($entry),
+                ];
+            }
+        ));
+
+        $this->registerTool(new McpTool(
+            'diff_versions',
+            'Compare deux versions d\'une entrée',
+            McpTool::schema([
+                'project_uuid' => McpTool::stringProp('UUID du projet', true),
+                'collection_slug' => McpTool::stringProp('Slug de la collection', true),
+                'entry_uuid' => McpTool::stringProp('UUID de l\'entrée', true),
+                'v1' => McpTool::intProp('Numéro de la première version', true),
+                'v2' => McpTool::intProp('Numéro de la deuxième version', true),
+            ], ['project_uuid', 'collection_slug', 'entry_uuid', 'v1', 'v2']),
+            function (array $args, array $ctx) use ($versioningService): array {
+                $this->assertCanReadProject($args['project_uuid'], $ctx);
+                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
+                if (!$entry) throw new McpException('Entrée introuvable', 404);
+
+                return $versioningService->diff($entry, (int) $args['v1'], (int) $args['v2']);
+            }
+        ));
+
+        $this->registerTool(new McpTool(
             'transform_image',
             'Obtient l\'URL d\'une image transformée',
             McpTool::schema([
@@ -964,6 +1311,39 @@ class JamboApiMcpServer extends McpServer
                 'tools' => count($this->tools),
                 'resources' => count($this->resources),
             ]
+        ));
+
+        $this->registerResource(new McpResource(
+            'jamboapi://projects',
+            'Liste des projets accessibles',
+            'Retourne les projets auxquels le client courant a accès',
+            'application/json',
+            function (array $ctx): array {
+                $user = $ctx['user'] ?? null;
+                $isAuthenticated = $ctx['authenticated'] ?? false;
+                if (!$user instanceof \App\Entity\User && !$isAuthenticated) {
+                    throw new McpException('Authentification requise', 401);
+                }
+
+                $qb = $this->em->getRepository(Project::class)->createQueryBuilder('p');
+                if (isset($ctx['_project']) && $ctx['_project'] instanceof Project) {
+                    $qb->andWhere('p.id = :pid')->setParameter('pid', $ctx['_project']->id);
+                } elseif ($user instanceof \App\Entity\User && !in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+                    $qb->innerJoin(\App\Entity\ProjectMember::class, 'pm', 'WITH', 'pm.project = p')
+                       ->andWhere('pm.user = :u')
+                       ->andWhere('pm.status = :status')
+                       ->setParameter('u', $user)
+                       ->setParameter('status', \App\Enum\ProjectMemberStatus::Active);
+                }
+
+                return array_map(fn(Project $p) => [
+                    'uuid' => $p->uuid->toRfc4122(),
+                    'name' => $p->name,
+                    'description' => $p->description,
+                    'locales' => $p->locales,
+                    'defaultLocale' => $p->defaultLocale,
+                ], $qb->getQuery()->getResult());
+            }
         ));
     }
 
@@ -1118,14 +1498,17 @@ class JamboApiMcpServer extends McpServer
         ]);
     }
 
-    private function findEntry(string $projectUuid, string $collectionSlug, string $entryUuid, ?array $ctx = null): ?ContentEntry
+    private function findEntry(string $projectUuid, string $collectionSlug, string $entryUuid, ?array $ctx = null, bool $includeDeleted = false): ?ContentEntry
     {
         $collection = $this->findCollection($projectUuid, $collectionSlug, $ctx);
         if (!$collection) return null;
 
-        return $this->em->getRepository(ContentEntry::class)->findOneBy([
-            'collection' => $collection, 'uuid' => $entryUuid, 'deletedAt' => null,
-        ]);
+        $criteria = ['collection' => $collection, 'uuid' => $entryUuid];
+        if (!$includeDeleted) {
+            $criteria['deletedAt'] = null;
+        }
+
+        return $this->em->getRepository(ContentEntry::class)->findOneBy($criteria);
     }
 
     private function createFieldValue(Field $field, mixed $value): ContentFieldValue

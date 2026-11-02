@@ -36,3 +36,11 @@ framework:
             policy: sliding_window
             limit: 10
             interval: '60 seconds'
+
+when@test:
+    framework:
+        rate_limiter:
+            mcp_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'

@@ -57,7 +57,7 @@ class HealthController extends AbstractController
 
         return new JsonResponse([
             'status'    => $status,
-            'version'   => '1.26.24',
+            'version'   => '1.26.25',
             'timestamp' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
             'checks'    => $checks,
         ], $httpCode);

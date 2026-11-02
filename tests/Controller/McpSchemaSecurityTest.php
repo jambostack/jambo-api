@@ -517,4 +517,148 @@ class McpSchemaSecurityTest extends WebTestCase
         self::assertSame('JamboApi CMS', $info['name'] ?? null);
         self::assertGreaterThan(0, $info['tools'] ?? 0);
     }
+
+    public function testExtendedMcpToolsLifecycle(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'ext-mcp-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'x';
+        $em->persist($user);
+
+        $project = new Project();
+        $project->name = 'Ext Project ' . bin2hex(random_bytes(4));
+        $em->persist($project);
+
+        $member = new ProjectMember();
+        $member->project = $project;
+        $member->user = $user;
+        $member->email = $user->email;
+        $member->status = ProjectMemberStatus::Active;
+        $member->joinedAt = new \DateTimeImmutable();
+        $em->persist($member);
+
+        $collection = new Collection();
+        $collection->name = 'Posts';
+        $collection->slug = 'posts';
+        $collection->project = $project;
+        $em->persist($collection);
+
+        $field = new \App\Entity\Field();
+        $field->name = 'Title';
+        $field->slug = 'title';
+        $field->type = 'text';
+        $field->collection = $collection;
+        $em->persist($field);
+
+        $em->flush();
+        $em->clear();
+
+        $client->loginUser($user);
+
+        // 1. Create entry
+        $rpcCreate = [
+            'jsonrpc' => '2.0', 'id' => 201, 'method' => 'tools/call',
+            'params' => ['name' => 'create_entry', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'posts',
+                'data' => ['title' => 'Initial Post'],
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpcCreate));
+        $resCreate = json_decode($client->getResponse()->getContent(), true);
+        $entryData = json_decode($resCreate['result']['content'][0]['text'], true);
+        $entryUuid = $entryData['uuid'];
+
+        // 2. Publish then Unpublish
+        $rpcPub = [
+            'jsonrpc' => '2.0', 'id' => 202, 'method' => 'tools/call',
+            'params' => ['name' => 'publish_entry', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'posts',
+                'entry_uuid' => $entryUuid,
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpcPub));
+
+        $rpcUnpub = [
+            'jsonrpc' => '2.0', 'id' => 203, 'method' => 'tools/call',
+            'params' => ['name' => 'unpublish_entry', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'posts',
+                'entry_uuid' => $entryUuid,
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpcUnpub));
+        $resUnpub = json_decode($client->getResponse()->getContent(), true);
+        $unpubData = json_decode($resUnpub['result']['content'][0]['text'], true);
+        self::assertTrue($unpubData['unpublished']);
+        self::assertSame('draft', $unpubData['status']);
+
+        // 3. Duplicate entry
+        $rpcDup = [
+            'jsonrpc' => '2.0', 'id' => 204, 'method' => 'tools/call',
+            'params' => ['name' => 'duplicate_entry', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'posts',
+                'entry_uuid' => $entryUuid,
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpcDup));
+        $resDup = json_decode($client->getResponse()->getContent(), true);
+        $dupData = json_decode($resDup['result']['content'][0]['text'], true);
+        self::assertNotSame($entryUuid, $dupData['uuid']);
+        self::assertStringContainsString('copy', $dupData['slug']);
+
+        // 4. Delete then Restore entry
+        $rpcDel = [
+            'jsonrpc' => '2.0', 'id' => 205, 'method' => 'tools/call',
+            'params' => ['name' => 'delete_entry', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'posts',
+                'entry_uuid' => $entryUuid,
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpcDel));
+
+        $rpcRestore = [
+            'jsonrpc' => '2.0', 'id' => 206, 'method' => 'tools/call',
+            'params' => ['name' => 'restore_entry', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'posts',
+                'entry_uuid' => $entryUuid,
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpcRestore));
+        $resRestore = json_decode($client->getResponse()->getContent(), true);
+        $restoreData = json_decode($resRestore['result']['content'][0]['text'], true);
+        self::assertTrue($restoreData['restored']);
+
+        // 5. Update collection & update field
+        $rpcUpColl = [
+            'jsonrpc' => '2.0', 'id' => 207, 'method' => 'tools/call',
+            'params' => ['name' => 'update_collection', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'posts',
+                'description' => 'Updated posts description',
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpcUpColl));
+        $resUpColl = json_decode($client->getResponse()->getContent(), true);
+        $upCollData = json_decode($resUpColl['result']['content'][0]['text'], true);
+        self::assertSame('Updated posts description', $upCollData['description']);
+
+        // 6. Test jamboapi://projects resource
+        $rpcProjRes = [
+            'jsonrpc' => '2.0', 'id' => 208, 'method' => 'resources/read',
+            'params' => ['uri' => 'jamboapi://projects'],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpcProjRes));
+        $resProjRes = json_decode($client->getResponse()->getContent(), true);
+        $projList = json_decode($resProjRes['result']['contents'][0]['text'], true);
+        self::assertIsArray($projList);
+        self::assertNotEmpty($projList);
+    }
 }

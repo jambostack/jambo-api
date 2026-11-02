@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.25] — 2026-11-02
+
+### Added
+- **MCP Feature Completion & Resource Expansion (FIX-025)**:
+  - Added entry lifecycle tools: `unpublish_entry` (revert to draft status), `restore_entry` (restore soft-deleted entry), and `duplicate_entry` (clone entry with relations and unique slug generation).
+  - Added schema mutation tools: `update_collection`, `delete_collection`, `update_field`, and `delete_field` wired to `SchemaProvisioner` with write authorization guards.
+  - Added versioning tools: `restore_version` (rollback to snapshot) and `diff_versions` (compare version revisions) wired to `VersioningService`.
+  - Added media management tools: `update_media` (alt and caption metadata) and `delete_media` (soft-delete media asset).
+  - Added accessibility AI tool: `ai_generate_alt_text` powered by `AiContentService`.
+  - Added `jamboapi://projects` resource listing accessible projects directly via MCP resource read.
+  - Added `mcp_limiter` override in test environment to prevent rate-limit exhaustion during automated test runs.
+  - Added regression test `testExtendedMcpToolsLifecycle` covering all new tools in `McpSchemaSecurityTest`.
+
+---
+
 ## [1.26.24] — 2026-11-02
 
 ### Fixed
