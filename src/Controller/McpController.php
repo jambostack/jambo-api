@@ -35,13 +35,7 @@ class McpController extends AbstractController
         }
 
         $body = $request->getContent();
-
-        // Extraire le token d'authentification du header
-        $authHeader = $request->headers->get('Authorization');
-        $token = null;
-        if ($authHeader && str_starts_with($authHeader, 'Bearer ')) {
-            $token = substr($authHeader, 7);
-        }
+        $token = $this->extractBearerToken($request);
 
         // Construire le contexte utilisateur/projet
         $context = $this->buildContext($request, $token);
@@ -55,18 +49,18 @@ class McpController extends AbstractController
     #[Route('/api/projects/{uuid}/mcp', name: 'mcp_project_endpoint', methods: ['POST'])]
     public function handleProject(string $uuid, Request $request): Response
     {
+        // Rate limiting : 60 requêtes par minute par IP
+        $limiter = $this->mcpLimiter->create($request->getClientIp());
+        if (false === $limiter->consume(1)->isAccepted()) {
+            return new JsonResponse(['error' => 'Trop de requêtes MCP. Réessayez plus tard.'], 429);
+        }
+
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         if (!$project) {
             return new JsonResponse(['error' => 'Projet introuvable'], 404);
         }
 
-        // Extraire le token d'authentification du header
-        $authHeader = $request->headers->get('Authorization');
-        $token = null;
-        if ($authHeader && str_starts_with($authHeader, 'Bearer ')) {
-            $token = substr($authHeader, 7);
-        }
-
+        $token = $this->extractBearerToken($request);
         $context = $this->buildContext($request, $token);
 
         $user = $context['user'] ?? null;
@@ -126,9 +120,22 @@ class McpController extends AbstractController
         ]);
     }
 
+    private function extractBearerToken(Request $request): ?string
+    {
+        $authHeader = $request->headers->get('Authorization');
+        if ($authHeader && preg_match('/^Bearer\s+(.+)$/i', trim($authHeader), $matches)) {
+            return trim($matches[1]);
+        }
+        return null;
+    }
+
     private function buildContext(Request $request, ?string $token): array
     {
-        $context = ['user' => $this->getUser()];
+        $user = $this->getUser();
+        $context = [
+            'user' => $user,
+            'authenticated' => $user instanceof \App\Entity\User,
+        ];
 
         // PAT user-scopé (Admin API) : authentifie en tant qu'utilisateur + scopes.
         if ($token && str_starts_with($token, 'jbo_pat_')) {

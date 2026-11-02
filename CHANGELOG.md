@@ -7,6 +7,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.23] — 2026-11-02
+
+### Fixed
+- **MCP Server Hardening, Security Isolation & Protocol Compliance (FIX-023)**:
+  - Added `PUBLIC_ACCESS` for `/mcp` in `security.yaml` preventing 302 login redirection on Bearer token requests.
+  - Added rate limiting and case-insensitive Bearer token parsing in `McpController`.
+  - Implemented `assertCanWriteProject` in `JamboApiMcpServer` enforcing tenant isolation and write ability checks for `create_entry`, `update_entry`, `delete_entry`, and `publish_entry`.
+  - Enforced authentication and tenant guards on `search_content`, `search_content_semantic`, `get_media_info`, `transform_image`, `ai_generate_content`, `ai_suggest_schema`, `ai_translate_content`, `ai_summarize_text`, and `ai_generate_seo`.
+  - Secured `apply_template` with authentication checks and active owner `ProjectMember` provisioning.
+  - Added field value validation via `EavFieldHelperService::validateValue()` in entry creation and update.
+  - Aligned MCP tool error reporting with Model Context Protocol specification (`isError: true`).
+  - Added complete allowed field type enumeration (25 types) in `add_field` schema.
+  - Added unit test regressions in `McpSchemaSecurityTest` covering public access, anonymous tool call denial, and cross-project entry mutation prevention.
+
+---
+
 ## [1.26.22] — 2026-10-19
 
 ### Added

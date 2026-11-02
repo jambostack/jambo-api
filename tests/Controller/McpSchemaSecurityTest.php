@@ -202,4 +202,95 @@ class McpSchemaSecurityTest extends WebTestCase
         $res = json_decode($client->getResponse()->getContent(), true);
         self::assertTrue(isset($res['error']) || (isset($res['result']['isError']) && $res['result']['isError'] === true));
     }
+
+    public function testMcpEndpointPublicAccessWithoutRedirect(): void
+    {
+        $client = static::createClient();
+        $rpc = ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'ping'];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpc));
+
+        self::assertSame(200, $client->getResponse()->getStatusCode());
+        $res = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame(['pong' => true], $res['result'] ?? null);
+    }
+
+    public function testAnonymousCreateEntryDenied(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $project = new Project();
+        $project->name = 'Sec ' . bin2hex(random_bytes(4));
+        $em->persist($project);
+
+        $collection = new Collection();
+        $collection->name = 'Posts';
+        $collection->slug = 'posts';
+        $collection->project = $project;
+        $em->persist($collection);
+        $em->flush();
+
+        $rpc = [
+            'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call',
+            'params' => ['name' => 'create_entry', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'posts',
+                'data' => ['title' => 'Hacked'],
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpc));
+
+        self::assertSame(200, $client->getResponse()->getStatusCode());
+        $res = json_decode($client->getResponse()->getContent(), true);
+        self::assertTrue(isset($res['error']) || (isset($res['result']['isError']) && $res['result']['isError'] === true));
+    }
+
+    public function testCrossProjectCreateEntryDenied(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'mcp6-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'x';
+        $em->persist($user);
+
+        $projectA = new Project();
+        $projectA->name = 'Proj A ' . bin2hex(random_bytes(4));
+        $em->persist($projectA);
+
+        $projectB = new Project();
+        $projectB->name = 'Proj B ' . bin2hex(random_bytes(4));
+        $em->persist($projectB);
+
+        $collectionB = new Collection();
+        $collectionB->name = 'Posts B';
+        $collectionB->slug = 'posts_b';
+        $collectionB->project = $projectB;
+        $em->persist($collectionB);
+
+        $member = new ProjectMember();
+        $member->project = $projectA;
+        $member->user = $user;
+        $member->email = $user->email;
+        $member->status = ProjectMemberStatus::Active;
+        $member->joinedAt = new \DateTimeImmutable();
+        $em->persist($member);
+        $em->flush();
+
+        $client->loginUser($user);
+
+        $rpc = [
+            'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call',
+            'params' => ['name' => 'create_entry', 'arguments' => [
+                'project_uuid' => $projectB->uuid->toString(),
+                'collection_slug' => 'posts_b',
+                'data' => ['title' => 'Injected'],
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpc));
+
+        $res = json_decode($client->getResponse()->getContent(), true);
+        self::assertTrue(isset($res['error']) || (isset($res['result']['isError']) && $res['result']['isError'] === true));
+    }
 }

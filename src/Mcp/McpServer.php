@@ -172,7 +172,15 @@ class McpServer
         }
 
         if ($status === 'error') {
-            throw new McpException($errorMsg, -32000);
+            return [
+                'content' => [
+                    [
+                        'type' => 'text',
+                        'text' => $errorMsg ?? 'Unknown error',
+                    ],
+                ],
+                'isError' => true,
+            ];
         }
 
         return [

@@ -48,30 +48,65 @@ class McpTool
      */
     public static function schema(array $properties, array $required = []): array
     {
+        $resolvedRequired = $required;
+        $cleanProperties = [];
+
+        foreach ($properties as $key => $prop) {
+            if (is_array($prop)) {
+                if (!empty($prop['_required']) && !in_array($key, $resolvedRequired, true)) {
+                    $resolvedRequired[] = $key;
+                }
+                unset($prop['_required']);
+                if (isset($prop['required']) && is_bool($prop['required'])) {
+                    if ($prop['required'] && !in_array($key, $resolvedRequired, true)) {
+                        $resolvedRequired[] = $key;
+                    }
+                    unset($prop['required']);
+                }
+            }
+            $cleanProperties[$key] = $prop;
+        }
+
         return [
             'type' => 'object',
-            'properties' => $properties,
-            'required' => $required,
+            'properties' => $cleanProperties,
+            'required' => array_values(array_unique($resolvedRequired)),
         ];
     }
 
     public static function stringProp(string $description, bool $required = false): array
     {
-        return ['type' => 'string', 'description' => $description];
+        $p = ['type' => 'string', 'description' => $description];
+        if ($required) {
+            $p['_required'] = true;
+        }
+        return $p;
     }
 
     public static function intProp(string $description, bool $required = false): array
     {
-        return ['type' => 'integer', 'description' => $description];
+        $p = ['type' => 'integer', 'description' => $description];
+        if ($required) {
+            $p['_required'] = true;
+        }
+        return $p;
     }
 
     public static function boolProp(string $description, bool $required = false): array
     {
-        return ['type' => 'boolean', 'description' => $description];
+        $p = ['type' => 'boolean', 'description' => $description];
+        if ($required) {
+            $p['_required'] = true;
+        }
+        return $p;
     }
 
     public static function enumProp(array $values, string $description, bool $required = false): array
     {
-        return ['type' => 'string', 'enum' => $values, 'description' => $description];
+        $p = ['type' => 'string', 'enum' => $values, 'description' => $description];
+        if ($required) {
+            $p['_required'] = true;
+        }
+        return $p;
     }
 }

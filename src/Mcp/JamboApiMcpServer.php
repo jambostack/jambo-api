@@ -41,6 +41,7 @@ class JamboApiMcpServer extends McpServer
         EavFieldHelperService $fieldHelperService,
         SchemaProvisioner $provisioner,
         \App\Repository\ProjectMemberRepository $memberRepo,
+        private ?\Symfony\Contracts\EventDispatcher\EventDispatcherInterface $eventDispatcher = null,
     ) {
         parent::__construct('JamboApi CMS', '2.0.0');
 
@@ -238,14 +239,15 @@ class JamboApiMcpServer extends McpServer
                 'data' => ['type' => 'object', 'description' => 'Données de l\'entrée (clés = slugs des champs)'],
             ], ['project_uuid', 'collection_slug', 'data']),
             function (array $args, array $ctx): array {
-                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug']);
+                $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
+                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
                 if (!$collection) throw new McpException('Collection introuvable', 404);
 
                 if ($collection->isSingleton) {
                     $existing = $this->em->getRepository(ContentEntry::class)
                         ->findOneBy(['collection' => $collection, 'deletedAt' => null]);
                     if ($existing) {
-                        throw new McpException('Cette collection singleton a déjà une entrée');
+                        throw new McpException('Cette collection singleton a déjà une entrée', 422);
                     }
                 }
 
@@ -254,17 +256,35 @@ class JamboApiMcpServer extends McpServer
                 $entry->project = $collection->project;
                 $entry->locale = $args['locale'] ?? $collection->project->defaultLocale ?? 'en';
                 $entry->status = 'draft';
+                if (($ctx['user'] ?? null) instanceof \App\Entity\User) {
+                    $entry->createdBy = $ctx['user'];
+                }
 
-                foreach ($args['data'] as $fieldSlug => $value) {
+                $data = $args['data'] ?? [];
+                foreach ($data as $fieldSlug => $value) {
                     $field = $this->fieldHelper->findField($collection, $fieldSlug);
                     if (!$field) continue;
-                    $cfv = $this->createFieldValue($field, $value);
+                    $errors = $this->fieldHelper->validateValue($field->type, $value);
+                    if (!empty($errors)) {
+                        throw new McpException(sprintf("Champ '%s': %s", $fieldSlug, implode(', ', $errors)), 422);
+                    }
+                    try {
+                        $cfv = $this->createFieldValue($field, $value);
+                    } catch (\Throwable $e) {
+                        throw new McpException(sprintf("Erreur champ '%s': %s", $fieldSlug, $e->getMessage()), 422);
+                    }
                     $cfv->contentEntry = $entry;
                     $entry->fieldValues->add($cfv);
                 }
 
                 $this->em->persist($entry);
                 $this->em->flush();
+
+                if ($this->eventDispatcher !== null) {
+                    $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
+                        \App\Event\ContentEvent::CREATED, $entry, $project, null
+                    ));
+                }
 
                 return $this->formatter->formatEntry($entry);
             }
@@ -281,28 +301,53 @@ class JamboApiMcpServer extends McpServer
                 'status' => McpTool::enumProp(['draft', 'published'], 'Nouveau statut'),
             ], ['project_uuid', 'collection_slug', 'entry_uuid', 'data']),
             function (array $args, array $ctx): array {
-                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid']);
+                $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
+                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
                 if (!$entry) throw new McpException('Entrée introuvable', 404);
 
+                $previousStatus = $entry->status;
                 if (isset($args['status'])) $entry->status = $args['status'];
+                if (($ctx['user'] ?? null) instanceof \App\Entity\User) {
+                    $entry->updatedBy = $ctx['user'];
+                }
 
-                foreach ($args['data'] as $fieldSlug => $value) {
+                $data = $args['data'] ?? [];
+                foreach ($data as $fieldSlug => $value) {
                     $field = $this->fieldHelper->findField($entry->collection, $fieldSlug);
                     if (!$field) continue;
+                    $errors = $this->fieldHelper->validateValue($field->type, $value);
+                    if (!empty($errors)) {
+                        throw new McpException(sprintf("Champ '%s': %s", $fieldSlug, implode(', ', $errors)), 422);
+                    }
                     $cfv = $entry->fieldValues->findFirst(
                         fn(int $k, ContentFieldValue $v) => $v->field?->slug === $fieldSlug
                     );
-                    if ($cfv) {
-                        $this->fieldHelper->setFieldValue($cfv, $field->type, $value);
-                    } else {
-                        $cfv = $this->createFieldValue($field, $value);
-                        $cfv->contentEntry = $entry;
-                        $entry->fieldValues->add($cfv);
+                    try {
+                        if ($cfv) {
+                            $this->fieldHelper->setFieldValue($cfv, $field->type, $value);
+                        } else {
+                            $cfv = $this->createFieldValue($field, $value);
+                            $cfv->contentEntry = $entry;
+                            $entry->fieldValues->add($cfv);
+                        }
+                    } catch (\Throwable $e) {
+                        throw new McpException(sprintf("Erreur champ '%s': %s", $fieldSlug, $e->getMessage()), 422);
                     }
                 }
 
                 $entry->updatedAt = new \DateTimeImmutable();
                 $this->em->flush();
+
+                if ($this->eventDispatcher !== null) {
+                    $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
+                        \App\Event\ContentEvent::UPDATED, $entry, $project, $previousStatus
+                    ));
+                    if (isset($args['status']) && $args['status'] !== $previousStatus) {
+                        $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
+                            \App\Event\ContentEvent::STATUS_CHANGED, $entry, $project, $previousStatus
+                        ));
+                    }
+                }
 
                 return $this->formatter->formatEntry($entry);
             }
@@ -317,13 +362,20 @@ class JamboApiMcpServer extends McpServer
                 'entry_uuid' => McpTool::stringProp('UUID de l\'entrée', true),
             ], ['project_uuid', 'collection_slug', 'entry_uuid']),
             function (array $args, array $ctx): array {
-                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid']);
+                $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
+                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
                 if (!$entry) throw new McpException('Entrée introuvable', 404);
 
                 $entry->deletedAt = new \DateTimeImmutable();
                 $this->em->flush();
 
-                return ['deleted' => true, 'uuid' => $entry->uuid->toRfc4122()];
+                if ($this->eventDispatcher !== null) {
+                    $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
+                        \App\Event\ContentEvent::DELETED, $entry, $project, $entry->status
+                    ));
+                }
+
+                return ['deleted' => true, 'uuid' => $entry->uuid?->toRfc4122()];
             }
         ));
 
@@ -336,14 +388,23 @@ class JamboApiMcpServer extends McpServer
                 'entry_uuid' => McpTool::stringProp('UUID de l\'entrée', true),
             ], ['project_uuid', 'collection_slug', 'entry_uuid']),
             function (array $args, array $ctx): array {
-                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid']);
+                $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
+                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
                 if (!$entry) throw new McpException('Entrée introuvable', 404);
 
+                $previousStatus = $entry->status;
                 $entry->status = 'published';
+                $entry->publishedAt = new \DateTimeImmutable();
                 $entry->updatedAt = new \DateTimeImmutable();
                 $this->em->flush();
 
-                return ['published' => true, 'uuid' => $entry->uuid->toRfc4122()];
+                if ($this->eventDispatcher !== null) {
+                    $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
+                        \App\Event\ContentEvent::STATUS_CHANGED, $entry, $project, $previousStatus
+                    ));
+                }
+
+                return ['published' => true, 'uuid' => $entry->uuid?->toRfc4122()];
             }
         ));
 
@@ -358,14 +419,19 @@ class JamboApiMcpServer extends McpServer
                 'limit' => McpTool::intProp('Nombre de résultats (défaut 20)'),
             ], ['project_uuid', 'query']),
             function (array $args, array $ctx): array {
-                $project = $this->findProject($args['project_uuid']);
-                if (!$project) throw new McpException('Projet introuvable', 404);
+                $project = $this->assertCanReadProject($args['project_uuid'], $ctx);
 
                 $options = ['limit' => min($args['limit'] ?? 20, 100)];
-                if (!empty($args['collection'])) $options['filter'] = "_collection = {$args['collection']}";
-                if (!empty($args['locale'])) $options['filter'] = isset($options['filter'])
-                    ? $options['filter'] . " AND locale = {$args['locale']}"
-                    : "locale = {$args['locale']}";
+                if (!empty($args['collection'])) {
+                    $cleanColl = addslashes($args['collection']);
+                    $options['filter'] = "_collection = \"{$cleanColl}\"";
+                }
+                if (!empty($args['locale'])) {
+                    $cleanLoc = addslashes($args['locale']);
+                    $options['filter'] = isset($options['filter'])
+                        ? $options['filter'] . " AND locale = \"{$cleanLoc}\""
+                        : "locale = \"{$cleanLoc}\"";
+                }
 
                 return $this->searchService->search($project, $args['query'], $options);
             }
@@ -417,7 +483,11 @@ class JamboApiMcpServer extends McpServer
                 'name' => McpTool::stringProp('Nom du champ', true),
                 'slug' => McpTool::stringProp('Slug du champ'),
                 'type' => McpTool::enumProp(
-                    ['text', 'longtext', 'richtext', 'number', 'boolean', 'date', 'datetime', 'email', 'slug', 'color', 'json', 'enumeration', 'media', 'relation'],
+                    [
+                        'text', 'longtext', 'richtext', 'wysiwyg', 'markdown', 'number', 'decimal', 'rating',
+                        'boolean', 'checkbox', 'date', 'datetime', 'email', 'url', 'slug', 'color', 'icon',
+                        'code', 'json', 'array', 'repeater', 'enumeration', 'tags', 'media', 'relation',
+                    ],
                     'Type du champ', true
                 ),
                 'is_required' => McpTool::boolProp('Champ obligatoire'),
@@ -425,7 +495,7 @@ class JamboApiMcpServer extends McpServer
             ], ['project_uuid', 'collection_slug', 'name', 'type']),
             function (array $args, array $ctx): array {
                 $this->assertCanWriteSchema($args, $ctx);
-                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug']);
+                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
                 if (!$collection) throw new McpException('Collection introuvable', 404);
 
                 try {
@@ -492,6 +562,15 @@ class JamboApiMcpServer extends McpServer
                 'project_name' => McpTool::stringProp('Nom du nouveau projet', true),
             ], ['template_id', 'project_name']),
             function (array $args, array $ctx): array {
+                $user = $ctx['user'] ?? null;
+                if (!$user instanceof \App\Entity\User) {
+                    throw new McpException('Authentification requise', 401);
+                }
+                $scopes = $ctx['scopes'] ?? null;
+                if ($scopes !== null && !in_array('projects:write', $scopes, true)) {
+                    throw new McpException('Scope insuffisant', 403);
+                }
+
                 $template = $this->em->getRepository(\App\Entity\ProjectTemplate::class)
                     ->find($args['template_id']);
                 if (!$template) throw new McpException('Template introuvable', 404);
@@ -503,6 +582,14 @@ class JamboApiMcpServer extends McpServer
                 $project->defaultLocale = $template->structure['defaultLocale'] ?? 'en';
 
                 $this->em->persist($project);
+
+                $member = new \App\Entity\ProjectMember();
+                $member->project = $project;
+                $member->user = $user;
+                $member->email = $user->email;
+                $member->status = \App\Enum\ProjectMemberStatus::Active;
+                $member->joinedAt = new \DateTimeImmutable();
+                $this->em->persist($member);
 
                 foreach ($template->structure['collections'] ?? [] as $collData) {
                     $collection = new Collection();
@@ -582,8 +669,11 @@ class JamboApiMcpServer extends McpServer
                 'media_uuid' => McpTool::stringProp('UUID du média', true),
             ], ['media_uuid']),
             function (array $args, array $ctx): array {
-                $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid']]);
+                $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
                 if (!$media) throw new McpException('Média introuvable', 404);
+                if ($media->project !== null) {
+                    $this->assertCanReadProject($media->project->uuid->toRfc4122(), $ctx);
+                }
 
                 return [
                     'uuid' => $media->uuid->toRfc4122(),
@@ -682,7 +772,7 @@ class JamboApiMcpServer extends McpServer
                 'locale' => McpTool::stringProp('Locale (défaut: fr)'),
             ], ['project_uuid', 'collection_slug', 'brief']),
             function (array $args, array $ctx) use ($aiService): array {
-                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug']);
+                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
                 if (!$collection) throw new McpException('Collection introuvable', 404);
 
                 return $aiService->generateContent(
@@ -699,6 +789,7 @@ class JamboApiMcpServer extends McpServer
                 'target_locale' => McpTool::stringProp('Locale cible (ex: en, es, ar)', true),
             ], ['content', 'target_locale']),
             function (array $args, array $ctx) use ($aiService): array {
+                $this->assertAuthenticated($ctx);
                 return $aiService->translateContent($args['content'], $args['target_locale']);
             }
         ));
@@ -711,6 +802,7 @@ class JamboApiMcpServer extends McpServer
                 'max_words' => McpTool::intProp('Nombre maximum de mots (défaut 80)'),
             ], ['text']),
             function (array $args, array $ctx) use ($aiService): array {
+                $this->assertAuthenticated($ctx);
                 return ['summary' => $aiService->summarize($args['text'], $args['max_words'] ?? 80)];
             }
         ));
@@ -722,6 +814,7 @@ class JamboApiMcpServer extends McpServer
                 'content' => ['type' => 'object', 'description' => 'Contenu à analyser', 'required' => true],
             ], ['content']),
             function (array $args, array $ctx) use ($aiService): array {
+                $this->assertAuthenticated($ctx);
                 return $aiService->generateSeo($args['content']);
             }
         ));
@@ -734,7 +827,7 @@ class JamboApiMcpServer extends McpServer
                 'collection_slug' => McpTool::stringProp('Collection à analyser', true),
             ], ['project_uuid', 'collection_slug']),
             function (array $args, array $ctx) use ($aiService): array {
-                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug']);
+                $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
                 if (!$collection) throw new McpException('Collection introuvable', 404);
 
                 return $aiService->suggestSchema($collection);
@@ -750,8 +843,7 @@ class JamboApiMcpServer extends McpServer
                 'limit' => McpTool::intProp('Nombre de résultats'),
             ], ['project_uuid', 'query']),
             function (array $args, array $ctx) use ($searchService): array {
-                $project = $this->findProject($args['project_uuid']);
-                if (!$project) throw new McpException('Projet introuvable', 404);
+                $project = $this->assertCanReadProject($args['project_uuid'], $ctx);
 
                 return $searchService->search($project, $args['query'], [
                     'limit' => min($args['limit'] ?? 20, 100),
@@ -769,13 +861,14 @@ class JamboApiMcpServer extends McpServer
                 'label' => McpTool::stringProp('Libellé de la version'),
             ], ['project_uuid', 'collection_slug', 'entry_uuid']),
             function (array $args, array $ctx) use ($versioningService): array {
-                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid']);
+                $this->assertCanWriteProject($args['project_uuid'], $ctx);
+                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
                 if (!$entry) throw new McpException('Entrée introuvable', 404);
 
                 $version = $versioningService->createVersion($entry, $args['label'] ?? null);
 
                 return [
-                    'uuid' => $version->uuid->toRfc4122(),
+                    'uuid' => $version->uuid?->toRfc4122(),
                     'versionNumber' => $version->versionNumber,
                     'label' => $version->label,
                     'createdAt' => $version->createdAt->format(\DateTimeInterface::ATOM),
@@ -792,12 +885,13 @@ class JamboApiMcpServer extends McpServer
                 'entry_uuid' => McpTool::stringProp('UUID de l\'entrée', true),
             ], ['project_uuid', 'collection_slug', 'entry_uuid']),
             function (array $args, array $ctx): array {
-                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid']);
+                $this->assertCanReadProject($args['project_uuid'], $ctx);
+                $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
                 if (!$entry) throw new McpException('Entrée introuvable', 404);
 
                 $repo = $this->em->getRepository(\App\Entity\ContentVersion::class);
                 return array_map(fn($v) => [
-                    'uuid' => $v->uuid->toRfc4122(),
+                    'uuid' => $v->uuid?->toRfc4122(),
                     'versionNumber' => $v->versionNumber,
                     'label' => $v->label,
                     'createdAt' => $v->createdAt->format(\DateTimeInterface::ATOM),
@@ -817,8 +911,11 @@ class JamboApiMcpServer extends McpServer
                 'quality' => McpTool::intProp('Qualité (1-100)'),
             ], ['media_uuid']),
             function (array $args, array $ctx): array {
-                $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid']]);
+                $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
                 if (!$media) throw new McpException('Média introuvable', 404);
+                if ($media->project !== null) {
+                    $this->assertCanReadProject($media->project->uuid->toRfc4122(), $ctx);
+                }
 
                 $params = [];
                 if (isset($args['width'])) $params['w'] = $args['width'];
@@ -939,6 +1036,62 @@ class JamboApiMcpServer extends McpServer
         }
 
         return $project;
+    }
+
+    /**
+     * Garde d'écriture de données (entrées, médias, versions) :
+     * vérifie que le contexte a le droit d'écrire dans le projet ciblé.
+     */
+    private function assertCanWriteProject(string $projectUuid, array $ctx): Project
+    {
+        $project = $this->findProject($projectUuid);
+        if (!$project) {
+            throw new McpException('Projet introuvable', 404);
+        }
+
+        // Contexte ApiToken / endpoint projet-scopé : doit cibler CE projet + avoir la capacité d'écriture.
+        $ctxProjectId = $ctx['project_id'] ?? ($ctx['_project']->id ?? null);
+        if ($ctxProjectId !== null) {
+            if ($ctxProjectId !== $project->id) {
+                throw new McpException('Accès refusé à ce projet', 403);
+            }
+            $abilities = $ctx['token_abilities'] ?? [];
+            if (!empty($abilities) && !array_intersect(['create', 'write', 'entries:write', 'content:write', '*'], $abilities)) {
+                throw new McpException('Scope insuffisant', 403);
+            }
+            return $project;
+        }
+
+        // Contexte utilisateur (session admin ou PAT) : appartenance active requise.
+        $user = $ctx['user'] ?? null;
+        if (!$user instanceof \App\Entity\User) {
+            throw new McpException('Authentification requise', 401);
+        }
+        if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)
+            && $this->memberRepo->findActiveByUserAndProject($user, $project) === null) {
+            throw new McpException('Accès refusé à ce projet', 403);
+        }
+
+        // Si le contexte porte des scopes (PAT), exiger un scope d'écriture.
+        $scopes = $ctx['scopes'] ?? null;
+        if ($scopes !== null
+            && !in_array('content:write', $scopes, true)
+            && !in_array('entries:write', $scopes, true)
+            && !in_array('write', $scopes, true)
+            && !in_array('projects:write', $scopes, true)) {
+            throw new McpException('Scope insuffisant', 403);
+        }
+
+        return $project;
+    }
+
+    private function assertAuthenticated(array $ctx): void
+    {
+        $user = $ctx['user'] ?? null;
+        $isAuthenticated = $ctx['authenticated'] ?? false;
+        if (!$user instanceof \App\Entity\User && !$isAuthenticated) {
+            throw new McpException('Authentification requise', 401);
+        }
     }
 
     private function findCollection(string $projectUuid, string $slug, ?array $ctx = null): ?Collection
