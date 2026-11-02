@@ -575,4 +575,74 @@ class CoreApiHardeningTest extends WebTestCase
         $this->assertTrue($data['success']);
         $this->assertStringContainsString('successfully', $data['message']);
     }
+
+    public function testImageTransformAccessControlAndQueryToken(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $this->projectUuid]);
+        $project->publicApi = false;
+
+        $media = new \App\Entity\Media();
+        $media->project = $project;
+        $media->fileName = 'test-image.jpg';
+        $media->originalName = 'test-image.jpg';
+        $media->mimeType = 'image/jpeg';
+        $media->fileSize = 100;
+        $em->persist($media);
+        $em->flush();
+
+        // 1. Anonymous access to private project media info is blocked (403)
+        $client->request('GET', '/cdn/media/' . $media->uuid->toRfc4122() . '/info');
+        $this->assertSame(403, $client->getResponse()->getStatusCode());
+
+        // 2. Access with token in query string is permitted (or 404 if physical file doesn't exist on disk, but NOT 403!)
+        $client->request('GET', '/cdn/media/' . $media->uuid->toRfc4122() . '/info?token=' . $this->tokenSecret);
+        $status = $client->getResponse()->getStatusCode();
+        $this->assertTrue(in_array($status, [200, 404], true));
+        $this->assertNotSame(403, $status);
+    }
+
+    public function testDirectUploadAuthorization(): void
+    {
+        $client = static::createClient();
+
+        // 1. Unauthenticated intent creation is rejected
+        $client->request('POST', '/api/projects/' . $this->projectUuid . '/media/direct-upload/intent');
+        $status = $client->getResponse()->getStatusCode();
+        $this->assertTrue(in_array($status, [401, 403], true));
+
+        // 2. Authenticated intent creation with ApiToken proceeds to payload processing
+        $client->request(
+            'POST',
+            '/api/projects/' . $this->projectUuid . '/media/direct-upload/intent',
+            [],
+            [],
+            ['HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret, 'CONTENT_TYPE' => 'application/json'],
+            json_encode(['filename' => 'pic.png'])
+        );
+        $statusAuth = $client->getResponse()->getStatusCode();
+        $this->assertNotSame(401, $statusAuth);
+        $this->assertNotSame(403, $statusAuth);
+    }
+
+    public function testTemplateControllersAuthorization(): void
+    {
+        $client = static::createClient();
+
+        // 1. Save from project requires authorization
+        $client->request('POST', '/api/project-templates/from-project/' . $this->projectUuid, [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Stolen Template',
+        ]));
+        $status = $client->getResponse()->getStatusCode();
+        $this->assertTrue(in_array($status, [302, 401, 403], true));
+
+        // 2. Save from collection requires authorization
+        $client->request('POST', '/api/collection-templates/from-collection/' . $this->projectUuid . '/articles', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Stolen Collection',
+        ]));
+        $statusCol = $client->getResponse()->getStatusCode();
+        $this->assertTrue(in_array($statusCol, [302, 401, 403], true));
+    }
 }

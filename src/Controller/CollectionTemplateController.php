@@ -47,7 +47,11 @@ class CollectionTemplateController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(Request $request): JsonResponse
     {
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         if (empty($data['name'])) {
             return $this->json(['error' => 'name is required'], 422);
@@ -84,12 +88,20 @@ class CollectionTemplateController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
+
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
             return $this->json(['error' => 'Collection not found'], 404);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         $template = new CollectionTemplate();
         $template->name        = $data['name'] ?? $collection->name;
@@ -117,6 +129,8 @@ class CollectionTemplateController extends AbstractController
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
     public function delete(int $id): JsonResponse
     {
+        $this->denyAccessUnlessGranted('ROLE_SUPER_ADMIN');
+
         $template = $this->templateRepository->find($id);
         if ($template === null) {
             return $this->json(['error' => 'Template not found'], 404);

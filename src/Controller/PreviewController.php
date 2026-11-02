@@ -34,14 +34,16 @@ class PreviewController extends AbstractController
      * Protege par l'auth admin Symfony standard.
      */
     #[Route('/token/{entryUuid}', name: 'token', methods: ['GET'])]
-    public function token(string $projectUuid, string $entryUuid): JsonResponse
+    public function token(string $projectUuid, string $entryUuid, Request $request): JsonResponse
     {
         $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $this->denyAccessUnlessGranted('project.view', $project);
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
 
         $entry = $this->entryRepository->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
         if (!$entry || $entry->isDeleted()) {

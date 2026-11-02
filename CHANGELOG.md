@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.33] — 2026-11-02
+
+### Fixed & Improved
+- **CDN Media Access Control & Query Token Resolution (`ImageTransformController` & `ApiTokenChecker`)**:
+  - Closed metadata information disclosure on `/cdn/media/{uuid}/info` for projects with private API by requiring authentication or valid project tokens.
+  - Extended `ApiTokenChecker::resolve` to support `?token=` and `?preview_token=` query parameters when the `Authorization: Bearer` header is absent, enabling `<img src="/cdn/media/...?token=...">` embedding in frontend apps.
+- **Direct Upload Authorization (`DirectUploadController`)**:
+  - Enforced `content.create` permission checks on presigned upload intent creation (`/api/projects/{projectUuid}/media/direct-upload/intent`) to prevent unauthorized generation of presigned S3 upload URLs.
+- **Project & Collection Template Protection (`ProjectTemplateController` & `CollectionTemplateController`)**:
+  - Enforced project access checks (`project.view`) before exporting project schemas (`/from-project/{projectUuid}`) and collection definitions (`/from-collection/{projectUuid}/{collectionSlug}`) to global templates.
+  - Restricted template deletion to `ROLE_SUPER_ADMIN` and wrapped request bodies in JSON parsing exception handling.
+- **Public Shares & Live Preview ApiToken Access (`ShareController` & `PreviewController`)**:
+  - Supported project `ApiToken` authentication in `PreviewController::token` and `ShareController` (`store`, `index`, `destroy`) via project attribute matching.
+- **Project Email Route Alias & Attachment Hardening (`ProjectEmailController`)**:
+  - Added standard route alias `POST /api/projects/{projectUuid}/email`.
+  - Sanitized attachment filenames to strip control characters/path traversal and enforced a 10MB per-attachment size safeguard.
+- **Automation Error Handling (`AutomationController`)**:
+  - Protected `store`, `update`, `dryRun`, and `testNode` against uncaught `JsonException` returning clean 400 Bad Request responses.
+
+---
+
 ## [1.26.32] — 2026-11-02
 
 ### Fixed & Improved

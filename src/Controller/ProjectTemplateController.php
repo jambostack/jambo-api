@@ -54,7 +54,21 @@ class ProjectTemplateController extends AbstractController
     #[Route('/from-project/{projectUuid}', name: 'save_from_project', methods: ['POST'])]
     public function saveFromProject(string $projectUuid, Request $request): JsonResponse
     {
-        $data     = $request->toArray();
+        $project = $this->em->getRepository(\App\Entity\Project::class)->findOneBy(['uuid' => $projectUuid]);
+        if ($project === null) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
+
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
         $template = $this->builder->exportFromProject($projectUuid, $data['name'] ?? null, $data['description'] ?? null);
 
         if ($template === null) {
@@ -71,12 +85,21 @@ class ProjectTemplateController extends AbstractController
     #[Route('/{id}/apply', name: 'apply', methods: ['POST'])]
     public function apply(int $id, Request $request): JsonResponse
     {
+        if (!$this->getUser()) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
         $template = $this->templateRepository->find($id);
         if ($template === null) {
             return $this->json(['error' => 'Template not found'], 404);
         }
 
-        $data    = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
         $project = $this->builder->applyTemplate($template, $data['name'] ?? $template->name, $this->getUser());
 
         return $this->json([
@@ -88,6 +111,8 @@ class ProjectTemplateController extends AbstractController
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
     public function delete(int $id): JsonResponse
     {
+        $this->denyAccessUnlessGranted('ROLE_SUPER_ADMIN');
+
         $template = $this->templateRepository->find($id);
         if ($template === null) {
             return $this->json(['error' => 'Template not found'], 404);

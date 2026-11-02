@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\Media;
 use App\Entity\ProjectStorageProfile;
 use App\Repository\ProjectStorageProfileRepository;
+use App\Service\ApiTokenChecker;
 use App\Service\ImageTransformService;
 use App\Service\StorageDriverFactory;
 use Doctrine\ORM\EntityManagerInterface;
@@ -21,6 +22,7 @@ class ImageTransformController extends AbstractController
         private ImageTransformService $imageTransform,
         private ?StorageDriverFactory $storageDriverFactory = null,
         private ?ProjectStorageProfileRepository $storageProfileRepo = null,
+        private ?ApiTokenChecker $tokenChecker = null,
     ) {}
 
     #[Route('/cdn/media/{uuid}', name: 'cdn_media_transform', methods: ['GET'])]
@@ -33,9 +35,8 @@ class ImageTransformController extends AbstractController
             return new Response('Média introuvable', 404);
         }
 
-        // Vérifier que le projet autorise l'accès public ou que l'utilisateur est authentifié
-        $project = $media->project;
-        if (!$project?->publicApi && !$this->getUser()) {
+        // Vérifier les autorisations d'accès au média (publicApi, session utilisateur ou ApiToken)
+        if (!$this->canAccessMedia($media, $request)) {
             return new Response('Accès non autorisé', 403);
         }
 
@@ -68,11 +69,16 @@ class ImageTransformController extends AbstractController
     }
 
     #[Route('/cdn/media/{uuid}/info', name: 'cdn_media_info', methods: ['GET'])]
-    public function info(string $uuid): Response
+    public function info(string $uuid, Request $request): Response
     {
         $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $uuid]);
         if (!$media || $media->isDeleted()) {
             return $this->json(['error' => 'Média introuvable'], 404);
+        }
+
+        // Vérifier les autorisations d'accès au média (publicApi, session utilisateur ou ApiToken)
+        if (!$this->canAccessMedia($media, $request)) {
+            return $this->json(['error' => 'Accès non autorisé'], 403);
         }
 
         $filePath = $this->resolveLocalOrRemoteFilePath($media);
@@ -185,5 +191,26 @@ class ImageTransformController extends AbstractController
         }
 
         return null;
+    }
+
+    private function canAccessMedia(Media $media, Request $request): bool
+    {
+        $project = $media->project;
+        if ($project?->publicApi) {
+            return true;
+        }
+
+        if ($this->getUser() !== null) {
+            return true;
+        }
+
+        if ($this->tokenChecker !== null) {
+            $token = $this->tokenChecker->resolve($request);
+            if ($token !== null && $token->project === $project) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

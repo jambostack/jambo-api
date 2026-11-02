@@ -16,17 +16,23 @@ class ApiTokenChecker
     ) {}
 
     /**
-     * Resolves an ApiToken from the Authorization: Bearer header.
+     * Resolves an ApiToken from the Authorization: Bearer header or token query parameter.
      * Returns null if the token is missing, invalid, or expired.
      */
     public function resolve(Request $request): ?ApiToken
     {
         $header = $request->headers->get('Authorization', '');
-        if (!str_starts_with($header, 'Bearer ')) {
+        if (str_starts_with($header, 'Bearer ')) {
+            $plainToken = substr($header, 7);
+        } else {
+            $plainToken = $request->query->get('token') ?? $request->query->get('preview_token');
+        }
+
+        if (empty($plainToken) || !is_string($plainToken)) {
             return null;
         }
 
-        $plainToken = substr($header, 7);
+        $plainToken = trim($plainToken);
         $token = $this->tokenRepository->findByPlainToken($plainToken);
 
         if ($token === null || $token->isExpired()) {

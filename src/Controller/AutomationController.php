@@ -53,7 +53,11 @@ class AutomationController extends AbstractController
         if (!$project) return $this->json(['error' => 'Project not found'], 404);
         $this->denyProjectAccess($project, $request);
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         $automation = new Automation();
         $automation->project    = $project;
@@ -91,7 +95,11 @@ class AutomationController extends AbstractController
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         if (isset($data['name']))        $automation->name      = $data['name'];
         if (isset($data['flow_graph']))  $automation->flowGraph  = $data['flow_graph'];
@@ -216,7 +224,13 @@ class AutomationController extends AbstractController
         $graph = $automation->flowGraph;
         if (!$graph) return $this->json(['error' => 'Automation has no flow graph'], 400);
 
-        $payload = $request->toArray()['payload'] ?? [];
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
+        $payload = $data['payload'] ?? [];
 
         $ctx = new FlowContext(
             automationId: $automation->id,
@@ -246,7 +260,12 @@ class AutomationController extends AbstractController
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
         $nodeId   = $data['node_id'] ?? '';
         $nodeType = $data['node_type'] ?? '';
         $config   = $data['config'] ?? [];

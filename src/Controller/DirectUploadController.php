@@ -32,6 +32,10 @@ class DirectUploadController extends AbstractController
             return new JsonResponse(['error' => 'Project not found'], 404);
         }
 
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('content.create', $project);
+        }
+
         $payload = json_decode($request->getContent(), true) ?? [];
 
         try {

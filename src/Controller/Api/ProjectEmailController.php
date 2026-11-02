@@ -40,6 +40,8 @@ class ProjectEmailController extends AbstractController
 
     #[Route('/api/{projectUuid}/email', name: 'api_project_email', methods: ['POST'],
         requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
+    #[Route('/api/projects/{projectUuid}/email', name: 'api_project_email_alt', methods: ['POST'],
+        requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
     public function send(string $projectUuid, Request $request): JsonResponse
     {
         // Resoudre le projet
@@ -176,10 +178,14 @@ class ProjectEmailController extends AbstractController
                 if (empty($a['content']) || empty($a['filename'])) {
                     return new JsonResponse(['error' => 'attachment content et filename requis'], 422);
                 }
+                if (strlen((string) $a['content']) > 15 * 1024 * 1024) {
+                    return new JsonResponse(['error' => 'Pièce jointe trop volumineuse (max 10MB)'], 422);
+                }
+                $safeFilename = basename(str_replace(["\0", "\r", "\n"], '', (string) $a['filename']));
                 $attachments[] = new Attachment(
-                    content: base64_decode($a['content']),
-                    filename: $a['filename'],
-                    mimeType: $a['mimeType'] ?? 'application/octet-stream',
+                    content: base64_decode((string) $a['content']),
+                    filename: $safeFilename,
+                    mimeType: (string) ($a['mimeType'] ?? 'application/octet-stream'),
                 );
             }
         }
