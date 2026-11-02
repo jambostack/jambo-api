@@ -282,7 +282,7 @@ class JamboApiMcpServer extends McpServer
 
                 if ($this->eventDispatcher !== null) {
                     $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
-                        \App\Event\ContentEvent::CREATED, $entry, $project, null
+                        \App\Event\ContentEvent::CREATED, $project, $entry, 'mcp', ''
                     ));
                 }
 
@@ -340,11 +340,11 @@ class JamboApiMcpServer extends McpServer
 
                 if ($this->eventDispatcher !== null) {
                     $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
-                        \App\Event\ContentEvent::UPDATED, $entry, $project, $previousStatus
+                        \App\Event\ContentEvent::UPDATED, $project, $entry, 'mcp', $previousStatus ?? ''
                     ));
                     if (isset($args['status']) && $args['status'] !== $previousStatus) {
                         $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
-                            \App\Event\ContentEvent::STATUS_CHANGED, $entry, $project, $previousStatus
+                            \App\Event\ContentEvent::STATUS_CHANGED, $project, $entry, 'mcp', $previousStatus ?? ''
                         ));
                     }
                 }
@@ -371,7 +371,7 @@ class JamboApiMcpServer extends McpServer
 
                 if ($this->eventDispatcher !== null) {
                     $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
-                        \App\Event\ContentEvent::DELETED, $entry, $project, $entry->status
+                        \App\Event\ContentEvent::DELETED, $project, $entry, 'mcp', $entry->status ?? ''
                     ));
                 }
 
@@ -400,7 +400,7 @@ class JamboApiMcpServer extends McpServer
 
                 if ($this->eventDispatcher !== null) {
                     $this->eventDispatcher->dispatch(new \App\Event\ContentEvent(
-                        \App\Event\ContentEvent::STATUS_CHANGED, $entry, $project, $previousStatus
+                        \App\Event\ContentEvent::STATUS_CHANGED, $project, $entry, 'mcp', $previousStatus ?? ''
                     ));
                 }
 

@@ -7,10 +7,10 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 class McpServer
 {
     /** @var McpTool[] */
-    private array $tools = [];
+    protected array $tools = [];
 
     /** @var McpResource[] */
-    private array $resources = [];
+    protected array $resources = [];
 
     private string $serverName;
     private string $serverVersion = '1.0.0';
