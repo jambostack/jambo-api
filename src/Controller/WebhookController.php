@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Webhook;
+use App\Message\SendWebhookMessage;
 use App\Repository\CollectionRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\WebhookLogRepository;
@@ -12,6 +13,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api/projects/{projectUuid}/webhooks', name: 'api_webhook_')]
@@ -24,6 +26,7 @@ class WebhookController extends AbstractController
         private CollectionRepository $collectionRepository,
         private EntityManagerInterface $em,
         private WebhookSecretService $secretService,
+        private ?MessageBusInterface $bus = null,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -55,10 +58,15 @@ class WebhookController extends AbstractController
             return $this->json(['error' => 'name and url are required'], 422);
         }
 
+        $url = trim($data['url']);
+        if ($err = $this->validateWebhookUrl($url)) {
+            return $this->json(['error' => $err], 422);
+        }
+
         $webhook = new Webhook();
         $webhook->project  = $project;
         $webhook->name     = $data['name'];
-        $webhook->url      = $data['url'];
+        $webhook->url      = $url;
         $webhook->events   = $data['events'] ?? ['content.created', 'content.updated', 'content.deleted'];
         $webhook->secret   = isset($data['secret']) ? $this->secretService->encrypt($data['secret']) : null;
         $webhook->isActive = (bool) ($data['is_active'] ?? true);
@@ -103,7 +111,11 @@ class WebhookController extends AbstractController
             $webhook->name = $data['name'];
         }
         if (isset($data['url'])) {
-            $webhook->url = $data['url'];
+            $url = trim($data['url']);
+            if ($err = $this->validateWebhookUrl($url)) {
+                return $this->json(['error' => $err], 422);
+            }
+            $webhook->url = $url;
         }
         if (isset($data['events'])) {
             $webhook->events = $data['events'];
@@ -178,6 +190,67 @@ class WebhookController extends AbstractController
         ]);
     }
 
+    #[Route('/{uuid}/test', name: 'test', methods: ['POST'])]
+    public function test(string $projectUuid, string $uuid): JsonResponse
+    {
+        $webhook = $this->resolveWebhook($projectUuid, $uuid);
+        if ($webhook instanceof JsonResponse) {
+            return $webhook;
+        }
+
+        $payload = [
+            'event'     => 'ping',
+            'timestamp' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
+            'project'   => $projectUuid,
+            'webhook'   => $webhook->uuid?->toString(),
+            'message'   => 'Test webhook ping from Jambo API',
+        ];
+
+        if ($this->bus !== null) {
+            $this->bus->dispatch(new SendWebhookMessage($webhook->id, 'ping', $payload));
+            return $this->json([
+                'success' => true,
+                'message' => 'Test webhook queued successfully',
+                'payload' => $payload,
+            ]);
+        }
+
+        return $this->json([
+            'success' => false,
+            'message' => 'Message bus is not configured',
+            'payload' => $payload,
+        ], 503);
+    }
+
+    private function validateWebhookUrl(string $url): ?string
+    {
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            return 'Invalid URL format';
+        }
+
+        $parts = parse_url($url);
+        $scheme = strtolower($parts['scheme'] ?? '');
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return 'Webhook URL must use http or https scheme';
+        }
+
+        $host = strtolower($parts['host'] ?? '');
+        if (empty($host)) {
+            return 'Invalid URL host';
+        }
+
+        $appEnv = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? 'prod';
+        if ($appEnv !== 'test' && (
+            $host === 'localhost' ||
+            str_ends_with($host, '.local') ||
+            (filter_var($host, FILTER_VALIDATE_IP) && !filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE))
+        )) {
+            return 'Internal and private IP addresses are not allowed for webhooks';
+        }
+
+        return null;
+    }
+
     private function serialize(Webhook $webhook): array
     {
         return [
@@ -199,8 +272,10 @@ class WebhookController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
         $user = $this->getUser();
-        if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true) && !$project->hasMember($user)) {
-            return $this->json(['error' => 'Access denied'], 403);
+        if ($user instanceof \App\Entity\User) {
+            if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true) && !$project->hasMember($user)) {
+                return $this->json(['error' => 'Access denied'], 403);
+            }
         }
         return $project;
     }

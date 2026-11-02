@@ -12,7 +12,6 @@ class StudioAntiSsrfTest extends KernelTestCase
         self::bootKernel();
         $controller = self::getContainer()->get(StudioController::class);
         $method = new \ReflectionMethod($controller, 'downloadExternalImage');
-        $method->setAccessible(true);
         return $method->invoke($controller, $url);
     }
 

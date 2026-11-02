@@ -7,6 +7,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.26] — 2026-11-02
+
+### Fixed
+- **CommentController Dependency & Multi-Tenant Isolation**:
+  - Replaced broken `$this->container->get(NotificationSubscriber::class)` call with constructor dependency injection (`NotificationSubscriber`).
+  - Added strict multi-tenant isolation verifying that comments and target contents belong to the requested project and collection UUID.
+  - Added null check on `$this->getUser()` and strict role checks (`ROLE_ADMIN`, `ROLE_SUPER_ADMIN`) before updating or deleting comments.
+- **CSV Import Reliability & EAV Property Fix (`AdminApi/ImportController`)**:
+  - Fixed fatal `Undefined property: $numericValue` on `ContentFieldValue` by using `$fv->numberValue` via `EavFieldHelperService`.
+  - Added auto-incrementing suffix slug deduplication (`ensureUniqueSlug`) to avoid duplicate key violations during bulk CSV row imports.
+  - Added `EntityManager::clear()` and safe error recovery preventing subsequent row failures from poisoning the entity manager.
+- **Search Controller Escaping & DB Fallback (`SearchController` & `SearchService`)**:
+  - Fixed unquoted Meilisearch filter injection and syntax errors by enclosing filter string literals in quotes (`_collection = "..."`, `locale = "..."`).
+  - Implemented database search fallback (`fallbackDatabaseSearch`) in `SearchService` so fulltext search remains functional when Meilisearch is unconfigured or unreachable.
+- **Webhook Controller URL Validation, SSRF Protection & Test Ping (`WebhookController`)**:
+  - Added `validateWebhookUrl()` with URL syntax validation, scheme restriction (HTTP/HTTPS only), and SSRF blocking of private and reserved IP addresses.
+  - Added `POST /api/projects/{projectUuid}/webhooks/{uuid}/test` endpoint to trigger test pings via `SendWebhookMessage`.
+- **System Version Reporting (`DeploymentController` & `HealthController`)**:
+  - Added fallback to `composer.json` and `HealthController::VERSION` in `/api/system/info` when the static `VERSION` file is absent.
+
+---
+
 ## [1.26.25] — 2026-11-02
 
 ### Added

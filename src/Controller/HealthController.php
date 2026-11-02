@@ -11,6 +11,8 @@ use OpenApi\Attributes as OA;
 #[OA\Tag(name: 'Health')]
 class HealthController extends AbstractController
 {
+    public const VERSION = '1.26.26';
+
     public function __construct(
         private Connection $connection,
     ) {}
@@ -57,7 +59,7 @@ class HealthController extends AbstractController
 
         return new JsonResponse([
             'status'    => $status,
-            'version'   => '1.26.25',
+            'version'   => self::VERSION,
             'timestamp' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
             'checks'    => $checks,
         ], $httpCode);

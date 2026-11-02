@@ -17,6 +17,7 @@ class SearchService
         private string $meilisearchKey,
         private EavDataFormatterService $formatter,
         private LoggerInterface $logger = new NullLogger(),
+        private ?\Doctrine\ORM\EntityManagerInterface $em = null,
     ) {
         if (!empty($meilisearchHost) && !empty($meilisearchKey)) {
             $this->client = new Client($meilisearchHost, $meilisearchKey);
@@ -72,7 +73,7 @@ class SearchService
     public function search(Project $project, string $query, array $options = []): array
     {
         if (!$this->isEnabled()) {
-            return ['hits' => [], 'query' => $query, 'processingTimeMs' => 0];
+            return $this->fallbackDatabaseSearch($project, $query, $options);
         }
 
         $searchOptions = array_merge([
@@ -90,9 +91,9 @@ class SearchService
 
             return $index->search($query, array_filter($searchOptions))->toArray();
         } catch (\Throwable $e) {
-            $this->logger->error('Meilisearch search failed: {error}', ['error' => $e->getMessage()]);
+            $this->logger->error('Meilisearch search failed, falling back to database: {error}', ['error' => $e->getMessage()]);
 
-            return ['hits' => [], 'query' => $query, 'processingTimeMs' => 0, 'error' => $e->getMessage()];
+            return $this->fallbackDatabaseSearch($project, $query, $options);
         }
     }
 
@@ -153,5 +154,60 @@ class SearchService
     private function indexName(Project $project): string
     {
         return 'jambo_p_' . substr(md5($project->uuid->toRfc4122()), 0, 8);
+    }
+
+    private function fallbackDatabaseSearch(Project $project, string $query, array $options): array
+    {
+        $startTime = microtime(true);
+        if ($this->em === null) {
+            return ['hits' => [], 'query' => $query, 'processingTimeMs' => 0];
+        }
+
+        $limit = min(max(1, (int) ($options['limit'] ?? 20)), 100);
+        $offset = max(0, (int) ($options['offset'] ?? 0));
+
+        $qb = $this->em->createQueryBuilder();
+        $qb->select('DISTINCT e')
+           ->from(ContentEntry::class, 'e')
+           ->leftJoin('e.fieldValues', 'fv')
+           ->leftJoin('e.collection', 'c')
+           ->where('e.project = :project')
+           ->andWhere('e.deletedAt IS NULL')
+           ->andWhere('(fv.textValue LIKE :q OR e.slug LIKE :q)')
+           ->setParameter('project', $project)
+           ->setParameter('q', '%' . $query . '%')
+           ->orderBy('e.updatedAt', 'DESC')
+           ->setMaxResults($limit)
+           ->setFirstResult($offset);
+
+        if (!empty($options['collection'])) {
+            $qb->andWhere('c.slug = :collection')->setParameter('collection', $options['collection']);
+        }
+        if (!empty($options['locale'])) {
+            $qb->andWhere('e.locale = :locale')->setParameter('locale', $options['locale']);
+        }
+
+        try {
+            $entries = $qb->getQuery()->getResult();
+            $hits = array_map(function (ContentEntry $entry) {
+                $data = $this->formatter->formatEntry($entry);
+                $data['_collection'] = $entry->collection?->slug;
+                $data['_project'] = $entry->project?->uuid?->toRfc4122();
+                return $data;
+            }, $entries);
+        } catch (\Throwable $e) {
+            $this->logger->error('Fallback database search failed: {error}', ['error' => $e->getMessage()]);
+            $hits = [];
+        }
+
+        $durationMs = (int) ((microtime(true) - $startTime) * 1000);
+
+        return [
+            'hits' => $hits,
+            'query' => $query,
+            'estimatedTotalHits' => count($hits),
+            'processingTimeMs' => $durationMs,
+            'source' => 'database',
+        ];
     }
 }

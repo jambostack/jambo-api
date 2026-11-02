@@ -21,11 +21,17 @@ class CommentController extends AbstractController
         private ContentEntryRepository $entryRepository,
         private CommentRepository $commentRepository,
         private EntityManagerInterface $em,
+        private ?NotificationSubscriber $notificationSubscriber = null,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, string $collectionSlug, int $entryId, Request $request): JsonResponse
     {
+        $entry = $this->entryRepository->find($entryId);
+        if (!$entry || $entry->project?->uuid?->toRfc4122() !== $projectUuid || $entry->collection?->slug !== $collectionSlug) {
+            return $this->json(['error' => 'Entry not found.'], 404);
+        }
+
         $page = max(1, $request->query->getInt('page', 1));
         $perPage = min(50, max(1, $request->query->getInt('per_page', 15)));
         $comments = $this->commentRepository->findByEntryPaginated($entryId, $page, $perPage);
@@ -40,19 +46,33 @@ class CommentController extends AbstractController
     public function create(string $projectUuid, string $collectionSlug, int $entryId, Request $request): JsonResponse
     {
         $entry = $this->entryRepository->find($entryId);
-        if (!$entry) return $this->json(['error' => 'Entry not found.'], 404);
+        if (!$entry || $entry->project?->uuid?->toRfc4122() !== $projectUuid || $entry->collection?->slug !== $collectionSlug) {
+            return $this->json(['error' => 'Entry not found.'], 404);
+        }
+
+        $user = $this->getUser();
+        if (!$user instanceof \App\Entity\User) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+
         $data = $request->toArray();
         $comment = new Comment();
         $comment->entry = $entry;
-        $comment->author = $this->getUser();
-        $comment->body = $data['body'] ?? '';
+        $comment->author = $user;
+        $comment->body = (string) ($data['body'] ?? '');
         if (!empty($data['parent_id'])) {
             $parent = $this->commentRepository->find($data['parent_id']);
-            if ($parent && $parent->entry->id === $entry->id) $comment->parent = $parent;
+            if ($parent && $parent->entry?->id === $entry->id) {
+                $comment->parent = $parent;
+            }
         }
         $this->em->persist($comment);
         $this->em->flush();
-        $this->container->get(NotificationSubscriber::class)->onCommentCreated($comment);
+
+        if ($this->notificationSubscriber !== null) {
+            $this->notificationSubscriber->onCommentCreated($comment);
+        }
+
         return $this->json(['data' => $this->serializeComment($comment)], 201);
     }
 
@@ -61,9 +81,18 @@ class CommentController extends AbstractController
     {
         $comment = $this->commentRepository->find($id);
         if (!$comment) return $this->json(['error' => 'Not found.'], 404);
-        if ($comment->author->id !== $this->getUser()->id) return $this->json(['error' => 'Forbidden.'], 403);
+
+        $user = $this->getUser();
+        if (!$user instanceof \App\Entity\User) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+        if ($comment->author?->id !== $user->id) {
+            return $this->json(['error' => 'Forbidden.'], 403);
+        }
+
         $data = $request->toArray();
-        if (isset($data['body'])) $comment->body = $data['body'];
+        if (isset($data['body'])) $comment->body = (string) $data['body'];
+        $comment->updatedAt = new \DateTimeImmutable();
         $this->em->flush();
         return $this->json(['data' => $this->serializeComment($comment)]);
     }
@@ -73,8 +102,16 @@ class CommentController extends AbstractController
     {
         $comment = $this->commentRepository->find($id);
         if (!$comment) return $this->json(['error' => 'Not found.'], 404);
-        if ($comment->author->id !== $this->getUser()->id && !in_array('ROLE_ADMIN', $this->getUser()->getRoles()))
+
+        $user = $this->getUser();
+        if (!$user instanceof \App\Entity\User) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+        $isAdmin = in_array('ROLE_ADMIN', $user->getRoles(), true) || in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true);
+        if ($comment->author?->id !== $user->id && !$isAdmin) {
             return $this->json(['error' => 'Forbidden.'], 403);
+        }
+
         $this->em->remove($comment);
         $this->em->flush();
         return $this->json(null, 204);
@@ -85,8 +122,18 @@ class CommentController extends AbstractController
     {
         $comment = $this->commentRepository->find($id);
         if (!$comment) return $this->json(['error' => 'Not found.'], 404);
+
+        $user = $this->getUser();
+        if (!$user instanceof \App\Entity\User) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+
         $data = $request->toArray();
-        $comment->status = in_array(($data['status'] ?? ''), ['open', 'resolved']) ? $data['status'] : $comment->status;
+        $status = $data['status'] ?? '';
+        if (in_array($status, ['open', 'resolved'], true)) {
+            $comment->status = $status;
+        }
+        $comment->updatedAt = new \DateTimeImmutable();
         $this->em->flush();
         return $this->json(['data' => $this->serializeComment($comment)]);
     }

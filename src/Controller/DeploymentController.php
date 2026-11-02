@@ -36,7 +36,14 @@ class DeploymentController extends AbstractController
     {
         $rootDir = $this->getParameter('kernel.project_dir');
         $versionFile = $rootDir . '/VERSION';
-        $version = is_file($versionFile) ? trim((string) file_get_contents($versionFile)) : 'dev';
+        if (is_file($versionFile)) {
+            $version = trim((string) file_get_contents($versionFile));
+        } elseif (is_file($rootDir . '/composer.json')) {
+            $composerJson = json_decode((string) file_get_contents($rootDir . '/composer.json'), true);
+            $version = $composerJson['version'] ?? HealthController::VERSION;
+        } else {
+            $version = HealthController::VERSION;
+        }
 
         return $this->json([
             'name'        => 'JamboApi CMS',

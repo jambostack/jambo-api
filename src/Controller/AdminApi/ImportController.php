@@ -27,6 +27,8 @@ class ImportController extends AbstractController
         private FieldRepository $fields,
         private EntityManagerInterface $em,
         private SluggerInterface $slugger,
+        private ?\App\Service\EavFieldHelperService $fieldHelper = null,
+        private ?\Doctrine\Persistence\ManagerRegistry $doctrine = null,
     ) {}
 
     #[Route('/import-csv', name: 'csv', methods: ['POST'])]
@@ -78,38 +80,51 @@ class ImportController extends AbstractController
                     $slugSource = $row[$body['slug_field']];
                 }
                 $slugStr = $slugSource ?: "imported-$idx-" . bin2hex(random_bytes(3));
-                $entry->slug = (string) $this->slugger->slug($slugStr)->lower()->truncate(50, '');
-
-                $this->em->persist($entry);
-                $this->em->flush(); // get entry ID
+                $entry->slug = $this->ensureUniqueSlug($collection, $slugStr, $locale);
 
                 // Set field values
                 foreach ($fieldMapping as $csvCol => $fieldSlug) {
                     if (!isset($fieldMap[$fieldSlug]) || !isset($row[$csvCol])) continue;
+                    $field = $fieldMap[$fieldSlug];
+                    $value = $row[$csvCol];
                     $fv = new ContentFieldValue();
                     $fv->contentEntry = $entry;
-                    $fv->field = $fieldMap[$fieldSlug];
-                    $fv->fieldType = $fieldMap[$fieldSlug]->type;
-                    $value = $row[$csvCol];
-                    // Map value to the right DB column
-                    switch ($fieldMap[$fieldSlug]->type) {
-                        case 'number':
-                            $fv->numericValue = is_numeric($value) ? (float) $value : null;
-                            break;
-                        case 'boolean':
-                            $fv->booleanValue = in_array(strtolower($value), ['1', 'true', 'yes', 'oui', 'on']);
-                            break;
-                        default:
-                            $fv->textValue = (string) $value;
+                    $fv->field = $field;
+                    $fv->fieldType = $field->type;
+                    if ($this->fieldHelper !== null) {
+                        $this->fieldHelper->setFieldValue($fv, $field->type, $value);
+                    } else {
+                        switch ($field->type) {
+                            case 'number':
+                            case 'decimal':
+                                $fv->numberValue = is_numeric($value) ? (string) $value : null;
+                                break;
+                            case 'boolean':
+                                $fv->booleanValue = in_array(strtolower((string) $value), ['1', 'true', 'yes', 'oui', 'on'], true);
+                                break;
+                            default:
+                                $fv->textValue = (string) $value;
+                        }
                     }
                     $this->em->persist($fv);
+                    $entry->fieldValues->add($fv);
                 }
+
+                $this->em->persist($entry);
                 $this->em->flush();
                 $created++;
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 $errors[] = ['row' => $idx, 'error' => $e->getMessage()];
-                // Rollback this entry
-                $this->em->clear();
+                if ($this->doctrine !== null && !$this->em->isOpen()) {
+                    $this->em = $this->doctrine->resetManager();
+                    $project = $this->projects->findOneBy(['uuid' => $uuid]);
+                    $collection = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
+                    $collectionFields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
+                    $fieldMap = [];
+                    foreach ($collectionFields as $f) {
+                        $fieldMap[$f->slug] = $f;
+                    }
+                }
             }
         }
 
@@ -120,5 +135,35 @@ class ImportController extends AbstractController
                 'total'   => count($csvData),
             ]
         ], empty($errors) ? 201 : 200);
+    }
+
+    private function ensureUniqueSlug(\App\Entity\Collection $collection, string $baseSlug, string $locale): string
+    {
+        $base = (string) $this->slugger->slug($baseSlug)->lower()->truncate(50, '');
+        if ($base === '') {
+            $base = 'entry';
+        }
+        $slug = $base;
+        $counter = 1;
+
+        while (true) {
+            $qb = $this->em->createQueryBuilder();
+            $qb->select('COUNT(e.id)')
+               ->from(ContentEntry::class, 'e')
+               ->where('e.collection = :collection')
+               ->andWhere('e.slug = :slug')
+               ->andWhere('e.locale = :locale')
+               ->setParameter('collection', $collection)
+               ->setParameter('slug', $slug)
+               ->setParameter('locale', $locale);
+
+            if ((int) $qb->getQuery()->getSingleScalarResult() === 0) {
+                return $slug;
+            }
+
+            $suffix = '-' . $counter;
+            $slug = substr($base, 0, max(1, 50 - strlen($suffix))) . $suffix;
+            $counter++;
+        }
     }
 }

@@ -33,16 +33,26 @@ class SearchController extends AbstractController
         }
 
         $options = [
-            'limit' => min((int) $request->query->get('limit', 20), 100),
-            'offset' => (int) $request->query->get('offset', 0),
+            'limit' => min(max(1, (int) $request->query->get('limit', 20)), 100),
+            'offset' => max(0, (int) $request->query->get('offset', 0)),
         ];
 
         $collection = $request->query->get('collection');
         $locale = $request->query->get('locale');
         $filters = [];
-        if ($collection) $filters[] = "_collection = $collection";
-        if ($locale) $filters[] = "locale = $locale";
-        if (!empty($filters)) $options['filter'] = implode(' AND ', $filters);
+        if (!empty($collection)) {
+            $options['collection'] = (string) $collection;
+            $cleanColl = addslashes((string) $collection);
+            $filters[] = "_collection = \"{$cleanColl}\"";
+        }
+        if (!empty($locale)) {
+            $options['locale'] = (string) $locale;
+            $cleanLoc = addslashes((string) $locale);
+            $filters[] = "locale = \"{$cleanLoc}\"";
+        }
+        if (!empty($filters)) {
+            $options['filter'] = implode(' AND ', $filters);
+        }
 
         $results = $this->search->search($project, $query, $options);
 
