@@ -12,6 +12,8 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
+use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 
 class TwoFactorChallengeController extends InertiaController
 {
@@ -20,6 +22,7 @@ class TwoFactorChallengeController extends InertiaController
         private TwoFactorMailer $twoFactorMailer,
         private RequestStack $requestStack,
         private EntityManagerInterface $em,
+        private TokenStorageInterface $tokenStorage,
     ) {}
 
     #[Route('/two-factor-challenge', name: 'two_factor_challenge', methods: ['GET'])]
@@ -106,9 +109,8 @@ class TwoFactorChallengeController extends InertiaController
         $session->remove('two_factor_expires');
 
         // Créer la session Symfony complète (authentification manuelle)
-        $token = $this->container->get('security.authenticator.form_login.main')
-            ->createAuthenticatedToken($user, 'main');
-        $this->container->get('security.token_storage')->setToken($token);
+        $token = new UsernamePasswordToken($user, 'main', $user->getRoles());
+        $this->tokenStorage->setToken($token);
         $session->set('_security_main', serialize($token));
         $session->migrate(true);
 

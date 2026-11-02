@@ -4,9 +4,11 @@ namespace App\Controller\Api;
 
 use App\Entity\EndUser;
 use App\Entity\PasswordResetToken;
+use App\Entity\Project;
 use App\Repository\EndUserRepository;
 use App\Repository\ProjectRepository;
 use App\Service\EndUserJwtService;
+use App\Service\ProjectMailerService;
 use App\Service\SocialLoginService;
 use App\Service\TwoFactorService;
 use App\Controller\EndUserSerializerTrait;
@@ -15,6 +17,8 @@ use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -34,6 +38,8 @@ class EndUserAuthController extends AbstractController
         private UserPasswordHasherInterface $hasher,
         private EntityManagerInterface $em,
         private ?SocialLoginService $socialLogin = null,
+        private ?ProjectMailerService $projectMailer = null,
+        private ?MailerInterface $mailer = null,
     ) {}
 
     #[OA\Post(
@@ -457,9 +463,41 @@ class EndUserAuthController extends AbstractController
             $token = new PasswordResetToken($project, $email);
             $this->em->persist($token);
             $this->em->flush();
+
+            $this->sendPasswordResetEmail($project, $email, $token->token);
         }
 
         return $this->json(['message' => 'If the email exists, a reset link has been sent.']);
+    }
+
+    private function sendPasswordResetEmail(Project $project, string $email, string $token): void
+    {
+        $subject = 'Password reset request';
+        $body = "Your password reset token is: " . $token;
+        $html = "<p>You requested a password reset. Your reset token is: <code>" . htmlspecialchars($token) . "</code></p>";
+
+        if ($this->projectMailer !== null) {
+            try {
+                $this->projectMailer->send($project, $email, $subject, $body, $html);
+                return;
+            } catch (\Throwable) {
+                // Fallback to system mailer if project mailer is not enabled
+            }
+        }
+
+        if ($this->mailer !== null) {
+            try {
+                $this->mailer->send(
+                    (new Email())
+                        ->from('noreply@jambostack.site')
+                        ->to($email)
+                        ->subject($subject)
+                        ->html($html)
+                );
+            } catch (\Throwable) {
+                // Silently ignore mail transport errors in test/dev
+            }
+        }
     }
 
     #[OA\Post(

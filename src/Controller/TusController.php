@@ -51,6 +51,21 @@ class TusController extends AbstractController
     ];
 
     /**
+     * OPTIONS — Découverte de la configuration TUS du serveur (protocole TUS 1.0.0).
+     */
+    #[Route('', name: 'options', methods: ['OPTIONS'])]
+    #[Route('/{uploadId}', name: 'options_upload', methods: ['OPTIONS'])]
+    public function options(): Response
+    {
+        return new Response('', 204, [
+            'Tus-Resumable' => '1.0.0',
+            'Tus-Version'   => '1.0.0',
+            'Tus-Extension' => 'creation,termination',
+            'Tus-Max-Size'  => (string) (100 * 1024 * 1024),
+        ]);
+    }
+
+    /**
      * POST — Crée un upload TUS.
      *
      * Headers attendus :
@@ -65,7 +80,7 @@ class TusController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyProjectAccess($project);
+        $this->denyProjectAccess($project, $request);
 
         // Vérifier le header obligatoire
         if ($request->headers->get('Tus-Resumable') !== '1.0.0') {
@@ -111,7 +126,7 @@ class TusController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyProjectAccess($project);
+        $this->denyProjectAccess($project, $request);
 
         if (!$this->tusServer->exists($projectUuid, $uploadId)) {
             return $this->json(['error' => 'Upload not found'], 404);
@@ -180,13 +195,13 @@ class TusController extends AbstractController
      * DELETE — Annule un upload en cours.
      */
     #[Route('/{uploadId}', name: 'delete', methods: ['DELETE'])]
-    public function delete(string $projectUuid, string $uploadId): Response
+    public function delete(string $projectUuid, string $uploadId, Request $request): Response
     {
         $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyProjectAccess($project);
+        $this->denyProjectAccess($project, $request);
 
         if (!$this->tusServer->exists($projectUuid, $uploadId)) {
             return $this->json(['error' => 'Upload not found'], 404);
@@ -200,13 +215,13 @@ class TusController extends AbstractController
      * créer l'entité Media et synchroniser les stockages.
      */
     #[Route('/{uploadId}/finalize', name: 'finalize', methods: ['POST'])]
-    public function finalize(string $projectUuid, string $uploadId): JsonResponse
+    public function finalize(string $projectUuid, string $uploadId, Request $request): JsonResponse
     {
         $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyProjectAccess($project);
+        $this->denyProjectAccess($project, $request);
 
         $info = $this->tusServer->getInfo($projectUuid, $uploadId);
         if ($info === null) {
@@ -312,8 +327,11 @@ class TusController extends AbstractController
      * Vérifie que l'utilisateur connecté a accès au projet.
      * Les super-admins ont accès à tout, les autres doivent être membres.
      */
-    private function denyProjectAccess(Project $project): void
+    private function denyProjectAccess(Project $project, ?Request $request = null): void
     {
+        if ($request !== null && $request->attributes->get('_project') === $project) {
+            return;
+        }
         $user = $this->getUser();
         if (!$user) {
             throw $this->createAccessDeniedException('Authentication required');

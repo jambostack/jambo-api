@@ -35,6 +35,11 @@ class CorsSubscriber implements EventSubscriberInterface
             return;
         }
 
+        // Les routes avec un contrôleur OPTIONS explicite (ex: TUS protocol discovery) passent au contrôleur
+        if (str_contains($request->getPathInfo(), '/files/tus')) {
+            return;
+        }
+
         // Répondre directement avec les headers CORS
         $response = new Response('', 204);
         $this->addCorsHeaders($response);
@@ -57,9 +62,9 @@ class CorsSubscriber implements EventSubscriberInterface
     private function addCorsHeaders(Response $response): void
     {
         $response->headers->set('Access-Control-Allow-Origin', '*');
-        $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-        $response->headers->set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, Origin, X-Requested-With');
+        $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+        $response->headers->set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, Origin, X-Requested-With, Tus-Resumable, Upload-Length, Upload-Metadata, Upload-Offset');
         $response->headers->set('Access-Control-Max-Age', '3600');
-        $response->headers->set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+        $response->headers->set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Upload-Offset, Location, Upload-Length, Tus-Version, Tus-Resumable, Tus-Max-Size, Tus-Extension');
     }
 }

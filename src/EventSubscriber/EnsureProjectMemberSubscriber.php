@@ -39,7 +39,7 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
             $projectUuid = $request->attributes->get('uuid');
         }
 
-        if ($projectUuid === null) {
+        if ($projectUuid === null || $request->isMethod('OPTIONS')) {
             return;
         }
 

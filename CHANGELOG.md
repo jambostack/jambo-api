@@ -7,6 +7,24 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.28] — 2026-11-02
+
+### Fixed & Improved
+- **TUS 1.0.0 Protocol Discovery & Resumable Upload CORS (`TusController` & `CorsSubscriber`)**:
+  - Implemented standard `OPTIONS` route (`/files/tus` & `/{uploadId}`) returning `Tus-Resumable: 1.0.0`, `Tus-Version: 1.0.0`, `Tus-Extension: creation,termination`, and `Tus-Max-Size` required by Uppy and tus-js-client.
+  - Configured `CorsSubscriber` to pass through `/files/tus` OPTIONS requests to the controller and expose TUS headers (`Upload-Offset`, `Location`, `Upload-Length`, `Tus-Version`, `Tus-Resumable`, `Tus-Max-Size`, `Tus-Extension`).
+  - Added `ApiToken` authentication bypass check in `TusController::denyProjectAccess`.
+- **Media Folder Circular Reference Protection (`MediaFolderController`)**:
+  - Implemented ancestor tree traversal in `move` endpoint to prevent moving a folder into one of its descendants (preventing infinite recursion and tree corruption).
+- **Two-Factor Challenge Manual Authentication (`TwoFactorChallengeController`)**:
+  - Replaced broken `$this->container->get('security.authenticator.form_login.main')` with standard `UsernamePasswordToken` and constructor-injected `TokenStorageInterface`.
+- **End-User Password Reset Email Delivery (`EndUserAuthController`)**:
+  - Injected `ProjectMailerService` and `MailerInterface` to complete the missing email delivery upon end-user password reset requests.
+- **Automation Controller API Token Authorization (`AutomationController`)**:
+  - Added support for `ApiToken` authorization in `AutomationController::denyProjectAccess`.
+
+---
+
 ## [1.26.27] — 2026-11-02
 
 ### Fixed & Improved

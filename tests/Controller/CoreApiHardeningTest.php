@@ -183,4 +183,69 @@ class CoreApiHardeningTest extends WebTestCase
 
         $this->assertSame(404, $client->getResponse()->getStatusCode());
     }
+
+    public function testTusOptionsDiscovery(): void
+    {
+        $client = static::createClient();
+
+        $client->request('OPTIONS', '/api/projects/' . $this->projectUuid . '/files/tus');
+        $response = $client->getResponse();
+
+        $this->assertSame(204, $response->getStatusCode());
+        $this->assertSame('1.0.0', $response->headers->get('Tus-Resumable'));
+        $this->assertSame('1.0.0', $response->headers->get('Tus-Version'));
+        $this->assertTrue($response->headers->has('Tus-Extension'));
+    }
+
+    public function testMediaFolderCircularMovePrevention(): void
+    {
+        $client = static::createClient();
+
+        // 1. Create parent folder A
+        $client->request(
+            'POST',
+            '/api/projects/' . $this->projectUuid . '/media-folders',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            json_encode(['name' => 'Folder A'])
+        );
+        $this->assertSame(201, $client->getResponse()->getStatusCode());
+        $folderA = json_decode($client->getResponse()->getContent(), true)['data'];
+
+        // 2. Create child folder B inside A
+        $client->request(
+            'POST',
+            '/api/projects/' . $this->projectUuid . '/media-folders',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            json_encode(['name' => 'Folder B', 'parent_id' => $folderA['id']])
+        );
+        $this->assertSame(201, $client->getResponse()->getStatusCode());
+        $folderB = json_decode($client->getResponse()->getContent(), true)['data'];
+
+        // 3. Attempt to move folder A into folder B (illegal circular move)
+        $client->request(
+            'PATCH',
+            '/api/projects/' . $this->projectUuid . '/media-folders/' . $folderA['id'] . '/move',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            json_encode(['parent_id' => $folderB['id']])
+        );
+
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $error = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('Cannot move a folder into one of its descendants', $error['error']);
+    }
 }

@@ -143,7 +143,7 @@ class MediaFolderController extends AbstractController
 
         $parentId = $data['parent_id'];
         if ($parentId !== null) {
-            // Empêcher le déplacement vers soi-même ou un descendant
+            // Empêcher le déplacement vers soi-même
             if ((int) $parentId === $folder->id) {
                 return $this->json(['error' => 'Cannot move a folder into itself'], 422);
             }
@@ -151,6 +151,16 @@ class MediaFolderController extends AbstractController
             if (!$parent) {
                 return $this->json(['error' => 'Parent folder not found'], 404);
             }
+
+            // Empêcher le déplacement vers un descendant (boucle cyclique)
+            $ancestor = $parent;
+            while ($ancestor !== null) {
+                if ($ancestor->id === $folder->id) {
+                    return $this->json(['error' => 'Cannot move a folder into one of its descendants'], 422);
+                }
+                $ancestor = $ancestor->parent;
+            }
+
             $folder->parent = $parent;
         } else {
             $folder->parent = null;
