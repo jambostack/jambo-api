@@ -21,25 +21,25 @@ class PublicShareController extends AbstractController
     #[Route('/share/{token}.json', name: 'public_share_show_json', requirements: ['token' => '[A-Za-z0-9_]+'], defaults: ['_format' => 'json'], methods: ['GET'])]
     public function show(string $token, string $_format, Request $request): Response
     {
+        $wantsJson = $_format === 'json'
+            || str_contains((string) $request->headers->get('Accept'), 'application/json');
+
         $share = $this->shares->resolve($token);
 
         if ($share === null || $share->isRevoked()) {
-            return $this->renderError(404, 'invalid');
+            return $this->renderError(404, 'invalid', $wantsJson);
         }
         if ($share->isExpired()) {
-            return $this->renderError(410, 'expired');
+            return $this->renderError(410, 'expired', $wantsJson);
         }
         $entry = $share->entry;
         if ($entry === null || $entry->isDeleted()) {
-            return $this->renderError(404, 'invalid');
+            return $this->renderError(404, 'invalid', $wantsJson);
         }
 
         $this->shares->recordAccess($share);
 
         $data = $this->formatter->formatEntry($entry);
-
-        $wantsJson = $_format === 'json'
-            || str_contains((string) $request->headers->get('Accept'), 'application/json');
 
         if ($wantsJson) {
             return new JsonResponse($data);
@@ -51,8 +51,11 @@ class PublicShareController extends AbstractController
         ]);
     }
 
-    private function renderError(int $status, string $reason): Response
+    private function renderError(int $status, string $reason, bool $wantsJson = false): Response
     {
+        if ($wantsJson) {
+            return new JsonResponse(['error' => $reason], $status);
+        }
         return $this->render('share/error.html.twig', ['reason' => $reason], new Response('', $status));
     }
 }

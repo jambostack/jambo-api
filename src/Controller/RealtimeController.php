@@ -37,7 +37,7 @@ class RealtimeController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyProjectAccess($project);
+        $this->denyProjectAccess($project, $request);
 
         $mercureSecret = $this->getParameter('mercure_jwt_secret') ?? '';
         if ($mercureSecret === '' || strlen($mercureSecret) < 32) {
@@ -87,7 +87,7 @@ class RealtimeController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyProjectAccess($project);
+        $this->denyProjectAccess($project, $request);
 
         $since = max(0, (int) $request->query->get('since', '0'));
 
@@ -124,8 +124,11 @@ class RealtimeController extends AbstractController
 
     // ─── Private ─────────────────────────────────────────────────────────
 
-    private function denyProjectAccess(\App\Entity\Project $project): void
+    private function denyProjectAccess(\App\Entity\Project $project, Request $request): void
     {
+        if ($request->attributes->get('_project') === $project) {
+            return;
+        }
         $user = $this->getUser();
         if (!$user) {
             throw $this->createAccessDeniedException('Authentication required');

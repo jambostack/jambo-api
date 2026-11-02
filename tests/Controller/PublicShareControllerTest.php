@@ -91,6 +91,27 @@ class PublicShareControllerTest extends WebTestCase
         $client = static::createClient();
         $client->request('GET', '/share/jbo_share_unknown');
         self::assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Test with .json returns JSON error
+        $client->request('GET', '/share/jbo_share_unknown.json');
+        self::assertSame(404, $client->getResponse()->getStatusCode());
+        self::assertTrue($client->getResponse()->headers->contains('content-type', 'application/json'));
+        $data = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('invalid', $data['error']);
+    }
+
+    public function testExpiredReturns410Json(): void
+    {
+        $client = static::createClient();
+        [$share, $token] = $this->seedShare(ShareDuration::D7);
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $share->expiresAt = new \DateTimeImmutable('-1 hour');
+        $em->flush();
+        $client->request('GET', "/share/$token.json");
+        self::assertSame(410, $client->getResponse()->getStatusCode());
+        self::assertTrue($client->getResponse()->headers->contains('content-type', 'application/json'));
+        $data = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('expired', $data['error']);
     }
 
     public function testViewCountIncremented(): void

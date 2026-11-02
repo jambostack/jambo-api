@@ -63,13 +63,21 @@ class PreviewController extends AbstractController
     #[Route('/content/{collection}/{entryUuid}', name: 'content', methods: ['GET'])]
     public function content(string $projectUuid, string $collection, string $entryUuid, Request $request): JsonResponse
     {
-        // Extraire le token du header Authorization
+        // Extraire le token du header Authorization ou des query params (?token= ou ?preview_token=)
+        $token = null;
         $authHeader = $request->headers->get('Authorization');
-        if ($authHeader === null || !str_starts_with($authHeader, 'Bearer ')) {
-            return $this->json(['error' => 'Missing or malformed Authorization header'], 401);
+        if ($authHeader !== null && str_starts_with($authHeader, 'Bearer ')) {
+            $token = substr($authHeader, 7);
+        } elseif ($request->query->has('token')) {
+            $token = (string) $request->query->get('token');
+        } elseif ($request->query->has('preview_token')) {
+            $token = (string) $request->query->get('preview_token');
         }
 
-        $token = substr($authHeader, 7);
+        if ($token === null || trim($token) === '') {
+            return $this->json(['error' => 'Missing or malformed Authorization header or preview token parameter'], 401);
+        }
+
         $claims = $this->tokenService->validateToken($token);
 
         if ($claims === null) {

@@ -51,6 +51,18 @@ class InsightsControllerTest extends WebTestCase
         self::assertArrayHasKey('activity', $body['data']);
     }
 
+    public function testProjectInsightsWithUuid(): void
+    {
+        $client = static::createClient();
+        [$user, $project] = $this->makeMemberAndProject($client);
+        $client->loginUser($user);
+
+        $client->request('GET', "/insights/projects/{$project->uuid->toString()}");
+        self::assertSame(200, $client->getResponse()->getStatusCode());
+        $body = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('30d', $body['data']['range']);
+    }
+
     public function testInvalidRangeReturns400(): void
     {
         $client = static::createClient();

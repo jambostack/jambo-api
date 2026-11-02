@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.27] — 2026-11-02
+
+### Fixed & Improved
+- **Public Share JSON Error Responses (`PublicShareController`)**:
+  - Ensured `/share/{token}.json` and `Accept: application/json` requests return JSON error payloads (`{"error": "invalid"}` or `{"error": "expired"}`) instead of HTML error pages on 404/410 conditions.
+- **Insights UUID & API Route Alignment (`InsightsController`)**:
+  - Added support for project UUID lookups in addition to numeric IDs.
+  - Added standard endpoint `GET /api/projects/{project}/insights`.
+- **Realtime API Token Support (`RealtimeController`)**:
+  - Fixed access denial when requesting Mercure subscription tokens or polling realtime events using valid `ApiToken` authentication.
+- **Live Preview Query Param Token Integration (`PreviewController`)**:
+  - Supported `?token=` and `?preview_token=` query parameters alongside the `Authorization: Bearer` header for live preview iframes and static site generators.
+
+---
+
 ## [1.26.26] — 2026-11-02
 
 ### Fixed

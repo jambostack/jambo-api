@@ -24,10 +24,14 @@ class InsightsController extends AbstractController
         return $this->json(['data' => $this->insights->summaryForUser($this->getUser())]);
     }
 
-    #[Route('/insights/projects/{project}', name: 'insights_project', requirements: ['project' => '\d+'], methods: ['GET'])]
-    public function project(int $project, Request $request): JsonResponse
+    #[Route('/insights/projects/{project}', name: 'insights_project', methods: ['GET'])]
+    #[Route('/api/projects/{project}/insights', name: 'api_insights_project', methods: ['GET'])]
+    public function project(string $project, Request $request): JsonResponse
     {
-        $entity = $this->projectRepository->find($project);
+        $entity = is_numeric($project)
+            ? $this->projectRepository->find((int) $project)
+            : $this->projectRepository->findOneBy(['uuid' => $project]);
+
         if (!$entity) {
             throw $this->createNotFoundException();
         }
