@@ -414,4 +414,165 @@ class CoreApiHardeningTest extends WebTestCase
         $this->assertArrayHasKey('logs', $data);
         $this->assertArrayHasKey('total_today', $data);
     }
+
+    public function testContentAiStreamRequiresAuth(): void
+    {
+        $client = static::createClient();
+
+        // 1. Anonymous access to admin ai stream endpoint is denied (redirects to login or 401/403)
+        $client->request('POST', '/admin/api/content-ai/stream', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'text' => 'Hello AI world',
+        ]));
+        $status = $client->getResponse()->getStatusCode();
+        $this->assertTrue(in_array($status, [302, 401, 403], true));
+
+        // 2. Anonymous access to project-scoped ai stream without auth is denied
+        $client->request('POST', '/api/projects/' . $this->projectUuid . '/ai/stream', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'text' => 'Hello AI world',
+        ]));
+        $status2 = $client->getResponse()->getStatusCode();
+        $this->assertTrue(in_array($status2, [302, 401, 403], true));
+    }
+
+    public function testRedirectLoopProtectionAndValidation(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'redirectuser-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'hashed';
+        $user->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($user);
+        $em->flush();
+
+        $client->loginUser($user);
+
+        // 1. Self loop attempt
+        $client->request('POST', '/admin-api/' . $this->projectUuid . '/redirects', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'fromPath' => '/page-a',
+            'toPath' => '/page-a',
+            'httpCode' => 301,
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('A redirect cannot point to itself.', $data['error']);
+
+        // 2. Invalid HTTP code
+        $client->request('POST', '/admin-api/' . $this->projectUuid . '/redirects', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'fromPath' => '/page-a',
+            'toPath' => '/page-b',
+            'httpCode' => 200,
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+
+        // 3. Valid redirect creation (/page-a -> /page-b)
+        $client->request('POST', '/admin-api/' . $this->projectUuid . '/redirects', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'fromPath' => '/page-a',
+            'toPath' => '/page-b',
+            'httpCode' => 301,
+        ]));
+        $this->assertSame(201, $client->getResponse()->getStatusCode());
+
+        // 4. Circular loop attempt (/page-b -> /page-a)
+        $client->request('POST', '/admin-api/' . $this->projectUuid . '/redirects', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'fromPath' => '/page-b',
+            'toPath' => '/page-a',
+            'httpCode' => 301,
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $loopData = json_decode($client->getResponse()->getContent(), true);
+        $this->assertStringContainsString('loop was detected', $loopData['error']);
+
+        // 5. Chains detection endpoint
+        $client->request('GET', '/admin-api/' . $this->projectUuid . '/redirects/chains');
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $chainData = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('data', $chainData);
+    }
+
+    public function testFormSubmissionsPaginationAndSingleDelete(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $this->projectUuid]);
+
+        $form = new \App\Entity\Form();
+        $form->project = $project;
+        $form->name = 'Contact Form';
+        $form->slug = 'contact';
+        $form->fields = [
+            ['name' => 'email', 'type' => 'email', 'label' => 'Email', 'required' => true],
+        ];
+        $em->persist($form);
+
+        $sub1 = new \App\Entity\FormSubmission();
+        $sub1->form = $form;
+        $sub1->data = ['email' => 'one@example.com'];
+        $em->persist($sub1);
+
+        $sub2 = new \App\Entity\FormSubmission();
+        $sub2->form = $form;
+        $sub2->data = ['email' => 'two@example.com'];
+        $em->persist($sub2);
+
+        $user = new User();
+        $user->email = 'formuser-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'hashed';
+        $user->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($user);
+
+        $em->flush();
+
+        $client->loginUser($user);
+
+        // 1. List submissions with pagination
+        $client->request('GET', '/admin-api/' . $this->projectUuid . '/forms/' . $form->id . '/submissions?page=1&per_page=1');
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $res = json_decode($client->getResponse()->getContent(), true);
+        $this->assertCount(1, $res['data']);
+        $this->assertSame(2, $res['meta']['total']);
+
+        // 2. Delete single submission
+        $client->request('DELETE', '/admin-api/' . $this->projectUuid . '/forms/' . $form->id . '/submissions/' . $sub1->id);
+        $this->assertSame(204, $client->getResponse()->getStatusCode());
+
+        // 3. Verify total is now 1
+        $client->request('GET', '/admin-api/' . $this->projectUuid . '/forms/' . $form->id . '/submissions');
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $resAfter = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame(1, $resAfter['meta']['total']);
+    }
+
+    public function testProjectStorageProfileTestingEndpoint(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $this->projectUuid]);
+
+        $profile = new \App\Entity\ProjectStorageProfile();
+        $profile->project = $project;
+        $profile->name = 'Local Storage Test';
+        $profile->driver = 'local';
+        $profile->isDefault = true;
+        $em->persist($profile);
+
+        $user = new User();
+        $user->email = 'storageuser-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'hashed';
+        $user->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($user);
+
+        $em->flush();
+
+        $client->loginUser($user);
+
+        $client->request('POST', '/api/admin/projects/' . $this->projectUuid . '/storage/profiles/' . $profile->id . '/test');
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+        $this->assertStringContainsString('successfully', $data['message']);
+    }
 }

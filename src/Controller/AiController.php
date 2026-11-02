@@ -26,7 +26,7 @@ class AiController extends AbstractController
         $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
 
-        $this->denyAccessUnlessGranted('content.create', $project);
+        $this->denyProjectAccess($request, $project, 'content.create');
 
         $body = json_decode($request->getContent(), true);
         $brief = $body['brief'] ?? '';
@@ -55,7 +55,7 @@ class AiController extends AbstractController
         $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
 
-        $this->denyAccessUnlessGranted('content.update', $project);
+        $this->denyProjectAccess($request, $project, 'content.update');
 
         $body = json_decode($request->getContent(), true);
         $content = $body['content'] ?? [];
@@ -76,7 +76,7 @@ class AiController extends AbstractController
         $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
 
-        $this->denyAccessUnlessGranted('project.view', $project);
+        $this->denyProjectAccess($request, $project, 'project.view');
 
         $body = json_decode($request->getContent(), true);
         $text = $body['text'] ?? '';
@@ -95,7 +95,7 @@ class AiController extends AbstractController
         $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
 
-        $this->denyAccessUnlessGranted('project.view', $project);
+        $this->denyProjectAccess($request, $project, 'project.view');
 
         $body = json_decode($request->getContent(), true);
         $content = $body['content'] ?? [];
@@ -113,7 +113,7 @@ class AiController extends AbstractController
         $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
 
-        $this->denyAccessUnlessGranted('project.manage', $project);
+        $this->denyProjectAccess($request, $project, 'project.manage');
 
         $collectionSlug = $request->query->get('collection');
         if (!$collectionSlug) {
@@ -131,14 +131,22 @@ class AiController extends AbstractController
     }
 
     #[Route('/api/projects/{uuid}/ai/models', name: 'ai_models', methods: ['GET'])]
-    public function models(string $uuid): JsonResponse
+    public function models(string $uuid, Request $request): JsonResponse
     {
         $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
 
-        $this->denyAccessUnlessGranted('project.view', $project);
+        $this->denyProjectAccess($request, $project, 'project.view');
 
         return $this->json($this->ai->getAvailableModels());
+    }
+
+    private function denyProjectAccess(Request $request, Project $project, string $attribute): void
+    {
+        if ($request->attributes->get('_project') === $project) {
+            return;
+        }
+        $this->denyAccessUnlessGranted($attribute, $project);
     }
 
     private function findProject(string $uuid): ?Project

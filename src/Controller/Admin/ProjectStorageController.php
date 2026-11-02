@@ -92,8 +92,16 @@ class ProjectStorageController extends AbstractController
             return $project;
         }
 
-        $body = $request->toArray();
+        try {
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return new JsonResponse(['error' => 'Invalid JSON'], 400);
+        }
+
         $profile = $this->hydrateProfile(new ProjectStorageProfile(), $body, $project);
+        if ($profile instanceof JsonResponse) {
+            return $profile;
+        }
 
         if ($profile->isDefault) {
             $this->clearOtherDefaults($project, $profile);
@@ -118,7 +126,16 @@ class ProjectStorageController extends AbstractController
             return new JsonResponse(['error' => 'Profile not found.'], 404);
         }
 
-        $this->hydrateProfile($profile, $request->toArray(), $project);
+        try {
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return new JsonResponse(['error' => 'Invalid JSON'], 400);
+        }
+
+        $res = $this->hydrateProfile($profile, $body, $project);
+        if ($res instanceof JsonResponse) {
+            return $res;
+        }
 
         if ($profile->isDefault) {
             $this->clearOtherDefaults($project, $profile);
@@ -127,6 +144,39 @@ class ProjectStorageController extends AbstractController
         $this->em->flush();
 
         return new JsonResponse(['data' => $profile->toArray()]);
+    }
+
+    #[Route('/api/admin/projects/{uuid}/storage/profiles/{id}/test', name: 'admin_project_storage_profile_test', methods: ['POST'])]
+    public function testProfile(string $uuid, int $id): JsonResponse
+    {
+        $project = $this->findProject($uuid);
+        if ($project instanceof JsonResponse) {
+            return $project;
+        }
+
+        $profile = $this->profileRepo->find($id);
+        if ($profile === null || $profile->project->id !== $project->id) {
+            return new JsonResponse(['error' => 'Profile not found.'], 404);
+        }
+
+        try {
+            $filesystem = $this->driverFactory->create($profile);
+            $testFileName = '.jambo_test_' . bin2hex(random_bytes(8)) . '.txt';
+            $filesystem->write($testFileName, 'ping');
+            if (!$filesystem->fileExists($testFileName)) {
+                return new JsonResponse(['error' => 'Storage test failed: written file was not readable.'], 422);
+            }
+            $filesystem->delete($testFileName);
+
+            return new JsonResponse([
+                'success' => true,
+                'message' => sprintf('Storage driver "%s" tested successfully.', $profile->driver),
+            ]);
+        } catch (\Throwable $e) {
+            return new JsonResponse([
+                'error' => 'Storage test failed: ' . $e->getMessage(),
+            ], 422);
+        }
     }
 
     #[Route('/api/admin/projects/{uuid}/storage/profiles/{id}', name: 'admin_project_storage_profile_delete', methods: ['DELETE'])]
@@ -166,7 +216,12 @@ class ProjectStorageController extends AbstractController
             return $project;
         }
 
-        $body = $request->toArray();
+        try {
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return new JsonResponse(['error' => 'Invalid JSON'], 400);
+        }
+
         $rule = $this->hydrateRule(new StorageRule(), $body, $project);
         if ($rule instanceof JsonResponse) {
             return $rule;
@@ -191,7 +246,13 @@ class ProjectStorageController extends AbstractController
             return new JsonResponse(['error' => 'Rule not found.'], 404);
         }
 
-        $result = $this->hydrateRule($rule, $request->toArray(), $project);
+        try {
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return new JsonResponse(['error' => 'Invalid JSON'], 400);
+        }
+
+        $result = $this->hydrateRule($rule, $body, $project);
         if ($result instanceof JsonResponse) {
             return $result;
         }
@@ -241,7 +302,7 @@ class ProjectStorageController extends AbstractController
         }
     }
 
-    private function hydrateProfile(ProjectStorageProfile $p, array $body, Project $project): ProjectStorageProfile
+    private function hydrateProfile(ProjectStorageProfile $p, array $body, Project $project): ProjectStorageProfile|JsonResponse
     {
         if (isset($body['name'])) {
             $p->name = (string) $body['name'];
@@ -249,7 +310,7 @@ class ProjectStorageController extends AbstractController
         if (isset($body['driver'])) {
             $driver = (string) $body['driver'];
             if (!in_array($driver, ['local', 's3'], true)) {
-                throw new \InvalidArgumentException("Invalid storage driver: $driver");
+                return new JsonResponse(['error' => "Invalid storage driver: $driver. Allowed: local, s3."], 422);
             }
             $p->driver = $driver;
         }

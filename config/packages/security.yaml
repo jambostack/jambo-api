@@ -29,13 +29,15 @@ security:
 
         admin_api:
             pattern: ^/admin-api
-            stateless: true
+            lazy: true
+            context: main
             provider: app_user_provider
             custom_authenticators:
                 - App\Security\PersonalAccessTokenAuthenticator
 
         main:
             lazy: true
+            context: main
             provider: app_user_provider
             custom_authenticators:
                 - App\Security\SocialLoginAuthenticator

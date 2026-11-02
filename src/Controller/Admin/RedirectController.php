@@ -7,6 +7,7 @@ namespace App\Controller\Admin;
 use App\Entity\Redirect;
 use App\Repository\ProjectRepository;
 use App\Repository\RedirectRepository;
+use App\Service\Redirect\RedirectChainDetector;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -22,6 +23,7 @@ class RedirectController extends AbstractController
         private readonly RedirectRepository $redirectRepo,
         private readonly ProjectRepository $projectRepo,
         private readonly EntityManagerInterface $em,
+        private readonly RedirectChainDetector $chainDetector,
     ) {}
 
     // ── Liste des redirections ────────────────────────────────────────────
@@ -57,6 +59,29 @@ class RedirectController extends AbstractController
         ]);
     }
 
+    // ── Détection des chaînes ─────────────────────────────────────────────
+
+    #[Route('/admin-api/{projectUuid}/redirects/chains', name: 'admin_redirects_chains', methods: ['GET'])]
+    public function chains(string $projectUuid): JsonResponse
+    {
+        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found.'], 404);
+        }
+        $this->denyAccessUnlessGranted('project.view', $project);
+
+        $all = $this->redirectRepo->findByProject($project);
+        $chains = $this->chainDetector->detectChains($all);
+
+        $formatted = array_map(fn (array $c) => [
+            'shortcut' => $c['shortcut'],
+            'length' => count($c['links']),
+            'links' => array_map(fn (Redirect $r) => $this->serializeRedirect($r), $c['links']),
+        ], $chains);
+
+        return $this->json(['data' => $formatted]);
+    }
+
     // ── Créer ─────────────────────────────────────────────────────────────
 
     #[Route('/admin-api/{projectUuid}/redirects', name: 'admin_redirects_create', methods: ['POST'])]
@@ -68,16 +93,50 @@ class RedirectController extends AbstractController
         }
         $this->denyAccessUnlessGranted('project.view', $project);
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
+        $fromPath = trim((string) ($data['fromPath'] ?? ''));
+        $toPath = trim((string) ($data['toPath'] ?? ''));
+
+        if ($fromPath === '' || $toPath === '') {
+            return $this->json(['error' => 'Both fromPath and toPath are required.'], 422);
+        }
+
+        // Normaliser les chemins relatifs avec un slash initial
+        if (!str_starts_with($fromPath, 'http://') && !str_starts_with($fromPath, 'https://')) {
+            $fromPath = '/' . ltrim($fromPath, '/');
+        }
+        if (!str_starts_with($toPath, 'http://') && !str_starts_with($toPath, 'https://')) {
+            $toPath = '/' . ltrim($toPath, '/');
+        }
+
+        if ($fromPath === $toPath) {
+            return $this->json(['error' => 'A redirect cannot point to itself.'], 422);
+        }
+
+        $httpCode = (int) ($data['httpCode'] ?? 301);
+        if (!\in_array($httpCode, [301, 302, 307, 308], true)) {
+            return $this->json(['error' => 'Invalid HTTP redirect code. Allowed codes: 301, 302, 307, 308.'], 422);
+        }
 
         $redirect = new Redirect();
         $redirect->project = $project;
-        $redirect->fromPath = $data['fromPath'] ?? '';
-        $redirect->toPath = $data['toPath'] ?? '';
-        $redirect->httpCode = (int) ($data['httpCode'] ?? 301);
+        $redirect->fromPath = $fromPath;
+        $redirect->toPath = $toPath;
+        $redirect->httpCode = $httpCode;
         $redirect->isPattern = (bool) ($data['isPattern'] ?? false);
         $redirect->isEnabled = (bool) ($data['isEnabled'] ?? true);
         $redirect->createdBy = $this->getUser();
+
+        // Détection de boucle
+        $existing = $this->redirectRepo->findByProject($project);
+        if ($this->chainDetector->detectLoopWithContext($redirect, $existing)) {
+            return $this->json(['error' => 'A redirect loop was detected (fromPath directly or indirectly redirects to itself).'], 422);
+        }
 
         $this->em->persist($redirect);
         $this->em->flush();
@@ -110,22 +169,55 @@ class RedirectController extends AbstractController
         }
         $this->denyAccessUnlessGranted('project.view', $redirect->project);
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
-        if (array_key_exists('fromPath', $data)) {
-            $redirect->fromPath = $data['fromPath'];
+        $fromPath = array_key_exists('fromPath', $data) ? trim((string) $data['fromPath']) : $redirect->fromPath;
+        $toPath = array_key_exists('toPath', $data) ? trim((string) $data['toPath']) : $redirect->toPath;
+
+        if ($fromPath === '' || $toPath === '') {
+            return $this->json(['error' => 'Both fromPath and toPath must not be empty.'], 422);
         }
-        if (array_key_exists('toPath', $data)) {
-            $redirect->toPath = $data['toPath'];
+
+        if (!str_starts_with($fromPath, 'http://') && !str_starts_with($fromPath, 'https://')) {
+            $fromPath = '/' . ltrim($fromPath, '/');
         }
+        if (!str_starts_with($toPath, 'http://') && !str_starts_with($toPath, 'https://')) {
+            $toPath = '/' . ltrim($toPath, '/');
+        }
+
+        if ($fromPath === $toPath) {
+            return $this->json(['error' => 'A redirect cannot point to itself.'], 422);
+        }
+
         if (array_key_exists('httpCode', $data)) {
-            $redirect->httpCode = (int) $data['httpCode'];
+            $code = (int) $data['httpCode'];
+            if (!\in_array($code, [301, 302, 307, 308], true)) {
+                return $this->json(['error' => 'Invalid HTTP redirect code. Allowed codes: 301, 302, 307, 308.'], 422);
+            }
+            $redirect->httpCode = $code;
         }
+
+        $redirect->fromPath = $fromPath;
+        $redirect->toPath = $toPath;
+
         if (array_key_exists('isPattern', $data)) {
             $redirect->isPattern = (bool) $data['isPattern'];
         }
         if (array_key_exists('isEnabled', $data)) {
             $redirect->isEnabled = (bool) $data['isEnabled'];
+        }
+
+        // Détection de boucle en excluant la redirection en cours de modification
+        $existing = array_filter(
+            $this->redirectRepo->findByProject($redirect->project),
+            fn (Redirect $r) => $r->id !== $redirect->id
+        );
+        if ($this->chainDetector->detectLoopWithContext($redirect, $existing)) {
+            return $this->json(['error' => 'A redirect loop was detected (fromPath directly or indirectly redirects to itself).'], 422);
         }
 
         $redirect->updatedBy = $this->getUser();

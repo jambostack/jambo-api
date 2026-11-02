@@ -7,6 +7,29 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.32] — 2026-11-02
+
+### Fixed & Improved
+- **AI Streaming Endpoint Authorization & Security (`ContentAiStreamController` & `AiController`)**:
+  - Closed unauthenticated access to expensive LLM text-generation streams (`/admin/api/content-ai/stream` and `/api/projects/{projectUuid}/ai/stream`).
+  - Added project ownership checks with `content.create` permissions and support for project `ApiToken`.
+  - Added `denyProjectAccess` helper in `AiController` to support project `ApiToken` across `generate`, `translate`, `summarize`, `seo`, `suggestSchema`, and `models`.
+- **Redirect Loop Protection & Chain Detection (`RedirectController`)**:
+  - Integrated `RedirectChainDetector::detectLoopWithContext` into redirect creation and updates to prevent circular redirect loops (`A -> B -> A`).
+  - Prevented self-redirects (`fromPath === toPath`), enforced non-empty normalized paths, and validated redirect status codes (`301`, `302`, `307`, `308`).
+  - Added `GET /admin-api/{projectUuid}/redirects/chains` to inspect redirect chains and recommend direct shortcut paths.
+- **Form Submissions Memory Optimization & Single Deletion (`FormController` & `FormSubmissionRepository`)**:
+  - Resolved potential memory exhaustion (OOM) on large forms by replacing in-memory entity filtering with SQL-level pagination (`findPaginatedByForm`) and count queries (`countByForm`).
+  - Added endpoint `DELETE /admin-api/{projectUuid}/forms/{id}/submissions/{submissionId}` for individual submission removal (GDPR/spam cleanup).
+  - Streamlined form deletion with single-query bulk submission cleanup.
+- **Storage Profile Connectivity Testing (`ProjectStorageController`)**:
+  - Added `POST /api/admin/projects/{uuid}/storage/profiles/{id}/test` to safely verify storage credentials and read/write permissions (local and S3).
+  - Sanitized driver validation returning 422 JSON errors instead of unhandled 500 exceptions.
+- **Admin API Shared Session / PAT Context (`security.yaml`)**:
+  - Configured `context: main` on firewall `admin_api` so both web UI session users and external PAT tokens can seamlessly interact with `/admin-api/` endpoints without false 401s.
+
+---
+
 ## [1.26.31] — 2026-11-02
 
 ### Fixed & Improved

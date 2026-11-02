@@ -8,12 +8,15 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 
 class ContentAiStreamController extends AbstractController
 {
     public function __construct(
         private readonly ProjectRepository $projectRepository,
         private readonly AiContentService $aiService,
+        private readonly ?AuthorizationCheckerInterface $authChecker = null,
     ) {}
 
     #[Route('/api/projects/{projectUuid}/ai/stream', name: 'api_project_ai_stream', methods: ['POST'])]
@@ -28,6 +31,11 @@ class ContentAiStreamController extends AbstractController
                     flush();
                 }, 404, ['Content-Type' => 'text/event-stream']);
             }
+            if ($request->attributes->get('_project') !== $project) {
+                $this->checkAccess('content.create', $project);
+            }
+        } else {
+            $this->checkAccess('IS_AUTHENTICATED_FULLY');
         }
 
         $payload = json_decode($request->getContent(), true) ?? [];
@@ -98,5 +106,19 @@ class ContentAiStreamController extends AbstractController
         $response->headers->set('X-Accel-Buffering', 'no');
 
         return $response;
+    }
+
+    private function checkAccess(mixed $attribute, mixed $subject = null): void
+    {
+        if ($this->authChecker !== null) {
+            if (!$this->authChecker->isGranted($attribute, $subject)) {
+                throw new AccessDeniedException('Access Denied.');
+            }
+            return;
+        }
+
+        if (isset($this->container) && $this->container->has('security.authorization_checker')) {
+            $this->denyAccessUnlessGranted($attribute, $subject);
+        }
     }
 }
