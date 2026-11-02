@@ -417,4 +417,104 @@ class McpSchemaSecurityTest extends WebTestCase
         $deletedData = json_decode($deleteRes['result']['content'][0]['text'], true);
         self::assertTrue($deletedData['deleted'] ?? false);
     }
+
+    public function testEntrySlugCollisionAndPaginationSafety(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'slug-test-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'x';
+        $em->persist($user);
+
+        $project = new Project();
+        $project->name = 'Slug Project ' . bin2hex(random_bytes(4));
+        $em->persist($project);
+
+        $member = new ProjectMember();
+        $member->project = $project;
+        $member->user = $user;
+        $member->email = $user->email;
+        $member->status = ProjectMemberStatus::Active;
+        $member->joinedAt = new \DateTimeImmutable();
+        $em->persist($member);
+
+        $collection = new Collection();
+        $collection->name = 'Articles';
+        $collection->slug = 'articles';
+        $collection->project = $project;
+        $em->persist($collection);
+
+        $field = new \App\Entity\Field();
+        $field->name = 'Title';
+        $field->slug = 'title';
+        $field->type = 'text';
+        $field->collection = $collection;
+        $em->persist($field);
+
+        $em->flush();
+        $em->clear();
+
+        $client->loginUser($user);
+
+        // 1. Create first entry with same title
+        $rpc1 = [
+            'jsonrpc' => '2.0', 'id' => 101, 'method' => 'tools/call',
+            'params' => ['name' => 'create_entry', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'articles',
+                'data' => ['title' => 'Hello World'],
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpc1));
+        $res1 = json_decode($client->getResponse()->getContent(), true);
+        $entry1 = json_decode($res1['result']['content'][0]['text'], true);
+        self::assertNotNull($entry1['uuid']);
+
+        // 2. Create second entry with IDENTICAL title - must NOT fail with duplicate entry constraint
+        $rpc2 = [
+            'jsonrpc' => '2.0', 'id' => 102, 'method' => 'tools/call',
+            'params' => ['name' => 'create_entry', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'articles',
+                'data' => ['title' => 'Hello World'],
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpc2));
+        $res2 = json_decode($client->getResponse()->getContent(), true);
+        self::assertFalse($res2['result']['isError'] ?? false);
+        $entry2 = json_decode($res2['result']['content'][0]['text'], true);
+        self::assertNotNull($entry2['uuid']);
+        self::assertNotSame($entry1['uuid'], $entry2['uuid']);
+
+        // 3. Test list_entries with limit = 0 and negative offset
+        $rpc3 = [
+            'jsonrpc' => '2.0', 'id' => 103, 'method' => 'tools/call',
+            'params' => ['name' => 'list_entries', 'arguments' => [
+                'project_uuid' => $project->uuid->toString(),
+                'collection_slug' => 'articles',
+                'limit' => 0,
+                'offset' => -5,
+            ]],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpc3));
+        $res3 = json_decode($client->getResponse()->getContent(), true);
+        self::assertFalse($res3['result']['isError'] ?? false);
+        $listData = json_decode($res3['result']['content'][0]['text'], true);
+        self::assertSame(2, $listData['total']);
+
+        // 4. Test resource read for jamboapi://server/info
+        $rpc4 = [
+            'jsonrpc' => '2.0', 'id' => 104, 'method' => 'resources/read',
+            'params' => ['uri' => 'jamboapi://server/info'],
+        ];
+        $client->request('POST', '/mcp', server: ['CONTENT_TYPE' => 'application/json'], content: json_encode($rpc4));
+        $res4 = json_decode($client->getResponse()->getContent(), true);
+        self::assertArrayHasKey('result', $res4);
+        $infoText = $res4['result']['contents'][0]['text'] ?? '';
+        $info = json_decode($infoText, true);
+        self::assertSame('JamboApi CMS', $info['name'] ?? null);
+        self::assertGreaterThan(0, $info['tools'] ?? 0);
+    }
 }

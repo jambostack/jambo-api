@@ -196,16 +196,20 @@ class JamboApiMcpServer extends McpServer
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
                 if (!$collection) throw new McpException('Collection introuvable', 404);
 
-                $limit = min($args['limit'] ?? 50, 200);
-                $offset = $args['offset'] ?? 0;
+                $limit = max(1, min((int) ($args['limit'] ?? 50), 200));
+                $offset = max(0, (int) ($args['offset'] ?? 0));
                 $page = (int) floor($offset / $limit) + 1;
 
-                $entries = $this->em->getRepository(ContentEntry::class)
-                    ->findByCollectionPaginated($collection, $page, $limit,
-                        $args['locale'] ?? null, $args['status'] ?? null);
+                $entryRepo = $this->em->getRepository(ContentEntry::class);
+                $total = $entryRepo->countByCollection($collection, $args['locale'] ?? null, $args['status'] ?? null);
+                $entries = $entryRepo->findByCollectionPaginated(
+                    $collection, $page, $limit,
+                    $args['locale'] ?? null, $args['status'] ?? null
+                );
 
                 return [
-                    'total' => count($entries),
+                    'total' => $total,
+                    'count' => count($entries),
                     'limit' => $limit,
                     'offset' => $offset,
                     'entries' => array_map(fn(ContentEntry $e) => $this->formatter->formatEntry($e), $entries),
@@ -235,6 +239,7 @@ class JamboApiMcpServer extends McpServer
             McpTool::schema([
                 'project_uuid' => McpTool::stringProp('UUID du projet', true),
                 'collection_slug' => McpTool::stringProp('Slug de la collection', true),
+                'slug' => McpTool::stringProp('Slug unique de l\'entrée (généré automatiquement si omis)'),
                 'locale' => McpTool::stringProp('Locale (par défaut celle du projet)'),
                 'data' => ['type' => 'object', 'description' => 'Données de l\'entrée (clés = slugs des champs)'],
             ], ['project_uuid', 'collection_slug', 'data']),
@@ -259,6 +264,9 @@ class JamboApiMcpServer extends McpServer
                 if (($ctx['user'] ?? null) instanceof \App\Entity\User) {
                     $entry->createdBy = $ctx['user'];
                 }
+
+                $rawSlug = $args['slug'] ?? ($args['data']['slug'] ?? ($args['data']['title'] ?? ($args['data']['name'] ?? ('entry-' . bin2hex(random_bytes(4))))));
+                $entry->slug = $this->ensureUniqueEntrySlug($collection, (string) $rawSlug, $entry->locale);
 
                 $data = $args['data'] ?? [];
                 foreach ($data as $fieldSlug => $value) {
@@ -297,9 +305,10 @@ class JamboApiMcpServer extends McpServer
                 'project_uuid' => McpTool::stringProp('UUID du projet', true),
                 'collection_slug' => McpTool::stringProp('Slug de la collection', true),
                 'entry_uuid' => McpTool::stringProp('UUID de l\'entrée', true),
+                'slug' => McpTool::stringProp('Nouveau slug unique de l\'entrée'),
                 'data' => ['type' => 'object', 'description' => 'Champs à mettre à jour'],
                 'status' => McpTool::enumProp(['draft', 'published'], 'Nouveau statut'),
-            ], ['project_uuid', 'collection_slug', 'entry_uuid', 'data']),
+            ], ['project_uuid', 'collection_slug', 'entry_uuid']),
             function (array $args, array $ctx): array {
                 $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
@@ -309,6 +318,11 @@ class JamboApiMcpServer extends McpServer
                 if (isset($args['status'])) $entry->status = $args['status'];
                 if (($ctx['user'] ?? null) instanceof \App\Entity\User) {
                     $entry->updatedBy = $ctx['user'];
+                }
+
+                $newSlug = $args['slug'] ?? ($args['data']['slug'] ?? null);
+                if ($newSlug !== null && $newSlug !== '') {
+                    $entry->slug = $this->ensureUniqueEntrySlug($entry->collection, (string) $newSlug, $entry->locale, $entry->id);
                 }
 
                 $data = $args['data'] ?? [];
@@ -643,8 +657,8 @@ class JamboApiMcpServer extends McpServer
                     ->where('m.project = :project')->andWhere('m.deletedAt IS NULL')
                     ->setParameter('project', $project)
                     ->orderBy('m.createdAt', 'DESC')
-                    ->setMaxResults(min($args['limit'] ?? 50, 200))
-                    ->setFirstResult($args['offset'] ?? 0);
+                    ->setMaxResults(max(1, min((int) ($args['limit'] ?? 50), 200)))
+                    ->setFirstResult(max(0, (int) ($args['offset'] ?? 0)));
 
                 if (!empty($args['search'])) {
                     $qb->andWhere('m.originalName LIKE :q OR m.fileName LIKE :q')
@@ -711,8 +725,8 @@ class JamboApiMcpServer extends McpServer
 
                 $qb = $this->em->getRepository(EndUser::class)->createQueryBuilder('u')
                     ->where('u.project = :project')->setParameter('project', $project)
-                    ->setMaxResults(min($args['limit'] ?? 50, 200))
-                    ->setFirstResult($args['offset'] ?? 0);
+                    ->setMaxResults(max(1, min((int) ($args['limit'] ?? 50), 200)))
+                    ->setFirstResult(max(0, (int) ($args['offset'] ?? 0)));
 
                 if (!empty($args['status'])) {
                     $qb->andWhere('u.status = :status')->setParameter('status', $args['status']);
@@ -1129,5 +1143,41 @@ class JamboApiMcpServer extends McpServer
         $text = mb_strtolower(trim($text));
         $text = preg_replace('/[^a-z0-9]+/', '_', $text);
         return trim($text, '_');
+    }
+
+    private function ensureUniqueEntrySlug(Collection $collection, string $baseSlug, string $locale, ?int $excludeEntryId = null): string
+    {
+        $slugger = new \Symfony\Component\String\Slugger\AsciiSlugger();
+        $base = (string) $slugger->slug($baseSlug)->lower()->truncate(50, '');
+        if ($base === '') {
+            $base = 'entry';
+        }
+        $slug = $base;
+        $counter = 1;
+
+        while (true) {
+            $qb = $this->em->createQueryBuilder();
+            $qb->select('COUNT(e.id)')
+               ->from(ContentEntry::class, 'e')
+               ->where('e.collection = :collection')
+               ->andWhere('e.slug = :slug')
+               ->andWhere('e.locale = :locale')
+               ->setParameter('collection', $collection)
+               ->setParameter('slug', $slug)
+               ->setParameter('locale', $locale);
+
+            if ($excludeEntryId !== null) {
+                $qb->andWhere('e.id != :excludeId')
+                   ->setParameter('excludeId', $excludeEntryId);
+            }
+
+            if ((int) $qb->getQuery()->getSingleScalarResult() === 0) {
+                return $slug;
+            }
+
+            $suffix = '-' . $counter;
+            $slug = substr($base, 0, max(1, 50 - strlen($suffix))) . $suffix;
+            $counter++;
+        }
     }
 }

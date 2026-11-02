@@ -7,6 +7,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.24] — 2026-11-02
+
+### Fixed
+- **MCP Entry Slug Generation & Query Bounds Safety (FIX-024)**:
+  - Implemented `ensureUniqueEntrySlug` in `JamboApiMcpServer` to auto-generate unique slugs on `create_entry` and `update_entry`, preventing `UNIQ_COLLECTION_SLUG_LOCALE` SQL duplicate entry collisions.
+  - Added optional `slug` property in MCP tool input schemas for `create_entry` and `update_entry`.
+  - Added bounded limit (`max(1, min(limit, 200))`) and offset (`max(0, offset)`) sanitization across `list_entries`, `list_media`, and `list_end_users` preventing division by zero and SQL offset errors.
+  - Enhanced `list_entries` response to return accurate overall `total` via `countByCollection` alongside paginated `count`.
+  - Added regression test `testEntrySlugCollisionAndPaginationSafety` in `McpSchemaSecurityTest`.
+
+---
+
 ## [1.26.23] — 2026-11-02
 
 ### Fixed
