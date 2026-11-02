@@ -25,6 +25,7 @@ class FormPublicController extends AbstractController
     ) {}
 
     #[Route('/{projectUuid}/forms/{slug}', name: 'public_form_show', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
+    #[Route('/api/projects/{projectUuid}/forms/{slug}', name: 'api_public_form_show')]
     public function show(string $projectUuid, string $slug): JsonResponse
     {
         $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
@@ -52,6 +53,7 @@ class FormPublicController extends AbstractController
     }
 
     #[Route('/{projectUuid}/forms/{slug}/submit', name: 'public_form_submit', methods: ['POST'], requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
+    #[Route('/api/projects/{projectUuid}/forms/{slug}/submit', name: 'api_public_form_submit', methods: ['POST'])]
     public function submit(string $projectUuid, string $slug, Request $request): JsonResponse
     {
         $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
@@ -64,7 +66,16 @@ class FormPublicController extends AbstractController
             return new JsonResponse(['error' => 'Form not found.'], 404);
         }
 
-        $data = $request->toArray();
+        $contentType = (string) $request->headers->get('Content-Type');
+        if (str_contains($contentType, 'application/json') || empty($contentType)) {
+            try {
+                $data = $request->toArray();
+            } catch (\Throwable) {
+                $data = $request->request->all();
+            }
+        } else {
+            $data = $request->request->all();
+        }
 
         try {
             $submission = $this->submitHandler->handle($form, $data, $request);

@@ -26,7 +26,15 @@ class ColumnSettingController extends AbstractController
     public function show(string $projectUuid, string $collectionSlug): JsonResponse
     {
         $user = $this->getUser();
-        [$project, $collection] = $this->resolve($projectUuid, $collectionSlug);
+        if (!$user instanceof \App\Entity\User) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
+        $resolved = $this->resolve($projectUuid, $collectionSlug);
+        if ($resolved instanceof JsonResponse) {
+            return $resolved;
+        }
+        [$project, $collection] = $resolved;
 
         $setting = $this->columnSettingRepository->findOneByUserAndCollection($user, $collection);
 
@@ -39,7 +47,15 @@ class ColumnSettingController extends AbstractController
     public function update(string $projectUuid, string $collectionSlug, Request $request): JsonResponse
     {
         $user = $this->getUser();
-        [$project, $collection] = $this->resolve($projectUuid, $collectionSlug);
+        if (!$user instanceof \App\Entity\User) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
+        $resolved = $this->resolve($projectUuid, $collectionSlug);
+        if ($resolved instanceof JsonResponse) {
+            return $resolved;
+        }
+        [$project, $collection] = $resolved;
 
         $data    = $request->toArray();
         $columns = $data['visible_columns'] ?? [];
@@ -59,10 +75,16 @@ class ColumnSettingController extends AbstractController
         return $this->json(['visibleColumns' => $setting->visibleColumns]);
     }
 
-    private function resolve(string $projectUuid, string $collectionSlug): array
+    private function resolve(string $projectUuid, string $collectionSlug): array|JsonResponse
     {
         $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
-        $collection = $project ? $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug) : null;
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+        $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
+        if (!$collection) {
+            return $this->json(['error' => 'Collection not found'], 404);
+        }
         return [$project, $collection];
     }
 }

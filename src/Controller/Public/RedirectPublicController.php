@@ -21,6 +21,7 @@ class RedirectPublicController extends AbstractController
     ) {}
 
     #[Route('/{projectUuid}/redirects/resolve', name: 'public_redirect_resolve', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
+    #[Route('/api/projects/{projectUuid}/redirects/resolve', name: 'api_public_redirect_resolve')]
     public function resolve(string $projectUuid, Request $request): Response
     {
         $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
@@ -36,8 +37,9 @@ class RedirectPublicController extends AbstractController
         }
 
         // Retour en JSON ou en redirect HTTP selon le header Accept
-        $acceptHeader = $request->headers->get('Accept', '');
-        if (str_contains($acceptHeader, 'text/html') || str_contains($acceptHeader, '*/*')) {
+        $acceptHeader = (string) $request->headers->get('Accept', '');
+        $wantsJson = str_contains($acceptHeader, 'application/json') || $request->query->getBoolean('json');
+        if (!$wantsJson && str_contains($acceptHeader, 'text/html')) {
             return new RedirectResponse(
                 $redirect->toPath,
                 $redirect->httpCode,

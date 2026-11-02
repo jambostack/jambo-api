@@ -18,6 +18,7 @@ class SeoPublicController extends AbstractController
     ) {}
 
     #[Route('/{projectUuid}/sitemap.xml', name: 'public_sitemap', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
+    #[Route('/api/projects/{projectUuid}/sitemap.xml', name: 'api_public_sitemap')]
     public function sitemap(string $projectUuid): Response
     {
         $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
@@ -31,6 +32,7 @@ class SeoPublicController extends AbstractController
     }
 
     #[Route('/{projectUuid}/sitemap-images.xml', name: 'public_image_sitemap', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
+    #[Route('/api/projects/{projectUuid}/sitemap-images.xml', name: 'api_public_image_sitemap')]
     public function imageSitemap(string $projectUuid): Response
     {
         $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
@@ -44,6 +46,7 @@ class SeoPublicController extends AbstractController
     }
 
     #[Route('/{projectUuid}/robots.txt', name: 'public_robots', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
+    #[Route('/api/projects/{projectUuid}/robots.txt', name: 'api_public_robots')]
     public function robots(string $projectUuid): Response
     {
         $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);

@@ -36,7 +36,9 @@ class GraphQLController extends AbstractController
             return new JsonResponse(['errors' => [['message' => 'Projet introuvable']]], 404);
         }
 
-        $this->denyAccessUnlessGranted('project.view', $project);
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
 
         if ($request->isMethod('GET')) {
             $query = $request->query->get('query');

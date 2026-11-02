@@ -7,6 +7,24 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.29] — 2026-11-02
+
+### Fixed & Improved
+- **GraphQL API Token Authorization (`GraphQLController`)**:
+  - Allowed `ApiToken` requests when validated by `EnsureProjectMemberSubscriber`, preventing false 403 Access Denied errors on `/api/projects/{uuid}/graphql`.
+- **Column Setting Validation & Multi-Tenant Isolation (`ColumnSettingController`)**:
+  - Enforced authentication and valid project/collection checks returning 401/404 JSON responses instead of crashing with unhandled null entity exceptions.
+- **Form Public Controller Multi-Format Payload Support (`FormPublicController`)**:
+  - Supported `application/x-www-form-urlencoded` and multipart form submissions alongside JSON payloads, preventing `JsonException` when native HTML forms post submissions.
+  - Added alias routes under `/api/projects/{projectUuid}/forms/{slug}`.
+- **Redirect Public Controller Accept Header Handling (`RedirectPublicController`)**:
+  - Fixed client `Accept` negotiation so clients sending `Accept: */*` or `Accept: application/json` receive redirect metadata in JSON instead of an immediate HTTP 301 redirect.
+  - Added alias route `/api/projects/{projectUuid}/redirects/resolve`.
+- **Public SEO Sitemaps & Robots.txt Route Aliases (`SeoPublicController`)**:
+  - Added route aliases under `/api/projects/{projectUuid}/sitemap.xml`, `/sitemap-images.xml`, and `/robots.txt`.
+
+---
+
 ## [1.26.28] — 2026-11-02
 
 ### Fixed & Improved

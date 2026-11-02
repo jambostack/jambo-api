@@ -248,4 +248,85 @@ class CoreApiHardeningTest extends WebTestCase
         $error = json_decode($client->getResponse()->getContent(), true);
         $this->assertSame('Cannot move a folder into one of its descendants', $error['error']);
     }
+
+    public function testGraphQLWithApiToken(): void
+    {
+        $client = static::createClient();
+
+        $client->request(
+            'POST',
+            '/api/projects/' . $this->projectUuid . '/graphql',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            json_encode([
+                'query' => '{ __typename }',
+            ])
+        );
+
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('data', $data);
+        $this->assertSame('Query', $data['data']['__typename']);
+    }
+
+    public function testColumnSettingRejectsNotFoundCollection(): void
+    {
+        $client = static::createClient();
+
+        // 1. ApiToken alone without user session returns 401 Authentication required
+        $client->request(
+            'GET',
+            '/api/projects/' . $this->projectUuid . '/collections/nonexistent-collection/column-settings',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+            ]
+        );
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+
+        // 2. Logged-in user returns 404 on missing collection
+        $em = self::getContainer()->get(\Doctrine\ORM\EntityManagerInterface::class);
+        $user = new \App\Entity\User();
+        $user->email = 'coluser-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'hashed';
+        $user->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($user);
+        $em->flush();
+
+        $client->loginUser($user);
+        $client->request(
+            'GET',
+            '/api/projects/' . $this->projectUuid . '/collections/nonexistent-collection/column-settings'
+        );
+
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('Collection not found', $data['error']);
+    }
+
+    public function testRedirectPublicReturnsJsonOnWildcardAccept(): void
+    {
+        $client = static::createClient();
+
+        // Clients like curl or fetch send Accept: */* or application/json, */*
+        $client->request(
+            'GET',
+            '/' . $this->projectUuid . '/redirects/resolve?path=/old-url',
+            [],
+            [],
+            [
+                'HTTP_ACCEPT' => '*/*',
+            ]
+        );
+
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $this->assertTrue($client->getResponse()->headers->contains('content-type', 'application/json'));
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertFalse($data['redirected']);
+    }
 }
