@@ -22,12 +22,14 @@ class VersioningController extends AbstractController
     ) {}
 
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions', name: 'versions_list', methods: ['GET'])]
-    public function list(string $projectUuid, string $collectionSlug, string $uuid): JsonResponse
+    public function list(string $projectUuid, string $collectionSlug, string $uuid, Request $request): JsonResponse
     {
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
         if (!$entry) return $this->json(['error' => 'Entrée introuvable'], 404);
 
-        $this->denyAccessUnlessGranted('project.view', $entry->project);
+        if ($request->attributes->get('_project') !== $entry->project) {
+            $this->denyAccessUnlessGranted('project.view', $entry->project);
+        }
 
         $versions = array_map(fn($v) => [
             'uuid' => $v->uuid->toRfc4122(),
@@ -41,12 +43,14 @@ class VersioningController extends AbstractController
     }
 
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}/restore', name: 'versions_restore', methods: ['POST'])]
-    public function restore(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber): JsonResponse
+    public function restore(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
     {
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
         if (!$entry) return $this->json(['error' => 'Entrée introuvable'], 404);
 
-        $this->denyAccessUnlessGranted('content.update', $entry->project);
+        if ($request->attributes->get('_project') !== $entry->project) {
+            $this->denyAccessUnlessGranted('content.update', $entry->project);
+        }
 
         $ok = $this->versioning->restoreVersion($entry, $versionNumber);
         if (!$ok) {
@@ -62,7 +66,9 @@ class VersioningController extends AbstractController
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
         if (!$entry) return $this->json(['error' => 'Entrée introuvable'], 404);
 
-        $this->denyAccessUnlessGranted('project.view', $entry->project);
+        if ($request->attributes->get('_project') !== $entry->project) {
+            $this->denyAccessUnlessGranted('project.view', $entry->project);
+        }
 
         $v1 = (int) $request->query->get('v1', 1);
         $v2 = (int) $request->query->get('v2', $this->versionRepo->getNextVersionNumber($entry) - 1);

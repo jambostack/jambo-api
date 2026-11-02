@@ -23,10 +23,12 @@ class AuditController extends AbstractController
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
 
-        $this->denyAccessUnlessGranted('project.view', $project);
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
 
-        $limit = min((int) $request->query->get('limit', 100), 500);
-        $offset = (int) $request->query->get('offset', 0);
+        $limit = min(max(1, (int) $request->query->get('limit', 100)), 500);
+        $offset = max(0, (int) $request->query->get('offset', 0));
 
         $logs = array_map(fn($l) => [
             'uuid' => $l->uuid->toRfc4122(),

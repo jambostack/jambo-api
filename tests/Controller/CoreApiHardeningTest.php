@@ -394,4 +394,24 @@ class CoreApiHardeningTest extends WebTestCase
 
         $this->assertSame(204, $client->getResponse()->getStatusCode());
     }
+
+    public function testAuditLogsWithApiToken(): void
+    {
+        $client = static::createClient();
+
+        $client->request(
+            'GET',
+            '/api/projects/' . $this->projectUuid . '/audit-logs',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+            ]
+        );
+
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('logs', $data);
+        $this->assertArrayHasKey('total_today', $data);
+    }
 }

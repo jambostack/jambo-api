@@ -7,6 +7,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.31] — 2026-11-02
+
+### Fixed & Improved
+- **Audit Logs ApiToken Access & Pagination Hardening (`AuditController`)**:
+  - Added support for project `ApiToken` authentication in audit logs retrieval.
+  - Implemented strict boundary sanitization on `limit` (bounded between 1 and 500) and `offset` (minimum 0) to prevent denial of service and memory overflow.
+- **Content Versioning ApiToken Authorization (`VersioningController`)**:
+  - Enabled project `ApiToken` access for version listing, diff comparison, and content restoration endpoints.
+  - Added project-scoped ownership validation to prevent cross-tenant version restoration.
+
+---
+
 ## [1.26.30] — 2026-11-02
 
 ### Fixed & Improved
