@@ -389,7 +389,12 @@ class ContentController extends AbstractController
             return $this->json(['error' => 'Entry not found.'], 404);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
         if (isset($data['status'])) {
             $status = $data['status'];
             $statuses = $collection->getWorkflowStatuses();
@@ -401,7 +406,11 @@ class ContentController extends AbstractController
             $entry->status = $status;
         }
         if ($entry->status === 'scheduled' && isset($data['scheduledAt'])) {
-            $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
+            try {
+                $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
+            } catch (\Exception) {
+                return $this->json(['error' => 'Format de date scheduledAt invalide.'], 422);
+            }
         }
         if ($entry->status === 'scheduled' && $entry->scheduledAt === null) {
             return $this->json(['error' => 'scheduledAt is required when status is scheduled.'], 422);

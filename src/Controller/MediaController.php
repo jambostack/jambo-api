@@ -243,12 +243,17 @@ class MediaController extends AbstractController
             return $media;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
         if (array_key_exists('alt', $data)) {
-            $media->alt = $data['alt'];
+            $media->alt = is_scalar($data['alt']) ? (string) $data['alt'] : null;
         }
         if (array_key_exists('caption', $data)) {
-            $media->caption = $data['caption'];
+            $media->caption = is_scalar($data['caption']) ? (string) $data['caption'] : null;
         }
 
         $this->em->flush();
@@ -264,7 +269,12 @@ class MediaController extends AbstractController
             return $media;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
         if (!array_key_exists('folder_id', $data)) {
             return $this->json(['error' => 'folder_id is required'], 422);
         }

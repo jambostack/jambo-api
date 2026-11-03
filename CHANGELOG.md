@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.38] — 2026-11-03
+
+### Fixed & Hardened
+- **Multi-Tenant Media & Transformation Security (`ImageTransformController` & `ImageTransformService`)**:
+  - Closed multi-tenant access vulnerability in `ImageTransformController::canAccessMedia` where any logged-in user could access private media of other projects; restricted access strictly to project members and super admins (`$project->hasMember($user)`).
+  - Sanitized background color parameter (`$bg`) against invalid or malicious color strings, enforcing strict hex color validation.
+  - Wrapped image processing in `try / catch (\Throwable)` returning HTTP 422 instead of uncaught 500 error when image decoders or drivers fail.
+- **Tus Resumable Upload Path Traversal Hardening (`TusServer` & `TusController`)**:
+  - Enforced strict UUID v4 format assertions on `uploadId` across `TusServer` and `TusController`, rejecting directory traversal attacks (`../`) with HTTP 404/400.
+- **AI Service Error Resilience (`AiController`)**:
+  - Wrapped AI content generation, translation, summarization, SEO, and schema suggestion operations in try/catch blocks returning HTTP 400/422 with clear error messages instead of propagating 500 exceptions when AI providers fail or are unconfigured.
+- **Global JsonException Safety**:
+  - Hardened remaining resource and authentication controllers against malformed JSON bodies (`JsonException` -> HTTP 400): `ProjectSettingsController`, `EndUserAuthController`, `EndUserSchemaController`, `MediaController`, `PageController`, `SeoController`, and `Api\ContentController`.
+  - Added expiration date validation in `ProjectSettingsController::createToken`, rejecting past or malformed `expires_at` dates (HTTP 422).
+
+---
+
 ## [1.26.37] — 2026-11-03
 
 ### Fixed & Hardened

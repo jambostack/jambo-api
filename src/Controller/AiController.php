@@ -29,6 +29,9 @@ class AiController extends AbstractController
         $this->denyProjectAccess($request, $project, 'content.create');
 
         $body = json_decode($request->getContent(), true);
+        if (!is_array($body)) {
+            return $this->json(['error' => 'Invalid JSON payload'], 400);
+        }
         $brief = $body['brief'] ?? '';
         $collectionSlug = $body['collection'] ?? '';
 
@@ -44,9 +47,13 @@ class AiController extends AbstractController
         }
 
         $locale = $body['locale'] ?? $project->defaultLocale ?? 'fr';
-        $result = $this->ai->generateContent($brief, $collection, $locale);
 
-        return $this->json($result);
+        try {
+            $result = $this->ai->generateContent($brief, $collection, $locale);
+            return $this->json($result);
+        } catch (\Throwable $e) {
+            return $this->json(['error' => $e->getMessage()], 422);
+        }
     }
 
     #[Route('/api/projects/{uuid}/ai/translate', name: 'ai_translate', methods: ['POST'])]
@@ -58,6 +65,9 @@ class AiController extends AbstractController
         $this->denyProjectAccess($request, $project, 'content.update');
 
         $body = json_decode($request->getContent(), true);
+        if (!is_array($body)) {
+            return $this->json(['error' => 'Invalid JSON payload'], 400);
+        }
         $content = $body['content'] ?? [];
         $targetLocale = $body['locale'] ?? 'en';
 
@@ -65,9 +75,12 @@ class AiController extends AbstractController
             return $this->json(['error' => 'Contenu requis'], 400);
         }
 
-        $translated = $this->ai->translateContent($content, $targetLocale, $project);
-
-        return $this->json(['original' => $content, 'translated' => $translated, 'locale' => $targetLocale]);
+        try {
+            $translated = $this->ai->translateContent($content, $targetLocale, $project);
+            return $this->json(['original' => $content, 'translated' => $translated, 'locale' => $targetLocale]);
+        } catch (\Throwable $e) {
+            return $this->json(['error' => $e->getMessage()], 422);
+        }
     }
 
     #[Route('/api/projects/{uuid}/ai/summarize', name: 'ai_summarize', methods: ['POST'])]
@@ -79,6 +92,9 @@ class AiController extends AbstractController
         $this->denyProjectAccess($request, $project, 'project.view');
 
         $body = json_decode($request->getContent(), true);
+        if (!is_array($body)) {
+            return $this->json(['error' => 'Invalid JSON payload'], 400);
+        }
         $text = $body['text'] ?? '';
         $maxWords = (int) ($body['maxWords'] ?? 80);
 
@@ -86,7 +102,11 @@ class AiController extends AbstractController
             return $this->json(['error' => 'Texte requis'], 400);
         }
 
-        return $this->json(['summary' => $this->ai->summarize($text, $maxWords, $project)]);
+        try {
+            return $this->json(['summary' => $this->ai->summarize($text, $maxWords, $project)]);
+        } catch (\Throwable $e) {
+            return $this->json(['error' => $e->getMessage()], 422);
+        }
     }
 
     #[Route('/api/projects/{uuid}/ai/seo', name: 'ai_seo', methods: ['POST'])]
@@ -98,13 +118,20 @@ class AiController extends AbstractController
         $this->denyProjectAccess($request, $project, 'project.view');
 
         $body = json_decode($request->getContent(), true);
+        if (!is_array($body)) {
+            return $this->json(['error' => 'Invalid JSON payload'], 400);
+        }
         $content = $body['content'] ?? [];
 
         if (empty($content)) {
             return $this->json(['error' => 'Contenu requis'], 400);
         }
 
-        return $this->json($this->ai->generateSeo($content, $project));
+        try {
+            return $this->json($this->ai->generateSeo($content, $project));
+        } catch (\Throwable $e) {
+            return $this->json(['error' => $e->getMessage()], 422);
+        }
     }
 
     #[Route('/api/projects/{uuid}/ai/suggest-schema', name: 'ai_suggest_schema', methods: ['GET'])]
@@ -127,7 +154,11 @@ class AiController extends AbstractController
             return $this->json(['error' => 'Collection introuvable'], 404);
         }
 
-        return $this->json($this->ai->suggestSchema($collection));
+        try {
+            return $this->json($this->ai->suggestSchema($collection));
+        } catch (\Throwable $e) {
+            return $this->json(['error' => $e->getMessage()], 422);
+        }
     }
 
     #[Route('/api/projects/{uuid}/ai/models', name: 'ai_models', methods: ['GET'])]

@@ -964,4 +964,126 @@ class CoreApiHardeningTest extends WebTestCase
         $client->request('POST', "/api/projects/{$this->projectUuid}/collections", [], [], ['CONTENT_TYPE' => 'application/json'], 'bad json');
         $this->assertSame(400, $client->getResponse()->getStatusCode());
     }
+
+    public function testProjectSettingsTokenValidationAndJsonSafety(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-settings-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // 1. Malformed JSON on tokens endpoint -> 400
+        $client->request('POST', "/api/projects/{$this->projectUuid}/settings/tokens", [], [], ['CONTENT_TYPE' => 'application/json'], 'not json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // 2. Past expires_at -> 422
+        $client->request('POST', "/api/projects/{$this->projectUuid}/settings/tokens", [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Expired Token',
+            'expires_at' => '2020-01-01T00:00:00Z',
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+
+        // 3. Invalid expires_at format -> 422
+        $client->request('POST', "/api/projects/{$this->projectUuid}/settings/tokens", [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Invalid Date Token',
+            'expires_at' => 'invalid-date-string',
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+    }
+
+    public function testEndUserAuthMalformedJsonReturns400(): void
+    {
+        $client = static::createClient();
+
+        // Register malformed JSON -> 400
+        $client->request('POST', "/api/{$this->projectUuid}/auth/register", [], [], ['CONTENT_TYPE' => 'application/json'], 'bad json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // Login malformed JSON -> 400
+        $client->request('POST', "/api/{$this->projectUuid}/auth/login", [], [], ['CONTENT_TYPE' => 'application/json'], 'bad json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+    }
+
+    public function testTusUploadIdPathTraversalProtection(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-tus-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // Path traversal in uploadId must return 404
+        $client->request('HEAD', "/api/projects/{$this->projectUuid}/files/tus/../../etc/passwd");
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        $client->request('POST', "/api/projects/{$this->projectUuid}/files/tus/../../etc/passwd/finalize");
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+    }
+
+    public function testImageTransformAccessControl(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        // 1. Create a private project
+        $privateProject = new Project();
+        $privateProject->name = 'Private Project ' . bin2hex(random_bytes(3));
+        $privateProject->publicApi = false;
+        $privateProject->defaultLocale = 'fr';
+        $privateProject->locales = ['fr'];
+        $em->persist($privateProject);
+
+        // 2. Create media for this private project
+        $media = new \App\Entity\Media();
+        $media->project = $privateProject;
+        $media->fileName = 'test.jpg';
+        $media->originalName = 'test.jpg';
+        $media->mimeType = 'image/jpeg';
+        $media->fileSize = 100;
+        $em->persist($media);
+        $em->flush();
+
+        $mediaUuid = $media->uuid->toRfc4122();
+
+        // 3. Unauthenticated user -> 403
+        $client->request('GET', "/cdn/media/{$mediaUuid}");
+        $this->assertSame(403, $client->getResponse()->getStatusCode());
+
+        // 4. Authenticated non-member user -> 403
+        $nonMember = new User();
+        $nonMember->email = 'outsider-' . bin2hex(random_bytes(4)) . '@example.com';
+        $nonMember->password = 'hashed';
+        $nonMember->roles = ['ROLE_USER'];
+        $em->persist($nonMember);
+        $em->flush();
+
+        $client->loginUser($nonMember);
+        $client->request('GET', "/cdn/media/{$mediaUuid}");
+        $this->assertSame(403, $client->getResponse()->getStatusCode());
+
+        // 5. Super admin -> access allowed (404 because file doesn't exist on disk, but NOT 403)
+        $admin = new User();
+        $admin->email = 'admin-media-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+        $client->request('GET', "/cdn/media/{$mediaUuid}");
+        $this->assertNotSame(403, $client->getResponse()->getStatusCode());
+    }
 }

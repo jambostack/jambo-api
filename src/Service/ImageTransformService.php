@@ -107,7 +107,7 @@ class ImageTransformService
         $fit = in_array($params['fit'] ?? '', self::ALLOWED_FITS) ? $params['fit'] : null;
         $fmt = in_array(strtolower($params['fmt'] ?? ''), self::ALLOWED_FORMATS) ? strtolower($params['fmt']) : null;
         $q = isset($params['q']) ? max(1, min(100, (int) $params['q'])) : null;
-        $bg = $params['bg'] ?? null;
+        $bg = isset($params['bg']) && preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) $params['bg']) ? (string) $params['bg'] : null;
 
         return compact('w', 'h', 'fit', 'fmt', 'q', 'bg');
     }

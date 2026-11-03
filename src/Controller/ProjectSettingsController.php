@@ -43,7 +43,11 @@ class ProjectSettingsController extends AbstractController
             return $project;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         if (isset($data['locales'])) {
             $newLocales = (array) $data['locales'];
@@ -74,7 +78,13 @@ class ProjectSettingsController extends AbstractController
             return $project;
         }
 
-        $locale = $request->toArray()['locale'] ?? null;
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
+        $locale = $data['locale'] ?? null;
         if (!$locale) {
             return $this->json(['error' => 'locale is required'], 422);
         }
@@ -95,7 +105,13 @@ class ProjectSettingsController extends AbstractController
             return $project;
         }
 
-        $locale = $request->toArray()['locale'] ?? null;
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
+        $locale = $data['locale'] ?? null;
         if (!$locale) {
             return $this->json(['error' => 'locale is required'], 422);
         }
@@ -201,7 +217,11 @@ class ProjectSettingsController extends AbstractController
             return $project;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         if (empty($data['name'])) {
             return $this->json(['error' => 'name is required'], 422);
@@ -216,7 +236,15 @@ class ProjectSettingsController extends AbstractController
         $token->tokenVersion = 2;
         $token->abilities = $data['abilities'] ?? ['read'];
         if (!empty($data['expires_at'])) {
-            $token->expiresAt = new \DateTimeImmutable($data['expires_at']);
+            try {
+                $expiresAt = new \DateTimeImmutable($data['expires_at']);
+            } catch (\Exception) {
+                return $this->json(['error' => 'Format de date d\'expiration invalide.'], 422);
+            }
+            if ($expiresAt <= new \DateTimeImmutable()) {
+                return $this->json(['error' => 'La date d\'expiration doit être dans le futur.'], 422);
+            }
+            $token->expiresAt = $expiresAt;
         }
 
         $this->em->persist($token);
@@ -244,7 +272,12 @@ class ProjectSettingsController extends AbstractController
             return $this->json(['error' => 'Token not found'], 404);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
         if (isset($data['name'])) {
             $token->name = $data['name'];
         }
@@ -348,7 +381,12 @@ class ProjectSettingsController extends AbstractController
             return $project;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
         $accessVal  = $data['jwt_access_ttl'] ?? null;
         $refreshVal = $data['jwt_refresh_ttl'] ?? null;
 

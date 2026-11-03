@@ -100,7 +100,11 @@ class SeoController extends AbstractController
         }
         $this->denyAccessUnlessGranted('project.view', $project);
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
         $entries = $data['entries'] ?? [];
         $updated = 0;
 

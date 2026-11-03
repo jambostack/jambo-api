@@ -128,7 +128,7 @@ class TusController extends AbstractController
         }
         $this->denyProjectAccess($project, $request);
 
-        if (!$this->tusServer->exists($projectUuid, $uploadId)) {
+        if (!$this->isValidUploadId($uploadId) || !$this->tusServer->exists($projectUuid, $uploadId)) {
             return $this->json(['error' => 'Upload not found'], 404);
         }
 
@@ -175,7 +175,7 @@ class TusController extends AbstractController
         }
         $this->denyProjectAccess($project);
 
-        if (!$this->tusServer->exists($projectUuid, $uploadId)) {
+        if (!$this->isValidUploadId($uploadId) || !$this->tusServer->exists($projectUuid, $uploadId)) {
             return new Response('', 404, ['Tus-Resumable' => '1.0.0']);
         }
 
@@ -203,7 +203,7 @@ class TusController extends AbstractController
         }
         $this->denyProjectAccess($project, $request);
 
-        if (!$this->tusServer->exists($projectUuid, $uploadId)) {
+        if (!$this->isValidUploadId($uploadId) || !$this->tusServer->exists($projectUuid, $uploadId)) {
             return $this->json(['error' => 'Upload not found'], 404);
         }
         $this->tusServer->cancel($projectUuid, $uploadId);
@@ -222,6 +222,10 @@ class TusController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
         $this->denyProjectAccess($project, $request);
+
+        if (!$this->isValidUploadId($uploadId)) {
+            return $this->json(['error' => 'Upload not found'], 404);
+        }
 
         $info = $this->tusServer->getInfo($projectUuid, $uploadId);
         if ($info === null) {
@@ -322,6 +326,11 @@ class TusController extends AbstractController
     }
 
     // ─── Private ─────────────────────────────────────────────────────────
+
+    private function isValidUploadId(string $uploadId): bool
+    {
+        return (bool) preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $uploadId);
+    }
 
     /**
      * Vérifie que l'utilisateur connecté a accès au projet.

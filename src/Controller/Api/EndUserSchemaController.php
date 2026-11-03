@@ -87,7 +87,11 @@ class EndUserSchemaController extends AbstractController
             return $project;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
         foreach ($data['fields'] ?? [] as $item) {
             $field = $this->fieldRepository->find((int) $item['id']);
             if ($field && $field->project->id === $project->id) {
@@ -131,7 +135,11 @@ class EndUserSchemaController extends AbstractController
             return $project;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         $rawName = trim($data['name'] ?? '');
         $type = trim($data['type'] ?? '');
@@ -205,7 +213,11 @@ class EndUserSchemaController extends AbstractController
             return $this->json(['error' => 'System fields cannot be modified'], 403);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         if (isset($data['name'])) {
             // Norme canonique Jambo : nom de champ camelCase. Le slug reste stable

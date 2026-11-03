@@ -57,8 +57,8 @@ class ImageTransformController extends AbstractController
 
         try {
             $cachePath = $this->imageTransform->transform($filePath, $params);
-        } catch (\RuntimeException $e) {
-            return new Response($e->getMessage(), 404);
+        } catch (\Throwable $e) {
+            return new Response($e->getMessage(), 422);
         }
 
         return new BinaryFileResponse($cachePath, 200, [
@@ -196,12 +196,18 @@ class ImageTransformController extends AbstractController
     private function canAccessMedia(Media $media, Request $request): bool
     {
         $project = $media->project;
-        if ($project?->publicApi) {
+        if ($project === null || $project->publicApi) {
             return true;
         }
 
-        if ($this->getUser() !== null) {
-            return true;
+        $user = $this->getUser();
+        if ($user instanceof \App\Entity\User) {
+            if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+                return true;
+            }
+            if ($project->hasMember($user)) {
+                return true;
+            }
         }
 
         if ($this->tokenChecker !== null) {

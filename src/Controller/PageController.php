@@ -587,7 +587,11 @@ class PageController extends InertiaController
         }
         $this->denyProjectAccess($project);
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
         $email = $data['email'] ?? '';
         $password = $data['password'] ?? '';
         $username = $data['username'] ?? null;
@@ -685,7 +689,11 @@ class PageController extends InertiaController
             throw $this->createNotFoundException();
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         if (isset($data['email']) && $data['email'] !== $endUser->email) {
             if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
@@ -733,7 +741,11 @@ class PageController extends InertiaController
             throw $this->createNotFoundException();
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
         $newStatus = $data['status'] ?? '';
         if (!in_array($newStatus, ['active', 'banned', 'pending'], true)) {
             return $this->json(['errors' => ['status' => 'Invalid status']], 422);

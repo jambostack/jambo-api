@@ -170,13 +170,22 @@ class TusServer
         return $this->projectDir . '/var/tus/' . $projectUuid;
     }
 
+    private function assertValidUploadId(string $uploadId): void
+    {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $uploadId)) {
+            throw new \InvalidArgumentException('Invalid upload ID format');
+        }
+    }
+
     private function infoPath(string $projectUuid, string $uploadId): string
     {
+        $this->assertValidUploadId($uploadId);
         return $this->uploadDir($projectUuid) . '/' . $uploadId . '.info';
     }
 
     private function filePath(string $projectUuid, string $uploadId): string
     {
+        $this->assertValidUploadId($uploadId);
         return $this->uploadDir($projectUuid) . '/' . $uploadId;
     }
 

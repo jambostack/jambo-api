@@ -74,7 +74,10 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $data = $request->toArray();
+        $data = $this->getJsonPayload($request);
+        if ($data instanceof JsonResponse) {
+            return $data;
+        }
         $email = $data['email'] ?? '';
         $password = $data['password'] ?? '';
         $username = $data['username'] ?? $data['name'] ?? null;
@@ -141,7 +144,10 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $data = $request->toArray();
+        $data = $this->getJsonPayload($request);
+        if ($data instanceof JsonResponse) {
+            return $data;
+        }
         $email = $data['email'] ?? '';
         $password = $data['password'] ?? '';
 
@@ -222,7 +228,10 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $data = $request->toArray();
+        $data = $this->getJsonPayload($request);
+        if ($data instanceof JsonResponse) {
+            return $data;
+        }
         $twoFactorToken = $data['two_factor_token'] ?? '';
         $code = (string) ($data['code'] ?? '');
 
@@ -295,7 +304,10 @@ class EndUserAuthController extends AbstractController
     #[Route('/refresh', name: 'refresh', methods: ['POST'])]
     public function refresh(Request $request, string $_projectId): JsonResponse
     {
-        $data = $request->toArray();
+        $data = $this->getJsonPayload($request);
+        if ($data instanceof JsonResponse) {
+            return $data;
+        }
         $refreshJwt = $data['refresh_token'] ?? '';
 
         if (empty($refreshJwt)) {
@@ -375,7 +387,10 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Unauthorized'], 401);
         }
 
-        $data = $request->toArray();
+        $data = $this->getJsonPayload($request);
+        if ($data instanceof JsonResponse) {
+            return $data;
+        }
 
         if (isset($data['username'])) {
             $endUser->username = $data['username'];
@@ -441,7 +456,10 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $data = $request->toArray();
+        $data = $this->getJsonPayload($request);
+        if ($data instanceof JsonResponse) {
+            return $data;
+        }
         $email = $data['email'] ?? '';
 
         if (empty($email)) {
@@ -526,7 +544,10 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $data = $request->toArray();
+        $data = $this->getJsonPayload($request);
+        if ($data instanceof JsonResponse) {
+            return $data;
+        }
         $tokenStr = $data['token'] ?? '';
         $newPassword = $data['password'] ?? '';
 
@@ -599,7 +620,10 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Social login is not enabled for this project'], 400);
         }
 
-        $data = $request->toArray();
+        $data = $this->getJsonPayload($request);
+        if ($data instanceof JsonResponse) {
+            return $data;
+        }
         $code = $data['code'] ?? '';
 
         if (empty($code)) {
@@ -644,6 +668,15 @@ class EndUserAuthController extends AbstractController
             ]);
         } catch (\Exception $e) {
             return $this->json(['error' => 'Social login failed: ' . $e->getMessage()], 400);
+        }
+    }
+
+    private function getJsonPayload(Request $request): array|JsonResponse
+    {
+        try {
+            return $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
         }
     }
 }
