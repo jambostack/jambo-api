@@ -74,9 +74,12 @@ class MediaImportHandler implements ImportHandlerInterface
             $media->caption = $mediaData['caption'] ?? null;
 
             // Copy binary file from extracted archive to project's upload directory
-            $sourceFile = $extractedDir . '/media/' . $mediaData['file_name'];
-            if (file_exists($sourceFile)) {
-                copy($sourceFile, $targetMediaDir . '/' . $mediaData['file_name']);
+            $fileName = basename((string) ($mediaData['file_name'] ?? ''));
+            if ($fileName !== '' && $fileName !== '.' && $fileName !== '..') {
+                $sourceFile = $extractedDir . '/media/' . $fileName;
+                if (file_exists($sourceFile)) {
+                    copy($sourceFile, $targetMediaDir . '/' . $fileName);
+                }
             }
 
             // Restore asset metadata (width/height) when present

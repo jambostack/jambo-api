@@ -44,6 +44,41 @@ class ProjectImporter
         if ($zip->open($zipPath) !== true) {
             throw new \RuntimeException('Cannot open ZIP file: ' . $zipPath);
         }
+
+        $maxFiles = 5000;
+        $maxTotalSize = 250 * 1024 * 1024; // 250 MB
+        $totalSize = 0;
+
+        if ($zip->numFiles > $maxFiles) {
+            $zip->close();
+            throw new \RuntimeException('ZIP file contains too many files (max ' . $maxFiles . ')');
+        }
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $stat = $zip->statIndex($i);
+            if (!$stat) {
+                continue;
+            }
+            $entryName = $stat['name'];
+
+            // Prevent Zip Slip / path traversal
+            if (
+                str_contains($entryName, '../') ||
+                str_contains($entryName, '..\\') ||
+                str_starts_with($entryName, '/') ||
+                str_starts_with($entryName, '\\')
+            ) {
+                $zip->close();
+                throw new \RuntimeException('Invalid file path in ZIP archive (directory traversal detected): ' . $entryName);
+            }
+
+            $totalSize += $stat['size'];
+            if ($totalSize > $maxTotalSize) {
+                $zip->close();
+                throw new \RuntimeException('Uncompressed ZIP size exceeds safety limit of 250MB');
+            }
+        }
+
         $zip->extractTo($tempDir);
         $zip->close();
 
@@ -119,7 +154,11 @@ class ProjectImporter
 
     public function cleanup(string $extractedDir): void
     {
-        $this->removeDir($extractedDir);
+        $baseTemp = realpath($this->getTempDir());
+        $realExtracted = realpath($extractedDir);
+        if ($baseTemp && $realExtracted && str_starts_with($realExtracted, $baseTemp)) {
+            $this->removeDir($realExtracted);
+        }
     }
 
     private function removeDir(string $dir): void

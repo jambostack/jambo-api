@@ -25,6 +25,8 @@ class CaptchaController extends AbstractController
 
     #[Route('/api/{projectUuid}/captcha', name: 'api_captcha', methods: ['GET'],
         requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
+    #[Route('/api/projects/{projectUuid}/captcha', name: 'api_captcha_alt', methods: ['GET'],
+        requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
     public function captcha(string $projectUuid, Request $request): JsonResponse
     {
         // Vérifier que le projet existe

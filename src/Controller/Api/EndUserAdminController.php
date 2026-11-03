@@ -118,7 +118,11 @@ class EndUserAdminController extends AbstractController
         $project = $this->resolveProject($uuid, $request);
         if ($project instanceof JsonResponse) return $project;
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
         $email    = trim($data['email'] ?? '');
         $password = $data['password'] ?? '';
         $username = trim($data['username'] ?? '');
@@ -165,7 +169,11 @@ class EndUserAdminController extends AbstractController
         $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
         if (!$endUser) return $this->json(['error' => 'Not found'], 404);
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         if (isset($data['email'])) {
             $email = trim($data['email']);
@@ -233,7 +241,11 @@ class EndUserAdminController extends AbstractController
         $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
         if (!$endUser) return $this->json(['error' => 'Not found'], 404);
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
         $newStatus = $data['status'] ?? '';
         if (!in_array($newStatus, ['active', 'banned', 'pending'], true)) {
             return $this->json(['error' => 'Invalid status'], 422);

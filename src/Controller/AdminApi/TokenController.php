@@ -38,7 +38,12 @@ class TokenController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(Request $request): JsonResponse
     {
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+
         $plain = 'jbo_pat_' . ApiToken::generatePlainToken();
         $t = new PersonalAccessToken();
         $t->name = $data['name'] ?? 'token';
@@ -47,7 +52,15 @@ class TokenController extends AbstractController
         $t->tokenHash = ApiToken::hashToken($plain, $this->appSecret);
         $t->tokenVersion = 2;
         if (!empty($data['expires_at'])) {
-            $t->expiresAt = new \DateTimeImmutable($data['expires_at']);
+            try {
+                $expiresAt = new \DateTimeImmutable($data['expires_at']);
+            } catch (\Exception) {
+                return $this->json(['error' => 'Invalid expires_at date format.'], 422);
+            }
+            if ($expiresAt <= new \DateTimeImmutable()) {
+                return $this->json(['error' => 'Expiration date must be in the future.'], 422);
+            }
+            $t->expiresAt = $expiresAt;
         }
         $this->em->persist($t);
         $this->em->flush();
@@ -67,7 +80,11 @@ class TokenController extends AbstractController
         if (!$t || $t->user !== $this->getUser()) {
             return $this->json(['error' => 'Token not found'], 404);
         }
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         if (isset($data['name'])) {
             $t->name = $data['name'];
         }

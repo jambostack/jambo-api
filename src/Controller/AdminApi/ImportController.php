@@ -42,7 +42,11 @@ class ImportController extends AbstractController
         $collection = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$collection) return $this->json(['error' => 'Collection not found'], 404);
 
-        $body = $request->toArray();
+        try {
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         $csvData = $body['data'] ?? [];
         $fieldMapping = $body['field_mapping'] ?? [];
         $locale = $body['locale'] ?? $project->defaultLocale;

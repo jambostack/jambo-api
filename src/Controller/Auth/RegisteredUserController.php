@@ -59,6 +59,10 @@ class RegisteredUserController extends InertiaController
             return $this->json(['errors' => ['password_confirmation' => 'Passwords do not match.']], 422);
         }
 
+        if ($this->em->getRepository(User::class)->findOneBy(['email' => $data['email']]) !== null) {
+            return $this->json(['errors' => ['email' => 'This email is already in use.']], 422);
+        }
+
         $user = new User();
         $user->name  = $data['name'];
         $user->email = $data['email'];

@@ -76,7 +76,11 @@ class RoleController extends AbstractController
     #[IsGranted('roles.manage')]
     public function bulkDelete(Request $request): JsonResponse
     {
-        $data     = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
         $ids      = $data['ids'] ?? [];
         $password = (string) ($data['password'] ?? '');
 
@@ -119,15 +123,25 @@ class RoleController extends AbstractController
     #[IsGranted('roles.manage')]
     public function create(Request $request): JsonResponse
     {
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
-        if (empty($data['name'])) {
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name === '') {
             return $this->json(['errors' => ['name' => 'Name is required.']], 422);
         }
 
+        $existing = $this->roleRepository->findByName($name);
+        if ($existing !== null) {
+            return $this->json(['errors' => ['name' => 'Role name already exists.']], 422);
+        }
+
         $role = new Role();
-        $role->name  = $data['name'];
-        $role->label = $data['label'] ?? $data['name'];
+        $role->name  = $name;
+        $role->label = $data['label'] ?? $name;
 
         $this->attachPermissions($role, $data['permissions'] ?? []);
 
@@ -146,10 +160,22 @@ class RoleController extends AbstractController
             return $this->json(['error' => 'Role not found'], 404);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         if (isset($data['name'])) {
-            $role->name = $data['name'];
+            $newName = trim((string) $data['name']);
+            if ($newName === '') {
+                return $this->json(['errors' => ['name' => 'Name cannot be empty.']], 422);
+            }
+            $existing = $this->roleRepository->findByName($newName);
+            if ($existing !== null && $existing->id !== $role->id) {
+                return $this->json(['errors' => ['name' => 'Role name already exists.']], 422);
+            }
+            $role->name = $newName;
         }
         if (isset($data['label'])) {
             $role->label = $data['label'];

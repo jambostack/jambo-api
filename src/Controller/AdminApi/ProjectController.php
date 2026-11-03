@@ -33,7 +33,12 @@ class ProjectController extends AbstractController
     {
         $this->requireScope($request, 'projects:write');
         try {
-            $project = $this->provisioner->createProject($this->getUser(), $request->toArray());
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+        try {
+            $project = $this->provisioner->createProject($this->getUser(), $body);
         } catch (SchemaException $e) {
             return $this->json(['error' => $e->getMessage()], $e->statusCode());
         }
@@ -61,7 +66,12 @@ class ProjectController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
-        $this->provisioner->updateProject($project, $request->toArray());
+        try {
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+        $this->provisioner->updateProject($project, $body);
         return $this->json(['data' => $this->serialize($project)]);
     }
 

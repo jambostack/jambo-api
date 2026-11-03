@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.34] — 2026-11-03
+
+### Fixed & Hardened
+- **Project Import Protection & Safe Zip Extraction (`ProjectExportImportController` & `ProjectImporter`)**:
+  - Enforced full authentication (`IS_AUTHENTICATED_FULLY`) on project archive import endpoints (`/api/projects/import`, `/api/projects/import/preview`) and `project.manage` on merging.
+  - Hardened `ProjectImporter::extractZip` against Zip Slip (directory traversal in archive entry names) and Zip Bombs (>5000 files, >250MB uncompressed).
+  - Sanitized media import filename targets (`MediaImportHandler`) with `basename()` to eliminate path traversal risk.
+- **User & Role Integrity Protection (`UserController`, `RegisteredUserController`, `RoleController`)**:
+  - Added duplicate email validation on user updates and user registration returning 409 / 422 Conflict instead of unhandled DBAL 500 exceptions.
+  - Added uniqueness checks on role creation and updates returning 422 Unprocessable Entity.
+- **Personal Access Token Hardening (`PersonalAccessTokenController` & `AdminApi\TokenController`)**:
+  - Validated `expires_at` date format and rejected past expiration dates (422) across both PAT management controllers.
+- **Public Route & Captcha Consistency (`CaptchaController` & `EnsureProjectMemberSubscriber`)**:
+  - Added canonical route alias `GET /api/projects/{projectUuid}/captcha`.
+  - Exempted public project endpoints (captcha, public form submissions, sitemaps, robots.txt, redirect resolutions) in `EnsureProjectMemberSubscriber`.
+- **JSON Parsing & Rate Limiting Hardening (`AdminApi\*`, `Settings\*`, `TwoFactorChallengeController`)**:
+  - Protected all Admin API controllers (`ProjectController`, `CollectionController`, `FieldController`, `ImportController`, `TokenController`) and Settings controllers (`ProfileController`, `PasswordController`, `LocaleController`, `SecurityController`, `EndUserAdminController`) against uncaught `JsonException` on malformed request bodies.
+  - Added rate limiting to 2FA email challenge sending (`TwoFactorChallengeController::sendEmail`).
+
+---
+
 ## [1.26.33] — 2026-11-02
 
 ### Fixed & Improved

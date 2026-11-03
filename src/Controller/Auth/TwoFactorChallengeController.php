@@ -23,6 +23,8 @@ class TwoFactorChallengeController extends InertiaController
         private RequestStack $requestStack,
         private EntityManagerInterface $em,
         private TokenStorageInterface $tokenStorage,
+        #[Autowire(service: 'limiter.two_factor_limiter')]
+        private RateLimiterFactory $twoFactorLimiter,
     ) {}
 
     #[Route('/two-factor-challenge', name: 'two_factor_challenge', methods: ['GET'])]
@@ -46,7 +48,7 @@ class TwoFactorChallengeController extends InertiaController
     }
 
     #[Route('/two-factor-challenge', name: 'two_factor_challenge_verify', methods: ['POST'])]
-    public function verify(Request $request, #[Autowire(service: 'limiter.two_factor_limiter')] RateLimiterFactory $twoFactorLimiter): Response
+    public function verify(Request $request): Response
     {
         $session = $request->getSession();
 
@@ -60,7 +62,7 @@ class TwoFactorChallengeController extends InertiaController
         }
 
         // Rate limiting
-        $limiter = $twoFactorLimiter->create($request->getClientIp());
+        $limiter = $this->twoFactorLimiter->create($request->getClientIp());
         if (!$limiter->consume()->isAccepted()) {
             return $this->inertia($request, 'auth/two-factor-challenge', [
                 'error' => 'Too many attempts. Please wait 60 seconds.',
@@ -120,6 +122,11 @@ class TwoFactorChallengeController extends InertiaController
     #[Route('/two-factor-challenge/send-email', name: 'two_factor_send_email', methods: ['POST'])]
     public function sendEmail(Request $request): Response
     {
+        $limiter = $this->twoFactorLimiter->create($request->getClientIp());
+        if (!$limiter->consume()->isAccepted()) {
+            return $this->json(['error' => 'Too many requests. Please wait 60 seconds.'], 429);
+        }
+
         $session = $request->getSession();
         if (!$session->has('two_factor_user_id')) {
             return $this->redirectToRoute('app_login');

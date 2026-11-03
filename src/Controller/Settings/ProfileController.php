@@ -43,7 +43,11 @@ class ProfileController extends AbstractController
         if (!$user instanceof User) {
             return $this->json(['error' => 'Non authentifié'], 401);
         }
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         if (isset($data['name'])) {
             $user->name = $data['name'];

@@ -46,7 +46,8 @@ class SecurityController extends AbstractController
         if ($user->twoFactorEnabled) {
             return $this->json(['error' => '2FA already enabled. Disable it first.'], 409);
         }
-        $password = (string) ($request->toArray()['password'] ?? '');
+        $data = $this->getJsonData($request);
+        $password = (string) ($data['password'] ?? '');
         if (!$this->hasher->isPasswordValid($user, $password)) {
             return $this->json(['error' => 'Invalid password.'], 422);
         }
@@ -85,7 +86,8 @@ class SecurityController extends AbstractController
             return $this->json(['error' => 'Run TOTP setup first.'], 400);
         }
 
-        $code = (string) ($request->toArray()['code'] ?? '');
+        $data = $this->getJsonData($request);
+        $code = (string) ($data['code'] ?? '');
         if (!$this->twoFactor->verifyTotp($user->twoFactorSecret, $code)) {
             return $this->json(['error' => 'Invalid code. Please try again.'], 422);
         }
@@ -109,7 +111,8 @@ class SecurityController extends AbstractController
         if ($user->twoFactorEnabled) {
             return $this->json(['error' => '2FA already enabled.'], 409);
         }
-        $password = (string) ($request->toArray()['password'] ?? '');
+        $data = $this->getJsonData($request);
+        $password = (string) ($data['password'] ?? '');
         if (!$this->hasher->isPasswordValid($user, $password)) {
             return $this->json(['error' => 'Invalid password.'], 422);
         }
@@ -139,7 +142,8 @@ class SecurityController extends AbstractController
             return $this->json(['error' => 'Run email setup first.'], 400);
         }
 
-        $code = (string) ($request->toArray()['code'] ?? '');
+        $data = $this->getJsonData($request);
+        $code = (string) ($data['code'] ?? '');
         $session = $this->requestStack->getCurrentRequest()->getSession();
         $storedCode = $session->get('two_factor_email_code');
         $expires = $session->get('two_factor_email_expires', 0);
@@ -174,7 +178,8 @@ class SecurityController extends AbstractController
             return $this->json(['error' => '2FA is not enabled.'], 400);
         }
 
-        $password = (string) ($request->toArray()['password'] ?? '');
+        $data = $this->getJsonData($request);
+        $password = (string) ($data['password'] ?? '');
         if (!$this->hasher->isPasswordValid($user, $password)) {
             return $this->json(['error' => 'Invalid password.'], 422);
         }
@@ -289,4 +294,12 @@ class SecurityController extends AbstractController
         return $user;
     }
 
+    private function getJsonData(Request $request): array
+    {
+        try {
+            return $request->toArray();
+        } catch (\JsonException) {
+            return [];
+        }
+    }
 }

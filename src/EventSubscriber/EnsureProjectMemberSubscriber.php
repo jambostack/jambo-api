@@ -43,6 +43,15 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
             return;
         }
 
+        // Les endpoints publics (captcha, formulaires publics, redirects, seo) sont hors périmètre
+        $path = $request->getPathInfo();
+        if (
+            str_ends_with($path, '/captcha') ||
+            preg_match('#^/api/projects/[^/]+/(forms/|redirects/resolve|sitemap|robots\.txt)#', $path)
+        ) {
+            return;
+        }
+
         $token = $this->tokenStorage->getToken();
         if ($token === null) {
             // Pas de session : seules les routes admin (/api/projects/*) sont

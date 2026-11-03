@@ -33,7 +33,11 @@ class PasswordController extends AbstractController
             return $this->json(['error' => 'Non authentifié'], 401);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         if (!$this->hasher->isPasswordValid($user, $data['current_password'] ?? '')) {
             return $this->json(['errors' => ['current_password' => 'The current password is incorrect.']], 422);

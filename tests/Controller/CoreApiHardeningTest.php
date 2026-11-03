@@ -645,4 +645,193 @@ class CoreApiHardeningTest extends WebTestCase
         $statusCol = $client->getResponse()->getStatusCode();
         $this->assertTrue(in_array($statusCol, [302, 401, 403], true));
     }
+
+    public function testCaptchaControllerAltRoute(): void
+    {
+        $client = static::createClient();
+
+        $client->request('GET', '/api/projects/' . $this->projectUuid . '/captcha');
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('token', $data);
+        $this->assertArrayHasKey('image', $data);
+    }
+
+    public function testProjectImportRequiresAuthentication(): void
+    {
+        $client = static::createClient();
+
+        $client->request('POST', '/api/projects/import');
+        $status1 = $client->getResponse()->getStatusCode();
+        $this->assertTrue(in_array($status1, [302, 401, 403], true));
+
+        $client->request('POST', '/api/projects/import/preview');
+        $status2 = $client->getResponse()->getStatusCode();
+        $this->assertTrue(in_array($status2, [302, 401, 403], true));
+    }
+
+    public function testUserEmailDuplicateConflictOnUpdate(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-user-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+
+        $user1 = new User();
+        $user1->name = 'User One';
+        $user1->email = 'user1-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user1->password = 'hashed';
+        $em->persist($user1);
+
+        $user2 = new User();
+        $user2->name = 'User Two';
+        $user2->email = 'user2-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user2->password = 'hashed';
+        $em->persist($user2);
+
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // Try updating user2 email to user1 email -> 409 Conflict
+        $client->request(
+            'PUT',
+            '/api/users/' . $user2->id,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['email' => $user1->email])
+        );
+
+        $this->assertSame(409, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('errors', $data);
+        $this->assertSame('Email already taken.', $data['errors']['email']);
+    }
+
+    public function testRoleNameDuplicateConflict(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'role-admin-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        $uniqueRole = 'Role_' . bin2hex(random_bytes(4));
+
+        // Create initial role
+        $client->request('POST', '/api/roles', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => $uniqueRole,
+            'label' => 'First Role',
+        ]));
+        $this->assertSame(201, $client->getResponse()->getStatusCode());
+
+        // Attempt creating duplicate role name -> 422
+        $client->request('POST', '/api/roles', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => $uniqueRole,
+            'label' => 'Duplicate Role',
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('Role name already exists.', $data['errors']['name']);
+    }
+
+    public function testPersonalAccessTokenPastExpirationRejected(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'pat-user-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'hashed';
+        $user->roles = ['ROLE_USER'];
+        $em->persist($user);
+        $em->flush();
+
+        $client->loginUser($user);
+
+        $client->request('POST', '/api/settings/personal-access-tokens', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Expired PAT',
+            'expires_at' => '2020-01-01T00:00:00Z',
+        ]));
+
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('Expiration date must be in the future.', $data['errors']['expires_at']);
+    }
+
+    public function testRegisteredUserDuplicateEmailReturns422(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $email = 'reg-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user = new User();
+        $user->name = 'Existing User';
+        $user->email = $email;
+        $user->password = 'hashed';
+        $user->roles = ['ROLE_USER'];
+        $em->persist($user);
+        $em->flush();
+
+        $client->request('POST', '/register', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'New Guy',
+            'email' => $email,
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ]));
+
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('This email is already in use.', $data['errors']['email']);
+    }
+
+    public function testProjectImporterZipSlipProtection(): void
+    {
+        $importer = self::getContainer()->get(\App\Service\ExportImport\ProjectImporter::class);
+        $zipPath = sys_get_temp_dir() . '/zipslip_test_' . uniqid() . '.zip';
+
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE));
+        $zip->addFromString('../../../etc/evil.txt', 'evil content');
+        $zip->close();
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessage('directory traversal detected');
+            $importer->extractZip($zipPath);
+        } finally {
+            if (file_exists($zipPath)) {
+                unlink($zipPath);
+            }
+        }
+    }
+
+    public function testLocaleControllerInvalidJsonReturns400(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'locale-user-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'hashed';
+        $user->roles = ['ROLE_USER'];
+        $em->persist($user);
+        $em->flush();
+
+        $client->loginUser($user);
+
+        $client->request('POST', '/settings/locale', [], [], ['CONTENT_TYPE' => 'application/json'], 'invalid json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+    }
 }

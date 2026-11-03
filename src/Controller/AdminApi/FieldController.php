@@ -69,7 +69,12 @@ class FieldController extends AbstractController
             return $err;
         }
         try {
-            $f = $this->provisioner->addField($c, $request->toArray());
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+        try {
+            $f = $this->provisioner->addField($c, $body);
         } catch (SchemaException $e) {
             return $this->json(['error' => $e->getMessage()], $e->statusCode());
         }
@@ -89,7 +94,12 @@ class FieldController extends AbstractController
             return $this->json(['error' => 'Field not found'], 404);
         }
         try {
-            $this->provisioner->updateField($f, $request->toArray());
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+        try {
+            $this->provisioner->updateField($f, $body);
         } catch (SchemaException $e) {
             return $this->json(['error' => $e->getMessage()], $e->statusCode());
         }

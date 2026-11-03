@@ -66,7 +66,12 @@ class CollectionController extends AbstractController
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         try {
-            $c = $this->provisioner->createCollection($project, $request->toArray());
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+        try {
+            $c = $this->provisioner->createCollection($project, $body);
         } catch (SchemaException $e) {
             return $this->json(['error' => $e->getMessage()], $e->statusCode());
         }
@@ -86,7 +91,12 @@ class CollectionController extends AbstractController
         if (!$c) {
             return $this->json(['error' => 'Collection not found'], 404);
         }
-        $this->provisioner->updateCollection($c, $request->toArray());
+        try {
+            $body = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+        $this->provisioner->updateCollection($c, $body);
         return $this->json(['data' => ['name' => $c->name, 'slug' => $c->slug]]);
     }
 

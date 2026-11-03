@@ -55,7 +55,11 @@ class PersonalAccessTokenController extends AbstractController
             return $user;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
@@ -73,6 +77,9 @@ class PersonalAccessTokenController extends AbstractController
                 $expiresAt = new \DateTimeImmutable((string) $data['expires_at']);
             } catch (\Exception) {
                 return $this->json(['errors' => ['expires_at' => 'Invalid date.']], 422);
+            }
+            if ($expiresAt <= new \DateTimeImmutable()) {
+                return $this->json(['errors' => ['expires_at' => 'Expiration date must be in the future.']], 422);
             }
         }
 

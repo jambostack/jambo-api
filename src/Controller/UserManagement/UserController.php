@@ -85,7 +85,11 @@ class UserController extends AbstractController
             return $this->json(['error' => 'User deletion is disabled in demo mode.'], 403);
         }
 
-        $data     = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
         $ids      = $data['ids'] ?? [];
         $password = (string) ($data['password'] ?? '');
 
@@ -128,7 +132,11 @@ class UserController extends AbstractController
     #[IsGranted('users.manage')]
     public function create(Request $request): JsonResponse
     {
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         if (empty($data['email']) || empty($data['password']) || empty($data['name'])) {
             return $this->json(['error' => 'name, email, and password are required'], 422);
@@ -172,13 +180,25 @@ class UserController extends AbstractController
             return $this->json(['error' => 'User not found'], 404);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
 
         if (isset($data['name'])) {
             $user->name = $data['name'];
         }
         if (isset($data['email'])) {
-            $user->email = $data['email'];
+            $newEmail = trim((string) $data['email']);
+            if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+                return $this->json(['errors' => ['email' => 'Invalid email address.']], 422);
+            }
+            $existing = $this->userRepository->findByEmail($newEmail);
+            if ($existing !== null && $existing->id !== $user->id) {
+                return $this->json(['errors' => ['email' => 'Email already taken.']], 409);
+            }
+            $user->email = $newEmail;
         }
         if (!empty($data['password'])) {
             $user->password = $this->hasher->hashPassword($user, $data['password']);

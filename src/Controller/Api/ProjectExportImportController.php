@@ -57,6 +57,10 @@ class ProjectExportImportController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
+
         $options = ExportOptions::fromRequest($request->query->all());
         if (empty($options->getEnabledOptions())) {
             $options->structure = true;
@@ -77,11 +81,15 @@ class ProjectExportImportController extends AbstractController
     }
 
     #[Route('/{uuid}/export/preview', name: 'export_preview', methods: ['GET'])]
-    public function exportPreview(string $uuid): JsonResponse
+    public function exportPreview(string $uuid, Request $request): JsonResponse
     {
         $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('project.view', $project);
         }
 
         $collectionCount = 0;
@@ -138,6 +146,8 @@ class ProjectExportImportController extends AbstractController
     #[Route('/import', name: 'import_new', methods: ['POST'])]
     public function importNew(Request $request): JsonResponse
     {
+        $this->denyAccessUnlessGranted('IS_AUTHENTICATED_FULLY');
+
         $uploadedFile = $request->files->get('file');
         if (!$uploadedFile) {
             return $this->json(['error' => 'No file uploaded'], 422);
@@ -244,6 +254,8 @@ class ProjectExportImportController extends AbstractController
     #[Route('/import/preview', name: 'import_preview', methods: ['POST'])]
     public function importPreview(Request $request): JsonResponse
     {
+        $this->denyAccessUnlessGranted('IS_AUTHENTICATED_FULLY');
+
         $uploadedFile = $request->files->get('file');
         if (!$uploadedFile) {
             return $this->json(['error' => 'No file uploaded'], 422);
@@ -308,6 +320,10 @@ class ProjectExportImportController extends AbstractController
         $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('project.manage', $project);
         }
 
         $uploadedFile = $request->files->get('file');
