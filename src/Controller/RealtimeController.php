@@ -45,9 +45,12 @@ class RealtimeController extends AbstractController
         $mercureSecret = $this->getParameter('mercure_jwt_secret') ?? '';
         if (!$this->mercureEnabled || $mercureSecret === '' || strlen($mercureSecret) < 32) {
             return $this->json([
-                'error' => 'Mercure not configured on this server. Fallback to polling.',
                 'enabled' => false,
-            ], 503);
+                'token'   => null,
+                'hub_url' => null,
+                'topics'  => [],
+                'message' => 'Mercure not configured on this server. Fallback to polling.',
+            ], 200);
         }
 
         $jwtConfig = Configuration::forSymmetricSigner(
@@ -75,6 +78,7 @@ class RealtimeController extends AbstractController
             ?? $request->getSchemeAndHttpHost() . '/.well-known/mercure';
 
         return $this->json([
+            'enabled' => true,
             'token'   => $token,
             'hub_url' => $hubUrl,
             'topics'  => [

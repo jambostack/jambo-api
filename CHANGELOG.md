@@ -7,6 +7,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.36] — 2026-11-03
+
+### Fixed
+- **Silent Realtime Fallback & DevTools Console Cleanliness (`RealtimeController::token`)**:
+  - Replaced HTTP 503 error response on `/api/projects/{uuid}/realtime/token` with HTTP 200 `{ enabled: false, token: null, hub_url: null, topics: [] }` when Mercure is not active.
+  - Eliminates the red `GET /api/projects/.../realtime/token 503 (Service Unavailable)` error in browser DevTools network tab and console, allowing both legacy and modern frontend clients to seamlessly and silently engage REST polling.
+
+---
+
 ## [1.26.35] — 2026-11-03
 
 ### Fixed

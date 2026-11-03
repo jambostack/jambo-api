@@ -872,4 +872,27 @@ class CoreApiHardeningTest extends WebTestCase
         $this->assertArrayHasKey('hub_url', $data);
         $this->assertArrayHasKey('topics', $data);
     }
+
+    public function testRealtimeTokenWhenMercureDisabledReturns200WithNullToken(): void
+    {
+        $projectRepo = self::getContainer()->get(\App\Repository\ProjectRepository::class);
+        $memberRepo = self::getContainer()->get(\App\Repository\ProjectMemberRepository::class);
+        $controller = new \App\Controller\RealtimeController(
+            $projectRepo,
+            $memberRepo,
+            mercureEnabled: false,
+        );
+        $controller->setContainer(self::getContainer());
+
+        $request = new \Symfony\Component\HttpFoundation\Request();
+        $project = $projectRepo->findOneBy(['uuid' => $this->projectUuid]);
+        $request->attributes->set('_project', $project);
+
+        $response = $controller->token($this->projectUuid, $request);
+        $this->assertSame(200, $response->getStatusCode());
+        $data = json_decode($response->getContent(), true);
+        $this->assertFalse($data['enabled']);
+        $this->assertNull($data['token']);
+        $this->assertNull($data['hub_url']);
+    }
 }
