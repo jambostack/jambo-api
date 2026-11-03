@@ -39,6 +39,7 @@
 
         <env name="MERCURE_JWT_SECRET" value="a-test-mercure-jwt-secret-that-is-thirty-two-chars"/>
         <env name="MERCURE_PUBLIC_URL" value="http://localhost:3000/.well-known/mercure"/>
+        <env name="MERCURE_ENABLED" value="true"/>
     </php>
 
     <testsuites>

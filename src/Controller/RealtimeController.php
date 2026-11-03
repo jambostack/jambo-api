@@ -8,6 +8,7 @@ use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -25,6 +26,8 @@ class RealtimeController extends AbstractController
     public function __construct(
         private readonly ProjectRepository $projectRepository,
         private readonly ProjectMemberRepository $memberRepo,
+        #[Autowire(param: 'mercure_enabled')]
+        private readonly bool $mercureEnabled = false,
     ) {}
 
     /**
@@ -40,8 +43,11 @@ class RealtimeController extends AbstractController
         $this->denyProjectAccess($project, $request);
 
         $mercureSecret = $this->getParameter('mercure_jwt_secret') ?? '';
-        if ($mercureSecret === '' || strlen($mercureSecret) < 32) {
-            return $this->json(['error' => 'Mercure not configured'], 503);
+        if (!$this->mercureEnabled || $mercureSecret === '' || strlen($mercureSecret) < 32) {
+            return $this->json([
+                'error' => 'Mercure not configured on this server. Fallback to polling.',
+                'enabled' => false,
+            ], 503);
         }
 
         $jwtConfig = Configuration::forSymmetricSigner(

@@ -23,6 +23,7 @@ class MercureCookieSubscriber implements EventSubscriberInterface
         private readonly string $mercureJwtSecret,
         private readonly string $mercurePublicUrl,
         private readonly RequestStack $requestStack,
+        private readonly bool $mercureEnabled = false,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -34,6 +35,10 @@ class MercureCookieSubscriber implements EventSubscriberInterface
 
     public function onLoginSuccess(LoginSuccessEvent $event): void
     {
+        if (!$this->mercureEnabled) {
+            return;
+        }
+
         $user = $event->getUser();
         if (!$user instanceof \App\Entity\User) {
             // Ne concerne que les admins (User entity), pas les end-users

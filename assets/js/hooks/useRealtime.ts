@@ -51,6 +51,11 @@ export function useRealtime(projectUuid?: string) {
 
         // ── Tente le mode SSE (EventSource) ──────────────────────────
         const trySSE = async () => {
+            if (typeof window === 'undefined' || !window.EventSource) {
+                startPolling();
+                return;
+            }
+
             try {
                 // 1. Récupérer le token de souscription
                 const tokenResp = await fetch(
@@ -62,11 +67,12 @@ export function useRealtime(projectUuid?: string) {
                     throw new Error(`Token endpoint returned ${tokenResp.status}`);
                 }
 
-                const { token, hub_url, topics } = await tokenResp.json();
-
-                if (!token || !hub_url) {
-                    throw new Error('Token response incomplete');
+                const data = await tokenResp.json();
+                if (data.enabled === false || !data.token || !data.hub_url) {
+                    throw new Error('SSE not available on this server');
                 }
+
+                const { token, hub_url, topics } = data;
 
                 // 2. Construire l'URL EventSource avec topics
                 const url = new URL(hub_url);
@@ -87,10 +93,16 @@ export function useRealtime(projectUuid?: string) {
                     }
                 });
 
+                es.addEventListener('close', () => {
+                    es.close();
+                    if (!cancelled) {
+                        startPolling();
+                    }
+                });
+
                 es.addEventListener('error', () => {
-                    // EventSource a sa propre reconnexion automatique.
-                    // Dégrader vers le polling après 3 échecs consécutifs.
-                    if (!cancelled && (es.readyState === EventSource.CLOSED)) {
+                    // Dégrader vers le polling si le flux SSE échoue
+                    if (!cancelled) {
                         es.close();
                         startPolling();
                     }

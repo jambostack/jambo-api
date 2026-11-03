@@ -834,4 +834,42 @@ class CoreApiHardeningTest extends WebTestCase
         $client->request('POST', '/settings/locale', [], [], ['CONTENT_TYPE' => 'application/json'], 'invalid json');
         $this->assertSame(400, $client->getResponse()->getStatusCode());
     }
+
+    public function testMercureFallbackReturnsEventStreamOnGet(): void
+    {
+        $client = static::createClient();
+
+        // Must be accessible publicly without 302 redirect to /login
+        $client->request('GET', '/.well-known/mercure');
+        $response = $client->getResponse();
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertStringContainsString('text/event-stream', (string) $response->headers->get('Content-Type'));
+        $this->assertInstanceOf(\Symfony\Component\HttpFoundation\StreamedResponse::class, $response);
+        ob_start();
+        ($response->getCallback())();
+        $content = ob_get_clean();
+        $this->assertStringContainsString('event: close', $content);
+    }
+
+    public function testRealtimeTokenEndpoint(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-rt-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        $client->request('GET', '/api/projects/' . $this->projectUuid . '/realtime/token');
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('token', $data);
+        $this->assertArrayHasKey('hub_url', $data);
+        $this->assertArrayHasKey('topics', $data);
+    }
 }

@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.35] — 2026-11-03
+
+### Fixed
+- **SSE EventSource MIME Type & Mercure Hub Fallback (`MercureFallbackController`, `RealtimeController`, `useRealtime`)**:
+  - Fixed browser error `EventSource's response has a MIME type ("text/html") that is not "text/event-stream"` caused when the dashboard opened an `EventSource` connection to `/.well-known/mercure` on hosts without an active Mercure daemon.
+  - Implemented `MercureFallbackController` on `/.well-known/mercure` to cleanly deliver `Content-Type: text/event-stream` with an `event: close` stream, preventing HTML MIME type aborts and 302 login redirects.
+  - Added `MERCURE_ENABLED` environment flag (defaulting to `false`). When Mercure is disabled, `/api/projects/{uuid}/realtime/token` returns a 503 `enabled: false` status, allowing the frontend (`useRealtime`) to switch cleanly to REST polling without attempting to open a failing `EventSource`.
+  - Added `PUBLIC_ACCESS` to `/.well-known/mercure` in `security.yaml` so EventSource requests are never intercepted by session-redirect firewalls.
+
+---
+
 ## [1.26.34] — 2026-11-03
 
 ### Fixed & Hardened

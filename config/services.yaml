@@ -5,8 +5,10 @@
 # See also https://symfony.com/doc/current/service_container/import.html
 
 parameters:
+    env(MERCURE_ENABLED): 'false'
     mercure_jwt_secret: '%env(MERCURE_JWT_SECRET)%'
     mercure_public_url: '%env(MERCURE_PUBLIC_URL)%'
+    mercure_enabled: '%env(bool:MERCURE_ENABLED)%'
 
 services:
     # default configuration for services in *this* file
@@ -133,6 +135,7 @@ services:
         arguments:
             $mercureJwtSecret: '%env(MERCURE_JWT_SECRET)%'
             $mercurePublicUrl: '%env(MERCURE_PUBLIC_URL)%'
+            $mercureEnabled: '%mercure_enabled%'
 
     # ── SchemaGenerator — projectDir pour les resolvers GraphQL Subscription ──
     App\GraphQL\SchemaGenerator:

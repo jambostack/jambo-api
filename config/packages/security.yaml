@@ -58,6 +58,7 @@ security:
 
     access_control:
         - { path: ^/health, roles: PUBLIC_ACCESS }
+        - { path: ^/\.well-known/mercure, roles: PUBLIC_ACCESS }
         - { path: ^/api/docs, roles: PUBLIC_ACCESS }
         - { path: ^/favicon, roles: PUBLIC_ACCESS }
         - { path: ^/oidc, roles: PUBLIC_ACCESS }
