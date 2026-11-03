@@ -21,7 +21,12 @@ class InsightsController extends AbstractController
     #[Route('/insights/summary', name: 'insights_summary', methods: ['GET'])]
     public function summary(): JsonResponse
     {
-        return $this->json(['data' => $this->insights->summaryForUser($this->getUser())]);
+        $user = $this->getUser();
+        if (!$user instanceof \App\Entity\User) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
+        return $this->json(['data' => $this->insights->summaryForUser($user)]);
     }
 
     #[Route('/insights/projects/{project}', name: 'insights_project', methods: ['GET'])]

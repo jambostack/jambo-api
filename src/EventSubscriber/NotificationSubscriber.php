@@ -28,7 +28,7 @@ class NotificationSubscriber implements EventSubscriberInterface
     {
         $entry = $event->entry;
         $project = $event->project;
-        $link = sprintf('/projects/%d/collections/%d/content/%d', $project->getId(), $entry->collection->getId(), $entry->getId());
+        $link = sprintf('/projects/%d/collections/%d/content/%d', $project->id, $entry->collection?->id ?? 0, $entry->id);
 
         if ($entry->assignedTo && $entry->status !== 'draft') {
             $this->createNotification('status_change', "Statut changé en « {$entry->status} »", "L'entrée « {$entry->locale} » est maintenant en {$entry->status}.", $link, $entry->assignedTo);
@@ -39,7 +39,7 @@ class NotificationSubscriber implements EventSubscriberInterface
     {
         $entry = $comment->entry;
         $project = $entry->project;
-        $link = sprintf('/projects/%d/collections/%d/content/%d', $project->getId(), $entry->collection->getId(), $entry->getId());
+        $link = sprintf('/projects/%d/collections/%d/content/%d', $project->id, $entry->collection?->id ?? 0, $entry->id);
         $authorName = $comment->author->name ?? $comment->author->email;
 
         // Notify assigned user

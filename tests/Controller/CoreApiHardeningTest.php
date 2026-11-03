@@ -895,4 +895,73 @@ class CoreApiHardeningTest extends WebTestCase
         $this->assertNull($data['token']);
         $this->assertNull($data['hub_url']);
     }
+
+    public function testInsightsSummaryUnauthenticatedReturns401(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/insights/summary');
+        $status = $client->getResponse()->getStatusCode();
+        $this->assertTrue(in_array($status, [302, 401], true));
+    }
+
+    public function testCommentValidationAndJsonSafety(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-cmt-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+
+        $entry = new \App\Entity\ContentEntry();
+        $project = $em->getRepository(Project::class)->findOneBy(['uuid' => $this->projectUuid]);
+        $collection = $em->getRepository(Collection::class)->findOneBy(['project' => $project, 'slug' => 'articles']);
+        $entry->project = $project;
+        $entry->collection = $collection;
+        $entry->locale = 'en';
+        $entry->slug = 'test-comment-slug-' . bin2hex(random_bytes(3));
+        $em->persist($entry);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // 1. Malformed JSON -> 400
+        $client->request('POST', "/api/projects/{$this->projectUuid}/collections/articles/content/{$entry->id}/comments", [], [], ['CONTENT_TYPE' => 'application/json'], 'malformed json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // 2. Empty body -> 422
+        $client->request('POST', "/api/projects/{$this->projectUuid}/collections/articles/content/{$entry->id}/comments", [], [], ['CONTENT_TYPE' => 'application/json'], json_encode(['body' => '   ']));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('Comment body cannot be empty.', $data['error']);
+
+        // 3. Valid body -> 201
+        $client->request('POST', "/api/projects/{$this->projectUuid}/collections/articles/content/{$entry->id}/comments", [], [], ['CONTENT_TYPE' => 'application/json'], json_encode(['body' => 'Super content!']));
+        $this->assertSame(201, $client->getResponse()->getStatusCode());
+    }
+
+    public function testProjectAndCollectionMalformedJsonSafety(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-pj-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // Project create malformed JSON -> 400
+        $client->request('POST', '/api/projects', [], [], ['CONTENT_TYPE' => 'application/json'], 'bad json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // Collection create malformed JSON -> 400
+        $client->request('POST', "/api/projects/{$this->projectUuid}/collections", [], [], ['CONTENT_TYPE' => 'application/json'], 'bad json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+    }
 }

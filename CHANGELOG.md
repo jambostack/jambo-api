@@ -7,6 +7,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.37] — 2026-11-03
+
+### Fixed & Hardened
+- **NotificationSubscriber Entity Property Access Fix (`NotificationSubscriber`)**:
+  - Fixed fatal PHP 500 error `Error: Call to undefined method App\Entity\Project::getId()` on comment creation and content status update events. Replaced `$project->getId()` and `$entry->getId()` with `$project->id`, `$entry->id`, and null-safe `$entry->collection?->id`.
+- **Comment Validation & Security Hardening (`CommentController`)**:
+  - Replaced unvalidated empty comment strings with strict empty/whitespace-only body checks returning HTTP 422 Unprocessable Entity.
+  - Restricted comment resolution (`resolve` action) to users with project access or system administrators (HTTP 403 Forbidden).
+  - Protected payload decoding against malformed JSON bodies (`JsonException` -> HTTP 400 Bad Request).
+- **Core Resource JSON Safety (`ProjectController`, `CollectionController`, `FieldController`, `ContentController`, `WebhookController`, `ColumnSettingController`, `MediaFolderController`)**:
+  - Wrapped request body parsing in try/catch `JsonException` returning clean HTTP 400 Bad Request errors instead of uncaught 500 server errors on malformed payloads.
+- **Unauthenticated Insights Protection (`InsightsController::summary`)**:
+  - Added explicit user authentication check on `/api/insights/summary`, returning HTTP 401 instead of a fatal PHP `TypeError`.
+
+---
+
 ## [1.26.36] — 2026-11-03
 
 ### Fixed

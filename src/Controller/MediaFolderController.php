@@ -59,7 +59,11 @@ class MediaFolderController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         $name = trim($data['name'] ?? '');
         if ($name === '') {
             return $this->json(['error' => 'Name is required'], 422);
@@ -112,7 +116,11 @@ class MediaFolderController extends AbstractController
             return $this->json(['error' => 'Folder not found'], 404);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         if (!empty($data['name'])) {
             $folder->name = trim($data['name']);
             $folder->slug = (new AsciiSlugger())->slug($folder->name)->lower()->toString();
@@ -136,7 +144,11 @@ class MediaFolderController extends AbstractController
             return $this->json(['error' => 'Folder not found'], 404);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         if (!array_key_exists('parent_id', $data)) {
             return $this->json(['error' => 'parent_id is required'], 422);
         }

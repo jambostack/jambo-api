@@ -50,7 +50,11 @@ class ProjectController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(Request $request): JsonResponse
     {
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         if (empty($data['name'])) {
             return $this->json(['error' => 'name is required'], 422);
@@ -101,7 +105,11 @@ class ProjectController extends AbstractController
             return $project;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         if (isset($data['name'])) {
             if (trim((string) $data['name']) === '') {
@@ -241,7 +249,11 @@ class ProjectController extends AbstractController
             return $source;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         $cloneName = $data['name'] ?? ($source->name . ' (Copy)');
         if (trim($cloneName) === '') {
@@ -337,7 +349,11 @@ class ProjectController extends AbstractController
             }
         }
 
-        $data   = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         $roleId = $data['role_id'] ?? null;
         $role   = null;
         if ($roleId !== null && $roleId !== '') {
@@ -450,7 +466,11 @@ class ProjectController extends AbstractController
             return $this->json(['error' => 'Member not found.'], 404);
         }
 
-        $data         = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         $roleId       = $data['role_id'] ?? null;
         $member->role = $roleId ? $this->roleRepository->find((int) $roleId) : null;
         $this->em->flush();

@@ -55,11 +55,21 @@ class CommentController extends AbstractController
             return $this->json(['error' => 'Unauthorized'], 401);
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+
+        $body = trim((string) ($data['body'] ?? ''));
+        if ($body === '') {
+            return $this->json(['error' => 'Comment body cannot be empty.'], 422);
+        }
+
         $comment = new Comment();
         $comment->entry = $entry;
         $comment->author = $user;
-        $comment->body = (string) ($data['body'] ?? '');
+        $comment->body = $body;
         if (!empty($data['parent_id'])) {
             $parent = $this->commentRepository->find($data['parent_id']);
             if ($parent && $parent->entry?->id === $entry->id) {
@@ -90,8 +100,19 @@ class CommentController extends AbstractController
             return $this->json(['error' => 'Forbidden.'], 403);
         }
 
-        $data = $request->toArray();
-        if (isset($data['body'])) $comment->body = (string) $data['body'];
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+
+        if (isset($data['body'])) {
+            $body = trim((string) $data['body']);
+            if ($body === '') {
+                return $this->json(['error' => 'Comment body cannot be empty.'], 422);
+            }
+            $comment->body = $body;
+        }
         $comment->updatedAt = new \DateTimeImmutable();
         $this->em->flush();
         return $this->json(['data' => $this->serializeComment($comment)]);
@@ -128,7 +149,17 @@ class CommentController extends AbstractController
             return $this->json(['error' => 'Unauthorized'], 401);
         }
 
-        $data = $request->toArray();
+        $project = $comment->entry?->project;
+        $isSuperAdmin = in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true);
+        if (!$isSuperAdmin && ($project === null || !$project->hasMember($user))) {
+            return $this->json(['error' => 'Forbidden.'], 403);
+        }
+
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         $status = $data['status'] ?? '';
         if (in_array($status, ['open', 'resolved'], true)) {
             $comment->status = $status;

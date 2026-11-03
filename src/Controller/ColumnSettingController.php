@@ -57,7 +57,11 @@ class ColumnSettingController extends AbstractController
         }
         [$project, $collection] = $resolved;
 
-        $data    = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         $columns = $data['visible_columns'] ?? [];
 
         $setting = $this->columnSettingRepository->findOneByUserAndCollection($user, $collection);

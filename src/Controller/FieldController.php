@@ -53,9 +53,15 @@ class FieldController extends AbstractController
         }
 
         try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+
+        try {
             // Logique centralisée dans SchemaProvisioner (conventions, validation,
             // normalisation des options relation).
-            $field = $this->provisioner->addField($collection, $request->toArray());
+            $field = $this->provisioner->addField($collection, $data);
         } catch (SchemaException $e) {
             return $this->json(['error' => $e->getMessage()], $e->statusCode());
         }
@@ -83,7 +89,13 @@ class FieldController extends AbstractController
         }
 
         try {
-            $this->provisioner->updateField($field, $request->toArray());
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+
+        try {
+            $this->provisioner->updateField($field, $data);
         } catch (SchemaException $e) {
             return $this->json(['error' => $e->getMessage()], $e->statusCode());
         }
@@ -99,7 +111,13 @@ class FieldController extends AbstractController
             return $collection;
         }
 
-        foreach ($request->toArray()['fields'] ?? [] as $item) {
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+
+        foreach ($data['fields'] ?? [] as $item) {
             $field = $this->fieldRepository->findOneBy(['id' => (int) $item['id'], 'collection' => $collection]);
             if ($field) {
                 $field->order = (int) $item['order'];

@@ -48,8 +48,14 @@ class CollectionController extends AbstractController
         }
 
         try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+
+        try {
             // Logique centralisée dans SchemaProvisioner (conventions + validation).
-            $collection = $this->provisioner->createCollection($project, $request->toArray());
+            $collection = $this->provisioner->createCollection($project, $data);
         } catch (SchemaException $e) {
             return $this->json(['error' => $e->getMessage()], $e->statusCode());
         }
@@ -65,7 +71,13 @@ class CollectionController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
-        foreach ($request->toArray()['collections'] ?? [] as $item) {
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+
+        foreach ($data['collections'] ?? [] as $item) {
             $collection = $this->collectionRepository->findOneBy([
                 'id'      => (int) $item['id'],
                 'project' => $project,
@@ -99,7 +111,11 @@ class CollectionController extends AbstractController
             return $collection;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         if (isset($data['name'])) {
             $collection->name = NamingConvention::toPascalCase($data['name']);

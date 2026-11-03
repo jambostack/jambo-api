@@ -103,7 +103,11 @@ class ContentController extends AbstractController
         }
 
         $project = $collection->project;
-        $data    = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         $user    = $this->getUser();
 
         // Validate status against workflow
@@ -231,7 +235,11 @@ class ContentController extends AbstractController
             return $entry;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         // Validate status against workflow
         $statuses = $entry->collection->getWorkflowStatuses();

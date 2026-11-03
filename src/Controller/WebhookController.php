@@ -52,7 +52,11 @@ class WebhookController extends AbstractController
             return $project;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         if (empty($data['name']) || empty($data['url'])) {
             return $this->json(['error' => 'name and url are required'], 422);
@@ -105,7 +109,11 @@ class WebhookController extends AbstractController
             return $webhook;
         }
 
-        $data = $request->toArray();
+        try {
+            $data = $request->toArray();
+        } catch (\JsonException) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         if (isset($data['name'])) {
             $webhook->name = $data['name'];
