@@ -7,6 +7,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.39] — 2026-11-03
+
+### Fixed & Hardened
+- **Versioning Safety & Diff Status (`VersioningController`)**:
+  - Protected `VersioningController::findEntry` against DBAL/UUID conversion crashes on malformed UUID strings, safely returning HTTP 404 instead of uncaught 500 errors.
+  - Aligned `diff` endpoint with HTTP semantics: returns HTTP 404 with error payload when requested version numbers do not exist.
+- **Collection & Project Template Validation (`CollectionTemplateController` & `ProjectTemplateController`)**:
+  - Enforced strict authentication (`401`) on `CollectionTemplateController::create`.
+  - Added field definition validation preventing undefined array key notices when template fields lack names or slugs.
+  - Sanitized project name application in `ProjectTemplateController::apply` to ensure empty string inputs fallback to the template default.
+- **Admin Form Management Hardening (`Admin/FormController`)**:
+  - Enforced mandatory non-empty form names (HTTP 422).
+  - Auto-generated slugs from form names when omitted and enforced slug uniqueness per project with automatic deduplication.
+  - Prevented empty name/slug updates and rejected duplicate slugs on form modification (HTTP 422).
+- **Settings App JSON Safety (`Admin/AppSettingsController`)**:
+  - Wrapped request body parsing in `try / catch (\JsonException)` and reused decoded JSON body for both app name and AI provider configurations.
+
+---
+
 ## [1.26.38] — 2026-11-03
 
 ### Fixed & Hardened

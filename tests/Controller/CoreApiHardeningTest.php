@@ -1086,4 +1086,77 @@ class CoreApiHardeningTest extends WebTestCase
         $client->request('GET', "/cdn/media/{$mediaUuid}");
         $this->assertNotSame(403, $client->getResponse()->getStatusCode());
     }
+
+    public function testVersioningMalformedUuidAndDiff404(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-version-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // Malformed UUID string in versioning should return 404, not 500
+        $client->request('GET', "/api/projects/{$this->projectUuid}/collections/articles/entries/not-a-uuid/versions");
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        $client->request('GET', "/api/projects/{$this->projectUuid}/collections/articles/entries/not-a-uuid/versions/diff?v1=1&v2=2");
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+    }
+
+    public function testCollectionTemplateAuthRequirement(): void
+    {
+        $client = static::createClient();
+
+        // Anonymous creation must be rejected (401)
+        $client->request('POST', '/api/collection-templates', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Public Template Attempt',
+        ]));
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+    }
+
+    public function testAdminFormValidationAndUniqueSlug(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-form-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // 1. Missing name -> 422
+        $client->request('POST', "/admin-api/{$this->projectUuid}/forms", [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => '',
+            'fields' => [],
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+
+        // 2. Valid name with omitted slug -> auto-slug and 201
+        $client->request('POST', "/admin-api/{$this->projectUuid}/forms", [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Contact Us',
+            'fields' => [],
+        ]));
+        $this->assertSame(201, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('contact-us', $data['slug']);
+
+        // 3. Second form with same name -> slug deduplication
+        $client->request('POST', "/admin-api/{$this->projectUuid}/forms", [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Contact Us',
+            'fields' => [],
+        ]));
+        $this->assertSame(201, $client->getResponse()->getStatusCode());
+        $data2 = json_decode($client->getResponse()->getContent(), true);
+        $this->assertNotSame($data['slug'], $data2['slug']);
+    }
 }

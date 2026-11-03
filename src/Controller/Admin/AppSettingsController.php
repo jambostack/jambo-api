@@ -167,10 +167,15 @@ class AppSettingsController extends AbstractController
         $changed  = false;
 
         // Handle JSON fields
+        $jsonData = null;
         if ($request->getContentTypeFormat() === 'json') {
-            $data = $request->toArray();
-            if (isset($data['appName']) && trim($data['appName']) !== '') {
-                $name = trim($data['appName']);
+            try {
+                $jsonData = $request->toArray();
+            } catch (\JsonException) {
+                return $this->json(['error' => 'Invalid JSON body'], 400);
+            }
+            if (isset($jsonData['appName']) && trim($jsonData['appName']) !== '') {
+                $name = trim($jsonData['appName']);
                 if (mb_strlen($name) > 100) {
                     return $this->json(['errors' => ['appName' => 'App name must not exceed 100 characters']], 422);
                 }
@@ -216,8 +221,8 @@ class AppSettingsController extends AbstractController
         }
 
         // AI providers (JSON body with key "aiProviders")
-        if ($request->getContentTypeFormat() === 'json') {
-            $data = $request->toArray();
+        if ($jsonData !== null) {
+            $data = $jsonData;
             if (array_key_exists('aiProviders', $data) && is_array($data['aiProviders'])) {
                 $current  = $settings->aiProviders ?? [];
                 $incoming = $data['aiProviders'];

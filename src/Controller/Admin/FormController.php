@@ -80,10 +80,28 @@ class FormController extends AbstractController
             return $this->json(['error' => 'Invalid field definition.', 'field_errors' => $validation['errors']], 422);
         }
 
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name === '') {
+            return $this->json(['error' => 'Form name is required.'], 422);
+        }
+
+        $slug = trim((string) ($data['slug'] ?? ''));
+        if ($slug === '') {
+            $slug = strtolower(trim((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $name), '-'));
+            if ($slug === '') {
+                $slug = 'form-' . bin2hex(random_bytes(3));
+            }
+        }
+
+        $existing = $this->formRepo->findOneBy(['project' => $project, 'slug' => $slug]);
+        if ($existing !== null) {
+            $slug .= '-' . bin2hex(random_bytes(2));
+        }
+
         $form = new Form();
         $form->project = $project;
-        $form->name = $data['name'] ?? '';
-        $form->slug = $data['slug'] ?? '';
+        $form->name = $name;
+        $form->slug = $slug;
         $form->fields = $fields;
         $form->steps = $data['steps'] ?? null;
         $form->settings = $data['settings'] ?? [];
@@ -126,10 +144,22 @@ class FormController extends AbstractController
         }
 
         if (array_key_exists('name', $data)) {
-            $form->name = $data['name'];
+            $newName = trim((string) $data['name']);
+            if ($newName === '') {
+                return $this->json(['error' => 'Form name cannot be empty.'], 422);
+            }
+            $form->name = $newName;
         }
         if (array_key_exists('slug', $data)) {
-            $form->slug = $data['slug'];
+            $newSlug = trim((string) $data['slug']);
+            if ($newSlug === '') {
+                return $this->json(['error' => 'Form slug cannot be empty.'], 422);
+            }
+            $existing = $this->formRepo->findOneBy(['project' => $form->project, 'slug' => $newSlug]);
+            if ($existing !== null && $existing->id !== $form->id) {
+                return $this->json(['error' => 'A form with this slug already exists in this project.'], 422);
+            }
+            $form->slug = $newSlug;
         }
         if (array_key_exists('fields', $data)) {
             $validation = $this->formBuilder->validateDefinition($data['fields']);

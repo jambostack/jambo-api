@@ -100,7 +100,8 @@ class ProjectTemplateController extends AbstractController
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
-        $project = $this->builder->applyTemplate($template, $data['name'] ?? $template->name, $this->getUser());
+        $projectName = trim((string) ($data['name'] ?? '')) ?: $template->name;
+        $project = $this->builder->applyTemplate($template, $projectName, $this->getUser());
 
         return $this->json([
             'uuid' => $project->uuid?->toString(),

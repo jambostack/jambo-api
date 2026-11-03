@@ -73,21 +73,30 @@ class VersioningController extends AbstractController
         $v1 = (int) $request->query->get('v1', 1);
         $v2 = (int) $request->query->get('v2', $this->versionRepo->getNextVersionNumber($entry) - 1);
 
-        return $this->json($this->versioning->diff($entry, $v1, $v2));
+        $diff = $this->versioning->diff($entry, $v1, $v2);
+        if (isset($diff['error'])) {
+            return $this->json($diff, 404);
+        }
+
+        return $this->json($diff);
     }
 
     private function findEntry(string $projectUuid, string $collectionSlug, string $uuid): ?ContentEntry
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
-        if (!$project) return null;
+        try {
+            $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+            if (!$project) return null;
 
-        $collection = $this->em->getRepository(Collection::class)->findOneBy([
-            'project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null,
-        ]);
-        if (!$collection) return null;
+            $collection = $this->em->getRepository(Collection::class)->findOneBy([
+                'project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null,
+            ]);
+            if (!$collection) return null;
 
-        return $this->em->getRepository(ContentEntry::class)->findOneBy([
-            'collection' => $collection, 'uuid' => $uuid, 'deletedAt' => null,
-        ]);
+            return $this->em->getRepository(ContentEntry::class)->findOneBy([
+                'collection' => $collection, 'uuid' => $uuid, 'deletedAt' => null,
+            ]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

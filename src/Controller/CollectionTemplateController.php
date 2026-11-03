@@ -47,29 +47,40 @@ class CollectionTemplateController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(Request $request): JsonResponse
     {
+        if (!$this->getUser()) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\JsonException) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
-        if (empty($data['name'])) {
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name === '') {
             return $this->json(['error' => 'name is required'], 422);
         }
 
         $template = new CollectionTemplate();
-        $template->name        = $data['name'];
+        $template->name        = $name;
         $template->description = $data['description'] ?? null;
-        $template->isSingleton = $data['is_singleton'] ?? false;
+        $template->isSingleton = (bool) ($data['is_singleton'] ?? false);
 
         foreach ($data['fields'] ?? [] as $i => $f) {
+            $fieldName = trim((string) ($f['name'] ?? ''));
+            $fieldSlug = trim((string) ($f['slug'] ?? ''));
+            if ($fieldName === '' || $fieldSlug === '') {
+                continue;
+            }
+
             $field = new CollectionTemplateField();
-            $field->name        = $f['name'];
-            $field->slug        = $f['slug'];
+            $field->name        = $fieldName;
+            $field->slug        = $fieldSlug;
             $field->type        = $f['type'] ?? 'text';
             $field->options     = $f['options'] ?? null;
-            $field->order       = $f['order'] ?? $i;
-            $field->isRequired  = $f['is_required'] ?? false;
+            $field->order       = (int) ($f['order'] ?? $i);
+            $field->isRequired  = (bool) ($f['is_required'] ?? false);
             $field->collectionTemplate = $template;
             $this->em->persist($field);
         }
