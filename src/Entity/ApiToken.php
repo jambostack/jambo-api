@@ -53,6 +53,9 @@ class ApiToken
 
     public function can(string $ability): bool
     {
+        if (in_array('*', $this->abilities, true)) {
+            return true;
+        }
         return in_array($ability, $this->abilities, true);
     }
 

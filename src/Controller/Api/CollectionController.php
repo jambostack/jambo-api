@@ -42,6 +42,9 @@ class CollectionController extends AbstractController
         if ($token === null) {
             return $this->json(['error' => 'Unauthorized.'], 401);
         }
+        if (!$this->tokenChecker->isAllowedForMethod($token, $request->getMethod())) {
+            return $this->json(['error' => 'Insufficient token abilities.'], 403);
+        }
 
         $page    = max(1, $request->query->getInt('page', 1));
         $perPage = min(200, max(1, $request->query->getInt('per_page', 50)));
@@ -90,6 +93,9 @@ class CollectionController extends AbstractController
         $token = $this->tokenChecker->resolve($request);
         if ($token === null) {
             return $this->json(['error' => 'Unauthorized.'], 401);
+        }
+        if (!$this->tokenChecker->isAllowedForMethod($token, $request->getMethod())) {
+            return $this->json(['error' => 'Insufficient token abilities.'], 403);
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($token->project, $slug);

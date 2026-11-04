@@ -260,7 +260,10 @@ class AssetController extends AbstractController
             return $this->memberRepo->findActiveByUserAndProject($user, $project) !== null;
         }
         $token = $this->tokenChecker->resolve($request);
-        return $token !== null && $token->project?->id === $project->id;
+        if ($token !== null && $token->project?->id === $project->id) {
+            return $this->tokenChecker->isAllowedForMethod($token, $request->getMethod());
+        }
+        return false;
     }
 
     private function corsResponse(JsonResponse|Response $response): Response

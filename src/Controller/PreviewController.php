@@ -8,6 +8,7 @@ use App\Repository\ContentEntryRepository;
 use App\Repository\ProjectRepository;
 use App\Service\EavDataFormatterService;
 use App\Service\PreviewTokenService;
+use App\Service\Security\SsrfProtectionService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -18,7 +19,8 @@ use Symfony\Component\Routing\Attribute\Route;
  * Endpoints pour le systeme de Live Preview.
  *
  * /token/{entryUuid}   — genere un JWT de preview (appele par l'admin)
- * /content/{col}/{eid}  — retourne l'entree (meme brouillon) via JWT preview
+ * /validate-url        — valide strictement l'URL cible de preview (anti-SSRF)
+ * /content/{col}/{eid} — retourne l'entree (meme brouillon) via JWT preview
  */
 #[Route('/api/projects/{projectUuid}/preview', name: 'api_preview_')]
 class PreviewController extends AbstractController
@@ -28,6 +30,7 @@ class PreviewController extends AbstractController
         private readonly ContentEntryRepository $entryRepository,
         private readonly PreviewTokenService $tokenService,
         private readonly EavDataFormatterService $formatter,
+        private readonly SsrfProtectionService $ssrfProtection,
         private readonly ?RateLimiterFactory $previewLimiter = null,
     ) {}
 
@@ -41,7 +44,7 @@ class PreviewController extends AbstractController
         if ($this->previewLimiter !== null) {
             $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->json(['error' => 'Too many preview requests. Try again later.'], 429);
+                return new JsonResponse(['error' => 'Too many preview requests. Try again later.'], 429);
             }
         }
 
@@ -71,12 +74,120 @@ class PreviewController extends AbstractController
             return $this->json(['error' => 'Entry not found'], 404);
         }
 
-        $token = $this->tokenService->createToken($entry);
+        // Validation du TTL (entre 60s et 86400s)
+        $ttl = PreviewTokenService::DEFAULT_TTL;
+        if ($request->query->has('ttl')) {
+            $rawTtl = $request->query->get('ttl');
+            if (!is_numeric($rawTtl)) {
+                return $this->json(['error' => 'Invalid preview token TTL: must be an integer.'], 422);
+            }
+            $ttl = (int) $rawTtl;
+            if ($ttl < PreviewTokenService::MIN_TTL || $ttl > PreviewTokenService::MAX_TTL) {
+                return $this->json(['error' => sprintf(
+                    'Invalid preview token TTL: must be between %d and %d seconds.',
+                    PreviewTokenService::MIN_TTL,
+                    PreviewTokenService::MAX_TTL
+                )], 422);
+            }
+        }
+
+        // Validation stricte de l'URL cible si fournie
+        $targetUrl = $request->query->get('target_url') ?? $request->query->get('preview_url');
+        if ($targetUrl !== null && trim((string) $targetUrl) !== '') {
+            $validationError = $this->validatePreviewTargetUrl((string) $targetUrl);
+            if ($validationError !== null) {
+                return $this->json(['error' => $validationError], 422);
+            }
+        }
+
+        $token = $this->tokenService->createToken($entry, $ttl);
 
         return $this->json([
             'token'      => $token,
-            'expires_in' => 3600,
+            'expires_in' => $ttl,
         ]);
+    }
+
+    /**
+     * Valide une URL cible de preview (schémas http/https uniquement, anti-SSRF).
+     */
+    #[Route('/validate-url', name: 'validate_url', methods: ['GET', 'POST'])]
+    public function validateUrl(string $projectUuid, Request $request): JsonResponse
+    {
+        if ($this->previewLimiter !== null) {
+            $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many preview requests. Try again later.'], 429);
+            }
+        }
+
+        $url = $request->query->get('url') ?? $request->query->get('target_url') ?? $request->query->get('preview_url');
+        if ($url === null && $request->isMethod('POST')) {
+            try {
+                $body = $request->toArray();
+                $url = $body['url'] ?? $body['target_url'] ?? $body['preview_url'] ?? null;
+            } catch (\Throwable) {
+                // Ignore parsing errors
+            }
+        }
+
+        if ($url === null || trim((string) $url) === '') {
+            return new JsonResponse(['error' => 'URL is required.'], 422);
+        }
+
+        $error = $this->validatePreviewTargetUrl((string) $url);
+        if ($error !== null) {
+            return new JsonResponse(['valid' => false, 'error' => $error], 422);
+        }
+
+        return new JsonResponse(['valid' => true, 'url' => (string) $url]);
+    }
+
+    /**
+     * Valide strictement une URL cible de prévisualisation :
+     * format, longueur, contrôle anti-CRLF, schéma http/https, interdiction credentials, anti-SSRF.
+     */
+    public function validatePreviewTargetUrl(string $url): ?string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return 'Invalid preview target URL: URL cannot be empty.';
+        }
+        if (strlen($url) > 2048) {
+            return 'Invalid preview target URL: exceeds 2048 characters.';
+        }
+        if (preg_match('/[\r\n\x00-\x1F\x7F]/', $url)) {
+            return 'Invalid preview target URL: control characters detected.';
+        }
+
+        $parts = parse_url($url);
+        if (!is_array($parts) || empty($parts['scheme'])) {
+            return 'Invalid preview target URL: malformed URL.';
+        }
+
+        $scheme = strtolower((string) $parts['scheme']);
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return 'Invalid preview target URL: only http and https allowed.';
+        }
+
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            return 'Invalid preview target URL: malformed URL.';
+        }
+
+        if (isset($parts['user']) || isset($parts['pass'])) {
+            return 'Invalid preview target URL: credentials in URL are strictly forbidden.';
+        }
+        $host = strtolower(trim($parts['host'] ?? '', " \t\n\r\0\x0B[]"));
+        if ($host === '') {
+            return 'Invalid preview target URL: missing host in URL.';
+        }
+
+        $reason = null;
+        if (!$this->ssrfProtection->isSafeHost($host, $reason)) {
+            return 'Invalid preview target URL: target must not point to private or reserved addresses.';
+        }
+
+        return null;
     }
 
     /**
@@ -89,7 +200,7 @@ class PreviewController extends AbstractController
         if ($this->previewLimiter !== null) {
             $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->json(['error' => 'Too many preview requests. Try again later.'], 429);
+                return new JsonResponse(['error' => 'Too many preview requests. Try again later.'], 429);
             }
         }
 

@@ -25,8 +25,10 @@ class PreviewTokenService
 {
     private Configuration $config;
 
-    /** TTL du token de preview : 1 heure */
-    private const TTL = 3600;
+    /** TTL par défaut du token de preview : 1 heure */
+    public const DEFAULT_TTL = 3600;
+    public const MIN_TTL = 60;
+    public const MAX_TTL = 86400; // 24 heures
 
     private static ?DateInterval $leeway = null;
 
@@ -41,10 +43,18 @@ class PreviewTokenService
     }
 
     /**
-     * Genere un token de preview pour une entree.
+     * Genere un token de preview pour une entree avec validation du TTL.
      */
-    public function createToken(ContentEntry $entry): string
+    public function createToken(ContentEntry $entry, int $ttl = self::DEFAULT_TTL): string
     {
+        if ($ttl < self::MIN_TTL || $ttl > self::MAX_TTL) {
+            throw new \InvalidArgumentException(sprintf(
+                'Preview token TTL must be between %d and %d seconds.',
+                self::MIN_TTL,
+                self::MAX_TTL
+            ));
+        }
+
         if ($entry->uuid === null) {
             throw new \RuntimeException('Cannot generate preview token: ContentEntry has no UUID.');
         }
@@ -60,7 +70,7 @@ class PreviewTokenService
         return $this->config->builder()
             ->issuedAt($now)
             ->canOnlyBeUsedAfter($now)
-            ->expiresAt($now->modify('+' . self::TTL . ' seconds'))
+            ->expiresAt($now->modify('+' . $ttl . ' seconds'))
             ->relatedTo('preview')
             ->withClaim('pid', $entry->project->uuid->toRfc4122())
             ->withClaim('eid', $entry->uuid->toRfc4122())
@@ -95,6 +105,16 @@ class PreviewTokenService
 
             if ($parsedToken->claims()->get('sub') !== 'preview') {
                 return null;
+            }
+
+            // Validation du TTL : exp - iat doit être entre MIN_TTL et MAX_TTL
+            $iat = $parsedToken->claims()->get('iat');
+            $exp = $parsedToken->claims()->get('exp');
+            if ($iat instanceof \DateTimeInterface && $exp instanceof \DateTimeInterface) {
+                $duration = $exp->getTimestamp() - $iat->getTimestamp();
+                if ($duration < self::MIN_TTL || $duration > self::MAX_TTL) {
+                    return null;
+                }
             }
 
             return $claims;

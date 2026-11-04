@@ -47,6 +47,9 @@ class ProjectController extends AbstractController
         if ($token === null) {
             return $this->json(['error' => 'Unauthorized. Provide a valid Bearer token.'], 401);
         }
+        if (!$this->tokenChecker->isAllowedForMethod($token, $request->getMethod())) {
+            return $this->json(['error' => 'Insufficient token abilities.'], 403);
+        }
 
         $project = $token->project;
         $collections = $this->collectionRepository->findByProject($project);

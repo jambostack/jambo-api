@@ -91,7 +91,7 @@ class ProjectOpenApiController extends AbstractController
         }
 
         $token = $this->tokenChecker->resolve($request);
-        return $token !== null && $token->project?->id === $project->id;
+        return $token !== null && $token->project?->id === $project->id && $this->tokenChecker->isAllowedForMethod($token, $request->getMethod());
     }
 
     private function corsResponse(Response $response): Response

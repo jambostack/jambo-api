@@ -29,4 +29,24 @@ class ShareRepository extends ServiceEntityRepository
             ->orderBy('s.createdAt', 'DESC')
             ->getQuery()->getResult();
     }
+
+    public function countExpired(): int
+    {
+        return (int) $this->createQueryBuilder('s')
+            ->select('COUNT(s.id)')
+            ->where('(s.expiresAt IS NOT NULL AND s.expiresAt < :now) OR s.revokedAt IS NOT NULL')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    public function purgeExpired(): int
+    {
+        return $this->createQueryBuilder('s')
+            ->delete()
+            ->where('(s.expiresAt IS NOT NULL AND s.expiresAt < :now) OR s.revokedAt IS NOT NULL')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->execute();
+    }
 }

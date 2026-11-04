@@ -39,6 +39,12 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
             $projectUuid = $request->attributes->get('uuid') ?? $request->attributes->get('project');
         }
 
+        if ($projectUuid instanceof \App\Entity\Project) {
+            $projectUuid = $projectUuid->uuid?->toString();
+        } elseif (is_object($projectUuid) && method_exists($projectUuid, '__toString')) {
+            $projectUuid = (string) $projectUuid;
+        }
+
         if ($projectUuid === null || $request->isMethod('OPTIONS')) {
             return;
         }
@@ -53,21 +59,16 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
         }
 
         $token = $this->tokenStorage->getToken();
-        if ($token === null) {
-            // Pas de session : seules les routes admin (/api/projects/*) sont
-            // concernées — un anonyme n'y a jamais accès. Les jetons API (CRM)
-            // passent avec une capacité adaptée à la méthode HTTP. Les routes
-            // publiques à attribut projectUuid (/api/{uuid}/email, /captcha)
-            // restent hors du périmètre.
+        $user  = $token?->getUser();
+
+        if (!$user instanceof User) {
+            // Pas de session utilisateur admin : seules les routes admin (/api/projects/*)
+            // sont concernées pour l'authentification par jeton API (CRM).
+            // Les routes publiques restent hors du périmètre.
             if (!str_starts_with($request->getPathInfo(), '/api/projects/')) {
                 return;
             }
             $this->handleUnauthenticated($event, $request, (string) $projectUuid);
-            return;
-        }
-
-        $user = $token->getUser();
-        if (!$user instanceof User) {
             return;
         }
 
@@ -110,16 +111,8 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
             return;
         }
 
-        // Capacité requise selon la méthode HTTP ; 'write' (héritage) couvre tout.
-        $required = match ($request->getMethod()) {
-            'GET', 'HEAD'  => 'read',
-            'POST'         => 'create',
-            'PUT', 'PATCH' => 'update',
-            'DELETE'       => 'delete',
-            default        => null,
-        };
-
-        if ($required === null || (!$apiToken->can($required) && !$apiToken->can('write'))) {
+        // Cloisonnement strict des portées selon la méthode HTTP via ApiTokenChecker
+        if (!$this->tokenChecker->isAllowedForMethod($apiToken, $request->getMethod())) {
             $event->setResponse(new JsonResponse(['error' => 'Insufficient token abilities.'], 403));
             return;
         }

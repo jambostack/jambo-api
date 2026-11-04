@@ -10,6 +10,7 @@ use App\Service\Share\ShareService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
@@ -21,11 +22,19 @@ class ShareController extends AbstractController
         private readonly ContentEntryRepository $entryRepository,
         private readonly ShareRepository $shareRepository,
         private readonly ShareService $shareService,
+        private readonly ?RateLimiterFactory $shareLimiter = null,
     ) {}
 
     #[Route('', name: 'store', methods: ['POST'])]
     public function store(string $projectUuid, Request $request): JsonResponse
     {
+        if ($this->shareLimiter !== null) {
+            $limiter = $this->shareLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many share requests. Try again later.'], 429);
+            }
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
@@ -72,6 +81,13 @@ class ShareController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, Request $request): JsonResponse
     {
+        if ($this->shareLimiter !== null) {
+            $limiter = $this->shareLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many share requests. Try again later.'], 429);
+            }
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
@@ -102,12 +118,21 @@ class ShareController extends AbstractController
             'viewCount'      => $s->viewCount,
             'createdAt'      => $s->createdAt->format('c'),
             'isValid'        => $s->isValid(),
+            'isExpired'      => $s->isExpired(),
+            'isRevoked'      => $s->isRevoked(),
         ], $shares)]);
     }
 
     #[Route('/{id}', name: 'destroy', methods: ['DELETE'], requirements: ['id' => '\d+'])]
     public function destroy(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($this->shareLimiter !== null) {
+            $limiter = $this->shareLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many share requests. Try again later.'], 429);
+            }
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);

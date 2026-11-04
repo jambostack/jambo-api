@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.71] — 2026-11-04
+
+### Security & Hardening
+- **Strict API Token Scope Partitioning (`ApiTokenChecker`, `EnsureProjectMemberSubscriber`, `ProjectAwareControllerTrait`)**:
+  - Implemented strict HTTP method and capability partitioning (`isAllowedForMethod`) in `ApiTokenChecker` (GET/HEAD requires `read`, POST requires `create`, PUT/PATCH requires `update`, DELETE requires `delete`).
+  - Read-only tokens (`abilities = ['read']`) are strictly blocked from write/mutation actions across all project UUID routes.
+  - Hardened unauthenticated fallback in `EnsureProjectMemberSubscriber` against missing or unauthenticated user sessions.
+  - Added wildcard scope (`*`) support to `ApiToken::can()`.
+- **Live Preview Target URL & TTL Defense (`PreviewController`, `PreviewTokenService`)**:
+  - Enforced strict bounds on preview token TTL (60s <= TTL <= 86400s) during generation and validation.
+  - Added strict anti-SSRF validation (`validatePreviewTargetUrl`) in `PreviewController`: verified valid HTTP/HTTPS schemes, banned credentials, neutralized CRLF characters, and validated hosts against private/reserved IPs via `SsrfProtectionService`.
+  - Added `#[Route('/validate-url')]` endpoint for frontend live preview target verification.
+  - Added preview settings validation (`preview_url`, `preview_mode`, `preview_enabled`) to `ProjectController::update`.
+- **Share Expiration, Multi-Tenant Defense & Rate Limiting (`ShareController`, `PublicShareController`, `ShareRepository`)**:
+  - Enforced rate limiting (`share_limiter`) across `ShareController::store`, `index`, and `destroy`.
+  - Enforced strict multi-tenant cross-check between shared entry and share entity in `PublicShareController::show`.
+  - Added `countExpired()` and `purgeExpired()` in `ShareRepository` and integrated public shares into `PurgeExpiredTokensCommand`.
+- **Automated Test Suite**:
+  - Added comprehensive unit and integration suite `Cycle24HardeningTest.php` (10 tests, 68 assertions).
+  - Maintained 100% pass rate across the full test suite (901 tests, 2871 assertions).
+
 ## [1.26.70] — 2026-11-04
 
 ### Security & Hardening

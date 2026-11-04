@@ -39,22 +39,13 @@ trait ProjectAwareControllerTrait
         }
 
         // ApiToken auth (CRM apps)
-        // La capacité requise dépend de la méthode HTTP (read/create/update/delete).
-        // 'write' (héritage) couvre toutes les actions, y compris la lecture,
-        // pour ne pas casser les jetons existants.
+        // Cloisonnement strict des portées selon la méthode HTTP via ApiTokenChecker
         $token = $this->tokenChecker->resolve($request);
         if ($token !== null && $token->project->uuid?->toString() === $uuid) {
-            if ($requireManage && !$token->can('manage')) {
+            if ($requireManage && !$token->can('manage') && !$token->can('*')) {
                 return $this->json(['error' => 'You do not have permission to manage end-user fields.'], 403);
             }
-            $required = match ($request->getMethod()) {
-                'GET', 'HEAD'  => 'read',
-                'POST'         => 'create',
-                'PUT', 'PATCH' => 'update',
-                'DELETE'       => 'delete',
-                default        => null,
-            };
-            if ($required !== null && ($token->can($required) || $token->can('write'))) {
+            if ($this->tokenChecker->isAllowedForMethod($token, $request->getMethod())) {
                 return $project;
             }
         }

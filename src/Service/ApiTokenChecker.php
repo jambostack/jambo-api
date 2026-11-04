@@ -51,4 +51,52 @@ class ApiTokenChecker
 
         return $token;
     }
+
+    /**
+     * Checks whether an ApiToken is permitted to perform the requested HTTP method or ability.
+     * Enforces strict read vs write/mutation partitioning:
+     * - 'read' is allowed for GET and HEAD requests.
+     * - 'create' or 'write' is allowed for POST requests.
+     * - 'update' or 'write' is allowed for PUT and PATCH requests.
+     * - 'delete' or 'write' is allowed for DELETE requests.
+     * - Read-only tokens (abilities=['read']) are strictly forbidden from mutation operations.
+     */
+    public function isAllowedForMethod(ApiToken $token, string $method): bool
+    {
+        $m = strtoupper(trim($method));
+        $required = match ($m) {
+            'GET', 'HEAD'  => 'read',
+            'POST'         => 'create',
+            'PUT', 'PATCH' => 'update',
+            'DELETE'       => 'delete',
+            default        => null,
+        };
+
+        if ($required === null) {
+            return false;
+        }
+
+        if ($required === 'read') {
+            return $token->can('read') || $token->can('write') || $token->can('*');
+        }
+
+        return $token->can($required) || $token->can('write') || $token->can('*');
+    }
+
+    /**
+     * Checks if a token has a specific ability, adhering to inheritance / wildcards.
+     */
+    public function canAccess(ApiToken $token, string $ability): bool
+    {
+        if ($token->can('*')) {
+            return true;
+        }
+        if ($token->can($ability)) {
+            return true;
+        }
+        if ($token->can('write') && in_array($ability, ['read', 'create', 'update', 'delete'], true)) {
+            return true;
+        }
+        return false;
+    }
 }

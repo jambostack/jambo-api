@@ -132,6 +132,31 @@ class ProjectController extends AbstractController
         if (isset($data['public_api'])) {
             $project->publicApi = (bool) $data['public_api'];
         }
+        if (array_key_exists('preview_url', $data) || array_key_exists('previewUrl', $data)) {
+            $pUrl = $data['preview_url'] ?? $data['previewUrl'];
+            if ($pUrl === null || $pUrl === '') {
+                $project->previewUrl = null;
+            } else {
+                $pUrl = trim((string) $pUrl);
+                if (strlen($pUrl) > 2048 || preg_match('/[\r\n\x00-\x1F\x7F]/', $pUrl) || !filter_var($pUrl, FILTER_VALIDATE_URL)) {
+                    return $this->json(['error' => 'Invalid preview_url: must be a valid URL.'], 422);
+                }
+                $pScheme = strtolower((string) parse_url($pUrl, PHP_URL_SCHEME));
+                if (!in_array($pScheme, ['http', 'https'], true)) {
+                    return $this->json(['error' => 'Invalid preview_url: only http and https allowed.'], 422);
+                }
+                $project->previewUrl = $pUrl;
+            }
+        }
+        if (array_key_exists('preview_enabled', $data) || array_key_exists('previewEnabled', $data)) {
+            $project->previewEnabled = (bool) ($data['preview_enabled'] ?? $data['previewEnabled']);
+        }
+        if (array_key_exists('preview_mode', $data) || array_key_exists('previewMode', $data)) {
+            $mode = (string) ($data['preview_mode'] ?? $data['previewMode']);
+            if (in_array($mode, ['toggle', 'side-by-side'], true)) {
+                $project->previewMode = $mode;
+            }
+        }
         if (array_key_exists('jwt_access_ttl', $data)) {
             $val = $data['jwt_access_ttl'];
             if ($val === '' || $val === null || $val === '0' || $val === 0) {

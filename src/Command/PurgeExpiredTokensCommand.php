@@ -8,6 +8,7 @@ use App\Repository\PersonalAccessTokenRepository;
 use App\Repository\ProjectAuthAuthorizationCodeRepository;
 use App\Repository\ProjectAuthRefreshTokenRepository;
 use App\Repository\ProjectAuthSessionRepository;
+use App\Repository\ShareRepository;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -25,6 +26,7 @@ class PurgeExpiredTokensCommand extends Command
         private readonly ProjectAuthRefreshTokenRepository $refreshTokenRepository,
         private readonly ProjectAuthAuthorizationCodeRepository $authCodeRepository,
         private readonly ProjectAuthSessionRepository $sessionRepository,
+        private readonly ?ShareRepository $shareRepository = null,
     ) {
         parent::__construct();
     }
@@ -62,18 +64,20 @@ class PurgeExpiredTokensCommand extends Command
             $countCodes = $this->authCodeRepository->countExpired();
             $countSessions = $this->sessionRepository->countInactive($threshold);
 
+            $tableRows = [
+                ['Password reset tokens', $countReset],
+                ['Personal access tokens (PAT)', $countPat],
+                ['Project API tokens', $countApi],
+                ['OAuth refresh tokens (expired or revoked)', $countRefresh],
+                ['OAuth authorization codes (expired or used)', $countCodes],
+                ["Inactive sessions (> {$sessionDays}d)", $countSessions],
+            ];
+            if ($this->shareRepository !== null) {
+                $tableRows[] = ['Public shares (expired or revoked)', $this->shareRepository->countExpired()];
+            }
+
             $io->note('DRY-RUN MODE — Simulation only, no records were deleted.');
-            $io->table(
-                ['Record Category', 'Eligible Records'],
-                [
-                    ['Password reset tokens', $countReset],
-                    ['Personal access tokens (PAT)', $countPat],
-                    ['Project API tokens', $countApi],
-                    ['OAuth refresh tokens (expired or revoked)', $countRefresh],
-                    ['OAuth authorization codes (expired or used)', $countCodes],
-                    ["Inactive sessions (> {$sessionDays}d)", $countSessions],
-                ]
-            );
+            $io->table(['Record Category', 'Eligible Records'], $tableRows);
 
             return Command::SUCCESS;
         }
@@ -84,8 +88,9 @@ class PurgeExpiredTokensCommand extends Command
         $purgedRefresh = $this->refreshTokenRepository->deleteExpired();
         $purgedCodes = $this->authCodeRepository->deleteExpired();
         $purgedSessions = $this->sessionRepository->deleteInactive($threshold);
+        $purgedShares = $this->shareRepository !== null ? $this->shareRepository->purgeExpired() : 0;
 
-        $io->success([
+        $messages = [
             'Token and session retention cleanup completed:',
             "- Password reset tokens purged: {$purgedReset}",
             "- Personal access tokens (PAT) purged: {$purgedPat}",
@@ -93,7 +98,12 @@ class PurgeExpiredTokensCommand extends Command
             "- OAuth refresh tokens purged: {$purgedRefresh}",
             "- OAuth authorization codes purged: {$purgedCodes}",
             "- Inactive sessions (> {$sessionDays}d) purged: {$purgedSessions}",
-        ]);
+        ];
+        if ($this->shareRepository !== null) {
+            $messages[] = "- Public shares purged: {$purgedShares}";
+        }
+
+        $io->success($messages);
 
         return Command::SUCCESS;
     }

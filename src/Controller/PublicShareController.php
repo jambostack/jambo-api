@@ -46,6 +46,11 @@ class PublicShareController extends AbstractController
             return $this->renderError(404, 'invalid', $wantsJson);
         }
 
+        // Multi-tenant check: entry must match share project
+        if ($share->project === null || $entry->project?->id !== $share->project->id) {
+            return $this->renderError(404, 'invalid', $wantsJson);
+        }
+
         $this->shares->recordAccess($share);
 
         $data = $this->formatter->formatEntry($entry);
