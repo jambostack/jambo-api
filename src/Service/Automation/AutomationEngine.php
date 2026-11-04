@@ -69,8 +69,8 @@ class AutomationEngine
 
             if ($automation->debugMode) {
                 $run->actionOutput = [
-                    'stepLog' => $result->stepLog,
-                    'variables' => $ctx->variables,
+                    'stepLog' => $ctx->getSanitizedStepLog(),
+                    'variables' => $ctx->getSafeVariables(),
                 ];
             }
 

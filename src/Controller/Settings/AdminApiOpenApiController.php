@@ -4,6 +4,8 @@ namespace App\Controller\Settings;
 
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -15,10 +17,23 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 class AdminApiOpenApiController extends AbstractController
 {
+    public function __construct(
+        private readonly ?RateLimiterFactory $openapiLimiter = null,
+    ) {}
+
     #[Route('/api/settings/admin-api/openapi.json', name: 'api_settings_admin_api_openapi', methods: ['GET'])]
-    public function spec(): JsonResponse
+    public function spec(Request $request): JsonResponse
     {
-        return new JsonResponse($this->buildSpec());
+        if ($this->openapiLimiter !== null) {
+            $limiter = $this->openapiLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many requests. Please try again later.'], 429);
+            }
+        }
+
+        $response = new JsonResponse($this->buildSpec());
+        $response->headers->set('Cache-Control', 'private, max-age=60, must-revalidate');
+        return $response;
     }
 
     private function buildSpec(): array

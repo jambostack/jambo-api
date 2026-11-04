@@ -7,6 +7,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.74] — 2026-11-04
+
+### Security & Hardening
+- **OpenAPI & Introspection Hardening (`AdminApiOpenApiController`, `ProjectOpenApiController`)**:
+  - Implemented rate limiting (`openapi_limiter` at 60 req/min) on `/api/settings/admin-api/openapi.json` and `/api/{projectId}/openapi.json` to prevent dynamic specification generation DoS.
+  - Added strict sanitization of schema names in `ProjectOpenApiController::toSchemaName` stripping unsafe characters.
+  - Sanitized generated OpenAPI schemas by excluding soft-deleted fields (`isDeleted()`), sensitive internal fields (`password`, `hash`, `salt`, `secret`, `token`, `credential`, `auth_token`, `api_key`), and internal prefixes (`_internal_`, `_`, `system_`).
+  - Enforced `Cache-Control: private, max-age=60, must-revalidate` on all OpenAPI spec endpoints.
+- **Clickjacking, Cross-Origin Isolation & CORS Defense (`SecurityHeadersSubscriber`, `CorsSubscriber`)**:
+  - Hardened anti-clickjacking defense: enforced `X-Frame-Options: SAMEORIGIN` globally across all standard endpoints.
+  - Added studio-specific Content Security Policy: `frame-ancestors 'self'` on studio routes (`/projects/{id}/settings/studio`).
+  - Added iframe embed exemption on public widget and share endpoints (`/forms/embed.js`, `/share/*`, `/embed/*`) allowing legitimate framing while keeping backend interfaces secure.
+  - Enforced `Cross-Origin-Opener-Policy: same-origin-allow-popups` globally to isolate top-level browsing contexts while permitting OAuth popup flows.
+  - Added `Cross-Origin-Resource-Policy` partitioning: `cross-origin` for public APIs and assets, `same-origin` for internal administrative pages.
+  - Enhanced CORS allowed origin matching: supported apex domains for wildcard subdomains (e.g. `*.jambostack.site` matches `jambostack.site` and subdomains) and guaranteed `Access-Control-Allow-Credentials` is never granted with wildcard `*`.
+- **Webhook & Automation Strict Contextual Sandboxing (`FlowContext`, `FlowValidator`, `TemplateHandler`, `SetHandler`, `AutomationEngine`)**:
+  - Implemented strict variable validation in `FlowValidator`: capped graph variables at 50, required valid identifiers, and rejected forbidden/system keys (`_ENV`, `_SERVER`, `GLOBALS`, `APP_SECRET`, etc.).
+  - Added contextual variable isolation in `FlowContext`: sandboxed user variables with `setVariable`, preventing access or mutation of internal configurations (`_node_config`) or global server environments.
+  - Hardened `TemplateHandler`: stripped all global environment variable interpolation attempts (`_ENV.*`, `env.*`, `_SERVER.*`, `GLOBALS`, `APP_SECRET`, `DATABASE_URL`) and limited final rendered template size to 1MB.
+  - Hardened `AutomationEngine`: sanitized debug outputs (`getSanitizedStepLog()`, `getSafeVariables()`) by automatically redacting sensitive credentials (passwords, tokens, secrets, auth headers) before persistence.
+- **Automated Test Suite**:
+  - Added 18 unit tests in `tests/Controller/Cycle27HardeningTest.php` validating OpenAPI rate limits, schema masking, COOP/CORP/CSP anti-clickjacking headers, CORS subdomain matching, and Flow variable sandboxing.
+  - Full PHPUnit suite: 942 tests passing (3,042 assertions).
+
 ## [1.26.73] — 2026-11-04
 
 ### Security & Hardening

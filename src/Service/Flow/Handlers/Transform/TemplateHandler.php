@@ -10,24 +10,44 @@ class TemplateHandler implements FlowNodeHandler
 {
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
-        $config = $ctx->variables['_node_config'] ?? [];
+        $config = $ctx->getCurrentNodeConfig();
         $inputData = array_values($input)[0]->data ?? [];
-        $template = $config['template'] ?? '';
+        $template = (string) ($config['template'] ?? '');
 
-        $rendered = $this->renderTemplate($template, $inputData);
+        $safeVars = $ctx->getSafeVariables();
+        $rendered = $this->renderTemplate($template, $inputData, $safeVars);
 
         return new NodeOutput(data: ['rendered' => $rendered]);
     }
 
-    private function renderTemplate(string $template, array $data): string
+    private function renderTemplate(string $template, array $data, array $contextVars = []): string
     {
-        $result = $template;
-        foreach ($data as $key => $value) {
+        // 1. Anti-escape de variables globales d'environnement
+        $forbiddenEnvPatterns = [
+            '/\{\{\s*(?:_?ENV|_?SERVER|GLOBALS|getenv|putenv|env|server)\b[^\}]*\}\}/i',
+            '/\{\{\s*(?:APP_SECRET|DATABASE_URL|MAILER_DSN|JWT_SECRET|MERCURE_JWT_SECRET)[^\}]*\}\}/i',
+        ];
+        $result = (string) preg_replace($forbiddenEnvPatterns, '', $template);
+
+        // 2. Fusionne les variables contextuelles sûres et les données en entrée
+        $merged = array_merge($contextVars, $data);
+
+        foreach ($merged as $key => $value) {
+            if (!is_string($key) || str_starts_with($key, '_')) {
+                continue;
+            }
             if (is_scalar($value) || $value === null) {
-                $result = str_replace('{{ ' . $key . ' }}', (string) ($value ?? ''), $result);
-                $result = str_replace('{{' . $key . '}}', (string) ($value ?? ''), $result);
+                $valStr = (string) ($value ?? '');
+                $result = str_replace('{{ ' . $key . ' }}', $valStr, $result);
+                $result = str_replace('{{' . $key . '}}', $valStr, $result);
             }
         }
+
+        // Limite stricte anti-DoS sur la taille finale du rendu (1 Mo max)
+        if (strlen($result) > 1048576) {
+            $result = substr($result, 0, 1048576);
+        }
+
         return $result;
     }
 

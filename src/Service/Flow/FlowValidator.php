@@ -38,6 +38,38 @@ class FlowValidator
             return ['valid' => false, 'errors' => $errors];
         }
 
+        // 1c. Cloisonnement strict des variables de flow (prévention d'échappement global)
+        if (isset($flowGraph['variables'])) {
+            if (!is_array($flowGraph['variables'])) {
+                $errors[] = 'Le champ variables doit être un objet clé-valeur';
+                return ['valid' => false, 'errors' => $errors];
+            }
+            if (count($flowGraph['variables']) > 50) {
+                $errors[] = 'Le nombre de variables de flow ne peut excéder 50';
+                return ['valid' => false, 'errors' => $errors];
+            }
+            $forbiddenVarPatterns = [
+                '/^_/i',
+                '/^(?:_?env|_?server|globals|env|server)$/i',
+                '/(?:secret|password|token|credential|key|database|mailer|mercure|jwt|auth)/i',
+            ];
+            foreach ($flowGraph['variables'] as $varKey => $varValue) {
+                if (!is_string($varKey) || !preg_match('/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/', $varKey)) {
+                    $errors[] = sprintf("Variable '%s' invalide : doit débuter par une lettre et comporter uniquement alphanumériques et underscores (max 64 car)", (string) $varKey);
+                    continue;
+                }
+                foreach ($forbiddenVarPatterns as $pattern) {
+                    if (preg_match($pattern, $varKey)) {
+                        $errors[] = sprintf("Variable '%s' interdite : nom réservé ou sensible", $varKey);
+                        break;
+                    }
+                }
+                if (!is_scalar($varValue) && !is_array($varValue) && $varValue !== null) {
+                    $errors[] = sprintf("Variable '%s' : type de valeur invalide (seuls scalaires et tableaux autorisés)", $varKey);
+                }
+            }
+        }
+
         // 2. Types valides et intégrité des nodes
         $nodeIds = [];
         foreach ($nodes as $index => $node) {

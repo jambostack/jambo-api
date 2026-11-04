@@ -10,12 +10,12 @@ class SetHandler implements FlowNodeHandler
 {
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
-        $config = $ctx->variables['_node_config'] ?? [];
-        $key = $config['key'] ?? '';
+        $config = $ctx->getCurrentNodeConfig();
+        $key = (string) ($config['key'] ?? '');
         $value = $config['value'] ?? '';
 
         if ($key !== '') {
-            $ctx->variables[$key] = $value;
+            $ctx->setVariable($key, $value);
         }
 
         return new NodeOutput(data: $input);

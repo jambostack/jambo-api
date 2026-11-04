@@ -25,8 +25,15 @@ class FlowInterpreter
         $nodes = $graph['nodes'];
         $edges = $graph['edges'];
 
-        // 2. Initialise les variables du flow
-        $ctx->variables = array_merge($ctx->variables, $graph['variables'] ?? []);
+        // 2. Initialise les variables du flow avec cloisonnement strict
+        $rawVars = $graph['variables'] ?? [];
+        if (is_array($rawVars)) {
+            foreach ($rawVars as $k => $v) {
+                if (is_string($k)) {
+                    $ctx->setVariable($k, $v);
+                }
+            }
+        }
 
         // 3. Construit l'index des nœuds pour les recherches
         $nodeIndex = [];
@@ -65,7 +72,7 @@ class FlowInterpreter
             }
 
             // Injecte la config du node dans le contexte
-            $ctx->variables['_node_config'] = $node['data']['config'] ?? [];
+            $ctx->setCurrentNodeConfig($node['data']['config'] ?? []);
 
             $nodeStart = microtime(true);
             try {

@@ -15,9 +15,11 @@ use Symfony\Component\HttpKernel\KernelEvents;
  * - Strict-Transport-Security: HSTS with 1-year max-age, includeSubDomains, preload
  * - Permissions-Policy: restricted dangerous features
  * - Referrer-Policy: strict-origin-when-cross-origin
- * - X-Frame-Options: SAMEORIGIN (defense in depth for older user agents)
+ * - X-Frame-Options: DENY on sensitive endpoints, SAMEORIGIN on backoffice, omitted on embeds
  * - X-Permitted-Cross-Domain-Policies: none
- * - Content-Security-Policy sandbox defense for SVG payloads
+ * - Content-Security-Policy sandbox defense for SVG payloads, frame-ancestors for studio/auth
+ * - Cross-Origin-Opener-Policy: same-origin-allow-popups
+ * - Cross-Origin-Resource-Policy: cross-origin for public APIs/assets, same-origin otherwise
  */
 class SecurityHeadersSubscriber implements EventSubscriberInterface
 {
@@ -42,6 +44,7 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
         $request = $event->getRequest();
         $response = $event->getResponse();
         $headers = $response->headers;
+        $path = $request->getPathInfo();
 
         // 1. X-Content-Type-Options: nosniff
         if (!$headers->has('X-Content-Type-Options')) {
@@ -70,11 +73,21 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
             $headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         }
 
-        // 5. X-Frame-Options: SAMEORIGIN
+        // 5. Anti-clickjacking : X-Frame-Options & CSP frame-ancestors
+        $isEmbedRoute = str_starts_with($path, '/forms/embed')
+            || str_starts_with($path, '/share/')
+            || str_starts_with($path, '/embed/');
+
+        $isStudioRoute = str_contains($path, '/studio');
+
         if (!$headers->has('X-Frame-Options')) {
             $csp = (string) $headers->get('Content-Security-Policy', '');
             if (!str_contains($csp, 'frame-ancestors')) {
-                $headers->set('X-Frame-Options', 'SAMEORIGIN');
+                if ($isEmbedRoute) {
+                    // Embed widgets allow iframe framing; do not set X-Frame-Options
+                } else {
+                    $headers->set('X-Frame-Options', 'SAMEORIGIN');
+                }
             }
         }
 
@@ -83,10 +96,27 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
             $headers->set('X-Permitted-Cross-Domain-Policies', 'none');
         }
 
-        // 7. Défense en profondeur CSP pour SVG
+        // 7. Défense en profondeur CSP pour SVG et studio
         $contentType = (string) $headers->get('Content-Type', '');
         if (str_contains($contentType, 'image/svg+xml') && !$headers->has('Content-Security-Policy')) {
             $headers->set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+        } elseif (!$headers->has('Content-Security-Policy') && $isStudioRoute) {
+            $headers->set('Content-Security-Policy', "frame-ancestors 'self';");
+        }
+
+        // 8. Cross-Origin-Opener-Policy (COOP) : isolation d'exécution top-level
+        if (!$headers->has('Cross-Origin-Opener-Policy')) {
+            $headers->set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+        }
+
+        // 9. Cross-Origin-Resource-Policy (CORP) : protection des ressources contre l'inclusion illicite
+        if (!$headers->has('Cross-Origin-Resource-Policy')) {
+            $isPublicAssetOrApi = str_starts_with($path, '/api/')
+                || str_starts_with($path, '/files/')
+                || str_starts_with($path, '/storage/')
+                || str_starts_with($path, '/forms/embed')
+                || str_starts_with($path, '/share/');
+            $headers->set('Cross-Origin-Resource-Policy', $isPublicAssetOrApi ? 'cross-origin' : 'same-origin');
         }
     }
 }

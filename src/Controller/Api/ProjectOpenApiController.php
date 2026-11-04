@@ -14,6 +14,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Bundle\SecurityBundle\Security;
 
@@ -34,6 +35,7 @@ class ProjectOpenApiController extends AbstractController
         private ProjectMemberRepository $memberRepo,
         private ApiTokenChecker $tokenChecker,
         private Security $security,
+        private ?RateLimiterFactory $openapiLimiter = null,
     ) {}
 
     public function __invoke(Request $request, string $projectId): Response
@@ -43,17 +45,25 @@ class ProjectOpenApiController extends AbstractController
             return $this->corsResponse(new Response('', 204));
         }
 
+        // Rate limiting : 60 requêtes par minute par client IP
+        if ($this->openapiLimiter !== null) {
+            $limiter = $this->openapiLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return $this->corsResponse(new JsonResponse(['error' => 'Too many requests. Please try again later.'], 429));
+            }
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
         } catch (\Throwable) {
-            return $this->corsResponse($this->json(['error' => 'Project not found'], 404));
+            return $this->corsResponse(new JsonResponse(['error' => 'Project not found'], 404));
         }
         if (!$project) {
-            return $this->corsResponse($this->json(['error' => 'Project not found'], 404));
+            return $this->corsResponse(new JsonResponse(['error' => 'Project not found'], 404));
         }
 
         if (!$this->isAuthorized($request, $project)) {
-            return $this->corsResponse($this->json(['error' => 'Authentication required'], 401));
+            return $this->corsResponse(new JsonResponse(['error' => 'Authentication required'], 401));
         }
 
         $collections   = $this->collectionRepository->findByProject($project);
@@ -69,7 +79,7 @@ class ProjectOpenApiController extends AbstractController
 
         $spec = $this->buildSpec($projectId, $project, $collections, $fieldsByCollection, $endUserFields);
 
-        $response = $this->json($spec);
+        $response = new JsonResponse($spec);
         $response->headers->set('ETag', $etag);
         $response->headers->set('Cache-Control', 'private, max-age=60, must-revalidate');
 
@@ -111,9 +121,10 @@ class ProjectOpenApiController extends AbstractController
     {
         $parts = [$project->uuid?->toString(), $project->name];
         foreach ($collections as $c) {
-            $parts[] = $c->id . ':' . $c->slug;
-            foreach ($fieldsByCollection[$c->id] ?? [] as $f) {
-                $parts[] = $f->id . ':' . $f->slug . ':' . $f->type;
+            $cid = $c->id ?? 0;
+            $parts[] = $cid . ':' . $c->slug;
+            foreach ($fieldsByCollection[$cid] ?? [] as $f) {
+                $parts[] = ($f->id ?? 0) . ':' . $f->slug . ':' . $f->type;
             }
         }
         foreach ($endUserFields as $f) {
@@ -188,7 +199,8 @@ class ProjectOpenApiController extends AbstractController
         $schemas['EndUserProfile'] = $this->endUserProfileSchema($endUserFields);
 
         foreach ($collections as $collection) {
-            $schemas[$this->toSchemaName($collection->slug)] = $this->collectionSchema($fieldsByCollection[$collection->id] ?? []);
+            $cid = $collection->id ?? 0;
+            $schemas[$this->toSchemaName($collection->slug)] = $this->collectionSchema($fieldsByCollection[$cid] ?? []);
         }
 
         return $schemas;
@@ -237,8 +249,20 @@ class ProjectOpenApiController extends AbstractController
     private function endUserProfileSchema(array $endUserFields): array
     {
         $customProperties = [];
+        $sensitiveSlugs = ['password', 'hash', 'salt', 'secret', 'token', 'credential', 'auth_token', 'api_key'];
         foreach ($endUserFields as $field) {
             if (!$field->isSystem) {
+                $slug = strtolower($field->slug);
+                $isSensitive = false;
+                foreach ($sensitiveSlugs as $sensitive) {
+                    if ($slug === $sensitive || str_contains($slug, $sensitive)) {
+                        $isSensitive = true;
+                        break;
+                    }
+                }
+                if ($isSensitive || str_starts_with($slug, '_') || str_starts_with($slug, 'system_')) {
+                    continue;
+                }
                 $customProperties[$field->slug] = $this->fieldTypeToSchema($field->type, $field->options);
             }
         }
@@ -270,7 +294,22 @@ class ProjectOpenApiController extends AbstractController
             'created_at' => ['type' => 'string', 'format' => 'date-time'],
             'updated_at' => ['type' => 'string', 'format' => 'date-time'],
         ];
+        $sensitiveSlugs = ['password', 'hash', 'salt', 'secret', 'token', 'credential', 'internal_id', 'api_key', 'auth_token'];
         foreach ($fields as $field) {
+            if ($field->isDeleted()) {
+                continue;
+            }
+            $slug = strtolower($field->slug);
+            $isSensitive = false;
+            foreach ($sensitiveSlugs as $sensitive) {
+                if ($slug === $sensitive || str_contains($slug, $sensitive)) {
+                    $isSensitive = true;
+                    break;
+                }
+            }
+            if ($isSensitive || str_starts_with($slug, '_internal_') || str_starts_with($slug, '_')) {
+                continue;
+            }
             $properties[$field->slug] = $this->fieldTypeToSchema($field->type, $field->options);
         }
 
@@ -641,7 +680,8 @@ class ProjectOpenApiController extends AbstractController
     private function toSchemaName(string $slug): string
     {
         $name = str_replace(['-', '_'], '', ucwords($slug, '-_'));
+        $clean = preg_replace('/[^A-Za-z0-9]/', '', $name);
         // OpenAPI schema names must start with a letter
-        return preg_match('/^[A-Za-z]/', $name) === 1 ? $name : 'Schema' . $name;
+        return preg_match('/^[A-Za-z]/', $clean) === 1 ? $clean : 'Schema' . $clean;
     }
 }

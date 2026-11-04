@@ -160,7 +160,8 @@ class CorsSubscriber implements EventSubscriberInterface
                 }
                 if (str_starts_with($allowed, '*.')) {
                     $domainSuffix = substr($allowed, 1);
-                    if (str_ends_with($host, $domainSuffix)) {
+                    $apexDomain = substr($allowed, 2);
+                    if ($host === $apexDomain || str_ends_with($host, $domainSuffix)) {
                         return true;
                     }
                 }
@@ -181,8 +182,12 @@ class CorsSubscriber implements EventSubscriberInterface
 
     private function addRestrictedCorsHeaders(Response $response, string $origin): void
     {
-        $response->headers->set('Access-Control-Allow-Origin', $origin);
-        $response->headers->set('Access-Control-Allow-Credentials', 'true');
+        if ($origin === '*') {
+            $response->headers->set('Access-Control-Allow-Origin', '*');
+        } else {
+            $response->headers->set('Access-Control-Allow-Origin', $origin);
+            $response->headers->set('Access-Control-Allow-Credentials', 'true');
+        }
         $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
         $response->headers->set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, Origin, X-Requested-With, X-CSRF-Token');
         $response->headers->set('Access-Control-Max-Age', '3600');
