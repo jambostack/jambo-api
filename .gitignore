@@ -21,6 +21,7 @@ __pycache__/
 ###> phpunit/phpunit ###
 /phpunit.xml
 /.phpunit.cache/
+/.phpunit.result.cache
 ###< phpunit/phpunit ###
 
 ###> symfony/webpack-encore-bundle ###

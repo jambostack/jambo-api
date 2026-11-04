@@ -57,18 +57,13 @@ class AutomationRepository extends ServiceEntityRepository
      * Trouve les automatisations actives dont le graphe contient un trigger
      * du type spécifié (ex: trigger.content.created).
      *
-     * Utilise JSON_EXTRACT (MySQL) si disponible, sinon filtre en PHP.
      * Cherche dans TOUS les nœuds, pas seulement nodes[0].
      *
      * @return Automation[]
      */
     public function findActiveByTriggerType(Project $project, string $triggerType): array
     {
-        return $this->findActiveByCondition(
-            whereProject: $project,
-            jsonCondition: "JSON_CONTAINS(a.flowGraph, JSON_OBJECT('type', :triggerType), '$.nodes')",
-            triggerType: $triggerType,
-        );
+        return $this->findActiveByCondition($project, $triggerType);
     }
 
     /**
@@ -78,11 +73,7 @@ class AutomationRepository extends ServiceEntityRepository
      */
     public function findActiveScheduled(): array
     {
-        return $this->findActiveByCondition(
-            whereProject: null,
-            jsonCondition: "JSON_CONTAINS(a.flowGraph, JSON_OBJECT('type', :triggerType), '$.nodes')",
-            triggerType: 'trigger.schedule.cron',
-        );
+        return $this->findActiveByCondition(null, 'trigger.schedule.cron');
     }
 
     /**
@@ -92,44 +83,20 @@ class AutomationRepository extends ServiceEntityRepository
      */
     public function findActiveWebhookByProject(Project $project): array
     {
-        return $this->findActiveByCondition(
-            whereProject: $project,
-            jsonCondition: "JSON_CONTAINS(a.flowGraph, JSON_OBJECT('type', :triggerType), '$.nodes')",
-            triggerType: 'trigger.webhook.inbound',
-        );
+        return $this->findActiveByCondition($project, 'trigger.webhook.inbound');
     }
 
     // ─── Private ─────────────────────────────────────────────────────────
 
     /**
-     * Méthode générique : trouve les automatisations actives avec une condition JSON.
+     * Méthode générique : trouve les automatisations actives et filtre selon le type de trigger.
      *
      * @param Project|null $whereProject null = pas de filtre projet
-     * @param string $jsonCondition Condition JSON (utilise :triggerType comme paramètre)
      * @param string $triggerType Le type de trigger à chercher
      * @return Automation[]
      */
-    private function findActiveByCondition(?Project $whereProject, string $jsonCondition, string $triggerType): array
+    private function findActiveByCondition(?Project $whereProject, string $triggerType): array
     {
-        // Tentative avec fonctions JSON (MySQL / MariaDB)
-        try {
-            $qb = $this->createQueryBuilder('a')
-                ->where('a.isActive = true');
-
-            if ($whereProject !== null) {
-                $qb->andWhere('a.project = :project')
-                   ->setParameter('project', $whereProject);
-            }
-
-            return $qb->andWhere($jsonCondition)
-                ->setParameter('triggerType', $triggerType)
-                ->getQuery()
-                ->getResult();
-        } catch (\Throwable) {
-            // Fallback PHP si le driver ou DQL ne supporte pas JSON_CONTAINS
-        }
-
-        // Fallback : récupère toutes les actives et filtre en PHP
         $qb = $this->createQueryBuilder('a')
             ->where('a.isActive = true');
 
@@ -138,9 +105,10 @@ class AutomationRepository extends ServiceEntityRepository
                ->setParameter('project', $whereProject);
         }
 
+        /** @var Automation[] $allActive */
         $allActive = $qb->getQuery()->getResult();
 
-        return array_filter($allActive, fn (Automation $a) => $this->hasTriggerType($a->flowGraph, $triggerType));
+        return array_values(array_filter($allActive, fn (Automation $a) => $this->hasTriggerType($a->flowGraph, $triggerType)));
     }
 
     /** Vérifie si le flowGraph contient un nœud trigger du type donné. */

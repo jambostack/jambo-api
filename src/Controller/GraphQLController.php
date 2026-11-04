@@ -24,6 +24,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class GraphQLController extends AbstractController
 {
@@ -35,7 +36,19 @@ class GraphQLController extends AbstractController
         private EntityManagerInterface $em,
         private SchemaGenerator $schemaGenerator,
         private ?\Symfony\Component\RateLimiter\RateLimiterFactory $graphqlLimiter = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, string $default, array $parameters = []): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($key, $parameters, 'messages');
+            if ($translated !== $key) {
+                return $translated;
+            }
+        }
+        return strtr($default, $parameters);
+    }
 
     #[Route('/api/projects/{uuid}/graphql', name: 'graphql_endpoint', methods: ['POST', 'GET'])]
     public function handle(string $uuid, Request $request): Response
@@ -49,16 +62,16 @@ class GraphQLController extends AbstractController
         } catch (\Throwable) {}
 
         if ($this->graphqlLimiter !== null && false === $this->graphqlLimiter->create($identifier)->consume(1)->isAccepted()) {
-            return new JsonResponse(['errors' => [['message' => 'Trop de requêtes GraphQL. Veuillez réessayer plus tard.']]], 429);
+            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.too_many_requests', 'Trop de requêtes GraphQL. Veuillez réessayer plus tard.')]]], 429);
         }
 
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['errors' => [['message' => 'Projet introuvable']]], 404);
+            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable')]]], 404);
         }
         if (!$project) {
-            return new JsonResponse(['errors' => [['message' => 'Projet introuvable']]], 404);
+            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable')]]], 404);
         }
 
         if ($request->attributes->get('_project') !== $project) {
@@ -71,32 +84,32 @@ class GraphQLController extends AbstractController
         } else {
             $rawContent = $request->getContent();
             if (strlen($rawContent) > self::MAX_QUERY_LENGTH) {
-                return new JsonResponse(['errors' => [['message' => 'Taille de payload GraphQL dépassée (max 64 Ko)']]], 413);
+                return new JsonResponse(['errors' => [['message' => $this->trans('graphql.payload_too_large', 'Taille de payload GraphQL dépassée (max 64 Ko)')]]], 413);
             }
             $body = json_decode($rawContent, true);
             if (!is_array($body)) {
-                return new JsonResponse(['errors' => [['message' => 'Invalid JSON body']]], 400);
+                return new JsonResponse(['errors' => [['message' => $this->trans('graphql.invalid_json', 'Invalid JSON body')]]], 400);
             }
             // ── Blocage des requêtes GraphQL en batch (array de queries) ─────────
             // Un tableau JSON au niveau racine indique un batch de plusieurs opérations.
             // Cela contourne les limites de complexité/profondeur par requête → rejeté.
             if (isset($body[0])) {
-                return new JsonResponse(['errors' => [['message' => 'Les requêtes GraphQL en batch ne sont pas autorisées. Envoyez une seule opération par requête.']]], 400);
+                return new JsonResponse(['errors' => [['message' => $this->trans('graphql.batch_not_allowed', 'Les requêtes GraphQL en batch ne sont pas autorisées. Envoyez une seule opération par requête.')]]], 400);
             }
             $query = $body['query'] ?? null;
             $variables = $body['variables'] ?? null;
         }
 
         if (!$query || !is_string($query)) {
-            return new JsonResponse(['errors' => [['message' => 'Query GraphQL requise']]], 400);
+            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.query_required', 'Query GraphQL requise')]]], 400);
         }
 
         if (strlen($query) > self::MAX_QUERY_LENGTH) {
-            return new JsonResponse(['errors' => [['message' => 'Query GraphQL dépasse la taille maximale autorisée (64 Ko)']]], 413);
+            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.query_too_large', 'Query GraphQL dépasse la taille maximale autorisée (64 Ko)')]]], 413);
         }
 
         if ($variables !== null && !is_array($variables)) {
-            return new JsonResponse(['errors' => [['message' => 'Les variables GraphQL doivent être un objet ou tableau']]], 400);
+            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.invalid_variables', 'Les variables GraphQL doivent être un objet ou tableau')]]], 400);
         }
 
         // ── Détection subscription ───────────────────────────────────
@@ -113,9 +126,10 @@ class GraphQLController extends AbstractController
         // pour éviter l'explosion mémoire via des centaines d'alias identiques.
         if ($document !== null && $this->countAliasedFields($document) > self::MAX_ALIASES) {
             return new JsonResponse([
-                'errors' => [['message' => sprintf(
-                    'Trop d\'alias de champs GraphQL (max %d). Réduisez le nombre d\'alias dans votre requête.',
-                    self::MAX_ALIASES
+                'errors' => [['message' => $this->trans(
+                    'graphql.too_many_aliases',
+                    sprintf('Trop d\'alias de champs GraphQL (max %d). Réduisez le nombre d\'alias dans votre requête.', self::MAX_ALIASES),
+                    ['%max%' => self::MAX_ALIASES]
                 )]],
             ], 400);
         }

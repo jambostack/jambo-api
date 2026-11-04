@@ -43,6 +43,18 @@ class ProjectMailerService
         array $bcc = [],
         array $attachments = [],
     ): void {
+        $to = trim($to);
+        if ($to === '' || preg_match('/[\r\n\x00-\x1F\x7F]/', $to) || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            throw new \InvalidArgumentException('Invalid destination email address: must be a valid email without newlines or control characters.');
+        }
+        $subject = preg_replace('/[\r\n\x00-\x1F\x7F]/', ' ', trim($subject));
+        if ($replyTo !== null && $replyTo !== '') {
+            $replyTo = trim($replyTo);
+            if (preg_match('/[\r\n\x00-\x1F\x7F]/', $replyTo) || !filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
+                throw new \InvalidArgumentException('Invalid reply-to email address: must be a valid email without newlines or control characters.');
+            }
+        }
+
         $settings = $this->getSettings($project);
         if ($settings === null || !$settings->enabled) {
             throw new \RuntimeException('Mailer not configured or disabled for this project.');
@@ -90,6 +102,18 @@ class ProjectMailerService
         array $bcc = [],
         array $attachments = [],
     ): void {
+        $to = trim($to);
+        if ($to === '' || preg_match('/[\r\n\x00-\x1F\x7F]/', $to) || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            throw new \InvalidArgumentException('Invalid destination email address: must be a valid email without newlines or control characters.');
+        }
+        $subject = preg_replace('/[\r\n\x00-\x1F\x7F]/', ' ', trim($subject));
+        if ($replyTo !== null && $replyTo !== '') {
+            $replyTo = trim($replyTo);
+            if (preg_match('/[\r\n\x00-\x1F\x7F]/', $replyTo) || !filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
+                throw new \InvalidArgumentException('Invalid reply-to email address: must be a valid email without newlines or control characters.');
+            }
+        }
+
         $settings = $this->getSettings($project);
         if ($settings === null || !$settings->enabled) {
             throw new \RuntimeException('Mailer not configured or disabled for this project.');

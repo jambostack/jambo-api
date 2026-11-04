@@ -4,10 +4,12 @@ namespace App\Tests\Command;
 
 use App\Command\PruneMediaCacheCommand;
 use App\Service\ImageTransformService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Tester\CommandTester;
 
+#[AllowMockObjectsWithoutExpectations]
 class PruneMediaCacheCommandTest extends TestCase
 {
     private ImageTransformService $imageTransformService;

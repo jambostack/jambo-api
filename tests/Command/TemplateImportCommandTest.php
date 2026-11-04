@@ -6,9 +6,11 @@ use App\Command\TemplateImportCommand;
 use App\Entity\Project;
 use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
 
+#[AllowMockObjectsWithoutExpectations]
 class TemplateImportCommandTest extends TestCase
 {
     public function testFailsOnUnknownTemplate(): void

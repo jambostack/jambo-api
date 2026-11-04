@@ -7,6 +7,31 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.77] — 2026-11-04
+
+### Security & Hardening
+- **Email & Automation Flow CRLF Header Injection Defense (`SendEmailHandler`, `ProjectMailerService`, `SendProjectEmailMessageHandler`)**:
+  - Implemented strict CRLF and control character sanitization (`preg_replace('/[\r\n\x00-\x1F\x7F]/', ...)` ) on email recipients (`to`), subject lines, and `replyTo` across both synchronous and asynchronous mail dispatchers.
+  - Added strict email format validation (`FILTER_VALIDATE_EMAIL`) blocking forged headers like `to: victim@example.com\r\nBcc: evil@attacker.com`.
+  - Added safe contextual interpolation in `SendEmailHandler` supporting template tags (`{{entry.title}}`, etc.) via `interpolateSafe()`.
+- **FlowContext Safe Variable Boundary Hardening (`FlowContext`)**:
+  - Refined sensitive variable name regexes with word boundary checks (`/\b(?:auth|key|hash|salt)\b/` and `^(?:auth_|auth$|key_|key$)`) to avoid false-positive stripping of legitimate CMS attributes (such as `author`, `authority`).
+- **Complete I18N Migration & Translation Coverage (`GraphQLController`, `ImageTransformController`, `messages.{en,fr,es,ar}.php`)**:
+  - Eliminated hardcoded strings in `GraphQLController` and `ImageTransformController`, migrating all error responses to Symfony Translator with complete fallback catalogs across French, English, Spanish, and Arabic dictionaries.
+- **Doctrine Automation Repository Warning Elimination (`AutomationRepository`)**:
+  - Replaced unsupported native JSON DQL syntax with cross-database PHP filtering, eliminating 9 Doctrine ORM query parser warnings on PHP 8.5+.
+- **Automated Test Suite**:
+  - Added `tests/Controller/Cycle30HardeningTest.php` with 7 comprehensive hardening tests.
+  - Added `#[AllowMockObjectsWithoutExpectations]` across command test suites suppressing PHPUnit mock notices.
+  - Full PHPUnit suite: 954 tests passing (3,091 assertions).
+
+## [1.26.76] — 2026-11-04
+
+### CI & Testing Infrastructure
+- **PHPUnit Environment Configuration (`phpunit.xml.dist`, `.env.test`)**:
+  - Added version-controlled `phpunit.xml.dist` with `KERNEL_CLASS=App\Kernel` and `APP_ENV=test`.
+  - Configured Mercure test environment in `.env.test` with 32+ character JWT secret.
+
 ## [1.26.75] — 2026-11-04
 
 ### Security & Hardening

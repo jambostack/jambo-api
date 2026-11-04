@@ -10,10 +10,12 @@ use App\Entity\Project;
 use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Uid\Uuid;
 
+#[AllowMockObjectsWithoutExpectations]
 class BlueprintCommandsTest extends TestCase
 {
     public function testExportOutputsJson(): void

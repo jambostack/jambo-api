@@ -6,9 +6,11 @@ use App\Command\PublishScheduledEntriesCommand;
 use App\Entity\ContentEntry;
 use App\Repository\ContentEntryRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
 
+#[AllowMockObjectsWithoutExpectations]
 class PublishScheduledEntriesCommandTest extends TestCase
 {
     public function testCommandPublishesScheduledEntries(): void

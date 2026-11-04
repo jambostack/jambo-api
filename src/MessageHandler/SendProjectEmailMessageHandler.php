@@ -40,10 +40,16 @@ class SendProjectEmailMessageHandler
             $message->encryption,
         );
 
+        $to = trim($message->to);
+        if ($to === '' || preg_match('/[\r\n\x00-\x1F\x7F]/', $to) || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+        $subject = preg_replace('/[\r\n\x00-\x1F\x7F]/', ' ', trim($message->subject));
+
         $email = (new Email())
             ->from(sprintf('%s <%s>', $message->fromName, $message->fromEmail))
-            ->to($message->to)
-            ->subject($message->subject);
+            ->to($to)
+            ->subject($subject);
 
         // Body texte (toujours présent, fallback pour clients sans HTML)
         $email->text($message->body);

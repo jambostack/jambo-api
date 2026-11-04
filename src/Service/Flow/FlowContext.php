@@ -10,8 +10,8 @@ class FlowContext
     public const FORBIDDEN_VARIABLE_PATTERNS = [
         '/^_/i',
         '/^(?:_?env|_?server|globals|env|server)$/i',
-        '/(?:secret|password|token|credential|key|database|mailer|mercure|jwt|auth|session|cookie|hash|salt|bearer)/i',
-        '/^(?:app_env|app_secret|database_url|mailer_dsn|jwt_secret|mercure_|http_|path|shell|php_|sys_|system|document_root)/i',
+        '/(?:secret|password|token|credential|bearer|api_?key|database_url|mailer_dsn|jwt|session|cookie|hash|salt)/i',
+        '/^(?:auth_|auth$|key_|key$|app_env|app_secret|database_url|mailer_dsn|jwt_secret|mercure_|http_|path|shell|php_|sys_|system|document_root)/i',
     ];
 
     public readonly string $runId;
@@ -83,7 +83,7 @@ class FlowContext
             $clean = [];
             foreach ($value as $k => $v) {
                 $strKey = strtolower((string) $k);
-                if (preg_match('/(?:password|secret|token|credential|key|auth|bearer|hash|salt)/i', $strKey)) {
+                if (preg_match('/(?:password|secret|token|credential|bearer|hash|salt|api_?key|auth_token|auth_key|authorization)/i', $strKey) || preg_match('/^(?:auth|key)$/i', $strKey)) {
                     continue; // Supprime les sous-clés sensibles
                 }
                 if (is_scalar($v) || $v === null) {

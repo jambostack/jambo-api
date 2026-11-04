@@ -105,7 +105,8 @@ class Cycle12HardeningTest extends WebTestCase
 
         $this->assertSame(413, $this->client->getResponse()->getStatusCode());
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
-        $this->assertStringContainsString('dépassée', $data['errors'][0]['message'] ?? '');
+        $msg = $data['errors'][0]['message'] ?? '';
+        $this->assertTrue(str_contains($msg, 'dépassée') || str_contains($msg, 'exceeded'));
     }
 
     public function testGraphQLRejectsExcessiveDepth(): void

@@ -11,9 +11,11 @@ use App\Service\StorageDriverFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class ImageTransformController extends AbstractController
 {
@@ -23,7 +25,19 @@ class ImageTransformController extends AbstractController
         private ?StorageDriverFactory $storageDriverFactory = null,
         private ?ProjectStorageProfileRepository $storageProfileRepo = null,
         private ?ApiTokenChecker $tokenChecker = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, string $default, array $parameters = []): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($key, $parameters, 'messages');
+            if ($translated !== $key) {
+                return $translated;
+            }
+        }
+        return strtr($default, $parameters);
+    }
 
     #[Route('/cdn/media/{uuid}', name: 'cdn_media_transform', methods: ['GET'])]
     public function serve(string $uuid, Request $request): Response
@@ -31,22 +45,22 @@ class ImageTransformController extends AbstractController
         try {
             $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return new Response('Média introuvable', 404);
+            return new Response($this->trans('media.not_found', 'Média introuvable'), 404);
         }
 
         // Vérifier que le média existe, n'est pas supprimé, et est accessible
         if (!$media || $media->isDeleted()) {
-            return new Response('Média introuvable', 404);
+            return new Response($this->trans('media.not_found', 'Média introuvable'), 404);
         }
 
         // Vérifier les autorisations d'accès au média (publicApi, session utilisateur ou ApiToken)
         if (!$this->canAccessMedia($media, $request)) {
-            return new Response('Accès non autorisé', 403);
+            return new Response($this->trans('media.access_denied', 'Accès non autorisé'), 403);
         }
 
         $filePath = $this->resolveLocalOrRemoteFilePath($media);
         if ($filePath === null || !file_exists($filePath)) {
-            return new Response('Fichier introuvable', 404);
+            return new Response($this->trans('media.file_not_found', 'Fichier introuvable'), 404);
         }
 
         $params = $request->query->all();
@@ -90,17 +104,17 @@ class ImageTransformController extends AbstractController
     {
         $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $uuid]);
         if (!$media || $media->isDeleted()) {
-            return $this->json(['error' => 'Média introuvable'], 404);
+            return new JsonResponse(['error' => $this->trans('media.not_found', 'Média introuvable')], 404);
         }
 
         // Vérifier les autorisations d'accès au média (publicApi, session utilisateur ou ApiToken)
         if (!$this->canAccessMedia($media, $request)) {
-            return $this->json(['error' => 'Accès non autorisé'], 403);
+            return new JsonResponse(['error' => $this->trans('media.access_denied', 'Accès non autorisé')], 403);
         }
 
         $filePath = $this->resolveLocalOrRemoteFilePath($media);
         if ($filePath === null || !file_exists($filePath)) {
-            return $this->json(['error' => 'Fichier introuvable'], 404);
+            return new JsonResponse(['error' => $this->trans('media.file_not_found', 'Fichier introuvable')], 404);
         }
 
         $imageSize = @getimagesize($filePath);
