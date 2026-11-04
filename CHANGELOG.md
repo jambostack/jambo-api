@@ -7,6 +7,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.80] — 2026-11-04
+
+### Security & Strict I18N Hardening
+- **DirectUploadController Hardening & I18N**:
+  - Injected `TranslatorInterface` with fallback mechanism for legacy test compatibility.
+  - Eliminated all hardcoded strings (rate limit, missing project, auth required, invalid JSON, intent not found).
+  - Added strict input boundary validation on multipart uploads: part numbers constrained between 1 and 10,000; non-negative file sizes.
+- **AdminApi\\TokenController Hardening & I18N**:
+  - Injected `TranslatorInterface` across all token endpoints (`create`, `update`, `delete`, `consumeRateLimit`).
+  - Migrated 15 hardcoded error strings to parameterized translation keys across all 4 locales.
+- **Api\\ProjectEmailController I18N Migration**:
+  - Injected `TranslatorInterface` and migrated all contact form & admin email error strings from hardcoded French to translation dictionaries.
+  - Parameterized attachment security errors, captcha errors, recipient validations, and mailer state diagnostics.
+- **Translation Dictionaries**:
+  - Added 37 new keys across all 4 languages (`en`, `fr`, `es`, `ar`), total now **1,898 keys**, 0 missing keys.
+- **Automated Test Suite**:
+  - Added `tests/Controller/Cycle33HardeningTest.php` with 9 tests and 338 assertions.
+  - Total PHPUnit test suite: **982 tests**, all passing green.
+
 ## [1.26.79] — 2026-11-04
 
 ### Security & I18N Hardening

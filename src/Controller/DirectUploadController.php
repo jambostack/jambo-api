@@ -15,6 +15,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/projects/{projectUuid}/media/direct-upload', name: 'api_media_direct_upload_')]
 class DirectUploadController extends AbstractController
@@ -26,7 +27,16 @@ class DirectUploadController extends AbstractController
         private readonly MediaSerializer $mediaSerializer,
         #[Autowire(service: 'limiter.direct_upload_limiter')]
         private readonly ?RateLimiterFactory $directUploadLimiter = null,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default ?? $id;
+    }
 
     #[Route('/intent', name: 'intent', methods: ['POST'])]
     public function createIntent(string $projectUuid, Request $request): JsonResponse
@@ -34,21 +44,21 @@ class DirectUploadController extends AbstractController
         if ($this->directUploadLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
             if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many direct upload requests. Please retry later.'], 429);
+                return new JsonResponse(['error' => $this->trans('direct_upload.rate_limit_exceeded', [], 'Too many direct upload requests. Please retry later.')], 429);
             }
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Project not found'], 404);
+            return new JsonResponse(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => 'Project not found'], 404);
+            return new JsonResponse(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
         }
 
         if (!$this->getUser() && !$request->attributes->get('_project')) {
-            return new JsonResponse(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('direct_upload.auth_required', [], 'Authentication required')], 401);
         }
 
         if ($this->getUser()) {
@@ -58,7 +68,7 @@ class DirectUploadController extends AbstractController
         try {
             $payload = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Invalid JSON body'], 400);
+            return new JsonResponse(['error' => $this->trans('direct_upload.invalid_json', [], 'Invalid JSON body')], 400);
         }
 
         try {
@@ -88,29 +98,33 @@ class DirectUploadController extends AbstractController
         if ($this->directUploadLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
             if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many direct upload requests. Please retry later.'], 429);
+                return new JsonResponse(['error' => $this->trans('direct_upload.rate_limit_exceeded', [], 'Too many direct upload requests. Please retry later.')], 429);
             }
         }
 
         try {
             $payload = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Invalid JSON body'], 400);
+            return new JsonResponse(['error' => $this->trans('direct_upload.invalid_json', [], 'Invalid JSON body')], 400);
         }
         $intentUuid = $payload['intent_uuid'] ?? '';
         $partNumber = (int) ($payload['part_number'] ?? 1);
 
+        if ($partNumber < 1 || $partNumber > 10000) {
+            return new JsonResponse(['error' => $this->trans('direct_upload.invalid_part_number', [], 'Part number must be between 1 and 10000.')], 422);
+        }
+
         try {
             $intent = $this->intentRepository->findPendingByUuid((string) $intentUuid);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+            return new JsonResponse(['error' => $this->trans('direct_upload.intent_not_found', [], 'Valid pending upload intent not found')], 404);
         }
         if (!$intent || $intent->project->uuid?->toRfc4122() !== $projectUuid) {
-            return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+            return new JsonResponse(['error' => $this->trans('direct_upload.intent_not_found', [], 'Valid pending upload intent not found')], 404);
         }
 
         if (!$this->getUser() && !$request->attributes->get('_project')) {
-            return new JsonResponse(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('direct_upload.auth_required', [], 'Authentication required')], 401);
         }
 
         if ($this->getUser()) {
@@ -134,30 +148,37 @@ class DirectUploadController extends AbstractController
         if ($this->directUploadLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
             if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many direct upload requests. Please retry later.'], 429);
+                return new JsonResponse(['error' => $this->trans('direct_upload.rate_limit_exceeded', [], 'Too many direct upload requests. Please retry later.')], 429);
             }
         }
 
         try {
             $payload = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Invalid JSON body'], 400);
+            return new JsonResponse(['error' => $this->trans('direct_upload.invalid_json', [], 'Invalid JSON body')], 400);
         }
         $intentUuid = $payload['intent_uuid'] ?? '';
         $parts = $payload['parts'] ?? [];
         $fileSize = isset($payload['file_size']) ? (int) $payload['file_size'] : null;
 
+        if (!is_array($parts)) {
+            return new JsonResponse(['error' => $this->trans('direct_upload.parts_invalid', [], 'Parts list must be a valid array.')], 422);
+        }
+        if ($fileSize !== null && $fileSize < 0) {
+            return new JsonResponse(['error' => $this->trans('direct_upload.invalid_file_size', [], 'File size cannot be negative.')], 422);
+        }
+
         try {
             $intent = $this->intentRepository->findPendingByUuid((string) $intentUuid);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+            return new JsonResponse(['error' => $this->trans('direct_upload.intent_not_found', [], 'Valid pending upload intent not found')], 404);
         }
         if (!$intent || $intent->project->uuid?->toRfc4122() !== $projectUuid) {
-            return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+            return new JsonResponse(['error' => $this->trans('direct_upload.intent_not_found', [], 'Valid pending upload intent not found')], 404);
         }
 
         if (!$this->getUser() && !$request->attributes->get('_project')) {
-            return new JsonResponse(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('direct_upload.auth_required', [], 'Authentication required')], 401);
         }
 
         if ($this->getUser()) {
@@ -169,7 +190,7 @@ class DirectUploadController extends AbstractController
             return new JsonResponse([
                 'data' => $this->mediaSerializer->serialize($media),
             ]);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return new JsonResponse(['error' => $e->getMessage()], 400);
         }
     }
@@ -180,28 +201,28 @@ class DirectUploadController extends AbstractController
         if ($this->directUploadLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
             if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many direct upload requests. Please retry later.'], 429);
+                return new JsonResponse(['error' => $this->trans('direct_upload.rate_limit_exceeded', [], 'Too many direct upload requests. Please retry later.')], 429);
             }
         }
 
         try {
             $payload = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Invalid JSON body'], 400);
+            return new JsonResponse(['error' => $this->trans('direct_upload.invalid_json', [], 'Invalid JSON body')], 400);
         }
         $intentUuid = $payload['intent_uuid'] ?? '';
 
         try {
             $intent = $this->intentRepository->findPendingByUuid((string) $intentUuid);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+            return new JsonResponse(['error' => $this->trans('direct_upload.intent_not_found', [], 'Valid pending upload intent not found')], 404);
         }
         if (!$intent || $intent->project->uuid?->toRfc4122() !== $projectUuid) {
-            return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+            return new JsonResponse(['error' => $this->trans('direct_upload.intent_not_found', [], 'Valid pending upload intent not found')], 404);
         }
 
         if (!$this->getUser() && !$request->attributes->get('_project')) {
-            return new JsonResponse(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('direct_upload.auth_required', [], 'Authentication required')], 401);
         }
 
         if ($this->getUser()) {
@@ -218,21 +239,21 @@ class DirectUploadController extends AbstractController
         if ($this->directUploadLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
             if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many direct upload requests. Please retry later.'], 429);
+                return new JsonResponse(['error' => $this->trans('direct_upload.rate_limit_exceeded', [], 'Too many direct upload requests. Please retry later.')], 429);
             }
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Project not found'], 404);
+            return new JsonResponse(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => 'Project not found'], 404);
+            return new JsonResponse(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
         }
 
         if (!$this->getUser() && !$request->attributes->get('_project')) {
-            return new JsonResponse(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('direct_upload.auth_required', [], 'Authentication required')], 401);
         }
 
         if ($this->getUser()) {

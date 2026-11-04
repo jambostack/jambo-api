@@ -20,6 +20,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Cache\CacheInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class ProjectEmailController extends AbstractController
 {
@@ -37,7 +38,16 @@ class ProjectEmailController extends AbstractController
         private readonly RateLimiterFactory $emailLimiter,
         #[Autowire(service: 'limiter.project_email_admin')]
         private readonly RateLimiterFactory $adminEmailLimiter,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default ?? $id;
+    }
 
     #[Route('/api/{projectUuid}/email', name: 'api_project_email', methods: ['POST'],
         requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
@@ -49,30 +59,30 @@ class ProjectEmailController extends AbstractController
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Projet introuvable'], 404);
+            return new JsonResponse(['error' => $this->trans('project.not_found', [], 'Projet introuvable')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => 'Projet introuvable'], 404);
+            return new JsonResponse(['error' => $this->trans('project.not_found', [], 'Projet introuvable')], 404);
         }
 
         // Rate limiting
         $limiter = $this->emailLimiter->create($request->getClientIp());
         if (!$limiter->consume()->isAccepted()) {
-            return new JsonResponse(['error' => 'Trop de requetes. Reessayez plus tard.'], 429);
+            return new JsonResponse(['error' => $this->trans('email.rate_limit_exceeded', [], 'Trop de requetes. Reessayez plus tard.')], 429);
         }
 
         // Parser le body
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'JSON invalide'], 400);
+            return new JsonResponse(['error' => $this->trans('email.invalid_json', [], 'JSON invalide')], 400);
         }
 
         // Valider les champs requis
         $subject = trim((string) ($body['subject'] ?? ''));
         $emailBody = trim((string) ($body['body'] ?? ''));
         if ($subject === '' || $emailBody === '') {
-            return new JsonResponse(['error' => 'subject et body sont requis'], 422);
+            return new JsonResponse(['error' => $this->trans('email.subject_and_body_required', [], 'subject et body sont requis')], 422);
         }
 
         // Valider le captcha
@@ -80,21 +90,21 @@ class ProjectEmailController extends AbstractController
         $captchaAnswer = (string) ($body['captchaAnswer'] ?? '');
 
         if ($captchaToken === '' || $captchaAnswer === '') {
-            return new JsonResponse(['error' => 'Captcha requis'], 422);
+            return new JsonResponse(['error' => $this->trans('email.captcha_required', [], 'Captcha requis')], 422);
         }
 
         $cacheKey = 'captcha.' . $captchaToken;
         $expectedAnswer = $this->cache->get($cacheKey, fn () => null);
 
         if ($expectedAnswer === null) {
-            return new JsonResponse(['error' => 'Captcha expire ou invalide'], 422);
+            return new JsonResponse(['error' => $this->trans('email.captcha_expired', [], 'Captcha expire ou invalide')], 422);
         }
 
         // Comparaison case-insensitive
         if (strtolower($captchaAnswer) !== strtolower($expectedAnswer)) {
             // Supprimer l'entree cache apres echec (usage unique)
             $this->cache->delete($cacheKey);
-            return new JsonResponse(['error' => 'Reponse captcha incorrecte'], 422);
+            return new JsonResponse(['error' => $this->trans('email.captcha_incorrect', [], 'Reponse captcha incorrecte')], 422);
         }
 
         // Supprimer l'entree cache (usage unique)
@@ -103,13 +113,13 @@ class ProjectEmailController extends AbstractController
         // Mode (A) : formulaire de contact — destinataire fixe
         $settings = $this->mailerService->getSettings($project);
         if ($settings === null || !$settings->enabled) {
-            return new JsonResponse(['error' => 'Mailer non configure pour ce projet'], 503);
+            return new JsonResponse(['error' => $this->trans('email.mailer_not_configured', [], 'Mailer non configure pour ce projet')], 503);
         }
 
         $to = $settings->fromEmail;
         $replyTo = isset($body['replyTo']) ? trim((string) $body['replyTo']) : null;
         if ($replyTo !== null && !filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
-            return new JsonResponse(['error' => 'replyTo invalide'], 422);
+            return new JsonResponse(['error' => $this->trans('email.invalid_reply_to', [], 'replyTo invalide')], 422);
         }
 
         // Honeypot : champ cache — si rempli, c'est un bot (ne pas envoyer mais retourner succes)
@@ -138,14 +148,14 @@ class ProjectEmailController extends AbstractController
         // Rate limiting (basé sur le projet)
         $limiter = $this->adminEmailLimiter->create('project_' . $project->id);
         if (!$limiter->consume()->isAccepted()) {
-            return new JsonResponse(['error' => 'Trop de requêtes. Réessayez plus tard.'], 429);
+            return new JsonResponse(['error' => $this->trans('email.rate_limit_exceeded', [], 'Trop de requêtes. Réessayez plus tard.')], 429);
         }
 
         // Parser le body
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'JSON invalide'], 400);
+            return new JsonResponse(['error' => $this->trans('email.invalid_json', [], 'JSON invalide')], 400);
         }
 
         // Valider les champs requis
@@ -153,16 +163,16 @@ class ProjectEmailController extends AbstractController
         $subject = trim((string) ($body['subject'] ?? ''));
         $textBody = trim((string) ($body['body'] ?? ''));
         if ($to === '' || $subject === '' || $textBody === '') {
-            return new JsonResponse(['error' => 'to, subject et body sont requis'], 422);
+            return new JsonResponse(['error' => $this->trans('email.to_subject_body_required', [], 'to, subject et body sont requis')], 422);
         }
         if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
-            return new JsonResponse(['error' => 'to invalide'], 422);
+            return new JsonResponse(['error' => $this->trans('email.invalid_to', [], 'to invalide')], 422);
         }
 
         // Valider replyTo
         $replyTo = isset($body['replyTo']) ? trim((string) $body['replyTo']) : null;
         if ($replyTo !== null && !filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
-            return new JsonResponse(['error' => 'replyTo invalide'], 422);
+            return new JsonResponse(['error' => $this->trans('email.invalid_reply_to', [], 'replyTo invalide')], 422);
         }
 
         // Valider CC / BCC
@@ -170,7 +180,7 @@ class ProjectEmailController extends AbstractController
             if (isset($body[$field]) && is_array($body[$field])) {
                 foreach ($body[$field] as $addr) {
                     if (!filter_var($addr, FILTER_VALIDATE_EMAIL)) {
-                        return new JsonResponse(['error' => $field . ' invalide: ' . $addr], 422);
+                        return new JsonResponse(['error' => $this->trans('email.invalid_recipient', ['%field%' => $field, '%email%' => $addr], $field . ' invalide: ' . $addr)], 422);
                     }
                 }
             }
@@ -181,15 +191,15 @@ class ProjectEmailController extends AbstractController
         if (isset($body['attachments']) && is_array($body['attachments'])) {
             foreach ($body['attachments'] as $a) {
                 if (empty($a['content']) || empty($a['filename'])) {
-                    return new JsonResponse(['error' => 'attachment content et filename requis'], 422);
+                    return new JsonResponse(['error' => $this->trans('email.attachment_missing_fields', [], 'attachment content et filename requis')], 422);
                 }
                 if (strlen((string) $a['content']) > 15 * 1024 * 1024) {
-                    return new JsonResponse(['error' => 'Pièce jointe trop volumineuse (max 10MB)'], 422);
+                    return new JsonResponse(['error' => $this->trans('email.attachment_too_large', [], 'Pièce jointe trop volumineuse (max 10MB)')], 422);
                 }
                 $safeFilename = basename(str_replace(["\0", "\r", "\n"], '', (string) $a['filename']));
                 $ext = strtolower(pathinfo($safeFilename, PATHINFO_EXTENSION));
                 if (in_array($ext, UploadSecurityValidator::FORBIDDEN_EXTENSIONS, true)) {
-                    return new JsonResponse(['error' => sprintf('L\'extension de pièce jointe .%s est strictement interdite.', $ext)], 422);
+                    return new JsonResponse(['error' => $this->trans('email.attachment_forbidden_extension', ['%ext%' => $ext], sprintf('L\'extension de pièce jointe .%s est strictement interdite.', $ext))], 422);
                 }
                 $attachments[] = new Attachment(
                     content: base64_decode((string) $a['content']),
