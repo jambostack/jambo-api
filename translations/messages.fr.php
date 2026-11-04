@@ -1958,4 +1958,5 @@ return [
     'studio.schema.create_first_collection' => 'Créez votre première collection',
     'studio.schema.save_success' => 'Schéma enregistré.',
     'studio.schema.save_error' => 'Échec de l\'enregistrement du schéma.',
+    'email.attachment.forbidden_extension' => 'L\'extension de pièce jointe .%s est strictement interdite.',
 ];

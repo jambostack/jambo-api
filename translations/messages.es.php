@@ -1940,4 +1940,5 @@ return [
     'studio.versions.subtitle' => 'Versiones guardadas',
     'studio.versions.count' => '{count} versión(es) guardada(s)',
     'studio.versions.current' => 'Actual',
+    'email.attachment.forbidden_extension' => 'La extensión del archivo adjunto .%s está estrictamente prohibida.',
 ];

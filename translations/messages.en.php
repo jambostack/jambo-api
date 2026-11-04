@@ -1940,4 +1940,5 @@ return [
     'studio.schema.create_first_collection' => 'Create your first collection',
     'studio.schema.save_success' => 'Schema saved.',
     'studio.schema.save_error' => 'Failed to save schema.',
+    'email.attachment.forbidden_extension' => 'Attachment extension .%s is strictly forbidden.',
 ];

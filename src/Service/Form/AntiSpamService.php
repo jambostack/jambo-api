@@ -50,7 +50,9 @@ class AntiSpamService
         if (!$this->httpClient) return false;
         try {
             $response = $this->httpClient->request('POST', 'https://challenges.cloudflare.com/turnstile/v0/siteverify', [
-                'body' => ['secret' => $secret, 'response' => $token],
+                'body'         => ['secret' => $secret, 'response' => $token],
+                'timeout'      => 3.0,
+                'max_duration' => 5.0,
             ]);
             $data = $response->toArray();
             return $data['success'] ?? false;
@@ -64,7 +66,9 @@ class AntiSpamService
         if (!$this->httpClient) return false;
         try {
             $response = $this->httpClient->request('POST', 'https://www.google.com/recaptcha/api/siteverify', [
-                'body' => ['secret' => $secret, 'response' => $token],
+                'body'         => ['secret' => $secret, 'response' => $token],
+                'timeout'      => 3.0,
+                'max_duration' => 5.0,
             ]);
             $data = $response->toArray();
             return $data['success'] ?? false;
@@ -78,7 +82,9 @@ class AntiSpamService
         if (!$this->httpClient) return false;
         try {
             $response = $this->httpClient->request('POST', 'https://hcaptcha.com/siteverify', [
-                'body' => ['secret' => $secret, 'response' => $token],
+                'body'         => ['secret' => $secret, 'response' => $token],
+                'timeout'      => 3.0,
+                'max_duration' => 5.0,
             ]);
             $data = $response->toArray();
             return $data['success'] ?? false;

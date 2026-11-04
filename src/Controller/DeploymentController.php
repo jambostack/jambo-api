@@ -7,8 +7,10 @@ use App\Repository\DeploymentRepository;
 use App\Repository\ProjectRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
@@ -25,6 +27,8 @@ class DeploymentController extends AbstractController
         private EntityManagerInterface $em,
         private DeploymentRepository $deployments,
         private ProjectRepository $projects,
+        #[Autowire(service: 'limiter.deployment_hook_limiter')]
+        private ?RateLimiterFactory $hookLimiter = null,
     ) {}
 
     /**
@@ -84,6 +88,13 @@ class DeploymentController extends AbstractController
     #[Route('/api/deployments/hook', name: 'deployments_hook', methods: ['POST'])]
     public function hook(Request $request): JsonResponse
     {
+        if ($this->hookLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->hookLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many deployment hook requests. Please retry later.'], 429);
+            }
+        }
+
         $secret = $_ENV['DEPLOY_WEBHOOK_SECRET'] ?? '';
         if ($secret === '') {
             return $this->json(['error' => 'Webhook désactivé : DEPLOY_WEBHOOK_SECRET non configuré'], 503);

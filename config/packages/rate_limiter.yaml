@@ -72,6 +72,14 @@ framework:
             policy: sliding_window
             limit: 10
             interval: '60 seconds'
+        direct_upload_limiter:
+            policy: sliding_window
+            limit: 30
+            interval: '60 seconds'
+        deployment_hook_limiter:
+            policy: sliding_window
+            limit: 10
+            interval: '60 seconds'
 
 when@test:
     framework:
@@ -129,6 +137,14 @@ when@test:
                 limit: 10000
                 interval: '60 seconds'
             storage_test_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            direct_upload_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            deployment_hook_limiter:
                 policy: sliding_window
                 limit: 10000
                 interval: '60 seconds'

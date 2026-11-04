@@ -9,8 +9,10 @@ use App\Repository\ProjectRepository;
 use App\Service\DirectUploadService;
 use App\Service\MediaSerializer;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
@@ -22,11 +24,20 @@ class DirectUploadController extends AbstractController
         private readonly AssetUploadIntentRepository $intentRepository,
         private readonly DirectUploadService $directUploadService,
         private readonly MediaSerializer $mediaSerializer,
+        #[Autowire(service: 'limiter.direct_upload_limiter')]
+        private readonly ?RateLimiterFactory $directUploadLimiter = null,
     ) {}
 
     #[Route('/intent', name: 'intent', methods: ['POST'])]
     public function createIntent(string $projectUuid, Request $request): JsonResponse
     {
+        if ($this->directUploadLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many direct upload requests. Please retry later.'], 429);
+            }
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
@@ -34,6 +45,10 @@ class DirectUploadController extends AbstractController
         }
         if (!$project) {
             return new JsonResponse(['error' => 'Project not found'], 404);
+        }
+
+        if (!$this->getUser() && !$request->attributes->get('_project')) {
+            return new JsonResponse(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -65,6 +80,13 @@ class DirectUploadController extends AbstractController
     #[Route('/sign-part', name: 'sign_part', methods: ['POST'])]
     public function signPart(string $projectUuid, Request $request): JsonResponse
     {
+        if ($this->directUploadLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many direct upload requests. Please retry later.'], 429);
+            }
+        }
+
         try {
             $payload = $request->toArray();
         } catch (\Throwable) {
@@ -80,6 +102,10 @@ class DirectUploadController extends AbstractController
         }
         if (!$intent || $intent->project->uuid?->toRfc4122() !== $projectUuid) {
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+        }
+
+        if (!$this->getUser() && !$request->attributes->get('_project')) {
+            return new JsonResponse(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -100,6 +126,13 @@ class DirectUploadController extends AbstractController
     #[Route('/complete', name: 'complete', methods: ['POST'])]
     public function complete(string $projectUuid, Request $request, #[CurrentUser] ?User $user = null): JsonResponse
     {
+        if ($this->directUploadLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many direct upload requests. Please retry later.'], 429);
+            }
+        }
+
         try {
             $payload = $request->toArray();
         } catch (\Throwable) {
@@ -116,6 +149,10 @@ class DirectUploadController extends AbstractController
         }
         if (!$intent || $intent->project->uuid?->toRfc4122() !== $projectUuid) {
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+        }
+
+        if (!$this->getUser() && !$request->attributes->get('_project')) {
+            return new JsonResponse(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -135,6 +172,13 @@ class DirectUploadController extends AbstractController
     #[Route('/abort', name: 'abort', methods: ['POST'])]
     public function abort(string $projectUuid, Request $request): JsonResponse
     {
+        if ($this->directUploadLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many direct upload requests. Please retry later.'], 429);
+            }
+        }
+
         try {
             $payload = $request->toArray();
         } catch (\Throwable) {
@@ -149,6 +193,10 @@ class DirectUploadController extends AbstractController
         }
         if (!$intent || $intent->project->uuid?->toRfc4122() !== $projectUuid) {
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+        }
+
+        if (!$this->getUser() && !$request->attributes->get('_project')) {
+            return new JsonResponse(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {

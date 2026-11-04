@@ -10,6 +10,7 @@ use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
 use App\Service\ProjectMailerService;
+use App\Service\UploadSecurityValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -186,6 +187,10 @@ class ProjectEmailController extends AbstractController
                     return new JsonResponse(['error' => 'Pièce jointe trop volumineuse (max 10MB)'], 422);
                 }
                 $safeFilename = basename(str_replace(["\0", "\r", "\n"], '', (string) $a['filename']));
+                $ext = strtolower(pathinfo($safeFilename, PATHINFO_EXTENSION));
+                if (in_array($ext, UploadSecurityValidator::FORBIDDEN_EXTENSIONS, true)) {
+                    return new JsonResponse(['error' => sprintf('L\'extension de pièce jointe .%s est strictement interdite.', $ext)], 422);
+                }
                 $attachments[] = new Attachment(
                     content: base64_decode((string) $a['content']),
                     filename: $safeFilename,

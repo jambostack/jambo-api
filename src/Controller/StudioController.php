@@ -42,6 +42,7 @@ class StudioController extends InertiaController
         private \App\Service\FieldValueHydrator $fieldValueHydrator,
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
         private ?\App\Service\Security\SsrfProtectionService $ssrfProtection = null,
+        private ?\App\Service\UploadSecurityValidator $uploadValidator = null,
     ) {
         $this->ssrfProtection ??= new \App\Service\Security\SsrfProtectionService();
     }
@@ -1414,9 +1415,28 @@ PROMPT;
             $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_ai_img_');
             file_put_contents($tmpFile, $imageData);
 
+            // Déterminer et valider le type MIME réel
+            $finfo = new \finfo(FILEINFO_MIME_TYPE);
+            $mime = $finfo->file($tmpFile);
+            $allowedMimes = [
+                'image/png'  => 'png',
+                'image/jpeg' => 'jpg',
+                'image/webp' => 'webp',
+                'image/gif'  => 'gif',
+            ];
+            if (!isset($allowedMimes[$mime])) {
+                throw new \InvalidArgumentException(sprintf('Le fichier téléchargé n\'est pas une image valide (type MIME: %s).', $mime));
+            }
+
+            $ext = $allowedMimes[$mime];
+            $cleanName = 'ai-generated-' . substr(md5($prompt), 0, 8) . '.' . $ext;
+            if ($this->uploadValidator !== null) {
+                $this->uploadValidator->validateFileContent($tmpFile, $ext);
+            }
+
             $media = new \App\Entity\Media();
             $media->project = $project;
-            $media->originalName = 'ai-generated-' . substr(md5($prompt), 0, 8) . '.png';
+            $media->originalName = $cleanName;
             $media->alt = $body['alt'] ?? $prompt;
             $media->setFile(new \Symfony\Component\HttpFoundation\File\File($tmpFile));
             $this->em->persist($media);
@@ -1440,40 +1460,27 @@ PROMPT;
     }
 
     /**
-     * Télécharge une image distante de manière sécurisée (anti-SSRF, timeout, HTTPS uniquement).
+     * Télécharge une image distante de manière sécurisée (anti-SSRF via DNS pinning, timeout, HTTPS uniquement).
      */
     private function downloadExternalImage(string $url): string
     {
         $this->ssrfProtection->assertSafeUrl($url, true);
 
-        $context = stream_context_create([
-            'http' => [
-                'method' => 'GET',
-                'timeout' => 10,
-                'follow_location' => 0,
-                'user_agent' => 'JamboApi-CMS/1.26',
-            ],
-            'ssl' => [
-                'verify_peer' => true,
-                'verify_peer_name' => true,
-            ],
-        ]);
+        $options = $this->ssrfProtection->buildSafeHttpClientOptions($url, [
+            'headers' => ['User-Agent' => 'JamboApi-CMS/1.26'],
+        ], idleTimeout: 5.0, maxDuration: 10.0);
 
-        $stream = @fopen($url, 'rb', false, $context);
-        if ($stream === false) {
-            throw new \RuntimeException('Échec du téléchargement de l\'image distante');
+        $response = $this->httpClient->request('GET', $url, $options);
+        $status = $response->getStatusCode();
+        if ($status < 200 || $status >= 300) {
+            throw new \RuntimeException('Échec du téléchargement de l\'image distante : HTTP ' . $status);
         }
 
         $maxBytes = 10 * 1024 * 1024; // 10 Mo
-        $content = stream_get_contents($stream, $maxBytes + 1);
-        fclose($stream);
+        $content = $this->ssrfProtection->readSafeResponseBody($response, $maxBytes);
 
-        if ($content === false || strlen($content) === 0) {
+        if (strlen($content) === 0) {
             throw new \RuntimeException('Contenu image vide');
-        }
-
-        if (strlen($content) > $maxBytes) {
-            throw new \RuntimeException('Taille de l\'image supérieure à 10 Mo');
         }
 
         return $content;
