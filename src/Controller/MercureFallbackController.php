@@ -3,14 +3,21 @@
 namespace App\Controller;
 
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 class MercureFallbackController extends AbstractController
 {
+    public function __construct(
+        #[Autowire(service: 'limiter.realtime_limiter')]
+        private readonly ?RateLimiterFactory $realtimeLimiter = null,
+    ) {}
+
     #[Route('/.well-known/mercure', name: 'mercure_fallback', methods: ['GET', 'POST', 'OPTIONS'])]
     public function handle(Request $request): Response
     {
@@ -20,6 +27,14 @@ class MercureFallbackController extends AbstractController
                 'Access-Control-Allow-Methods' => 'GET, POST, OPTIONS',
                 'Access-Control-Allow-Headers' => 'Authorization, Content-Type, Last-Event-ID',
             ]);
+        }
+
+        if ($this->realtimeLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            $limiter = $this->realtimeLimiter->create($identifier);
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many requests. Try again later.'], 429);
+            }
         }
 
         // Si une requête EventSource (GET) arrive sur ce serveur alors qu'aucun hub

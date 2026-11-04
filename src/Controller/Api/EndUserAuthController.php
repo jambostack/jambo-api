@@ -784,6 +784,58 @@ class EndUserAuthController extends AbstractController
 
     // ─── Social Login ──────────────────────────────────────────────────────
 
+    #[OA\Get(
+        path: '/api/{projectId}/auth/social/{provider}',
+        summary: 'Social login — obtain OAuth authorization URL and state',
+        parameters: [
+            new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+            new OA\Parameter(name: 'provider', in: 'path', required: true, schema: new OA\Schema(type: 'string', enum: ['google', 'microsoft', 'github', 'gitlab'])),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Authorization URL and CSRF state', content: new OA\JsonContent(properties: [
+                new OA\Property(property: 'url', type: 'string'),
+                new OA\Property(property: 'state', type: 'string'),
+            ])),
+            new OA\Response(response: 400, description: 'Provider not configured'),
+            new OA\Response(response: 404, description: 'Project not found'),
+        ]
+    )]
+    #[Route('/social/{provider}', name: 'social_url', methods: ['GET'])]
+    public function getSocialUrl(Request $request, string $projectId, string $provider): JsonResponse
+    {
+        $project = $this->findProject($projectId);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        if (!in_array($provider, ['google', 'microsoft', 'github', 'gitlab'], true)) {
+            return $this->json(['error' => 'Unknown provider'], 400);
+        }
+
+        $security = ($project->settings ?? [])['security'] ?? [];
+        if (!($security['endUserSocialLogin'] ?? false)) {
+            return $this->json(['error' => 'Social login is not enabled for this project'], 400);
+        }
+
+        if ($this->socialLogin === null) {
+            return $this->json(['error' => 'Social login is not available'], 500);
+        }
+
+        $credentials = $this->socialLogin->getProjectCredentials($project, $provider);
+        if (!$credentials) {
+            return $this->json(['error' => "Provider '{$provider}' is not configured for this project"], 400);
+        }
+
+        $redirectUri = $request->getSchemeAndHttpHost() . "/api/{$projectId}/auth/social/{$provider}";
+
+        try {
+            $data = $this->socialLogin->getAuthorizationUrlAndState($provider, $redirectUri, $credentials);
+            return $this->json($data);
+        } catch (\Throwable $e) {
+            return $this->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
     #[OA\Post(
         path: '/api/{projectId}/auth/social/{provider}',
         summary: 'Social login — exchange OAuth code for JWT',
@@ -809,6 +861,17 @@ class EndUserAuthController extends AbstractController
     #[Route('/social/{provider}', name: 'social_login', methods: ['POST'])]
     public function socialLogin(Request $request, string $projectId, string $provider): JsonResponse
     {
+        if ($this->loginLimiter !== null) {
+            $limiter = $this->loginLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many login attempts. Please retry later.'], 429);
+            }
+        }
+
+        if (strlen($request->getContent()) > 1048576) {
+            return new JsonResponse(['error' => 'Payload too large (max 1MB).'], 413);
+        }
+
         $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
@@ -854,20 +917,33 @@ class EndUserAuthController extends AbstractController
 
             $endUser = $this->socialLogin->findOrCreateEndUser($project, $socialUser, $provider);
 
+            if (!$endUser->isActive()) {
+                return $this->json(['error' => 'Account is inactive or banned'], 403);
+            }
+
             // Vérifier 2FA
             if ($endUser->twoFactorEnabled) {
-                $twoFactorToken = bin2hex(random_bytes(32));
-                // Stocker le token 2FA pour cet end-user (simplifié — à améliorer)
-                $accessToken = $this->jwtService->createAccessToken($endUser);
+                $emailCodeHash = null;
+                if ($endUser->twoFactorMethod === 'email') {
+                    $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                    try {
+                        $this->container->get(\App\Service\TwoFactorMailer::class)
+                            ?->sendCode($endUser->email, $code, 'JamboAPI');
+                    } catch (\Throwable) {}
+                    $emailCodeHash = hash('sha256', $code);
+                }
+                $twoFactorToken = $this->jwtService->createTwoFactorToken($endUser, $emailCodeHash);
 
                 return $this->json([
                     'requires_2fa' => true,
                     'two_factor_token' => $twoFactorToken,
+                    'two_factor_method' => $endUser->twoFactorMethod,
                 ]);
             }
 
             $accessToken = $this->jwtService->createAccessToken($endUser);
             $refreshToken = $this->issueRefreshToken($endUser);
+            $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));
 
             return $this->json([
                 'data' => [

@@ -8,8 +8,10 @@ use App\Entity\User;
 use App\Repository\PersonalAccessTokenRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -32,6 +34,8 @@ class PersonalAccessTokenController extends AbstractController
         private PersonalAccessTokenRepository $repo,
         private EntityManagerInterface $em,
         private string $appSecret,
+        #[Autowire(service: 'limiter.token_management_limiter')]
+        private ?RateLimiterFactory $tokenLimiter = null,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -55,6 +59,18 @@ class PersonalAccessTokenController extends AbstractController
             return $user;
         }
 
+        if ($this->tokenLimiter !== null) {
+            $identifier = $user->getUserIdentifier();
+            if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->json(['error' => 'Too many token requests. Please retry later.'], 429);
+            }
+        }
+
+        $existingTokens = $this->repo->findByUser($user);
+        if (count($existingTokens) >= 50) {
+            return $this->json(['errors' => ['name' => 'Maximum token limit reached (50 tokens max).']], 422);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -65,11 +81,25 @@ class PersonalAccessTokenController extends AbstractController
         if ($name === '') {
             return $this->json(['errors' => ['name' => 'Name is required.']], 422);
         }
-
-        $scopes = array_values(array_intersect(self::ALLOWED_SCOPES, (array) ($data['scopes'] ?? [])));
-        if ($scopes === []) {
-            $scopes = ['schema:write'];
+        if (mb_strlen($name) > 255) {
+            return $this->json(['errors' => ['name' => 'Token name must not exceed 255 characters.']], 422);
         }
+        if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
+            return $this->json(['errors' => ['name' => 'Token name contains invalid control characters.']], 422);
+        }
+
+        $rawScopes = $data['scopes'] ?? ['schema:write'];
+        if (!is_array($rawScopes) || empty($rawScopes)) {
+            return $this->json(['errors' => ['scopes' => 'Scopes must be a non-empty array.']], 422);
+        }
+        $scopes = [];
+        foreach ($rawScopes as $s) {
+            if (!is_string($s) || !in_array($s, self::ALLOWED_SCOPES, true)) {
+                return $this->json(['errors' => ['scopes' => sprintf('Invalid scope "%s". Allowed scopes: %s', is_scalar($s) ? (string) $s : gettype($s), implode(', ', self::ALLOWED_SCOPES))]], 422);
+            }
+            $scopes[] = $s;
+        }
+        $scopes = array_values(array_unique($scopes));
 
         $expiresAt = null;
         if (!empty($data['expires_at'])) {

@@ -7,6 +7,29 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.72] — 2026-11-04
+
+### Security & Hardening
+- **Realtime Event Batching & Mercure Fallback Defense (`RealtimeController`, `MercureFallbackController`)**:
+  - Enforced batch event capping (max 100 events per poll) with configurable `limit` parameter in `RealtimeController::poll` to prevent memory blowup and latency DoS during short-polling.
+  - Added rate limiting (`realtime_limiter`) to `MercureFallbackController` to guard `/.well-known/mercure` from connection flooding and resource exhaustion while preserving CORS OPTIONS handling.
+- **End-User Social Auth Hardening & 2FA Flow (`EndUserAuthController`)**:
+  - Added rate limiting (`login_limiter`) and body payload size validation (max 1MB) on `socialLogin`.
+  - Added strict account activity verification (`!$endUser->isActive()`) in `socialLogin` preventing banned or pending accounts from authenticating via OAuth providers.
+  - Repaired 2FA workflow in `socialLogin`: generated signed JWT two-factor tokens (`createTwoFactorToken`) and dispatched verification email when method is email, matching the primary login workflow.
+  - Added session recording (`createSession`) on successful social logins.
+  - Added `GET /api/{projectId}/auth/social/{provider}` endpoint returning authorization URLs with CSRF states.
+- **End-User Multi-Tenant Admin & Token Revocation (`EndUserAdminController`)**:
+  - Implemented automatic and immediate revocation of all active sessions (`revokeAllForEndUser`) and refresh tokens upon banning or deleting end-users.
+  - Added input validation & sanitization: username bounded to 100 characters with control character rejection, and custom fields payload capped at 64KB.
+- **Personal Access Token Hardening (`PersonalAccessTokenController`)**:
+  - Integrated `token_management_limiter` rate limiting on personal access token creation.
+  - Enforced a 50-token active ceiling per user to prevent unbounded token accumulation and database bloat.
+  - Added strict name sanitization (max 255 chars, control character rejection) and strict scope whitelist validation.
+- **Automated Test Suite**:
+  - Added comprehensive security suite `Cycle25HardeningTest.php` (8 tests, 45 assertions).
+  - Maintained 100% pass rate across the full test suite (909 tests, 2916 assertions).
+
 ## [1.26.71] — 2026-11-04
 
 ### Security & Hardening

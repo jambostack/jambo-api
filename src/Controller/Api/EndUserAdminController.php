@@ -32,6 +32,8 @@ class EndUserAdminController extends AbstractController
         private Security $security,
         private ApiTokenChecker $tokenChecker,
         private UserPasswordHasherInterface $hasher,
+        private ?\App\Repository\ProjectAuthSessionRepository $sessionRepo = null,
+        private ?\App\Repository\ProjectAuthRefreshTokenRepository $refreshTokenRepo = null,
     ) {}
 
     // ─── LIST ────────────────────────────────────────────────────────────────
@@ -138,6 +140,16 @@ class EndUserAdminController extends AbstractController
         if (!in_array($status, ['active', 'banned', 'pending'], true)) {
             return $this->json(['error' => 'Invalid status'], 422);
         }
+        if ($username !== '') {
+            if (mb_strlen($username) > 100 || preg_match('/[\x00-\x1F\x7F]/', $username)) {
+                return $this->json(['error' => 'Invalid username format or too long (max 100 characters).'], 422);
+            }
+        }
+        if ($customFields !== null) {
+            if (!is_array($customFields) || strlen(json_encode($customFields) ?: '') > 65536) {
+                return $this->json(['error' => 'Custom fields must be a valid object (max 64KB).'], 422);
+            }
+        }
 
         $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $email);
         if ($existing) {
@@ -187,17 +199,31 @@ class EndUserAdminController extends AbstractController
             $endUser->email = $email;
         }
         if (isset($data['username'])) {
-            $endUser->username = trim($data['username']) ?: null;
+            $cleanUser = trim($data['username']);
+            if ($cleanUser !== '') {
+                if (mb_strlen($cleanUser) > 100 || preg_match('/[\x00-\x1F\x7F]/', $cleanUser)) {
+                    return $this->json(['error' => 'Invalid username format or too long (max 100 characters).'], 422);
+                }
+            }
+            $endUser->username = $cleanUser ?: null;
         }
         if (isset($data['status'])) {
             if (!in_array($data['status'], ['active', 'banned', 'pending'], true)) {
                 return $this->json(['error' => 'Invalid status'], 422);
             }
             $endUser->status = $data['status'];
-            if ($data['status'] === 'banned') $endUser->tokenVersion++;
+            if ($data['status'] === 'banned') {
+                $endUser->tokenVersion++;
+                $this->sessionRepo?->revokeAllForEndUser($endUser);
+                $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
+            }
         }
         if (isset($data['custom_fields'])) {
-            $endUser->customFields = (array) $data['custom_fields'];
+            $cf = $data['custom_fields'];
+            if (!is_array($cf) || strlen(json_encode($cf) ?: '') > 65536) {
+                return $this->json(['error' => 'Custom fields must be a valid object (max 64KB).'], 422);
+            }
+            $endUser->customFields = (array) $cf;
         }
         // Reset password (admin-initiated)
         if (!empty($data['password'] ?? '')) {
@@ -206,6 +232,8 @@ class EndUserAdminController extends AbstractController
             }
             $endUser->password = $this->hasher->hashPassword($endUser, $data['password']);
             $endUser->tokenVersion++;
+            $this->sessionRepo?->revokeAllForEndUser($endUser);
+            $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
         }
 
         $this->em->flush();
@@ -224,6 +252,8 @@ class EndUserAdminController extends AbstractController
         $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
         if (!$endUser) return $this->json(['error' => 'Not found'], 404);
 
+        $this->sessionRepo?->revokeAllForEndUser($endUser);
+        $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
         $this->em->remove($endUser);
         $this->em->flush();
 
@@ -252,7 +282,11 @@ class EndUserAdminController extends AbstractController
         }
 
         $endUser->status = $newStatus;
-        if ($newStatus === 'banned') $endUser->tokenVersion++;
+        if ($newStatus === 'banned') {
+            $endUser->tokenVersion++;
+            $this->sessionRepo?->revokeAllForEndUser($endUser);
+            $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
+        }
         $this->em->flush();
 
         return $this->json(['success' => true, 'status' => $newStatus]);

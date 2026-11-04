@@ -148,6 +148,7 @@ class RealtimeController extends AbstractController
         }
 
         $since = max(0, (int) $request->query->get('since', '0'));
+        $limit = min(100, max(1, (int) $request->query->get('limit', 100)));
         $safeUuid = $project->uuid?->toRfc4122() ?? $projectUuid;
 
         $eventFile = $this->getParameter('kernel.project_dir') . '/var/realtime/' . $safeUuid . '.jsonl';
@@ -158,7 +159,8 @@ class RealtimeController extends AbstractController
         if (file_exists($eventFile)) {
             $lines = file($eventFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
             if ($lines !== false && count($lines) > $since) {
-                for ($i = $since; $i < count($lines); $i++) {
+                $end = min(count($lines), $since + $limit);
+                for ($i = $since; $i < $end; $i++) {
                     $data = json_decode($lines[$i], true);
                     if ($data !== null) {
                         $data['_id'] = $i;
