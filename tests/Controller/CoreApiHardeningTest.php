@@ -1330,4 +1330,58 @@ class CoreApiHardeningTest extends WebTestCase
         $pollData = json_decode($client->getResponse()->getContent(), true);
         $this->assertArrayHasKey('events', $pollData);
     }
+
+    public function testLinkCheckerHtmlAndMarkdownExtraction(): void
+    {
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $entryRepo = $em->getRepository(\App\Entity\ContentEntry::class);
+        $linkChecker = new \App\Service\Redirect\LinkChecker($entryRepo);
+
+        $entry = new \App\Entity\ContentEntry();
+        $cfv1 = new \App\Entity\ContentFieldValue();
+        $cfv1->fieldType = 'richtext';
+        $cfv1->textValue = '<p>Check <a href="https://example.com/double">Double</a> and <a href=\'/single\'>Single</a></p>';
+        $entry->fieldValues->add($cfv1);
+
+        $cfv2 = new \App\Entity\ContentFieldValue();
+        $cfv2->fieldType = 'markdown';
+        $cfv2->textValue = 'Visit [My Page](/my-page) or [External](https://google.com)';
+        $entry->fieldValues->add($cfv2);
+
+        $scanned = $linkChecker->scanEntry($entry);
+        $this->assertCount(4, $scanned);
+
+        $urls = array_column($scanned, 'url');
+        $this->assertContains('https://example.com/double', $urls);
+        $this->assertContains('/single', $urls);
+        $this->assertContains('/my-page', $urls);
+        $this->assertContains('https://google.com', $urls);
+    }
+
+    public function testShareControllerInvalidJsonSafety(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-share-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        $client->request('POST', "/api/projects/{$this->projectUuid}/shares", [], [], ['CONTENT_TYPE' => 'application/json'], 'not a json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('Invalid JSON body', $data['error']);
+    }
+
+    public function testDeploymentsUnauthenticatedRejection(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/api/deployments');
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+    }
 }

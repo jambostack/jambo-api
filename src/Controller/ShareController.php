@@ -34,7 +34,11 @@ class ShareController extends AbstractController
             $this->denyAccessUnlessGranted('content.update', $project);
         }
 
-        $data = json_decode($request->getContent(), true) ?? [];
+        try {
+            $data = $request->toArray();
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
         $entry = $this->entryRepository->findOneBy(['uuid' => $data['entryUuid'] ?? '', 'project' => $project]);
         if (!$entry || $entry->isDeleted()) {
             return $this->json(['error' => 'Entry not found'], 404);

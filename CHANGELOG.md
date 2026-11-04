@@ -7,6 +7,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.42] — 2026-11-04
+
+### Fixed & Hardened
+- **Markdown & Single-Quote Link Extraction (`LinkChecker`)**:
+  - Enhanced regex to extract links with single quotes (`<a href='...'>`) as well as Markdown syntax (`[text](url)`), which previously went unscanned in markdown/richtext fields.
+- **Share Controller JSON Safety (`ShareController`)**:
+  - Wrapped request body parsing with `try / catch (\Throwable)` to return clean 400 Bad Request on malformed JSON rather than unhandled exceptions.
+- **Deployment Endpoint Authentication (`DeploymentController`)**:
+  - Replaced method attribute `#[IsGranted('IS_AUTHENTICATED_FULLY')]` with in-method JSON authentication check, returning clean 401 instead of a 302 redirect to HTML login.
+
+---
+
 ## [1.26.41] — 2026-11-04
 
 ### Fixed & Hardened

@@ -56,10 +56,13 @@ class DeploymentController extends AbstractController
         ]);
     }
 
-    #[IsGranted('IS_AUTHENTICATED_FULLY')]
     #[Route('/api/deployments', name: 'deployments_index', methods: ['GET'])]
     public function index(Request $request): JsonResponse
     {
+        if (!$this->getUser()) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
         $limit = min(100, max(1, $request->query->getInt('limit', 25)));
         $deployments = $this->deployments->findRecent($limit);
 

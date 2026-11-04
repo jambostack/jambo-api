@@ -91,24 +91,34 @@ class LinkChecker
     }
 
     /**
-     * Extract <a href="..."> links from HTML content.
+     * Extract links from HTML and Markdown content.
      *
      * @return array<int, array{url: string, text: string}>
      */
-    private function extractLinks(string $html): array
+    private function extractLinks(string $content): array
     {
         $links = [];
-        $pattern = '/<a\s[^>]*href\s*=\s*"([^"]*)"[^>]*>([^<]*)<\/a>/is';
 
-        if (preg_match_all($pattern, $html, $matches, PREG_SET_ORDER) === false) {
-            return [];
+        // 1. HTML <a href="..."> or <a href='...'>
+        $patternHtml = '/<a\s[^>]*href\s*=\s*["\']([^"\']*)["\'][^>]*>(.*?)<\/a>/is';
+        if (preg_match_all($patternHtml, $content, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $links[] = [
+                    'url'  => $m[1],
+                    'text' => trim(strip_tags($m[2])),
+                ];
+            }
         }
 
-        foreach ($matches as $m) {
-            $links[] = [
-                'url' => $m[1],
-                'text' => trim(strip_tags($m[2])),
-            ];
+        // 2. Markdown [text](url)
+        $patternMd = '/\[([^\]]+)\]\(([^)\s]+)\)/';
+        if (preg_match_all($patternMd, $content, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $links[] = [
+                    'url'  => $m[2],
+                    'text' => trim($m[1]),
+                ];
+            }
         }
 
         return $links;
