@@ -64,6 +64,22 @@ framework:
 when@test:
     framework:
         rate_limiter:
+            login_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            register_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            password_reset_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            two_factor_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
             mcp_limiter:
                 policy: sliding_window
                 limit: 10000

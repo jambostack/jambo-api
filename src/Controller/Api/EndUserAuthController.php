@@ -19,11 +19,13 @@ use App\Controller\EndUserSerializerTrait;
 use Doctrine\ORM\EntityManagerInterface;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Email;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[OA\Tag(name: 'End-User Auth')]
@@ -47,6 +49,14 @@ class EndUserAuthController extends AbstractController
         private ?ProjectAuthRefreshTokenRepository $refreshTokenRepo = null,
         private ?ProjectAuthSessionRepository $sessionRepo = null,
         private ?PasswordPolicyValidator $passwordValidator = null,
+        #[Autowire(service: 'limiter.two_factor_limiter')]
+        private ?RateLimiterFactory $twoFactorLimiter = null,
+        #[Autowire(service: 'limiter.login_limiter')]
+        private ?RateLimiterFactory $loginLimiter = null,
+        #[Autowire(service: 'limiter.register_limiter')]
+        private ?RateLimiterFactory $registerLimiter = null,
+        #[Autowire(service: 'limiter.password_reset_limiter')]
+        private ?RateLimiterFactory $passwordResetLimiter = null,
     ) {}
 
     #[OA\Post(
@@ -76,6 +86,13 @@ class EndUserAuthController extends AbstractController
     #[Route('/register', name: 'register', methods: ['POST'])]
     public function register(Request $request, string $projectId): JsonResponse
     {
+        if ($this->registerLimiter !== null) {
+            $limiter = $this->registerLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many registration requests. Please retry later.'], 429);
+            }
+        }
+
         $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
@@ -151,6 +168,13 @@ class EndUserAuthController extends AbstractController
     #[Route('/login', name: 'login', methods: ['POST'])]
     public function login(Request $request, string $projectId): JsonResponse
     {
+        if ($this->loginLimiter !== null) {
+            $limiter = $this->loginLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many login attempts. Please retry later.'], 429);
+            }
+        }
+
         $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
@@ -236,6 +260,13 @@ class EndUserAuthController extends AbstractController
     #[Route('/verify-2fa', name: 'verify_2fa', methods: ['POST'])]
     public function verifyTwoFactor(Request $request, string $projectId): JsonResponse
     {
+        if ($this->twoFactorLimiter !== null) {
+            $limiter = $this->twoFactorLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many 2FA verification attempts. Please retry later.'], 429);
+            }
+        }
+
         $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
@@ -600,6 +631,13 @@ class EndUserAuthController extends AbstractController
     #[Route('/forgot-password', name: 'forgot_password', methods: ['POST'])]
     public function forgotPassword(Request $request, string $projectId): JsonResponse
     {
+        if ($this->passwordResetLimiter !== null) {
+            $limiter = $this->passwordResetLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many password reset requests. Please retry later.'], 429);
+            }
+        }
+
         $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
@@ -688,6 +726,13 @@ class EndUserAuthController extends AbstractController
     #[Route('/reset-password', name: 'reset_password', methods: ['POST'])]
     public function resetPassword(Request $request, string $projectId): JsonResponse
     {
+        if ($this->passwordResetLimiter !== null) {
+            $limiter = $this->passwordResetLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many password reset attempts. Please retry later.'], 429);
+            }
+        }
+
         $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);

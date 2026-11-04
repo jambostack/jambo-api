@@ -6,9 +6,11 @@ use App\Controller\InertiaController;
 use App\Repository\PasswordResetTokenRepository;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 class NewPasswordController extends InertiaController
@@ -18,6 +20,8 @@ class NewPasswordController extends InertiaController
         private UserRepository $userRepository,
         private EntityManagerInterface $em,
         private UserPasswordHasherInterface $hasher,
+        #[Autowire(service: 'limiter.password_reset_limiter')]
+        private ?RateLimiterFactory $passwordResetLimiter = null,
     ) {}
 
     #[Route('/reset-password/{token}', name: 'app_reset_password', methods: ['GET'])]
@@ -40,6 +44,16 @@ class NewPasswordController extends InertiaController
     #[Route('/reset-password/{token}', name: 'app_reset_password_store', methods: ['POST'])]
     public function store(Request $request, string $token): Response
     {
+        if ($this->passwordResetLimiter !== null) {
+            $limiter = $this->passwordResetLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return $this->inertia($request, 'auth/reset-password', [
+                    'token' => $token,
+                    'errors' => ['token' => 'Too many requests. Please retry later.'],
+                ]);
+            }
+        }
+
         $resetToken = $this->tokenRepository->findValidByToken($token);
 
         if ($resetToken === null) {
