@@ -75,7 +75,11 @@ class WebhookInboundController extends AbstractController
 
         // Parse le corps
         $body = $request->getContent();
-        $payload = json_decode($body, true) ?? ['raw_body' => $body];
+        $decoded = null;
+        if (is_string($body) && $body !== '') {
+            $decoded = json_decode($body, true);
+        }
+        $payload = is_array($decoded) ? $decoded : ['raw_body' => $body];
         $payload['trigger'] = 'webhook.inbound';
         $payload['project_uuid'] = $automation->project?->uuid?->toRfc4122();
         $payload['timestamp'] = time();

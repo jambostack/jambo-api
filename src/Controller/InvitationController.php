@@ -50,7 +50,8 @@ class InvitationController extends AbstractController
             ]);
         }
 
-        if (!$this->getUser()) {
+        $user = $this->getUser();
+        if (!$user instanceof User) {
             if ($wantsJson) {
                 return new JsonResponse(['error' => 'Authentication required'], 401);
             }
@@ -58,10 +59,7 @@ class InvitationController extends AbstractController
             return $this->redirectToRoute('app_login', ['_target_path' => $redirectUrl]);
         }
 
-        /** @var User $user */
-        $user = $this->getUser();
-
-        if ($member->email !== $user->email) {
+        if (strtolower((string) $member->email) !== strtolower((string) $user->email)) {
             if ($wantsJson) {
                 return new JsonResponse(['error' => 'Cette invitation est destinée à ' . $member->email . '.'], 403);
             }

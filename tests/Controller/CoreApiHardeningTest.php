@@ -1804,6 +1804,10 @@ class CoreApiHardeningTest extends WebTestCase
         // 8) Malformed JSON on /forgot-password with Inertia header -> handles gracefully without 500
         $client->request('POST', '/forgot-password', [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_INERTIA' => 'true'], '{bad-json');
         $this->assertSame(200, $client->getResponse()->getStatusCode());
+
+        // 9) Malformed UUID on inbound webhook -> 404 (not 500)
+        $client->request('POST', '/api/webhooks/inbound/not-a-uuid', [], [], ['CONTENT_TYPE' => 'application/json'], '"string-payload"');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
     }
 
     public function testConfirmPasswordAuthenticatedValidation(): void
@@ -1830,6 +1834,14 @@ class CoreApiHardeningTest extends WebTestCase
 
         // Malformed UUID on search when authenticated -> 404 (not 500)
         $client->request('GET', '/api/projects/not-a-uuid/search?q=test');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on realtime token when authenticated -> 404 (not 500)
+        $client->request('GET', '/api/projects/not-a-uuid/realtime/token');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on TUS upload when authenticated -> 404 (not 500)
+        $client->request('POST', '/api/projects/not-a-uuid/files/tus', [], [], ['HTTP_Tus_Resumable' => '1.0.0', 'HTTP_Upload_Length' => '100']);
         $this->assertSame(404, $client->getResponse()->getStatusCode());
     }
 }

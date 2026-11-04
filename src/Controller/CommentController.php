@@ -70,8 +70,8 @@ class CommentController extends AbstractController
         $comment->entry = $entry;
         $comment->author = $user;
         $comment->body = $body;
-        if (!empty($data['parent_id'])) {
-            $parent = $this->commentRepository->find($data['parent_id']);
+        if (!empty($data['parent_id']) && is_numeric($data['parent_id'])) {
+            $parent = $this->commentRepository->find((int) $data['parent_id']);
             if ($parent && $parent->entry?->id === $entry->id) {
                 $comment->parent = $parent;
             }

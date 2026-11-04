@@ -95,7 +95,8 @@ class DeploymentController extends AbstractController
             return $this->json(['error' => 'Signature invalide'], 401);
         }
 
-        $data = json_decode($payload, true) ?: [];
+        $decoded = json_decode($payload, true);
+        $data = is_array($decoded) ? $decoded : [];
 
         $environment = in_array($data['environment'] ?? '', [
             Deployment::ENV_PREVIEW,
@@ -126,9 +127,13 @@ class DeploymentController extends AbstractController
         }
 
         if (!empty($data['project_uuid'])) {
-            $project = $this->projects->findOneBy(['uuid' => $data['project_uuid']]);
-            if ($project) {
-                $deployment->project = $project;
+            try {
+                $project = $this->projects->findOneBy(['uuid' => $data['project_uuid']]);
+                if ($project) {
+                    $deployment->project = $project;
+                }
+            } catch (\Throwable) {
+                // Ignore malformed project uuid
             }
         }
 

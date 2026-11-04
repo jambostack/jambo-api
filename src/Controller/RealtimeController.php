@@ -36,7 +36,11 @@ class RealtimeController extends AbstractController
     #[Route('/token', name: 'token', methods: ['GET'])]
     public function token(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -105,7 +109,11 @@ class RealtimeController extends AbstractController
     #[Route('', name: 'poll', methods: ['GET'])]
     public function poll(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }

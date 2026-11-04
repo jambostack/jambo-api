@@ -76,7 +76,7 @@ class TusController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(string $projectUuid, Request $request): Response
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->findProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -122,7 +122,7 @@ class TusController extends AbstractController
             return $this->json(['error' => 'Missing Tus-Resumable header'], 400);
         }
 
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->findProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -169,11 +169,11 @@ class TusController extends AbstractController
     #[Route('/{uploadId}', name: 'head', methods: ['HEAD'])]
     public function head(string $projectUuid, string $uploadId, Request $request): Response
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->findProject($projectUuid);
         if (!$project) {
             return new Response('', 404, ['Tus-Resumable' => '1.0.0']);
         }
-        $this->denyProjectAccess($project);
+        $this->denyProjectAccess($project, $request);
 
         if (!$this->isValidUploadId($uploadId) || !$this->tusServer->exists($projectUuid, $uploadId)) {
             return new Response('', 404, ['Tus-Resumable' => '1.0.0']);
@@ -197,7 +197,7 @@ class TusController extends AbstractController
     #[Route('/{uploadId}', name: 'delete', methods: ['DELETE'])]
     public function delete(string $projectUuid, string $uploadId, Request $request): Response
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->findProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -217,7 +217,7 @@ class TusController extends AbstractController
     #[Route('/{uploadId}/finalize', name: 'finalize', methods: ['POST'])]
     public function finalize(string $projectUuid, string $uploadId, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->findProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -302,10 +302,12 @@ class TusController extends AbstractController
             $firstProfileUuid = array_key_first($paths);
             if ($firstProfileUuid !== null) {
                 // Trouver le profil pour déterminer le driver (local/s3)
-                $firstProfile = $this->profileRepo->findOneBy(['uuid' => $firstProfileUuid]);
-                if ($firstProfile !== null) {
-                    $media->storageProfile = $firstProfile;
-                }
+                try {
+                    $firstProfile = $this->profileRepo->findOneBy(['uuid' => $firstProfileUuid]);
+                    if ($firstProfile !== null) {
+                        $media->storageProfile = $firstProfile;
+                    }
+                } catch (\Throwable) {}
             }
         } catch (\Throwable $e) {
             // Même si la sync distante échoue, on garde le fichier local
@@ -326,6 +328,15 @@ class TusController extends AbstractController
     }
 
     // ─── Private ─────────────────────────────────────────────────────────
+
+    private function findProject(string $projectUuid): ?Project
+    {
+        try {
+            return $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
 
     private function isValidUploadId(string $uploadId): bool
     {

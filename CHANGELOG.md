@@ -7,6 +7,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.47] — 2026-11-04
+
+### Fixed & Hardened
+- **Project OAuth Cross-Tenant Leak Prevention (`ProjectOAuthController::userinfo`)**:
+  - Enforced strict project tenant isolation on the `/api/v1/projects/{projectUuid}/oauth/userinfo` endpoint. Prevented end-users authenticated on one project from retrieving userinfo against another project's UUID, and added `try / catch (\Throwable)` around project resolution.
+- **Webhook Inbound Scalar JSON Payload Protection (`WebhookInboundController::receive`)**:
+  - Fixed an unhandled fatal `TypeError` (HTTP 500) occurring when incoming webhooks receive JSON scalar literals (e.g. `"string"`, `123`, `true`) instead of JSON objects/arrays by ensuring the decoded payload is always an array.
+- **Tus Resumable Upload UUID & Profile Safety (`TusController`)**:
+  - Protected all TUS endpoints (`create`, `patch`, `head`, `delete`, `finalize`) with safe `findProject()` lookups catching invalid UUID strings and returning 404 instead of throwing unhandled DBAL `ConversionException`.
+  - Added exception safety around storage profile resolution in upload finalization.
+- **Realtime Mercure & Long-Polling Hardening (`RealtimeController`)**:
+  - Wrapped project lookups in `try / catch (\Throwable)` across both `/realtime/token` and `/realtime` poll endpoints.
+- **Comments, Invitations & Deployments Integrity**:
+  - `CommentController`: Guarded `parent_id` parameter against non-numeric inputs.
+  - `InvitationController`: Case-insensitive email comparison and explicit User type safety.
+  - `DeploymentController`: Exception safety on project lookup and guaranteed array payload decoding.
+  - `McpController`: Protected project UUID lookup against malformed string exceptions.
+
+---
+
 ## [1.26.46] — 2026-11-04
 
 ### Fixed & Hardened

@@ -55,7 +55,11 @@ class McpController extends AbstractController
             return new JsonResponse(['error' => 'Trop de requêtes MCP. Réessayez plus tard.'], 429);
         }
 
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        }
         if (!$project) {
             return new JsonResponse(['error' => 'Projet introuvable'], 404);
         }

@@ -245,6 +245,15 @@ class ProjectOAuthController extends AbstractController
     #[Route('/userinfo', name: 'userinfo', methods: ['GET', 'POST'])]
     public function userinfo(string $projectUuid, Request $request): JsonResponse
     {
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+        }
+        if (!$project) {
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+        }
+
         $authHeader = $request->headers->get('Authorization', '');
         if (!str_starts_with($authHeader, 'Bearer ')) {
             return new JsonResponse(['error' => 'invalid_token', 'error_description' => 'Bearer token required.'], 401);
@@ -260,6 +269,10 @@ class ProjectOAuthController extends AbstractController
         $endUser = $userId ? $this->endUserRepository->find($userId) : null;
         if (!$endUser) {
             return new JsonResponse(['error' => 'user_not_found', 'error_description' => 'User no longer exists.'], 404);
+        }
+
+        if ($endUser->project->id !== $project->id) {
+            return new JsonResponse(['error' => 'invalid_token', 'error_description' => 'Token does not belong to this project.'], 403);
         }
 
         return new JsonResponse([
