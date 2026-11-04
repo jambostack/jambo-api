@@ -94,7 +94,7 @@ def main():
         return run_command_subprocess(cmd)
 
     steps = [
-        ("Git sync", f"git fetch --all --tags --prune && git checkout {target_tag}" if target_tag else "git pull origin main"),
+        ("Git sync", f"git fetch --all --tags --prune --force && git checkout {target_tag}" if target_tag else "git pull origin main"),
         ("Composer dependencies", "composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-scripts"),
         ("Frontend build", "if command -v npm >/dev/null 2>&1; then npm ci --prefer-offline && npm run build; else echo 'Notice: npm not found in server environment, skipping frontend build.'; fi"),
         ("Doctrine migrations", "php bin/console doctrine:migrations:migrate --no-interaction --all-or-nothing"),
