@@ -1159,4 +1159,54 @@ class CoreApiHardeningTest extends WebTestCase
         $data2 = json_decode($client->getResponse()->getContent(), true);
         $this->assertNotSame($data['slug'], $data2['slug']);
     }
+
+    public function testStudioInvalidJsonSafety(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-studio-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // Invalid JSON body -> 400
+        $client->request('POST', "/api/projects/{$this->projectUuid}/studio/schema", [], [], ['CONTENT_TYPE' => 'application/json'], 'not json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        $client->request('POST', "/api/projects/{$this->projectUuid}/studio/apply-entries", [], [], ['CONTENT_TYPE' => 'application/json'], 'not json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        $client->request('POST', "/api/projects/{$this->projectUuid}/studio/ai-schema", [], [], ['CONTENT_TYPE' => 'application/json'], 'not json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+    }
+
+    public function testSearchValidationAndQuerySanitization(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-search-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // Empty query -> 400
+        $client->request('GET', "/api/projects/{$this->projectUuid}/search?q=");
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // Valid search -> 200
+        $client->request('GET', "/api/projects/{$this->projectUuid}/search?q=test");
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('hits', $data);
+    }
 }

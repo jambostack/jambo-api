@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.40] — 2026-11-04
+
+### Fixed & Hardened
+- **Studio AI Endpoints JSON Safety (`StudioController`)**:
+  - Validated JSON payload structure (`!is_array($body)` checks returning HTTP 400 Bad Request) across all Studio endpoints: `aiSchema`, `aiChat`, `applyEntries`, `applySchema`, `aiExecute`, and `aiGenerateImage`, preventing PHP type errors on malformed payloads.
+- **Search Query Sanitization & SQL Wildcard Escaping (`SearchController` & `SearchService`)**:
+  - Enforced a 500-character upper bound on search query parameter `q` to prevent memory bloat.
+  - Escaped SQL LIKE wildcards (`%`, `_`) in `SearchService::fallbackDatabaseSearch` to prevent performance degradation and unintended broad matches during fallback database searches.
+
+---
+
 ## [1.26.39] — 2026-11-03
 
 ### Fixed & Hardened

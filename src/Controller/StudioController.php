@@ -322,6 +322,7 @@ EUSER;
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = json_decode($request->getContent(), true);
+        if (!is_array($body)) return $this->json(['error' => 'Invalid JSON body'], 400);
         $prompt = trim((string) ($body['prompt'] ?? ''));
         if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
 
@@ -415,6 +416,7 @@ PROMPT;
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = json_decode($request->getContent(), true);
+        if (!is_array($body)) return $this->json(['error' => 'Invalid JSON body'], 400);
         $prompt  = trim((string) ($body['prompt'] ?? ''));
         $context = trim((string) ($body['context'] ?? ''));
         $history = is_array($body['history'] ?? null) ? $body['history'] : [];
@@ -727,6 +729,7 @@ PROMPT;
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = json_decode($request->getContent(), true);
+        if (!is_array($body)) return $this->json(['error' => 'Invalid JSON body'], 400);
         $collectionSlug = $body['collection'] ?? '';
         $entryData = $body['entry'] ?? [];
 
@@ -1174,6 +1177,7 @@ PROMPT;
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $data = json_decode($request->getContent(), true);
+        if (!is_array($data)) return $this->json(['error' => 'Invalid JSON body'], 400);
         // Garantie ultime : on normalise au point de persistance, donc quelle que
         // soit la source (chat IA, schéma IA, builder visuel), les conventions de
         // nommage sont toujours respectées en base.
@@ -1329,6 +1333,7 @@ PROMPT;
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = json_decode($request->getContent(), true);
+        if (!is_array($body)) return $this->json(['error' => 'Invalid JSON body'], 400);
         $actions = $body['actions'] ?? [];
         if (empty($actions)) return $this->json(['error' => 'Aucune action fournie'], 422);
 
@@ -1385,6 +1390,7 @@ PROMPT;
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = json_decode($request->getContent(), true);
+        if (!is_array($body)) return $this->json(['error' => 'Invalid JSON body'], 400);
         $prompt = $body['prompt'] ?? '';
         if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
 

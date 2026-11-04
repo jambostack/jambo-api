@@ -27,9 +27,12 @@ class SearchController extends AbstractController
 
         $this->denyAccessUnlessGranted('project.view', $project);
 
-        $query = $request->query->get('q');
-        if (empty($query)) {
+        $query = trim((string) $request->query->get('q', ''));
+        if ($query === '') {
             return $this->json(['error' => 'Paramètre "q" requis'], 400);
+        }
+        if (mb_strlen($query) > 500) {
+            $query = mb_substr($query, 0, 500);
         }
 
         $options = [

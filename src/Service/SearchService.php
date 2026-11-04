@@ -175,7 +175,7 @@ class SearchService
            ->andWhere('e.deletedAt IS NULL')
            ->andWhere('(fv.textValue LIKE :q OR e.slug LIKE :q)')
            ->setParameter('project', $project)
-           ->setParameter('q', '%' . $query . '%')
+           ->setParameter('q', '%' . addcslashes($query, '%_\\') . '%')
            ->orderBy('e.updatedAt', 'DESC')
            ->setMaxResults($limit)
            ->setFirstResult($offset);
