@@ -11,6 +11,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/install', name: 'install_')]
@@ -21,6 +22,7 @@ class InstallController extends AbstractController
         private readonly UserRepository $userRepository,
         private readonly UserPasswordHasherInterface $passwordHasher,
         #[Autowire('%kernel.project_dir%')] private readonly string $projectDir,
+        #[Autowire(service: 'limiter.install_setup_limiter')] private readonly RateLimiterFactory $installLimiter,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -70,6 +72,12 @@ class InstallController extends AbstractController
     #[Route('/setup-admin', name: 'setup_admin', methods: ['POST'])]
     public function setupAdmin(Request $request): JsonResponse
     {
+        // Rate limiting: prevent brute-force admin setup on fresh instances.
+        $limiter = $this->installLimiter->create($request->getClientIp() ?: '127.0.0.1');
+        if (false === $limiter->consume(1)->isAccepted()) {
+            return new JsonResponse(['error' => 'Too many setup attempts. Please retry later.'], 429);
+        }
+
         if ($this->userRepository->count([]) > 0) {
             return new JsonResponse(['error' => 'Super admin already initialized.'], 403);
         }

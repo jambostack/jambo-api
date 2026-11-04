@@ -7,6 +7,24 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.65] — 2026-11-04
+
+### Fixed & Hardened
+- **CSPRNG for A/B Test Variant Selection (`AbTestManager::resolveVariant`)**:
+  - Replaced weak `mt_rand()` / `mt_getrandmax()` with cryptographically secure `random_int()` for A/B test variant selection, eliminating predictable variant distribution via PRNG state recovery.
+- **Information Disclosure Prevention (`DeploymentController::systemInfo`)**:
+  - Removed `'php'` (PHP version) and `'environment'` (runtime environment) fields from the public `/api/system/info` endpoint to reduce server fingerprinting and reconnaissance surface.
+  - Added explanatory comment documenting the intentional omission.
+- **Install Endpoint Brute-Force Protection (`InstallController::setupAdmin`)**:
+  - Added `install_setup_limiter` rate limiter (5 req / 5 minutes) on the `/install/setup-admin` POST endpoint to prevent automated admin setup attempts on fresh instances.
+  - Rate limiting applied before the user-count guard for maximum protection.
+- **Trusted Proxies Configuration (`framework.yaml`)**:
+  - Added `trusted_proxies` and `trusted_headers` configuration referencing `SYMFONY_TRUSTED_PROXIES` environment variable, preventing IP header spoofing via `X-Forwarded-For` in environments behind load balancers.
+- **Automated Test Coverage**:
+  - Added `Cycle18HardeningTest` covering all new defenses (8 assertions).
+
+---
+
 ## [1.26.64] — 2026-11-04
 
 ### Fixed & Hardened

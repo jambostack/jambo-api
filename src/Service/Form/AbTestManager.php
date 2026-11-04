@@ -64,7 +64,8 @@ class AbTestManager
         }
 
         $weights = $ab['weights'] ?? self::DEFAULT_WEIGHTS;
-        $rand = mt_rand() / mt_getrandmax(); // 0.0 - 1.0
+        // Use CSPRNG (random_int) for unbiased, unpredictable variant selection.
+        $rand = random_int(0, PHP_INT_MAX) / PHP_INT_MAX; // 0.0 - 1.0
         $index = $rand < $weights[0] ? 0 : 1;
 
         return [

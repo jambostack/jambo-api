@@ -84,6 +84,10 @@ framework:
             policy: sliding_window
             limit: 120
             interval: '60 seconds'
+        install_setup_limiter:
+            policy: sliding_window
+            limit: 5
+            interval: '300 seconds'
 
 when@test:
     framework:
@@ -156,3 +160,7 @@ when@test:
                 policy: sliding_window
                 limit: 10000
                 interval: '60 seconds'
+            install_setup_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '300 seconds'

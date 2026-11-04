@@ -5,6 +5,11 @@ framework:
     # Note that the session will be started ONLY if you read or write from it.
     session: true
 
+    # Trusted proxies: allow SYMFONY_TRUSTED_PROXIES env variable to override X-Forwarded-* headers.
+    # On o2switch (shared), leave empty; behind a load-balancer set to the proxy CIDR.
+    trusted_proxies: '%env(default::SYMFONY_TRUSTED_PROXIES)%'
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port', 'x-forwarded-prefix']
+
     #esi: true
     #fragments: true
 

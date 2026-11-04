@@ -50,13 +50,12 @@ class DeploymentController extends AbstractController
         }
 
         return $this->json([
-            'name'        => 'JamboApi CMS',
-            'version'     => $version,
-            'commit'      => $_ENV['GIT_COMMIT_SHA'] ?? null,
-            'branch'      => $_ENV['GIT_BRANCH'] ?? null,
-            'built_at'    => $_ENV['BUILT_AT'] ?? null,
-            'environment' => $this->getParameter('kernel.environment'),
-            'php'         => PHP_VERSION,
+            'name'     => 'JamboApi CMS',
+            'version'  => $version,
+            'commit'   => $_ENV['GIT_COMMIT_SHA'] ?? null,
+            'branch'   => $_ENV['GIT_BRANCH'] ?? null,
+            'built_at' => $_ENV['BUILT_AT'] ?? null,
+            // 'environment' and 'php' intentionally omitted to reduce information disclosure surface.
         ]);
     }
 
