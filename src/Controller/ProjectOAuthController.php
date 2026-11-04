@@ -82,8 +82,11 @@ class ProjectOAuthController extends AbstractController
         if (str_starts_with($authHeader, 'Bearer ')) {
             $token = substr($authHeader, 7);
             $claims = $this->jwtService->validateToken($token);
-            if ($claims && isset($claims['sub'])) {
-                $candidate = $this->endUserRepository->find($claims['sub']);
+            $userId = $claims['sub'] ?? $claims['euid'] ?? null;
+            if ($claims && $userId !== null) {
+                $candidate = is_numeric($userId)
+                    ? $this->endUserRepository->find((int) $userId)
+                    : $this->endUserRepository->findOneBy(['uuid' => $userId, 'project' => $project]);
                 if ($candidate && $candidate->project->id === $project->id && $candidate->isActive()) {
                     $endUser = $candidate;
                 }
@@ -265,8 +268,13 @@ class ProjectOAuthController extends AbstractController
             return new JsonResponse(['error' => 'invalid_token', 'error_description' => 'Invalid or expired token.'], 401);
         }
 
-        $userId = $claims['sub'] ?? null;
-        $endUser = $userId ? $this->endUserRepository->find($userId) : null;
+        $userId = $claims['sub'] ?? $claims['euid'] ?? null;
+        $endUser = null;
+        if ($userId !== null) {
+            $endUser = is_numeric($userId)
+                ? $this->endUserRepository->find((int) $userId)
+                : $this->endUserRepository->findOneBy(['uuid' => $userId, 'project' => $project]);
+        }
         if (!$endUser) {
             return new JsonResponse(['error' => 'user_not_found', 'error_description' => 'User no longer exists.'], 404);
         }

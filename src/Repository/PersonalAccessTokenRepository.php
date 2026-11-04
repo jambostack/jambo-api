@@ -38,4 +38,14 @@ class PersonalAccessTokenRepository extends ServiceEntityRepository
     {
         return $this->findBy(['user' => $user], ['createdAt' => 'DESC']);
     }
+
+    public function deleteExpired(): int
+    {
+        return $this->createQueryBuilder('p')
+            ->delete()
+            ->where('p.expiresAt IS NOT NULL AND p.expiresAt < :now')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->execute();
+    }
 }

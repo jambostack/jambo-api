@@ -238,4 +238,130 @@ class EndUserAuthControllerTest extends WebTestCase
         ]);
         $this->assertSame(400, $client->getResponse()->getStatusCode(), 'Le token du Projet A ne doit pas fonctionner sur le Projet B');
     }
+
+    public function testRefreshTokenSuccessAndRotation(): void
+    {
+        $client = static::createClient();
+        $email = 'refresh-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        $client->jsonRequest('POST', $this->baseUrl() . '/register', [
+            'email'    => $email,
+            'password' => 'password123',
+        ]);
+        $this->assertSame(201, $client->getResponse()->getStatusCode());
+
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $refreshToken = $body['data']['refresh_token'];
+
+        $client->jsonRequest('POST', $this->baseUrl() . '/refresh', [
+            'refresh_token' => $refreshToken,
+        ]);
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+
+        $refreshBody = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('data', $refreshBody);
+        $this->assertArrayHasKey('access_token', $refreshBody['data']);
+        $this->assertArrayHasKey('refresh_token', $refreshBody['data']);
+        $newAccessToken = $refreshBody['data']['access_token'];
+
+        // Verify the new access token works on /me
+        $client->request('GET', $this->baseUrl() . '/me', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $newAccessToken,
+            'HTTP_ACCEPT'        => 'application/json',
+        ]);
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+    }
+
+    public function testRefreshTokenFromProjectACannotBeUsedOnProjectB(): void
+    {
+        self::bootKernel();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $projectB = new Project();
+        $projectB->name = 'Project B ' . bin2hex(random_bytes(4));
+        $projectB->publicApi = true;
+        $em->persist($projectB);
+        $em->flush();
+        $projectBUuid = $projectB->uuid->toString();
+        self::ensureKernelShutdown();
+
+        $client = static::createClient();
+        $email = 'cross-refresh-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        $client->jsonRequest('POST', $this->baseUrl() . '/register', [
+            'email'    => $email,
+            'password' => 'password123',
+        ]);
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $refreshTokenA = $body['data']['refresh_token'];
+
+        // Attempt to use Project A refresh token on Project B
+        $client->jsonRequest('POST', '/api/' . $projectBUuid . '/auth/refresh', [
+            'refresh_token' => $refreshTokenA,
+        ]);
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+    }
+
+    public function testLogoutInvalidatesAllTokensForEndUser(): void
+    {
+        $client = static::createClient();
+        $email = 'logout-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        $client->jsonRequest('POST', $this->baseUrl() . '/register', [
+            'email'    => $email,
+            'password' => 'password123',
+        ]);
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $accessToken = $body['data']['access_token'];
+        $refreshToken = $body['data']['refresh_token'];
+
+        // Call /logout with access token
+        $client->request('POST', $this->baseUrl() . '/logout', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $accessToken,
+            'HTTP_ACCEPT'        => 'application/json',
+        ]);
+        $this->assertSame(204, $client->getResponse()->getStatusCode());
+
+        // Now /me should be rejected with 401
+        $client->request('GET', $this->baseUrl() . '/me', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $accessToken,
+            'HTTP_ACCEPT'        => 'application/json',
+        ]);
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+
+        // And /refresh should be rejected with 401
+        $client->jsonRequest('POST', $this->baseUrl() . '/refresh', [
+            'refresh_token' => $refreshToken,
+        ]);
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+    }
+
+    public function testMeEndpointRejectsCrossProjectToken(): void
+    {
+        self::bootKernel();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $projectB = new Project();
+        $projectB->name = 'Project B ' . bin2hex(random_bytes(4));
+        $projectB->publicApi = true;
+        $em->persist($projectB);
+        $em->flush();
+        $projectBUuid = $projectB->uuid->toString();
+        self::ensureKernelShutdown();
+
+        $client = static::createClient();
+        $email = 'cross-me-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        $client->jsonRequest('POST', $this->baseUrl() . '/register', [
+            'email'    => $email,
+            'password' => 'password123',
+        ]);
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $accessTokenA = $body['data']['access_token'];
+
+        // Call Project B's /me with Project A's access token
+        $client->request('GET', '/api/' . $projectBUuid . '/auth/me', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $accessTokenA,
+            'HTTP_ACCEPT'        => 'application/json',
+        ]);
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+    }
 }

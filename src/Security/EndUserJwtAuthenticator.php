@@ -40,18 +40,38 @@ class EndUserJwtAuthenticator extends AbstractAuthenticator
             throw new AuthenticationException('Refresh tokens cannot be used for API access.');
         }
 
-        $endUserUuid = $claims['euid'];
-        $tokenVersion = $claims['tkn'];
+        $endUserUuid = $claims['euid'] ?? $claims['sub'] ?? null;
+        if ($endUserUuid === null) {
+            throw new AuthenticationException('Invalid token: missing subject.');
+        }
+
+        $tokenVersion = $claims['tkn'] ?? null;
+        $tokenProjectId = $claims['pid'] ?? null;
 
         return new SelfValidatingPassport(
-            new UserBadge($endUserUuid, function ($uuid) use ($tokenVersion) {
+            new UserBadge((string) $endUserUuid, function ($uuid) use ($tokenVersion, $tokenProjectId, $request) {
                 $endUser = $this->endUserRepository->findOneBy(['uuid' => $uuid]);
                 if ($endUser === null || !$endUser->isActive()) {
                     throw new AuthenticationException('User not found or inactive.');
                 }
-                if ($endUser->tokenVersion !== $tokenVersion) {
+                if ($tokenVersion !== null && $endUser->tokenVersion !== $tokenVersion) {
                     throw new AuthenticationException('Token version mismatch - please re-login.');
                 }
+
+                // Verify tenant isolation against token claims
+                if ($tokenProjectId !== null) {
+                    $projectUuid = $endUser->project?->uuid?->toString();
+                    if ($projectUuid !== null && $tokenProjectId !== $projectUuid && (int) $tokenProjectId !== $endUser->project?->id) {
+                        throw new AuthenticationException('Token does not match user project.');
+                    }
+                }
+
+                // Verify tenant isolation against current route if applicable
+                $routeProjectId = $request->attributes->get('projectId');
+                if (is_string($routeProjectId) && $endUser->project?->uuid?->toString() !== $routeProjectId) {
+                    throw new AuthenticationException('Token does not belong to this project.');
+                }
+
                 return $endUser;
             }),
         );

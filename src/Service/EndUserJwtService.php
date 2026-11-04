@@ -57,8 +57,18 @@ class EndUserJwtService
                 new StrictValidAt($this->clock, new \DateInterval('PT30S')),
             ];
             $this->config->validator()->assert($token, ...$constraints);
+            $sub = null;
+            try {
+                $sub = $token->claims()->get('sub');
+            } catch (\Throwable) {}
+            $euid = null;
+            try {
+                $euid = $token->claims()->get('euid');
+            } catch (\Throwable) {}
+
             return [
-                'euid' => $token->claims()->get('euid'),
+                'sub'  => $sub ?? $euid,
+                'euid' => $euid ?? $sub,
                 'pid'  => $token->claims()->get('pid'),
                 'tkn'  => $token->claims()->get('tkn'),
                 'ref'  => $token->claims()->get('ref') ?? false,
@@ -88,6 +98,7 @@ class EndUserJwtService
         $builder = $this->config->builder()
             ->issuedAt($now)
             ->expiresAt($now->modify('+60 seconds'))
+            ->relatedTo($endUser->uuid->toRfc4122())
             ->withClaim('euid', $endUser->uuid->toRfc4122())
             ->withClaim('pid', $endUser->project->uuid->toRfc4122())
             ->withClaim('tfa', true); // marker: this is a 2FA token
@@ -137,6 +148,7 @@ class EndUserJwtService
             ->issuedAt($now)
             ->canOnlyBeUsedAfter($now)
             ->expiresAt($now->modify("+{$ttl} seconds"))
+            ->relatedTo($endUser->uuid->toString())
             ->withClaim('euid', $endUser->uuid->toString())
             ->withClaim('pid', $endUser->project->uuid->toString())
             ->withClaim('tkn', $endUser->tokenVersion);

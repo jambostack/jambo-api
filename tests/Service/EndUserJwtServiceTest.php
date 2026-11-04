@@ -39,6 +39,7 @@ class EndUserJwtServiceTest extends TestCase
         $claims = $service->validateToken($token);
         $this->assertNotNull($claims);
         $this->assertSame($endUser->uuid->toString(), $claims['euid']);
+        $this->assertSame($endUser->uuid->toString(), $claims['sub']);
         $this->assertSame($endUser->project->uuid->toString(), $claims['pid']);
         $this->assertFalse($service->isRefreshToken($claims));
     }

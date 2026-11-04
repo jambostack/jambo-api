@@ -111,9 +111,11 @@ class ProjectOAuthService
         $this->em->persist($refreshToken);
         $this->em->flush();
 
+        $expiresIn = EndUserJwtService::resolveTtl($code->endUser->project?->jwtAccessTtl, EndUserJwtService::DEFAULT_ACCESS_TTL);
+
         return [
             'token_type'    => 'Bearer',
-            'expires_in'    => EndUserJwtService::DEFAULT_ACCESS_TTL,
+            'expires_in'    => $expiresIn,
             'access_token'  => $accessToken,
             'refresh_token' => $plainRefreshToken,
             'scope'         => implode(' ', $code->scopes),
@@ -142,9 +144,11 @@ class ProjectOAuthService
         $this->em->persist($newToken);
         $this->em->flush();
 
+        $expiresIn = EndUserJwtService::resolveTtl($token->endUser->project?->jwtAccessTtl, EndUserJwtService::DEFAULT_ACCESS_TTL);
+
         return [
             'token_type'    => 'Bearer',
-            'expires_in'    => EndUserJwtService::DEFAULT_ACCESS_TTL,
+            'expires_in'    => $expiresIn,
             'access_token'  => $accessToken,
             'refresh_token' => $newPlainRefreshToken,
             'scope'         => implode(' ', $token->scopes),

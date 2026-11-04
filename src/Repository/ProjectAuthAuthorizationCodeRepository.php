@@ -27,4 +27,14 @@ class ProjectAuthAuthorizationCodeRepository extends ServiceEntityRepository
             ->getQuery()
             ->getOneOrNullResult();
     }
+
+    public function deleteExpired(): int
+    {
+        return $this->createQueryBuilder('c')
+            ->delete()
+            ->where('c.expiresAt < :now OR c.isUsed = true')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->execute();
+    }
 }

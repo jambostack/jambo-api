@@ -7,6 +7,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.50] — 2026-11-04
+
+### Fixed & Hardened
+- **Token Retention & Session Purge Engine (`PurgeExpiredTokensCommand`)**:
+  - Expanded `app:purge-expired-tokens` to automatically purge all categories of expired and revoked credentials:
+    - Expired Password Reset Tokens (`PasswordResetTokenRepository::deleteExpired`)
+    - Expired Personal Access Tokens (`PersonalAccessTokenRepository::deleteExpired`)
+    - Expired Project API Tokens (`ApiTokenRepository::deleteExpired`)
+    - Expired and revoked OAuth refresh tokens (`ProjectAuthRefreshTokenRepository::deleteExpired`)
+    - Expired and used OAuth authorization codes (`ProjectAuthAuthorizationCodeRepository::deleteExpired`)
+    - Stale / inactive end-user sessions (`ProjectAuthSessionRepository::deleteInactive`) with configurable retention window via `--session-days`.
+- **End-User Authentication & Refresh Token Project Isolation (`EndUserAuthController`, `EndUserJwtAuthenticator`)**:
+  - Fixed UUID string comparison in `EndUserAuthController::refresh()`, preventing legitimate refresh requests from being rejected by integer casts.
+  - Hardened `EndUserJwtAuthenticator` to rigorously enforce tenant isolation: tokens presented on project routes (`/api/{projectId}/...`) must match the project UUID embedded in both the user entity and token claims (`pid`), preventing cross-tenant JWT reuse.
+  - Added RFC 7519 `sub` standard claim alongside `euid` across `EndUserJwtService` and `ProjectOAuthController`.
+- **OAuth 2.0 Dynamic Token TTL (`ProjectOAuthService`)**:
+  - Configured `expires_in` to dynamically resolve custom project TTL settings (`jwtAccessTtl`) instead of falling back to static constants.
+- **Automated Security Verification**:
+  - Added full test coverage for token refresh rotation, cross-tenant refresh rejection, logout token version invalidation, cross-tenant `/me` protection, and purge console command.
+
+---
+
 ## [1.26.49] — 2026-11-04
 
 ### Fixed & Hardened

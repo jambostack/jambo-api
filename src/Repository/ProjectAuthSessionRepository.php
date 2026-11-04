@@ -33,4 +33,14 @@ class ProjectAuthSessionRepository extends ServiceEntityRepository
             $this->getEntityManager()->flush();
         }
     }
+
+    public function deleteInactive(\DateTimeImmutable $threshold): int
+    {
+        return $this->createQueryBuilder('s')
+            ->delete()
+            ->where('s.lastActiveAt < :threshold')
+            ->setParameter('threshold', $threshold)
+            ->getQuery()
+            ->execute();
+    }
 }

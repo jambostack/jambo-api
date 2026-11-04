@@ -328,7 +328,8 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Invalid or expired refresh token'], 401);
         }
 
-        if (isset($claims['pid']) && (int) $claims['pid'] !== $project->id) {
+        $projectUuidStr = $project->uuid?->toString();
+        if (isset($claims['pid']) && $claims['pid'] !== $projectUuidStr && (int) $claims['pid'] !== $project->id) {
             return $this->json(['error' => 'Invalid or expired refresh token'], 401);
         }
 
