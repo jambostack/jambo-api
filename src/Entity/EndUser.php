@@ -71,6 +71,9 @@ class EndUser implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     public ?\DateTimeImmutable $twoFactorConfirmedAt = null;
 
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    public ?\DateTimeImmutable $passwordChangedAt = null;
+
     #[ORM\Column(length: 255, nullable: true)]
     public ?string $googleId = null;
 

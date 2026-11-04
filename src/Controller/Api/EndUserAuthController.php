@@ -11,6 +11,7 @@ use App\Repository\ProjectAuthSessionRepository;
 use App\Repository\ProjectRepository;
 use App\Service\EndUserJwtService;
 use App\Service\ProjectMailerService;
+use App\Service\Security\PasswordPolicyValidator;
 use App\Service\SocialLoginService;
 use App\Service\TwoFactorService;
 use App\Controller\EndUserSerializerTrait;
@@ -44,6 +45,7 @@ class EndUserAuthController extends AbstractController
         private ?MailerInterface $mailer = null,
         private ?ProjectAuthRefreshTokenRepository $refreshTokenRepo = null,
         private ?ProjectAuthSessionRepository $sessionRepo = null,
+        private ?PasswordPolicyValidator $passwordValidator = null,
     ) {}
 
     #[OA\Post(
@@ -89,8 +91,11 @@ class EndUserAuthController extends AbstractController
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return $this->json(['error' => 'Valid email is required'], 422);
         }
-        if (strlen($password) < 8) {
-            return $this->json(['error' => 'Password must be at least 8 characters'], 422);
+
+        $validator = $this->passwordValidator ?? new PasswordPolicyValidator();
+        $policyResult = $validator->validate((string) $password, (string) $email, is_string($username) ? $username : null, $project);
+        if (!$policyResult['valid']) {
+            return $this->json(['error' => 'Password must be at least 8 characters', 'details' => $policyResult['errors']], 422);
         }
 
         $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $email);
@@ -101,6 +106,7 @@ class EndUserAuthController extends AbstractController
         $endUser = new EndUser($project, $email);
         $endUser->username = $username;
         $endUser->password = $this->hasher->hashPassword($endUser, $password);
+        $endUser->passwordChangedAt = new \DateTimeImmutable();
 
         $this->em->persist($endUser);
         $this->em->flush();
@@ -427,10 +433,22 @@ class EndUserAuthController extends AbstractController
             $endUser->customFields = $data['custom_fields'];
         }
         if (isset($data['password'])) {
-            if (strlen($data['password']) < 8) {
-                return $this->json(['error' => 'Password must be at least 8 characters'], 422);
+            $newPassword = (string) $data['password'];
+            $currentPassword = isset($data['current_password']) ? (string) $data['current_password'] : null;
+
+            $validator = $this->passwordValidator ?? new PasswordPolicyValidator();
+            $rot = $validator->validateRotation($currentPassword, $newPassword, $endUser, $this->hasher);
+            if (!$rot['valid']) {
+                return $this->json(['error' => $rot['error']], 422);
             }
-            $endUser->password = $this->hasher->hashPassword($endUser, $data['password']);
+
+            $policyResult = $validator->validate($newPassword, $endUser->email, $endUser->username, $endUser->project);
+            if (!$policyResult['valid']) {
+                return $this->json(['error' => 'Password must be at least 8 characters', 'details' => $policyResult['errors']], 422);
+            }
+
+            $endUser->password = $this->hasher->hashPassword($endUser, $newPassword);
+            $endUser->passwordChangedAt = new \DateTimeImmutable();
             $endUser->tokenVersion++;
             $this->sessionRepo?->revokeAllForEndUser($endUser);
             $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
@@ -646,9 +664,6 @@ class EndUserAuthController extends AbstractController
         if (empty($tokenStr) || empty($newPassword)) {
             return $this->json(['error' => 'Token and password are required'], 422);
         }
-        if (strlen($newPassword) < 8) {
-            return $this->json(['error' => 'Password must be at least 8 characters'], 422);
-        }
 
         $token = $this->em->getRepository(PasswordResetToken::class)
             ->findOneBy(['token' => $tokenStr, 'project' => $project]);
@@ -662,7 +677,18 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'User not found'], 404);
         }
 
+        $validator = $this->passwordValidator ?? new PasswordPolicyValidator();
+        if ($endUser->password !== null && $this->hasher->isPasswordValid($endUser, $newPassword)) {
+            return $this->json(['error' => 'New password must be different from previous password.'], 422);
+        }
+
+        $policyResult = $validator->validate($newPassword, $endUser->email, $endUser->username, $project);
+        if (!$policyResult['valid']) {
+            return $this->json(['error' => 'Password must be at least 8 characters', 'details' => $policyResult['errors']], 422);
+        }
+
         $endUser->password = $this->hasher->hashPassword($endUser, $newPassword);
+        $endUser->passwordChangedAt = new \DateTimeImmutable();
         $endUser->tokenVersion++;
         $this->sessionRepo?->revokeAllForEndUser($endUser);
         $this->refreshTokenRepo?->revokeAllForEndUser($endUser);

@@ -364,4 +364,129 @@ class EndUserAuthControllerTest extends WebTestCase
         ]);
         $this->assertSame(401, $client->getResponse()->getStatusCode());
     }
+
+    public function testUpdateMePasswordRotationRequiresCurrentPassword(): void
+    {
+        $client = static::createClient();
+        $email = 'rotate-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        $client->jsonRequest('POST', $this->baseUrl() . '/register', [
+            'email'    => $email,
+            'password' => 'InitialPassword1',
+        ]);
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $token = $body['data']['access_token'];
+
+        // Tenter de changer le mot de passe sans current_password
+        $client->request(
+            'PATCH',
+            $this->baseUrl() . '/me',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+                'HTTP_ACCEPT'        => 'application/json',
+                'CONTENT_TYPE'       => 'application/json',
+            ],
+            json_encode(['password' => 'NewSecretPassword2'])
+        );
+
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $err = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('Current password is required to change password.', $err['error']);
+
+        // Tenter avec un current_password erroné
+        $client->request(
+            'PATCH',
+            $this->baseUrl() . '/me',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+                'HTTP_ACCEPT'        => 'application/json',
+                'CONTENT_TYPE'       => 'application/json',
+            ],
+            json_encode(['current_password' => 'WrongCurrent', 'password' => 'NewSecretPassword2'])
+        );
+
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $err2 = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('Current password is incorrect.', $err2['error']);
+    }
+
+    public function testUpdateMePasswordRotationRejectsIdenticalPassword(): void
+    {
+        $client = static::createClient();
+        $email = 'rotate-same-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        $client->jsonRequest('POST', $this->baseUrl() . '/register', [
+            'email'    => $email,
+            'password' => 'MyCurrentPwd1',
+        ]);
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $token = $body['data']['access_token'];
+
+        // Tenter de réutiliser exactement le mot de passe actuel
+        $client->request(
+            'PATCH',
+            $this->baseUrl() . '/me',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+                'HTTP_ACCEPT'        => 'application/json',
+                'CONTENT_TYPE'       => 'application/json',
+            ],
+            json_encode(['current_password' => 'MyCurrentPwd1', 'password' => 'MyCurrentPwd1'])
+        );
+
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $err = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('New password must be different from current password.', $err['error']);
+    }
+
+    public function testUpdateMePasswordRotationSucceeds(): void
+    {
+        $client = static::createClient();
+        $email = 'rotate-ok-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        $client->jsonRequest('POST', $this->baseUrl() . '/register', [
+            'email'    => $email,
+            'password' => 'InitialValidPwd1',
+        ]);
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $token = $body['data']['access_token'];
+
+        // Changer avec succès le mot de passe
+        $client->request(
+            'PATCH',
+            $this->baseUrl() . '/me',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+                'HTTP_ACCEPT'        => 'application/json',
+                'CONTENT_TYPE'       => 'application/json',
+            ],
+            json_encode(['current_password' => 'InitialValidPwd1', 'password' => 'BrandNewPwd99'])
+        );
+
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $res = json_decode($client->getResponse()->getContent(), true);
+        $this->assertNotEmpty($res['data']['password_changed_at']);
+
+        // Se reconnecter avec le nouveau mot de passe
+        $client->jsonRequest('POST', $this->baseUrl() . '/login', [
+            'email'    => $email,
+            'password' => 'BrandNewPwd99',
+        ]);
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+
+        // L'ancien mot de passe ne fonctionne plus
+        $client->jsonRequest('POST', $this->baseUrl() . '/login', [
+            'email'    => $email,
+            'password' => 'InitialValidPwd1',
+        ]);
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+    }
 }

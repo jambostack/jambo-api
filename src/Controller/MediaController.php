@@ -187,8 +187,16 @@ class MediaController extends AbstractController
             }
         }
 
-        $this->em->persist($media);
-        $this->em->flush();
+        try {
+            $this->em->wrapInTransaction(function () use ($media, $project, $uploadedFile) {
+                // Vérification atomique du quota au moment du commit
+                $this->uploadValidator->validateSizeAndQuota($project, $uploadedFile->getSize());
+                $this->em->persist($media);
+                $this->em->flush();
+            });
+        } catch (\InvalidArgumentException $e) {
+            return $this->json(['error' => $e->getMessage()], 422);
+        }
 
         // Notification temps réel
         $serialized = $this->mediaSerializer->serialize($media);

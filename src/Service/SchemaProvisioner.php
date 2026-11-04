@@ -91,23 +91,42 @@ class SchemaProvisioner
         if (empty($dto['name'])) {
             throw new SchemaException('name is required', 422);
         }
-        $slug = NamingConvention::toSnakeCase($dto['slug'] ?? $dto['name']);
-        $dup = $this->em->getRepository(Collection::class)->findOneBy(['project' => $project, 'slug' => $slug]);
-        if ($dup !== null) {
-            throw new SchemaException("Collection slug '$slug' already exists", 409);
-        }
 
-        $c = new Collection();
-        $c->name = NamingConvention::toPascalCase($dto['name']);
-        $c->slug = $slug;
-        $c->description = $dto['description'] ?? null;
-        $c->isSingleton = (bool) ($dto['is_singleton'] ?? false);
-        $c->order = $dto['order'] ?? count($project->collections->toArray());
-        $c->project = $project;
+        return $this->em->wrapInTransaction(function () use ($project, $dto): Collection {
+            // Vérification de la limite de collections par projet (max_collections)
+            $maxCollections = $project->settings['max_collections'] ?? ($_ENV['PROJECT_MAX_COLLECTIONS'] ?? null);
+            if ($maxCollections !== null && (int) $maxCollections > 0) {
+                $currentCount = (int) $this->em->getRepository(Collection::class)->createQueryBuilder('c')
+                    ->select('COUNT(c.id)')
+                    ->where('c.project = :project')
+                    ->andWhere('c.deletedAt IS NULL')
+                    ->setParameter('project', $project)
+                    ->getQuery()
+                    ->getSingleScalarResult();
 
-        $this->em->persist($c);
-        $this->em->flush();
-        return $c;
+                if ($currentCount >= (int) $maxCollections) {
+                    throw new SchemaException(sprintf('Collection limit reached for this project (maximum: %d).', (int) $maxCollections), 403);
+                }
+            }
+
+            $slug = NamingConvention::toSnakeCase($dto['slug'] ?? $dto['name']);
+            $dup = $this->em->getRepository(Collection::class)->findOneBy(['project' => $project, 'slug' => $slug]);
+            if ($dup !== null) {
+                throw new SchemaException("Collection slug '$slug' already exists", 409);
+            }
+
+            $c = new Collection();
+            $c->name = NamingConvention::toPascalCase($dto['name']);
+            $c->slug = $slug;
+            $c->description = $dto['description'] ?? null;
+            $c->isSingleton = (bool) ($dto['is_singleton'] ?? false);
+            $c->order = $dto['order'] ?? count($project->collections->toArray());
+            $c->project = $project;
+
+            $this->em->persist($c);
+            $this->em->flush();
+            return $c;
+        });
     }
 
     public function updateCollection(Collection $c, array $dto): Collection

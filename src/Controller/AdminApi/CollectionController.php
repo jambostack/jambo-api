@@ -7,13 +7,18 @@ use App\Entity\Field;
 use App\Entity\Project;
 use App\Exception\SchemaException;
 use App\Repository\CollectionRepository;
+use App\Repository\ContentEntryRepository;
 use App\Repository\FieldRepository;
 use App\Repository\ProjectRepository;
 use App\Security\ProjectVoter;
 use App\Service\SchemaProvisioner;
+use App\Service\Security\CsvSanitizer;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/admin-api/projects/{uuid}/collections', name: 'admin_api_collection_')]
@@ -26,6 +31,9 @@ class CollectionController extends AbstractController
         private CollectionRepository $collections,
         private FieldRepository $fields,
         private SchemaProvisioner $provisioner,
+        private ?ContentEntryRepository $entries = null,
+        private ?CsvSanitizer $csvSanitizer = null,
+        private ?EntityManagerInterface $em = null,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -116,6 +124,94 @@ class CollectionController extends AbstractController
         }
         $this->provisioner->deleteCollection($c);
         return new JsonResponse(null, 204);
+    }
+
+    #[Route('/{slug}/export-csv', name: 'export_csv', methods: ['GET'])]
+    public function exportCsv(string $uuid, string $slug): Response
+    {
+        $project = $this->resolveProject($uuid);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+        $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
+
+        $collection = $this->collections->findOneByProjectAndSlug($project, $slug);
+        if (!$collection) {
+            return $this->json(['error' => 'Collection not found'], 404);
+        }
+
+        $fields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
+        $fieldSlugs = array_map(fn ($f) => $f->slug, $fields);
+
+        $sanitizer = $this->csvSanitizer ?? new CsvSanitizer();
+        $safeSlug = preg_replace('/[^a-zA-Z0-9_\-]+/', '_', $collection->slug ?: 'collection');
+        $filename = sprintf('collection_%s_%s.csv', $safeSlug, date('Ymd_His'));
+
+        $response = new StreamedResponse(function () use ($collection, $fieldSlugs, $sanitizer) {
+            $output = fopen('php://output', 'w');
+            if ($output === false) {
+                return;
+            }
+
+            // BOM UTF-8 pour Excel
+            fwrite($output, CsvSanitizer::BOM_UTF8);
+
+            // En-tête assaini
+            $header = ['uuid', 'slug', 'status', 'locale', ...$fieldSlugs];
+            fputcsv($output, $sanitizer->sanitizeRow($header), ',', '"', "\\");
+            flush();
+
+            if ($this->entries !== null) {
+                $batchSize = 100;
+                $offset = 0;
+
+                while (true) {
+                    $entries = $this->entries->findBy(
+                        ['collection' => $collection, 'deletedAt' => null],
+                        ['id' => 'ASC'],
+                        $batchSize,
+                        $offset
+                    );
+
+                    if (empty($entries)) {
+                        break;
+                    }
+
+                    foreach ($entries as $e) {
+                        $row = [$e->uuid?->toString() ?? '', $e->slug, $e->status, $e->locale];
+                        $vals = [];
+                        foreach ($e->fieldValues as $fv) {
+                            $vals[$fv->field?->slug ?? ''] = $fv->textValue ?? $fv->numberValue ?? $fv->booleanValue ?? '';
+                        }
+                        foreach ($fieldSlugs as $s) {
+                            $row[] = $vals[$s] ?? '';
+                        }
+                        fputcsv($output, $sanitizer->sanitizeRow($row), ',', '"', "\\");
+                    }
+
+                    flush();
+
+                    if ($this->em !== null) {
+                        $this->em->clear();
+                        $collection = $this->collections->findOneBy(['id' => $collection->id]);
+                        if (!$collection) {
+                            break;
+                        }
+                    }
+
+                    $offset += $batchSize;
+                }
+            }
+
+            fclose($output);
+        });
+
+        $response->headers->set('Content-Type', 'text/csv; charset=utf-8');
+        $response->headers->set('Content-Disposition', 'attachment; filename="' . $filename . '"');
+        $response->headers->set('X-Accel-Buffering', 'no');
+        $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+        return $response;
     }
 
     private function resolveProject(string $uuid): ?Project

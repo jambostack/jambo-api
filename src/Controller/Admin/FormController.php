@@ -10,10 +10,13 @@ use App\Repository\FormRepository;
 use App\Repository\FormSubmissionRepository;
 use App\Repository\ProjectRepository;
 use App\Service\Form\FormBuilder;
+use App\Service\Security\CsvSanitizer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
@@ -26,6 +29,7 @@ class FormController extends AbstractController
         private readonly ProjectRepository $projectRepo,
         private readonly FormBuilder $formBuilder,
         private readonly EntityManagerInterface $em,
+        private readonly ?CsvSanitizer $csvSanitizer = null,
     ) {}
 
     // ── Liste des formulaires ──────────────────────────────────────────────
@@ -232,6 +236,104 @@ class FormController extends AbstractController
             'data' => $data,
             'meta' => ['total' => $total, 'page' => $page, 'per_page' => $perPage],
         ]);
+    }
+
+    // ── Exporter les soumissions en CSV (protégé contre CSV Formula Injection) ───
+
+    #[Route('/admin-api/{projectUuid}/forms/{id}/submissions/export-csv', name: 'admin_forms_submissions_export_csv', methods: ['GET'])]
+    public function exportSubmissionsCsv(string $projectUuid, int $id, Request $request): Response
+    {
+        $form = $this->formRepo->find($id);
+        if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
+            return $this->json(['error' => 'Form not found.'], 404);
+        }
+        $this->denyAccessUnlessGranted('project.view', $form->project);
+
+        $spamFilter = $request->query->get('spam'); // 'spam', 'ham', or omit for all
+
+        // Extraire la liste ordonnée des noms / labels de champs
+        $fieldKeys = [];
+        $fieldLabels = [];
+        if (is_array($form->fields)) {
+            foreach ($form->fields as $fieldDef) {
+                if (!is_array($fieldDef)) {
+                    continue;
+                }
+                $key = $fieldDef['name'] ?? $fieldDef['id'] ?? null;
+                if ($key !== null && $key !== '') {
+                    $fieldKeys[] = (string) $key;
+                    $fieldLabels[] = (string) ($fieldDef['label'] ?? $key);
+                }
+            }
+        }
+
+        $sanitizer = $this->csvSanitizer ?? new CsvSanitizer();
+        $slug = preg_replace('/[^a-zA-Z0-9_\-]+/', '_', $form->slug ?: 'form');
+        $filename = sprintf('submissions_%s_%s.csv', $slug, date('Ymd_His'));
+
+        $response = new StreamedResponse(function () use ($form, $spamFilter, $fieldKeys, $fieldLabels, $sanitizer) {
+            $output = fopen('php://output', 'w');
+            if ($output === false) {
+                return;
+            }
+
+            // Émission du BOM UTF-8 pour Excel
+            fwrite($output, CsvSanitizer::BOM_UTF8);
+
+            // En-tête du fichier CSV
+            $header = ['id', 'created_at', 'is_spam', 'is_read', ...$fieldLabels];
+            fputcsv($output, $sanitizer->sanitizeRow($header), ',', '"', "\\");
+            flush();
+
+            $page = 1;
+            $perPage = 100;
+
+            while (true) {
+                $submissions = $this->submissionRepo->findPaginatedByForm($form, $page, $perPage, $spamFilter);
+                if (empty($submissions)) {
+                    break;
+                }
+
+                foreach ($submissions as $s) {
+                    $submittedData = is_array($s->data) ? $s->data : [];
+                    $fieldValues = [];
+                    foreach ($fieldKeys as $k) {
+                        $fieldValues[] = $submittedData[$k] ?? '';
+                    }
+
+                    $row = [
+                        $s->id,
+                        $s->createdAt->format(\DateTimeInterface::ATOM),
+                        $s->isSpam ? 'true' : 'false',
+                        $s->isRead ? 'true' : 'false',
+                        ...$fieldValues,
+                    ];
+
+                    fputcsv($output, $sanitizer->sanitizeRow($row), ',', '"', "\\");
+                }
+
+                flush();
+
+                // Libérer la mémoire
+                $this->em->clear();
+                // Recharger l'entité formulaire pour la prochaine page
+                $form = $this->formRepo->find($form->id);
+                if (!$form) {
+                    break;
+                }
+
+                $page++;
+            }
+
+            fclose($output);
+        });
+
+        $response->headers->set('Content-Type', 'text/csv; charset=utf-8');
+        $response->headers->set('Content-Disposition', 'attachment; filename="' . $filename . '"');
+        $response->headers->set('X-Accel-Buffering', 'no');
+        $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+        return $response;
     }
 
     // ── Supprimer une soumission ───────────────────────────────────────────
