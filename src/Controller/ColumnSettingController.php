@@ -11,6 +11,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/column-settings', name: 'api_column_settings_')]
 class ColumnSettingController extends AbstractController
@@ -20,14 +21,20 @@ class ColumnSettingController extends AbstractController
         private CollectionRepository $collectionRepository,
         private ColumnSettingRepository $columnSettingRepository,
         private EntityManagerInterface $em,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
 
     #[Route('', name: 'show', methods: ['GET'])]
     public function show(string $projectUuid, string $collectionSlug): JsonResponse
     {
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
-            return $this->json(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('column_setting.auth_required', [], 'Authentication required.')], 401);
         }
 
         $resolved = $this->resolve($projectUuid, $collectionSlug);
@@ -40,7 +47,7 @@ class ColumnSettingController extends AbstractController
 
         $setting = $this->columnSettingRepository->findOneByUserAndCollection($user, $collection);
 
-        return $this->json([
+        return new JsonResponse([
             'visibleColumns' => $setting?->visibleColumns ?? [],
         ]);
     }
@@ -50,7 +57,7 @@ class ColumnSettingController extends AbstractController
     {
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
-            return $this->json(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('column_setting.auth_required', [], 'Authentication required.')], 401);
         }
 
         $resolved = $this->resolve($projectUuid, $collectionSlug);
@@ -64,18 +71,18 @@ class ColumnSettingController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON body'], 400);
+            return new JsonResponse(['error' => $this->trans('column_setting.invalid_json', [], 'Invalid JSON body.')], 400);
         }
         $rawColumns = $data['visible_columns'] ?? [];
         if (!is_array($rawColumns)) {
-            return $this->json(['error' => 'visible_columns must be an array'], 422);
+            return new JsonResponse(['error' => $this->trans('column_setting.columns_must_be_array', [], 'Visible columns must be an array.')], 422);
         }
         $columns = [];
         foreach (array_slice($rawColumns, 0, 50) as $col) {
             if (is_scalar($col)) {
                 $trimmed = trim((string) $col);
                 if ($trimmed !== '' && mb_strlen($trimmed) <= 100 && !preg_match('/[\x00-\x1F\x7F]/', $trimmed)) {
-                    $columns[] = $trimmed;
+                    $columns[] = strip_tags($trimmed);
                 }
             }
         }
@@ -92,22 +99,26 @@ class ColumnSettingController extends AbstractController
         $setting->visibleColumns = $columns;
         $this->em->flush();
 
-        return $this->json(['visibleColumns' => $setting->visibleColumns]);
+        return new JsonResponse(['visibleColumns' => $setting->visibleColumns]);
     }
 
     private function resolve(string $projectUuid, string $collectionSlug): array|JsonResponse
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return new JsonResponse(['error' => $this->trans('column_setting.project_not_found', [], 'Project not found')], 404);
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return new JsonResponse(['error' => $this->trans('column_setting.project_not_found', [], 'Project not found')], 404);
         }
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return new JsonResponse(['error' => $this->trans('column_setting.project_not_found', [], 'Project not found')], 404);
         }
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if (!$collection) {
-            return $this->json(['error' => 'Collection not found'], 404);
+            return new JsonResponse(['error' => $this->trans('column_setting.collection_not_found', [], 'Collection not found')], 404);
         }
         return [$project, $collection];
     }

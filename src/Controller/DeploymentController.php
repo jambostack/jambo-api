@@ -13,6 +13,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Jambo Deploy — endpoints d'observabilité du pipeline CI/CD.
@@ -29,7 +30,42 @@ class DeploymentController extends AbstractController
         private ProjectRepository $projects,
         #[Autowire(service: 'limiter.deployment_hook_limiter')]
         private ?RateLimiterFactory $hookLimiter = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
+
+    private function validateSafeUrl(string $url): bool
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+        if (!$host) {
+            return false;
+        }
+        $host = strtolower($host);
+        $blockedHosts = [
+            '169.254.169.254',
+            '169.254.169.250',
+            'fd00:ec2::254',
+            'localhost',
+            '127.0.0.1',
+            '::1',
+        ];
+        if (in_array($host, $blockedHosts, true)) {
+            return false;
+        }
+        $ip = filter_var($host, FILTER_VALIDATE_IP) ? $host : @gethostbyname($host);
+        if ($ip && filter_var($ip, FILTER_VALIDATE_IP)) {
+            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)
+                || str_starts_with($ip, '127.')
+                || str_starts_with($ip, '169.254.')) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     /**
      * Info de build — utilisée par le frontend pour afficher la version courante.
@@ -49,7 +85,7 @@ class DeploymentController extends AbstractController
             $version = HealthController::VERSION;
         }
 
-        return $this->json([
+        return new JsonResponse([
             'name'     => 'JamboApi CMS',
             'version'  => $version,
             'commit'   => $_ENV['GIT_COMMIT_SHA'] ?? null,
@@ -63,17 +99,17 @@ class DeploymentController extends AbstractController
     public function index(Request $request): JsonResponse
     {
         if (!$this->getUser()) {
-            return $this->json(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('deployment.auth_required', [], 'Authentication required.')], 401);
         }
 
         if (!$this->isGranted('ROLE_SUPER_ADMIN') && !$this->isGranted('ROLE_ADMIN')) {
-            return $this->json(['error' => 'Access denied'], 403);
+            return new JsonResponse(['error' => $this->trans('deployment.access_denied', [], 'Access denied.')], 403);
         }
 
         $limit = min(100, max(1, $request->query->getInt('limit', 25)));
         $deployments = $this->deployments->findRecent($limit);
 
-        return $this->json([
+        return new JsonResponse([
             'data' => array_map(fn (Deployment $d) => $this->serialize($d), $deployments),
         ]);
     }
@@ -90,27 +126,27 @@ class DeploymentController extends AbstractController
         if ($this->hookLimiter !== null) {
             $identifier = $request->getClientIp() ?: '127.0.0.1';
             if (false === $this->hookLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many deployment hook requests. Please retry later.'], 429);
+                return new JsonResponse(['error' => $this->trans('deployment.too_many_requests', [], 'Too many deployment hook requests. Please retry later.')], 429);
             }
         }
 
         $secret = $_ENV['DEPLOY_WEBHOOK_SECRET'] ?? '';
         if ($secret === '') {
-            return $this->json(['error' => 'Webhook désactivé : DEPLOY_WEBHOOK_SECRET non configuré'], 503);
+            return new JsonResponse(['error' => $this->trans('deployment.webhook_disabled', [], 'Deployment webhook disabled: DEPLOY_WEBHOOK_SECRET not configured.')], 503);
         }
 
         $payload = $request->getContent();
         if (strlen($payload) > 1048576) {
-            return $this->json(['error' => 'Payload too large (max 1MB)'], 413);
+            return new JsonResponse(['error' => $this->trans('deployment.payload_too_large', [], 'Payload too large (max 1MB).')], 413);
         }
 
         $signature = $request->headers->get('X-Jambo-Signature', '');
         if (!str_starts_with($signature, 'sha256=')) {
-            return $this->json(['error' => 'Signature manquante'], 401);
+            return new JsonResponse(['error' => $this->trans('deployment.signature_missing', [], 'Signature header missing.')], 401);
         }
         $expected = 'sha256=' . hash_hmac('sha256', $payload, $secret);
         if (!hash_equals($expected, $signature)) {
-            return $this->json(['error' => 'Signature invalide'], 401);
+            return new JsonResponse(['error' => $this->trans('deployment.signature_invalid', [], 'Invalid signature.')], 401);
         }
 
         $decoded = json_decode($payload, true);
@@ -132,13 +168,13 @@ class DeploymentController extends AbstractController
 
         $commitSha = trim((string) ($data['commit_sha'] ?? ''));
         if ($commitSha !== '' && !preg_match('/^[a-fA-F0-9]{4,40}$/', $commitSha)) {
-            return $this->json(['error' => 'Invalid commit_sha format.'], 422);
+            return new JsonResponse(['error' => $this->trans('deployment.invalid_commit_sha', [], 'Invalid commit SHA format.')], 422);
         }
 
         $branch = isset($data['branch']) ? trim((string) $data['branch']) : null;
         if ($branch !== null) {
             if (strlen($branch) > 100 || preg_match('/[\r\n\x00-\x1F\x7F]/', $branch)) {
-                return $this->json(['error' => 'Invalid branch name.'], 422);
+                return new JsonResponse(['error' => $this->trans('deployment.invalid_branch', [], 'Invalid branch name.')], 422);
             }
         }
 
@@ -146,11 +182,14 @@ class DeploymentController extends AbstractController
         if (!empty($data['preview_url'])) {
             $pUrl = trim((string) $data['preview_url']);
             if (strlen($pUrl) > 2048 || preg_match('/[\r\n\x00-\x1F\x7F]/', $pUrl) || !filter_var($pUrl, FILTER_VALIDATE_URL)) {
-                return $this->json(['error' => 'Invalid preview_url: must be a valid URL.'], 422);
+                return new JsonResponse(['error' => $this->trans('deployment.invalid_preview_url', [], 'Invalid preview URL.')], 422);
             }
             $pScheme = strtolower((string) parse_url($pUrl, PHP_URL_SCHEME));
             if (!in_array($pScheme, ['http', 'https'], true)) {
-                return $this->json(['error' => 'Invalid preview_url: only http and https allowed.'], 422);
+                return new JsonResponse(['error' => $this->trans('deployment.invalid_preview_url_scheme', [], 'Invalid preview URL scheme: only http and https allowed.')], 422);
+            }
+            if (!$this->validateSafeUrl($pUrl)) {
+                return new JsonResponse(['error' => $this->trans('deployment.invalid_preview_url_ssrf', [], 'Invalid preview URL: private or restricted address rejected for security.')], 422);
             }
             $previewUrl = $pUrl;
         }
@@ -159,11 +198,14 @@ class DeploymentController extends AbstractController
         if (!empty($data['run_url'])) {
             $rUrl = trim((string) $data['run_url']);
             if (strlen($rUrl) > 2048 || preg_match('/[\r\n\x00-\x1F\x7F]/', $rUrl) || !filter_var($rUrl, FILTER_VALIDATE_URL)) {
-                return $this->json(['error' => 'Invalid run_url: must be a valid URL.'], 422);
+                return new JsonResponse(['error' => $this->trans('deployment.invalid_run_url', [], 'Invalid run URL.')], 422);
             }
             $rScheme = strtolower((string) parse_url($rUrl, PHP_URL_SCHEME));
             if (!in_array($rScheme, ['http', 'https'], true)) {
-                return $this->json(['error' => 'Invalid run_url: only http and https allowed.'], 422);
+                return new JsonResponse(['error' => $this->trans('deployment.invalid_run_url_scheme', [], 'Invalid run URL scheme: only http and https allowed.')], 422);
+            }
+            if (!$this->validateSafeUrl($rUrl)) {
+                return new JsonResponse(['error' => $this->trans('deployment.invalid_run_url_ssrf', [], 'Invalid run URL: private or restricted address rejected for security.')], 422);
             }
             $runUrl = $rUrl;
         }
@@ -172,7 +214,7 @@ class DeploymentController extends AbstractController
         if (isset($data['image'])) {
             $img = trim((string) $data['image']);
             if (strlen($img) > 500 || preg_match('/[\r\n\x00-\x1F\x7F]/', $img)) {
-                return $this->json(['error' => 'Invalid image reference.'], 422);
+                return new JsonResponse(['error' => $this->trans('deployment.invalid_image_reference', [], 'Invalid image reference.')], 422);
             }
             $imageRef = $img !== '' ? $img : null;
         }
@@ -210,7 +252,7 @@ class DeploymentController extends AbstractController
         $this->em->persist($deployment);
         $this->em->flush();
 
-        return $this->json(['data' => $this->serialize($deployment)], 201);
+        return new JsonResponse(['data' => $this->serialize($deployment)], 201);
     }
 
     private function serialize(Deployment $d): array

@@ -11,6 +11,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class McpController extends AbstractController
 {
@@ -18,7 +19,13 @@ class McpController extends AbstractController
         private EntityManagerInterface $em,
         private JamboApiMcpServer $mcpServer,
         private RateLimiterFactory $mcpLimiter,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
 
     /**
      * MCP HTTP endpoint - point d'entrée unique pour les clients MCP.
@@ -31,12 +38,12 @@ class McpController extends AbstractController
         // Rate limiting : 60 requêtes par minute par IP
         $limiter = $this->mcpLimiter->create($request->getClientIp());
         if (false === $limiter->consume(1)->isAccepted()) {
-            return new JsonResponse(['error' => 'Trop de requêtes MCP. Réessayez plus tard.'], 429);
+            return new JsonResponse(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
         }
 
         $body = $request->getContent();
         if (strlen($body) > 2 * 1024 * 1024) {
-            return new JsonResponse(['error' => 'Payload trop volumineux (max 2MB)'], 413);
+            return new JsonResponse(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
         }
         $token = $this->extractBearerToken($request);
 
@@ -55,16 +62,16 @@ class McpController extends AbstractController
         // Rate limiting : 60 requêtes par minute par IP
         $limiter = $this->mcpLimiter->create($request->getClientIp());
         if (false === $limiter->consume(1)->isAccepted()) {
-            return new JsonResponse(['error' => 'Trop de requêtes MCP. Réessayez plus tard.'], 429);
+            return new JsonResponse(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
         }
 
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Projet introuvable'], 404);
+            return new JsonResponse(['error' => $this->trans('mcp.project_not_found', [], 'Project not found.')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => 'Projet introuvable'], 404);
+            return new JsonResponse(['error' => $this->trans('mcp.project_not_found', [], 'Project not found.')], 404);
         }
 
         $token = $this->extractBearerToken($request);
@@ -75,12 +82,12 @@ class McpController extends AbstractController
 
         // Rejeter si ni utilisateur ni token valide
         if (!$user instanceof \App\Entity\User && !$isAuthenticated) {
-            return new JsonResponse(['error' => 'Authentification requise'], 401);
+            return new JsonResponse(['error' => $this->trans('mcp.auth_required', [], 'Authentication required.')], 401);
         }
 
         // Si authentifié via ApiToken, vérifier que le token est scopé à ce projet
         if (isset($context['project_uuid']) && $context['project_uuid'] !== $uuid) {
-            return new JsonResponse(['error' => 'Accès refusé'], 403);
+            return new JsonResponse(['error' => $this->trans('mcp.access_denied', [], 'Access denied.')], 403);
         }
 
         // Si authentifié par session utilisateur ou PAT, vérifier l'appartenance
@@ -89,7 +96,7 @@ class McpController extends AbstractController
             $isMember = $this->em->getRepository(\App\Entity\ProjectMember::class)
                 ->findActiveByUserAndProject($user, $project) !== null;
             if (!$isSuperAdmin && !$isMember) {
-                return new JsonResponse(['error' => 'Accès refusé'], 403);
+                return new JsonResponse(['error' => $this->trans('mcp.access_denied', [], 'Access denied.')], 403);
             }
         }
 
@@ -99,7 +106,7 @@ class McpController extends AbstractController
 
         $body = $request->getContent();
         if (strlen($body) > 2 * 1024 * 1024) {
-            return new JsonResponse(['error' => 'Payload trop volumineux (max 2MB)'], 413);
+            return new JsonResponse(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
         }
         return $this->mcpServer->handleRequest($body, $context);
     }
@@ -110,7 +117,7 @@ class McpController extends AbstractController
     #[Route('/mcp', name: 'mcp_info', methods: ['GET'])]
     public function info(): JsonResponse
     {
-        return $this->json([
+        return new JsonResponse([
             'name' => 'JamboApi MCP Server',
             'version' => '2.0.0',
             'protocolVersion' => '2024-11-05',
@@ -121,7 +128,7 @@ class McpController extends AbstractController
             ],
             'authentication' => [
                 'type' => 'bearer_token',
-                'description' => 'Utiliser un token API JamboApi dans le header Authorization: Bearer <token>',
+                'description' => $this->trans('mcp.auth_description', [], 'Use a JamboApi API token in the Authorization: Bearer <token> header.'),
             ],
             'capabilities' => [
                 'tools' => true,

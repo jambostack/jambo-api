@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.78] — 2026-11-04
+
+### Security & Hardening
+- **Anti-SSRF Protection on Deployment URLs (`DeploymentController`)**:
+  - Enforced anti-SSRF validation (`validateSafeUrl`) on deployment webhook preview and run URLs, rejecting private IP ranges (RFC 1918), loopback (`127.0.0.1`, `localhost`, `::1`), link-local/cloud metadata (`169.254.169.254`), and reserved addresses.
+- **Comment System Hardening & Anti-Deep-Nesting (`CommentController`, `rate_limiter.yaml`)**:
+  - Bound dedicated sliding-window rate limiter (`comment_limiter`) protecting against comment spam and denial-of-service.
+  - Added strict control character sanitization on comment bodies.
+  - Implemented reply tree flattening to cap recursion and prevent unbounded recursive comment structures.
+  - Enforced strict validation on comment status transitions (`open`, `resolved`).
+- **Column Settings Hardening & HTML Sanitization (`ColumnSettingController`)**:
+  - Added strict RFC 4122 UUID format validation on project identifiers.
+  - Enforced array structure check and sanitized column identifiers (`strip_tags`, whitespace trimming, max 50 columns).
+- **Strict I18N Migration & Translation Coverage (`McpController`, `DeploymentController`, `CommentController`, `ColumnSettingController`, `messages.{en,fr,es,ar}.php`)**:
+  - Eliminated all hardcoded strings in `McpController`, `DeploymentController`, `CommentController`, and `ColumnSettingController`.
+  - Added 39 new translation keys synchronized across all 4 locales (`en`, `fr`, `es`, `ar`), maintaining total key parity (1,820 keys, 0 missing).
+  - Decoupled responses using direct `JsonResponse` instances to guarantee hermetic controller operation.
+- **Automated Test Suite**:
+  - Added `tests/Controller/Cycle31HardeningTest.php` with 10 comprehensive tests covering deployment anti-SSRF, HMAC signatures, column settings sanitization, comment rate limiting and nesting flattening, and MCP metadata.
+  - Full PHPUnit suite passing green.
+
 ## [1.26.77] — 2026-11-04
 
 ### Security & Hardening
