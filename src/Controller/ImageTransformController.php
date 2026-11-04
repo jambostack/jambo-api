@@ -28,7 +28,11 @@ class ImageTransformController extends AbstractController
     #[Route('/cdn/media/{uuid}', name: 'cdn_media_transform', methods: ['GET'])]
     public function serve(string $uuid, Request $request): Response
     {
-        $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $uuid]);
+        try {
+            $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return new Response('Média introuvable', 404);
+        }
 
         // Vérifier que le média existe, n'est pas supprimé, et est accessible
         if (!$media || $media->isDeleted()) {

@@ -33,9 +33,13 @@ class InsightsController extends AbstractController
     #[Route('/api/projects/{project}/insights', name: 'api_insights_project', methods: ['GET'])]
     public function project(string $project, Request $request): JsonResponse
     {
-        $entity = is_numeric($project)
-            ? $this->projectRepository->find((int) $project)
-            : $this->projectRepository->findOneBy(['uuid' => $project]);
+        try {
+            $entity = is_numeric($project)
+                ? $this->projectRepository->find((int) $project)
+                : $this->projectRepository->findOneBy(['uuid' => $project]);
+        } catch (\Throwable) {
+            throw $this->createNotFoundException();
+        }
 
         if (!$entity) {
             throw $this->createNotFoundException();

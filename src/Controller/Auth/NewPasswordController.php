@@ -49,8 +49,13 @@ class NewPasswordController extends InertiaController
             ]);
         }
 
-        $password = $request->getPayload()->getString('password');
-        $confirmation = $request->getPayload()->getString('password_confirmation');
+        try {
+            $password = $request->getPayload()->getString('password');
+            $confirmation = $request->getPayload()->getString('password_confirmation');
+        } catch (\Throwable) {
+            $password = (string) $request->request->get('password', '');
+            $confirmation = (string) $request->request->get('password_confirmation', '');
+        }
 
         if (strlen($password) < 8) {
             return $this->inertia($request, 'auth/reset-password', [

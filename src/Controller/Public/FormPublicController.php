@@ -28,7 +28,11 @@ class FormPublicController extends AbstractController
     #[Route('/api/projects/{projectUuid}/forms/{slug}', name: 'api_public_form_show')]
     public function show(string $projectUuid, string $slug): JsonResponse
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Project not found.'], 404);
+        }
         if (!$project) {
             return new JsonResponse(['error' => 'Project not found.'], 404);
         }
@@ -56,7 +60,11 @@ class FormPublicController extends AbstractController
     #[Route('/api/projects/{projectUuid}/forms/{slug}/submit', name: 'api_public_form_submit', methods: ['POST'])]
     public function submit(string $projectUuid, string $slug, Request $request): JsonResponse
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Project not found.'], 404);
+        }
         if (!$project) {
             return new JsonResponse(['error' => 'Project not found.'], 404);
         }

@@ -42,7 +42,11 @@ class RegisteredUserController extends InertiaController
             return $this->json(['error' => 'Too many requests. Please try again later.'], 429);
         }
 
-        $data = $request->getPayload()->all();
+        try {
+            $data = $request->getPayload()->all();
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         $errors = $this->validator->validate($data, new Assert\Collection([
             'name'                  => [new Assert\NotBlank(), new Assert\Length(min: 2, max: 255)],

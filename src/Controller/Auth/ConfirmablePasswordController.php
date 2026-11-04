@@ -25,7 +25,15 @@ class ConfirmablePasswordController extends InertiaController
     public function store(Request $request): Response
     {
         $user = $this->getUser();
-        $password = $request->getPayload()->getString('password');
+        if (!$user instanceof \App\Entity\User) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
+        try {
+            $password = $request->getPayload()->getString('password');
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
 
         if (!$this->hasher->isPasswordValid($user, $password)) {
             return $this->json(['errors' => ['password' => 'The provided password was incorrect.']], 422);

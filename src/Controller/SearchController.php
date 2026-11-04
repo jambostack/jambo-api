@@ -20,7 +20,11 @@ class SearchController extends AbstractController
     #[Route('/api/projects/{uuid}/search', name: 'search_endpoint', methods: ['GET'])]
     public function search(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Projet introuvable'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Projet introuvable'], 404);
         }
@@ -65,7 +69,11 @@ class SearchController extends AbstractController
     #[Route('/api/projects/{uuid}/search/reindex', name: 'search_reindex', methods: ['POST'])]
     public function reindex(string $uuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Projet introuvable'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Projet introuvable'], 404);
         }

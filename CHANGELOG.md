@@ -7,6 +7,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.46] — 2026-11-04
+
+### Fixed & Hardened
+- **Public & System Endpoint UUID Safety**:
+  - Protected `FormPublicController`, `RedirectPublicController`, `SeoPublicController`, `SearchController`, `InsightsController`, `ImageTransformController`, `AuditController`, and `EnsureProjectMemberSubscriber` against malformed UUID parameters in route paths, preventing unhandled DBAL `ConversionException` and returning clean HTTP 404 responses.
+- **Authentication & Password Recovery Payload Hardening**:
+  - `TwoFactorChallengeController`: Supported both JSON payloads via `$request->getPayload()` and form post data with safe fallback, avoiding unparsed verification codes.
+  - `RegisteredUserController`: Wrapped payload parsing in `try / catch (\Throwable)` returning HTTP 400 Bad Request on invalid JSON bodies.
+  - `ConfirmablePasswordController`: Added explicit authentication verification returning HTTP 401 instead of null `TypeError`, and wrapped payload parsing to return HTTP 400 on malformed JSON.
+  - `PasswordResetLinkController` & `NewPasswordController`: Wrapped string extraction in `try / catch (\Throwable)` with strict email validation.
+
+---
+
 ## [1.26.45] — 2026-11-04
 
 ### Fixed & Hardened

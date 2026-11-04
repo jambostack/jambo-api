@@ -74,7 +74,14 @@ class TwoFactorChallengeController extends InertiaController
             return $this->redirectToRoute('app_login');
         }
 
-        $postData = $request->request->all();
+        try {
+            $postData = $request->getPayload()->all();
+        } catch (\Throwable) {
+            $postData = $request->request->all();
+        }
+        if (empty($postData)) {
+            $postData = $request->request->all();
+        }
         $code = (string) ($postData['code'] ?? '');
         $useBackup = (bool) ($postData['use_backup'] ?? false);
 

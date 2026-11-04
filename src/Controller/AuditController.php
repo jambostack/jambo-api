@@ -20,7 +20,11 @@ class AuditController extends AbstractController
     #[Route('/api/projects/{uuid}/audit-logs', name: 'audit_logs', methods: ['GET'])]
     public function list(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Projet introuvable'], 404);
+        }
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
 
         if ($request->attributes->get('_project') !== $project) {

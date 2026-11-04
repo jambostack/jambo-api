@@ -1765,4 +1765,71 @@ class CoreApiHardeningTest extends WebTestCase
         $client->request('GET', "/api/not-a-valid-uuid");
         $this->assertSame(404, $client->getResponse()->getStatusCode());
     }
+
+    public function testAuthAndPublicEndpointsRobustness(): void
+    {
+        $client = static::createClient();
+
+        // 1) Unauthenticated POST to /confirm-password redirects to /login (302)
+        $client->request('POST', '/confirm-password', [], [], ['CONTENT_TYPE' => 'application/json'], '{"password":"test"}');
+        $this->assertSame(302, $client->getResponse()->getStatusCode());
+
+        // 2) Malformed JSON to /register returns 400
+        $client->request('POST', '/register', [], [], ['CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => '10.123.' . random_int(1, 250) . '.' . random_int(1, 250)], '{invalid-json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // 3) Malformed UUID on public SEO routes -> 404
+        $client->request('GET', '/api/projects/not-a-uuid/sitemap.xml');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        $client->request('GET', '/api/projects/not-a-uuid/robots.txt');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // 4) Malformed UUID on public forms -> 404
+        $client->request('GET', '/api/projects/not-a-uuid/forms/contact');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // 5) Malformed UUID on public redirects -> 404
+        $client->request('GET', '/api/projects/not-a-uuid/redirects/resolve?path=/home');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // 6) Malformed UUID on search when unauthenticated -> 401 (EnsureProjectMemberSubscriber)
+        $client->request('GET', '/api/projects/not-a-uuid/search?q=test');
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+
+        // 7) Malformed UUID on CDN media transform -> 404
+        $client->request('GET', '/cdn/media/not-a-uuid');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // 8) Malformed JSON on /forgot-password with Inertia header -> handles gracefully without 500
+        $client->request('POST', '/forgot-password', [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_INERTIA' => 'true'], '{bad-json');
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+    }
+
+    public function testConfirmPasswordAuthenticatedValidation(): void
+    {
+        $client = static::createClient();
+
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $user = new User();
+        $user->email = 'confirmpass_' . bin2hex(random_bytes(4)) . '@test.com';
+        $user->name = 'Confirm Pass User';
+        $user->password = '$2y$13$dummyhash';
+        $em->persist($user);
+        $em->flush();
+
+        $client->loginUser($user);
+
+        // Malformed JSON on /confirm-password -> 400
+        $client->request('POST', '/confirm-password', [], [], ['CONTENT_TYPE' => 'application/json'], '{bad-json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // Wrong password -> 422
+        $client->request('POST', '/confirm-password', [], [], ['CONTENT_TYPE' => 'application/json'], '{"password":"wrong-password"}');
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on search when authenticated -> 404 (not 500)
+        $client->request('GET', '/api/projects/not-a-uuid/search?q=test');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+    }
 }

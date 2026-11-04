@@ -47,7 +47,17 @@ class PasswordResetLinkController extends InertiaController
             ]);
         }
 
-        $email = $request->getPayload()->getString('email');
+        try {
+            $email = $request->getPayload()->getString('email');
+        } catch (\Throwable) {
+            $email = (string) $request->request->get('email', '');
+        }
+
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->inertia($request, 'auth/forgot-password', [
+                'errors' => ['email' => 'Adresse email invalide.'],
+            ]);
+        }
 
         $user = $this->userRepository->findByEmail($email);
         if ($user === null) {

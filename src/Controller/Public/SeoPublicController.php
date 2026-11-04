@@ -21,7 +21,11 @@ class SeoPublicController extends AbstractController
     #[Route('/api/projects/{projectUuid}/sitemap.xml', name: 'api_public_sitemap')]
     public function sitemap(string $projectUuid): Response
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            throw $this->createNotFoundException('Project not found.');
+        }
         if (!$project) {
             throw $this->createNotFoundException('Project not found.');
         }
@@ -35,7 +39,11 @@ class SeoPublicController extends AbstractController
     #[Route('/api/projects/{projectUuid}/sitemap-images.xml', name: 'api_public_image_sitemap')]
     public function imageSitemap(string $projectUuid): Response
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            throw $this->createNotFoundException('Project not found.');
+        }
         if (!$project) {
             throw $this->createNotFoundException('Project not found.');
         }
@@ -49,7 +57,11 @@ class SeoPublicController extends AbstractController
     #[Route('/api/projects/{projectUuid}/robots.txt', name: 'api_public_robots')]
     public function robots(string $projectUuid): Response
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            throw $this->createNotFoundException('Project not found.');
+        }
         if (!$project) {
             throw $this->createNotFoundException('Project not found.');
         }

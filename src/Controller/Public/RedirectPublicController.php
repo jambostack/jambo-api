@@ -24,7 +24,11 @@ class RedirectPublicController extends AbstractController
     #[Route('/api/projects/{projectUuid}/redirects/resolve', name: 'api_public_redirect_resolve')]
     public function resolve(string $projectUuid, Request $request): Response
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Project not found.'], 404);
+        }
         if (!$project) {
             return new JsonResponse(['error' => 'Project not found.'], 404);
         }

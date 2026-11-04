@@ -75,7 +75,12 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
             return;
         }
 
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            $event->setResponse(new JsonResponse(['error' => 'Project not found.'], 404));
+            return;
+        }
 
         if ($project === null) {
             $event->setResponse(new JsonResponse(['error' => 'Project not found.'], 404));
