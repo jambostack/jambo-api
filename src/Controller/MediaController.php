@@ -10,6 +10,7 @@ use App\Repository\MediaRepository;
 use App\Repository\ProjectRepository;
 use App\Service\MediaSerializer;
 use App\Service\MercurePublisher;
+use App\Service\UploadSecurityValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -29,6 +30,7 @@ class MediaController extends AbstractController
         private MediaRepository $mediaRepository,
         private MediaFolderRepository $folderRepository,
         private MercurePublisher $mercure,
+        private UploadSecurityValidator $uploadValidator,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -161,11 +163,19 @@ class MediaController extends AbstractController
             return $this->json(['error' => 'No file uploaded'], 422);
         }
 
+        try {
+            $this->uploadValidator->validateUploadedFile($uploadedFile, $project);
+        } catch (\InvalidArgumentException $e) {
+            return $this->json(['error' => $e->getMessage()], 422);
+        }
+
+        $cleanFilename = $this->uploadValidator->sanitizeAndValidateFilename($uploadedFile->getClientOriginalName());
+
         $media               = new Media();
         $media->project      = $project;
         $media->alt          = $request->request->get('alt');
         $media->caption      = $request->request->get('caption');
-        $media->originalName = $uploadedFile->getClientOriginalName();
+        $media->originalName = $cleanFilename;
         $media->setFile($uploadedFile);
 
         // Dossier cible optionnel

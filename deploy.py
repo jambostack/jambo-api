@@ -99,7 +99,7 @@ def main():
         ("Frontend build", "if command -v npm >/dev/null 2>&1; then npm ci --prefer-offline && npm run build; else echo 'Notice: npm not found in server environment, skipping frontend build.'; fi"),
         ("Doctrine migrations", "php bin/console doctrine:migrations:migrate --no-interaction --all-or-nothing"),
         ("Cache warmup", "php bin/console cache:clear --no-warmup && php bin/console cache:warmup --env=prod"),
-        ("File permissions hardening", "chmod 600 .env .env.local .env.backup_* 2>/dev/null || true; chmod 700 var var/cache var/log 2>/dev/null || true"),
+        ("File permissions hardening", "chmod 600 .env .env.local .env.backup_* 2>/dev/null || true; chmod 700 var var/cache var/log 2>/dev/null || true; chmod 644 public/uploads/.htaccess 2>/dev/null || true"),
     ]
 
     for label, cmd in steps:

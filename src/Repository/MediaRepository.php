@@ -44,6 +44,17 @@ class MediaRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
+    public function getTotalSizeByProject(Project $project): int
+    {
+        return (int) $this->createQueryBuilder('m')
+            ->select('COALESCE(SUM(m.fileSize), 0)')
+            ->where('m.project = :project')
+            ->andWhere('m.deletedAt IS NULL')
+            ->setParameter('project', $project)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     /**
      * Verifie l'appartenance au projet d'une liste d'UUIDs de media.
      * Retourne uniquement les UUIDs qui appartiennent bien au projet donne.

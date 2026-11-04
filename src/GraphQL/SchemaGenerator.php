@@ -183,6 +183,10 @@ class SchemaGenerator
                     'limit' => ['type' => Type::int(), 'defaultValue' => 50],
                     'offset' => ['type' => Type::int(), 'defaultValue' => 0],
                 ],
+                'complexity' => function (int $childrenComplexity, array $args): int {
+                    $limit = min(100, max(1, (int) ($args['limit'] ?? 50)));
+                    return (max(1, $childrenComplexity)) * $limit + 1;
+                },
                 'resolve' => fn($root, array $args) => $this->resolveEntries($collection, $args),
             ];
         }
@@ -275,9 +279,11 @@ class SchemaGenerator
 
     private function resolveEntries(Collection $collection, array $args): array
     {
-        $page = (int) floor($args['offset'] / $args['limit']) + 1;
+        $limit = min(100, max(1, (int) ($args['limit'] ?? 50)));
+        $offset = max(0, (int) ($args['offset'] ?? 0));
+        $page = (int) floor($offset / $limit) + 1;
         $entries = $this->entryRepo->findByCollectionPaginated(
-            $collection, $page, $args['limit'], $args['locale'] ?? null, $args['status'] ?? null
+            $collection, $page, $limit, $args['locale'] ?? null, $args['status'] ?? null
         );
 
         return array_map(fn($entry) => $this->formatter->formatEntry($entry), $entries);

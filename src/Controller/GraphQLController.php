@@ -11,6 +11,9 @@ use GraphQL\GraphQL as GraphQLExecutor;
 use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\OperationDefinitionNode;
 use GraphQL\Language\Parser;
+use GraphQL\Validator\DocumentValidator;
+use GraphQL\Validator\Rules\DisableIntrospection;
+use GraphQL\Validator\Rules\QueryComplexity;
 use GraphQL\Validator\Rules\QueryDepth;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
@@ -77,9 +80,35 @@ class GraphQLController extends AbstractController
         // ── Query / Mutation standard ────────────────────────────────
         $schema = $this->schemaGenerator->buildSchema($project);
 
-        $validationRules = [
-            new QueryDepth(15),
-        ];
+        $maxDepth = (int) ($_ENV['GRAPHQL_MAX_DEPTH'] ?? 15);
+        if ($maxDepth <= 0) {
+            $maxDepth = 15;
+        }
+
+        $maxComplexity = (int) ($_ENV['GRAPHQL_MAX_COMPLEXITY'] ?? 1000);
+        if ($maxComplexity <= 0) {
+            $maxComplexity = 1000;
+        }
+
+        $validationRules = array_merge(
+            DocumentValidator::defaultRules(),
+            [
+                new QueryDepth($maxDepth),
+                new QueryComplexity($maxComplexity),
+            ]
+        );
+
+        // En production, désactiver l'introspection GraphQL (__schema, __type)
+        // pour empêcher l'énumération non autorisée du schéma et des modèles
+        $env = (string) $this->getParameter('kernel.environment');
+        $introspectionConfig = $_ENV['GRAPHQL_INTROSPECTION_ENABLED'] ?? null;
+        $introspectionDisabled = $introspectionConfig !== null
+            ? !filter_var($introspectionConfig, FILTER_VALIDATE_BOOL)
+            : ($env === 'prod');
+
+        if ($introspectionDisabled) {
+            $validationRules[] = new DisableIntrospection(DisableIntrospection::ENABLED);
+        }
 
         $result = GraphQLExecutor::executeQuery(
             schema: $schema,

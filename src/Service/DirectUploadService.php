@@ -13,11 +13,16 @@ use Symfony\Component\Uid\Uuid;
 
 class DirectUploadService
 {
+    private ?UploadSecurityValidator $uploadValidator;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly StorageDriverFactory $storageDriverFactory,
         private readonly ProjectStorageProfileRepository $storageProfileRepository,
-    ) {}
+        ?UploadSecurityValidator $uploadValidator = null,
+    ) {
+        $this->uploadValidator = $uploadValidator;
+    }
 
     /**
      * Crée une intention de téléversement direct S3 (single_put ou multipart).
@@ -29,8 +34,16 @@ class DirectUploadService
             throw new \InvalidArgumentException('Filename is required.');
         }
 
+        $cleanFilename = $this->uploadValidator !== null
+            ? $this->uploadValidator->sanitizeAndValidateFilename($filename)
+            : basename($filename);
+
         $mimeType = $data['mime_type'] ?? 'application/octet-stream';
         $maxBytes = isset($data['max_bytes']) ? (int) $data['max_bytes'] : null;
+        if ($maxBytes !== null && $maxBytes > 0 && $this->uploadValidator !== null) {
+            $this->uploadValidator->validateSizeAndQuota($project, $maxBytes);
+        }
+
         $mode = ($data['mode'] ?? 'single_put') === AssetUploadIntent::MODE_MULTIPART
             ? AssetUploadIntent::MODE_MULTIPART
             : AssetUploadIntent::MODE_SINGLE_PUT;
@@ -42,7 +55,7 @@ class DirectUploadService
         }
 
         $intentUuid = Uuid::v4();
-        $extension = pathinfo($filename, PATHINFO_EXTENSION);
+        $extension = pathinfo($cleanFilename, PATHINFO_EXTENSION);
         $cleanExt = $extension !== '' ? '.' . strtolower($extension) : '';
         $storageKey = sprintf('%s/%s%s', $project->uuid?->toRfc4122() ?? 'global', $intentUuid->toRfc4122(), $cleanExt);
 
@@ -51,7 +64,7 @@ class DirectUploadService
         $intent->project = $project;
         $intent->storageProfile = $profile;
         $intent->storageKey = $storageKey;
-        $intent->originalFilename = $filename;
+        $intent->originalFilename = $cleanFilename;
         $intent->clientMimeType = $mimeType;
         $intent->maxBytes = $maxBytes;
         $intent->mode = $mode;
@@ -170,6 +183,10 @@ class DirectUploadService
             } catch (\Throwable) {
                 $fileSize = $intent->maxBytes ?? 0;
             }
+        }
+
+        if ($fileSize !== null && $fileSize > 0 && $this->uploadValidator !== null) {
+            $this->uploadValidator->validateSizeAndQuota($intent->project, $fileSize);
         }
 
         $media = new Media();

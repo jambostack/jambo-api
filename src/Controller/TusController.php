@@ -16,6 +16,7 @@ use App\Service\MercurePublisher;
 use App\Service\StorageDriverFactory;
 use App\Service\StorageManager;
 use App\Service\TusServer;
+use App\Service\UploadSecurityValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -38,6 +39,7 @@ class TusController extends AbstractController
         private readonly StorageDriverFactory $driverFactory,
         private readonly ProjectMemberRepository $memberRepo,
         private readonly MercurePublisher $mercure,
+        private readonly UploadSecurityValidator $uploadValidator,
     ) {}
 
     /** Extensions autorisées — refuse tout fichier exécutable */
@@ -94,6 +96,15 @@ class TusController extends AbstractController
 
         // Parser Upload-Metadata : format "filename BASE64,filetype BASE64[,folder_id BASE64]"
         $metadata = $this->parseMetadata($request->headers->get('Upload-Metadata', ''));
+
+        try {
+            if (isset($metadata['filename'])) {
+                $this->uploadValidator->sanitizeAndValidateFilename($metadata['filename']);
+            }
+            $this->uploadValidator->validateSizeAndQuota($project, $uploadLength);
+        } catch (\InvalidArgumentException $e) {
+            return $this->json(['error' => $e->getMessage()], 400);
+        }
 
         $uploadId = $this->tusServer->create($projectUuid, $uploadLength, $metadata);
 
@@ -233,21 +244,28 @@ class TusController extends AbstractController
         }
 
         $metadata = $info['metadata'] ?? [];
-        $filename = $this->sanitizeFilename($metadata['filename'] ?? 'file');
-
-        // Validation de l'extension
-        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        if ($ext === '' || !in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
-            return $this->json(['error' => 'File type not allowed'], 400);
+        try {
+            $filename = $this->uploadValidator->sanitizeAndValidateFilename($metadata['filename'] ?? 'file');
+        } catch (\InvalidArgumentException $e) {
+            return $this->json(['error' => $e->getMessage()], 400);
         }
 
-        // Validation du contenu réel (MIME magique)
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+        // Validation du contenu réel (MIME magique & signatures de sécurité)
         $sourcePath = $this->tusServer->getFilePath($projectUuid, $uploadId);
         if (!file_exists($sourcePath)) {
             return $this->json(['error' => 'Upload file missing'], 404);
         }
-        $detectedMime = mime_content_type($sourcePath);
-        $mimeType = $detectedMime !== false ? $detectedMime : 'application/octet-stream';
+
+        try {
+            $mimeType = $this->uploadValidator->validateFileContent($sourcePath, $ext);
+            $this->uploadValidator->validateSizeAndQuota($project, filesize($sourcePath) ?: 0);
+        } catch (\InvalidArgumentException $e) {
+            @unlink($sourcePath);
+            $this->tusServer->cleanup($projectUuid, $uploadId);
+            return $this->json(['error' => $e->getMessage()], 400);
+        }
 
         // Générer un nom unique (comme Vich UniqidNamer)
         $uniqueName = uniqid() . '.' . $ext;
