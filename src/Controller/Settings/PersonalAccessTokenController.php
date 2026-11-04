@@ -26,7 +26,7 @@ use Symfony\Component\Routing\Attribute\Route;
 class PersonalAccessTokenController extends AbstractController
 {
     /** Scopes proposés / acceptés côté UI. */
-    private const ALLOWED_SCOPES = ['schema:write', 'projects:write'];
+    private const ALLOWED_SCOPES = ['schema:write', 'projects:write', 'content:write', 'content:read', '*'];
 
     public function __construct(
         private PersonalAccessTokenRepository $repo,
@@ -57,7 +57,7 @@ class PersonalAccessTokenController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 

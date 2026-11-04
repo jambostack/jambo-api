@@ -1510,4 +1510,82 @@ class CoreApiHardeningTest extends WebTestCase
         ], 'malformed json');
         $this->assertSame(400, $client->getResponse()->getStatusCode());
     }
+
+    public function testPreviewHardening(): void
+    {
+        $client = static::createClient();
+
+        // 1. Unauthenticated token request -> 401
+        $client->request('GET', "/api/projects/{$this->projectUuid}/preview/token/some-entry");
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+
+        // 2. Authenticated admin with malformed entry UUID -> 404
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $admin = new User();
+        $admin->email = 'admin-prev-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+        $client->request('GET', "/api/projects/{$this->projectUuid}/preview/token/not-a-valid-uuid");
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+    }
+
+    public function testInstallHardening(): void
+    {
+        $client = static::createClient();
+
+        // Invalid JSON body -> 400 or 403 if already installed
+        $client->request('POST', '/install/setup-admin', [], [], ['CONTENT_TYPE' => 'application/json'], 'not json');
+        $this->assertContains($client->getResponse()->getStatusCode(), [400, 403]);
+    }
+
+    public function testProfileUpdateEmailValidation(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'user-prof-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'hashed';
+        $user->roles = ['ROLE_USER'];
+        $em->persist($user);
+        $em->flush();
+
+        $client->loginUser($user);
+
+        // Invalid email format -> 422
+        $client->request('PATCH', '/api/settings/profile', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'email' => 'invalid-email-address',
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('email', $data['errors']);
+    }
+
+    public function testLocaleOpenRedirectProtection(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'user-loc-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'hashed';
+        $user->roles = ['ROLE_USER'];
+        $em->persist($user);
+        $em->flush();
+
+        $client->loginUser($user);
+
+        // External referer must be sanitized to '/' instead of redirecting off-site
+        $client->request('POST', '/settings/locale', [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_REFERER' => 'https://evil.attacker.com/phishing',
+        ], json_encode(['locale' => 'fr']));
+
+        $this->assertSame(302, $client->getResponse()->getStatusCode());
+        $this->assertSame('/', $client->getResponse()->headers->get('Location'));
+    }
 }

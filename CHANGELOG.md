@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.44] — 2026-11-04
+
+### Fixed & Hardened
+- **Live Preview Resilience & UUID Safety (`PreviewController`)**:
+  - Replaced firewall redirect with explicit in-method authentication check returning 401 JSON for unauthenticated preview token generation.
+  - Wrapped project and entry UUID lookups in `try / catch` returning 404 cleanly on malformed UUID strings.
+- **Open Redirect Protection (`LocaleController`)**:
+  - Validated referer header against the current host to prevent open redirect vulnerabilities when switching user locales.
+- **User Profile Email Validation (`ProfileController`)**:
+  - Enforced strict email format validation (`FILTER_VALIDATE_EMAIL`) on user profile updates before persisting.
+- **PAT Scopes Expansion (`PersonalAccessTokenController`)**:
+  - Expanded `ALLOWED_SCOPES` to include `'content:write'`, `'content:read'`, and `'*'`, allowing creation of PATs for full Admin API access from the dashboard.
+- **JSON Payload Safety across Settings & Install (`InstallController`, `PersonalAccessTokenController`, `PasswordController`, `ProfileController`, `LocaleController`)**:
+  - Caught `\Throwable` on `$request->toArray()` preventing unhandled Symfony JSON exceptions on malformed payloads.
+
+---
+
 ## [1.26.43] — 2026-11-04
 
 ### Fixed & Hardened

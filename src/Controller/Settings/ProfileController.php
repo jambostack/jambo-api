@@ -45,7 +45,7 @@ class ProfileController extends AbstractController
         }
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
 
@@ -54,10 +54,14 @@ class ProfileController extends AbstractController
         }
 
         if (isset($data['email'])) {
-            if ($data['email'] !== $user->email && $this->userRepository->findByEmail($data['email']) !== null) {
+            $newEmail = trim((string) $data['email']);
+            if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+                return $this->json(['errors' => ['email' => 'Valid email address is required.']], 422);
+            }
+            if ($newEmail !== $user->email && $this->userRepository->findByEmail($newEmail) !== null) {
                 return $this->json(['errors' => ['email' => 'Email already taken.']], 422);
             }
-            $user->email = $data['email'];
+            $user->email = $newEmail;
         }
 
         $this->em->flush();

@@ -25,7 +25,7 @@ class LocaleController extends AbstractController
     {
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
 
@@ -44,6 +44,13 @@ class LocaleController extends AbstractController
         $this->em->flush();
 
         $referer = $request->headers->get('referer', '/');
+        if (str_starts_with($referer, 'http://') || str_starts_with($referer, 'https://')) {
+            $parsed = parse_url($referer);
+            $host = $parsed['host'] ?? '';
+            if ($host !== '' && $host !== $request->getHost()) {
+                $referer = '/';
+            }
+        }
         return $this->redirect($referer);
     }
 }

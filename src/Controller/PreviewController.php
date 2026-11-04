@@ -36,7 +36,15 @@ class PreviewController extends AbstractController
     #[Route('/token/{entryUuid}', name: 'token', methods: ['GET'])]
     public function token(string $projectUuid, string $entryUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        if (!$this->getUser()) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -45,7 +53,11 @@ class PreviewController extends AbstractController
             $this->denyAccessUnlessGranted('project.view', $project);
         }
 
-        $entry = $this->entryRepository->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
+        try {
+            $entry = $this->entryRepository->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Entry not found'], 404);
+        }
         if (!$entry || $entry->isDeleted()) {
             return $this->json(['error' => 'Entry not found'], 404);
         }
@@ -97,7 +109,11 @@ class PreviewController extends AbstractController
             return $this->json(['error' => 'Token does not match collection'], 403);
         }
 
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -107,7 +123,11 @@ class PreviewController extends AbstractController
             return $this->json(['error' => 'Preview not enabled for this project'], 403);
         }
 
-        $entry = $this->entryRepository->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
+        try {
+            $entry = $this->entryRepository->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Entry not found'], 404);
+        }
         if (!$entry || $entry->isDeleted()) {
             return $this->json(['error' => 'Entry not found'], 404);
         }

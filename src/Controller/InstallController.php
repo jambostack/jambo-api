@@ -74,7 +74,11 @@ class InstallController extends AbstractController
             return new JsonResponse(['error' => 'Super admin already initialized.'], 403);
         }
 
-        $payload = json_decode($request->getContent(), true) ?? [];
+        try {
+            $payload = $request->toArray();
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Invalid JSON body.'], 400);
+        }
         $email = trim($payload['email'] ?? '');
         $password = $payload['password'] ?? '';
 
