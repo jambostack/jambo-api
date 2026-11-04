@@ -36,4 +36,30 @@ class AutomationRunRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    /**
+     * Supprime les exécutions d'automatisation antérieures au seuil de rétention spécifié.
+     */
+    public function deleteOlderThan(\DateTimeImmutable $threshold): int
+    {
+        return (int) $this->createQueryBuilder('r')
+            ->delete()
+            ->where('r.startedAt < :threshold')
+            ->setParameter('threshold', $threshold)
+            ->getQuery()
+            ->execute();
+    }
+
+    /**
+     * Compte les exécutions d'automatisation antérieures au seuil de rétention (mode dry-run).
+     */
+    public function countOlderThan(\DateTimeImmutable $threshold): int
+    {
+        return (int) $this->createQueryBuilder('r')
+            ->select('COUNT(r.id)')
+            ->where('r.startedAt < :threshold')
+            ->setParameter('threshold', $threshold)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
 }

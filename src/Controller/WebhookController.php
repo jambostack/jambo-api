@@ -8,6 +8,7 @@ use App\Repository\CollectionRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\WebhookLogRepository;
 use App\Repository\WebhookRepository;
+use App\Service\Security\SsrfProtectionService;
 use App\Service\WebhookSecretService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -19,6 +20,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/projects/{projectUuid}/webhooks', name: 'api_webhook_')]
 class WebhookController extends AbstractController
 {
+    private SsrfProtectionService $ssrfProtection;
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private WebhookRepository $webhookRepository,
@@ -27,7 +30,10 @@ class WebhookController extends AbstractController
         private EntityManagerInterface $em,
         private WebhookSecretService $secretService,
         private ?MessageBusInterface $bus = null,
-    ) {}
+        ?SsrfProtectionService $ssrfProtection = null,
+    ) {
+        $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
+    }
 
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid): JsonResponse
@@ -232,41 +238,8 @@ class WebhookController extends AbstractController
 
     private function validateWebhookUrl(string $url): ?string
     {
-        if (!filter_var($url, FILTER_VALIDATE_URL)) {
-            return 'Invalid URL format';
-        }
-
-        $parts = parse_url($url);
-        $scheme = strtolower($parts['scheme'] ?? '');
-        if (!in_array($scheme, ['http', 'https'], true)) {
-            return 'Webhook URL must use http or https scheme';
-        }
-
-        $host = strtolower($parts['host'] ?? '');
-        if (empty($host)) {
-            return 'Invalid URL host';
-        }
-
-        $appEnv = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? 'prod';
-        if ($appEnv !== 'test') {
-            if ($host === 'localhost' || str_ends_with($host, '.local') || str_ends_with($host, '.internal') || str_ends_with($host, '.lan')) {
-                return 'Internal and private IP addresses are not allowed for webhooks';
-            }
-            if (filter_var($host, FILTER_VALIDATE_IP)) {
-                if (!filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                    return 'Internal and private IP addresses are not allowed for webhooks';
-                }
-            } else {
-                $ips = @dns_get_record($host, DNS_A + DNS_AAAA);
-                if (!empty($ips)) {
-                    foreach ($ips as $record) {
-                        $ip = $record['ip'] ?? $record['ipv6'] ?? null;
-                        if ($ip && !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                            return 'Internal and private IP addresses are not allowed for webhooks';
-                        }
-                    }
-                }
-            }
+        if (!$this->ssrfProtection->isSafeUrl($url, false, $reason)) {
+            return $reason ?? 'Internal and private IP addresses are not allowed for webhooks';
         }
 
         return null;

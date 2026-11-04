@@ -5,10 +5,18 @@ namespace App\Service\Flow\Handlers\Action;
 use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowNodeHandler;
 use App\Service\Flow\NodeOutput;
+use App\Service\Security\SsrfProtectionService;
 use Symfony\Component\HttpClient\HttpClient;
 
 class CallWebhookHandler implements FlowNodeHandler
 {
+    private SsrfProtectionService $ssrfProtection;
+
+    public function __construct(?SsrfProtectionService $ssrfProtection = null)
+    {
+        $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
+    }
+
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
         $config = $ctx->variables['_node_config'] ?? [];
@@ -18,46 +26,22 @@ class CallWebhookHandler implements FlowNodeHandler
         $body    = $config['body'] ?? '';
 
         try {
-            $this->validateUrl($url);
-
-            $client = HttpClient::create(['timeout' => 10, 'max_redirects' => 0]);
-            $response = $client->request($method, $url, [
+            $options = $this->ssrfProtection->buildSafeHttpClientOptions($url, [
                 'headers' => $headers,
                 'body'    => $body,
-            ]);
+            ], idleTimeout: 5.0, maxDuration: 10.0);
 
-            return new NodeOutput(data: ['called' => true, 'url' => $url, 'status_code' => $response->getStatusCode()]);
+            $client = HttpClient::create();
+            $response = $client->request($method, $url, $options);
+
+            return new NodeOutput(data: [
+                'called'      => true,
+                'url'         => $url,
+                'status_code' => $response->getStatusCode(),
+                'body'        => $this->ssrfProtection->readSafeResponseBody($response, 16384),
+            ]);
         } catch (\Throwable $e) {
             return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => $e->getMessage()]);
-        }
-    }
-
-    private function validateUrl(string $url): void
-    {
-        $scheme = parse_url($url, PHP_URL_SCHEME);
-        $host   = parse_url($url, PHP_URL_HOST);
-
-        if ($host === null || $host === false || $host === '') {
-            throw new \RuntimeException('Invalid webhook URL: missing host');
-        }
-
-        if (!in_array($scheme, ['http', 'https'], true)) {
-            throw new \RuntimeException('Invalid webhook URL: only http/https allowed');
-        }
-
-        // Bloquer les IPs internes/reservees (IPv4 + IPv6)
-        $records = dns_get_record($host, DNS_A | DNS_AAAA);
-        if (empty($records)) {
-            throw new \RuntimeException('Cannot resolve webhook host');
-        }
-
-        foreach ($records as $record) {
-            $ip = $record['ip'] ?? $record['ipv6'] ?? '';
-            if ($ip === '') continue;
-
-            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-                throw new \RuntimeException('Webhook URL resolves to private/internal IP');
-            }
         }
     }
 

@@ -41,7 +41,10 @@ class StudioController extends InertiaController
         private readonly \App\Service\FieldRelationOptionsNormalizer $relationOptionsNormalizer,
         private \App\Service\FieldValueHydrator $fieldValueHydrator,
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
-    ) {}
+        private ?\App\Service\Security\SsrfProtectionService $ssrfProtection = null,
+    ) {
+        $this->ssrfProtection ??= new \App\Service\Security\SsrfProtectionService();
+    }
 
     /** Conventions de nommage imposées aux schémas générés par l'IA. */
     private const NAMING_CONVENTIONS = <<<RULES
@@ -1441,48 +1444,7 @@ PROMPT;
      */
     private function downloadExternalImage(string $url): string
     {
-        $parts = parse_url($url);
-        if (!$parts || !isset($parts['scheme'], $parts['host'])) {
-            throw new \InvalidArgumentException('URL invalide');
-        }
-
-        // HTTPS obligatoire
-        if (strtolower($parts['scheme']) !== 'https') {
-            throw new \InvalidArgumentException('Protocole HTTPS obligatoire');
-        }
-
-        $host = $parts['host'];
-
-        // Si l'hôte est déjà une adresse IP directe
-        if (filter_var($host, FILTER_VALIDATE_IP)) {
-            $resolvedIps = [$host];
-        } else {
-            // Résolution DNS et vérification anti-SSRF sur chaque IP
-            $resolvedIps = [];
-            $ips = @dns_get_record($host, DNS_A + DNS_AAAA);
-            if (!empty($ips)) {
-                foreach ($ips as $record) {
-                    if (isset($record['ip'])) $resolvedIps[] = $record['ip'];
-                    if (isset($record['ipv6'])) $resolvedIps[] = $record['ipv6'];
-                }
-            }
-            if (empty($resolvedIps)) {
-                $ip = @gethostbyname($host);
-                if ($ip && $ip !== $host) {
-                    $resolvedIps[] = $ip;
-                }
-            }
-
-            if (empty($resolvedIps)) {
-                throw new \InvalidArgumentException('Résolution DNS impossible pour l\'hôte');
-            }
-        }
-
-        foreach ($resolvedIps as $ip) {
-            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                throw new \InvalidArgumentException('Accès aux adresses privées ou réservées interdit (SSRF protection)');
-            }
-        }
+        $this->ssrfProtection->assertSafeUrl($url, true);
 
         $context = stream_context_create([
             'http' => [

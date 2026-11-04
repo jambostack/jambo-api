@@ -11,7 +11,7 @@ use OpenApi\Attributes as OA;
 #[OA\Tag(name: 'Health')]
 class HealthController extends AbstractController
 {
-    public const VERSION = '1.26.52';
+    public const VERSION = '1.26.53';
 
     public function __construct(
         private Connection $connection,

@@ -175,4 +175,46 @@ class ProjectOAuthServiceTest extends TestCase
         $this->assertEquals('new.access.token', $tokens['access_token']);
         $this->assertNotEmpty($tokens['refresh_token']);
     }
+
+    public function testRefreshAccessTokenDetectsReuseAndRevokesAll(): void
+    {
+        $client = new ProjectAuthClient();
+        $client->id = 5;
+
+        $user = new EndUser(new Project(), 'victim@example.com');
+        $initialTokenVersion = $user->tokenVersion;
+
+        $revokedToken = new ProjectAuthRefreshToken();
+        $revokedToken->client = $client;
+        $revokedToken->endUser = $user;
+        $revokedToken->isRevoked = true;
+
+        $this->refreshTokenRepository->method('findValidToken')->willReturn(null);
+        $this->refreshTokenRepository->method('findByTokenHash')->willReturn($revokedToken);
+
+        $this->refreshTokenRepository->expects($this->once())
+            ->method('revokeAllForEndUser')
+            ->with($user);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Refresh token reuse detected. All tokens and sessions have been revoked.');
+
+        $this->service->refreshAccessToken($client, 'already_used_refresh_token');
+
+        $this->assertSame($initialTokenVersion + 1, $user->tokenVersion);
+    }
+
+    public function testRevokeAllTokensForEndUser(): void
+    {
+        $user = new EndUser(new Project(), 'user@example.com');
+        $initialTokenVersion = $user->tokenVersion;
+
+        $this->refreshTokenRepository->expects($this->once())
+            ->method('revokeAllForEndUser')
+            ->with($user);
+
+        $this->service->revokeAllTokensForEndUser($user);
+
+        $this->assertSame($initialTokenVersion + 1, $user->tokenVersion);
+    }
 }

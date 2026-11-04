@@ -11,6 +11,7 @@ use App\Entity\ProjectAuthSession;
 use App\Repository\ProjectAuthAuthorizationCodeRepository;
 use App\Repository\ProjectAuthClientRepository;
 use App\Repository\ProjectAuthRefreshTokenRepository;
+use App\Repository\ProjectAuthSessionRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
 class ProjectOAuthService
@@ -21,6 +22,7 @@ class ProjectOAuthService
         private readonly ProjectAuthAuthorizationCodeRepository $codeRepository,
         private readonly ProjectAuthRefreshTokenRepository $refreshTokenRepository,
         private readonly EndUserJwtService $jwtService,
+        private readonly ?ProjectAuthSessionRepository $sessionRepository = null,
     ) {}
 
     public function validateClient(string $clientId, ?string $clientSecret = null): ProjectAuthClient
@@ -125,7 +127,19 @@ class ProjectOAuthService
     public function refreshAccessToken(ProjectAuthClient $client, string $plainRefreshToken): array
     {
         $token = $this->refreshTokenRepository->findValidToken($plainRefreshToken);
-        if (!$token || $token->client->id !== $client->id) {
+        if (!$token) {
+            // Détection de réutilisation de Refresh Token (OAuth 2.0 Security BCP - RFC 6819)
+            $compromised = $this->refreshTokenRepository->findByTokenHash($plainRefreshToken);
+            if ($compromised !== null && $compromised->isRevoked) {
+                // Révocation proactive de l'ensemble des tokens et sessions de l'utilisateur
+                $this->revokeAllTokensForEndUser($compromised->endUser);
+                throw new \InvalidArgumentException('Refresh token reuse detected. All tokens and sessions have been revoked.');
+            }
+
+            throw new \InvalidArgumentException('Invalid or expired refresh token.');
+        }
+
+        if ($token->client->id !== $client->id) {
             throw new \InvalidArgumentException('Invalid or expired refresh token.');
         }
 
@@ -153,6 +167,17 @@ class ProjectOAuthService
             'refresh_token' => $newPlainRefreshToken,
             'scope'         => implode(' ', $token->scopes),
         ];
+    }
+
+    /**
+     * Révoque de manière proactive l'ensemble des refresh tokens et sessions d'un EndUser.
+     */
+    public function revokeAllTokensForEndUser(EndUser $endUser): void
+    {
+        $this->refreshTokenRepository->revokeAllForEndUser($endUser);
+        $this->sessionRepository?->revokeAllForEndUser($endUser);
+        $endUser->tokenVersion++;
+        $this->em->flush();
     }
 
     public function revokeToken(ProjectAuthClient $client, string $token): void

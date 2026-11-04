@@ -5,6 +5,7 @@ namespace App\MessageHandler;
 use App\Entity\WebhookLog;
 use App\Message\SendWebhookMessage;
 use App\Repository\WebhookRepository;
+use App\Service\Security\SsrfProtectionService;
 use App\Service\WebhookSecretService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
@@ -13,12 +14,17 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 #[AsMessageHandler]
 class SendWebhookMessageHandler
 {
+    private SsrfProtectionService $ssrfProtection;
+
     public function __construct(
         private WebhookRepository $webhookRepository,
         private EntityManagerInterface $em,
         private HttpClientInterface $httpClient,
         private WebhookSecretService $secretService,
-    ) {}
+        ?SsrfProtectionService $ssrfProtection = null,
+    ) {
+        $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
+    }
 
     public function __invoke(SendWebhookMessage $message): void
     {
@@ -44,40 +50,18 @@ class SendWebhookMessageHandler
             $headers['X-JamboApi-Signature'] = 'sha256=' . hash_hmac('sha256', $payloadJson, $plainSecret);
         }
 
-        $parts = parse_url($webhook->url);
-        $host = strtolower($parts['host'] ?? '');
+        // Contrôle SSRF rigoureux (anti-loopback, RFC1918, metadata cloud, notations évasives)
         $appEnv = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? 'prod';
-        if ($appEnv !== 'test') {
-            $isPrivate = false;
-            if ($host === 'localhost' || str_ends_with($host, '.local') || str_ends_with($host, '.internal') || str_ends_with($host, '.lan')) {
-                $isPrivate = true;
-            } elseif (filter_var($host, FILTER_VALIDATE_IP)) {
-                if (!filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                    $isPrivate = true;
-                }
-            } else {
-                $ips = @dns_get_record($host, DNS_A + DNS_AAAA);
-                if (!empty($ips)) {
-                    foreach ($ips as $record) {
-                        $ip = $record['ip'] ?? $record['ipv6'] ?? null;
-                        if ($ip && !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                            $isPrivate = true;
-                            break;
-                        }
-                    }
-                }
-            }
-            if ($isPrivate) {
-                $log = new WebhookLog();
-                $log->webhook        = $webhook;
-                $log->event          = $message->event;
-                $log->requestPayload = $payloadJson;
-                $log->status         = 'failed';
-                $log->errorMessage   = 'Blocked outbound request to private/internal IP';
-                $this->em->persist($log);
-                $this->em->flush();
-                return;
-            }
+        if ($appEnv !== 'test' && !$this->ssrfProtection->isSafeUrl($webhook->url, false, $reason)) {
+            $log = new WebhookLog();
+            $log->webhook        = $webhook;
+            $log->event          = $message->event;
+            $log->requestPayload = $payloadJson;
+            $log->status         = 'failed';
+            $log->errorMessage   = 'Blocked outbound request to private/internal IP: ' . ($reason ?? 'SSRF blocked');
+            $this->em->persist($log);
+            $this->em->flush();
+            return;
         }
 
         $log = new WebhookLog();
@@ -86,19 +70,21 @@ class SendWebhookMessageHandler
         $log->requestPayload = $payloadJson;
 
         try {
-            $response = $this->httpClient->request('POST', $webhook->url, [
+            // Options durcies : DNS pinning anti-rebinding, 0 redirect, timeout 5s, max_duration 10s
+            $options = $this->ssrfProtection->buildSafeHttpClientOptions($webhook->url, [
                 'headers' => $headers,
                 'body'    => $payloadJson,
-                'timeout' => 10,
-            ]);
+            ], idleTimeout: 5.0, maxDuration: 10.0);
+
+            $response = $this->httpClient->request('POST', $webhook->url, $options);
 
             $statusCode = $response->getStatusCode();
             $log->statusCode   = $statusCode;
-            $log->responseBody = substr($response->getContent(false), 0, 2000);
+            $log->responseBody = $this->ssrfProtection->readSafeResponseBody($response, 2000);
             $log->status       = $statusCode >= 200 && $statusCode < 300 ? 'succeeded' : 'failed';
         } catch (\Throwable $e) {
             $log->status       = 'failed';
-            $log->errorMessage = $e->getMessage();
+            $log->errorMessage = substr($e->getMessage(), 0, 500);
         }
 
         $this->em->persist($log);

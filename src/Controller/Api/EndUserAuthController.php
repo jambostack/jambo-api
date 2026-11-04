@@ -6,6 +6,8 @@ use App\Entity\EndUser;
 use App\Entity\PasswordResetToken;
 use App\Entity\Project;
 use App\Repository\EndUserRepository;
+use App\Repository\ProjectAuthRefreshTokenRepository;
+use App\Repository\ProjectAuthSessionRepository;
 use App\Repository\ProjectRepository;
 use App\Service\EndUserJwtService;
 use App\Service\ProjectMailerService;
@@ -40,6 +42,8 @@ class EndUserAuthController extends AbstractController
         private ?SocialLoginService $socialLogin = null,
         private ?ProjectMailerService $projectMailer = null,
         private ?MailerInterface $mailer = null,
+        private ?ProjectAuthRefreshTokenRepository $refreshTokenRepo = null,
+        private ?ProjectAuthSessionRepository $sessionRepo = null,
     ) {}
 
     #[OA\Post(
@@ -103,6 +107,7 @@ class EndUserAuthController extends AbstractController
 
         $accessToken = $this->jwtService->createAccessToken($endUser);
         $refreshToken = $this->jwtService->createRefreshToken($endUser);
+        $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));
 
         return $this->json([
             'data' => [
@@ -187,6 +192,7 @@ class EndUserAuthController extends AbstractController
 
         $accessToken = $this->jwtService->createAccessToken($endUser);
         $refreshToken = $this->jwtService->createRefreshToken($endUser);
+        $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));
 
         return $this->json([
             'data' => [
@@ -280,6 +286,7 @@ class EndUserAuthController extends AbstractController
 
         $accessToken = $this->jwtService->createAccessToken($endUser);
         $refreshToken = $this->jwtService->createRefreshToken($endUser);
+        $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));
 
         return $this->json([
             'data' => [
@@ -348,6 +355,7 @@ class EndUserAuthController extends AbstractController
 
         $accessToken = $this->jwtService->createAccessToken($endUser);
         $refreshToken = $this->jwtService->createRefreshToken($endUser);
+        $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));
 
         return $this->json([
             'data' => [
@@ -424,6 +432,8 @@ class EndUserAuthController extends AbstractController
             }
             $endUser->password = $this->hasher->hashPassword($endUser, $data['password']);
             $endUser->tokenVersion++;
+            $this->sessionRepo?->revokeAllForEndUser($endUser);
+            $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
         }
 
         $this->em->flush();
@@ -446,8 +456,72 @@ class EndUserAuthController extends AbstractController
         $endUser = $request->attributes->get('_end_user');
         if ($endUser instanceof EndUser) {
             $endUser->tokenVersion++;
+            $this->sessionRepo?->revokeAllForEndUser($endUser);
+            $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
             $this->em->flush();
         }
+
+        return $this->json(null, 204);
+    }
+
+    #[OA\Get(
+        path: '/api/{projectId}/auth/sessions',
+        summary: 'List active sessions for authenticated end-user',
+        security: [['EndUserJWT' => []]],
+        parameters: [new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid'))],
+        responses: [
+            new OA\Response(response: 200, description: 'List of active sessions'),
+            new OA\Response(response: 401, description: 'Unauthorized'),
+        ]
+    )]
+    #[Route('/sessions', name: 'sessions_list', methods: ['GET'])]
+    public function listSessions(Request $request): JsonResponse
+    {
+        $endUser = $request->attributes->get('_end_user');
+        if (!$endUser instanceof EndUser) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $sessions = $this->sessionRepo?->findByEndUser($endUser) ?? [];
+        $data = array_map(fn ($s) => [
+            'session_id'     => $s->sessionId,
+            'ip_address'     => $s->ipAddress,
+            'user_agent'     => $s->userAgent,
+            'last_active_at' => $s->lastActiveAt->format(\DateTimeInterface::ATOM),
+            'created_at'     => $s->createdAt->format(\DateTimeInterface::ATOM),
+        ], $sessions);
+
+        return $this->json(['data' => $data]);
+    }
+
+    #[OA\Delete(
+        path: '/api/{projectId}/auth/sessions/{sessionId}',
+        summary: 'Revoke a specific session for authenticated end-user',
+        security: [['EndUserJWT' => []]],
+        parameters: [
+            new OA\Parameter(name: 'projectId', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid')),
+            new OA\Parameter(name: 'sessionId', in: 'path', required: true, schema: new OA\Schema(type: 'string')),
+        ],
+        responses: [
+            new OA\Response(response: 204, description: 'Session revoked'),
+            new OA\Response(response: 404, description: 'Session not found'),
+            new OA\Response(response: 401, description: 'Unauthorized'),
+        ]
+    )]
+    #[Route('/sessions/{sessionId}', name: 'sessions_revoke', methods: ['DELETE'])]
+    public function revokeSession(Request $request, string $sessionId): JsonResponse
+    {
+        $endUser = $request->attributes->get('_end_user');
+        if (!$endUser instanceof EndUser) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $session = $this->sessionRepo?->findOneBy(['sessionId' => $sessionId, 'endUser' => $endUser]);
+        if (!$session) {
+            return $this->json(['error' => 'Session not found'], 404);
+        }
+
+        $this->sessionRepo->revokeSession($sessionId);
 
         return $this->json(null, 204);
     }
@@ -590,6 +664,8 @@ class EndUserAuthController extends AbstractController
 
         $endUser->password = $this->hasher->hashPassword($endUser, $newPassword);
         $endUser->tokenVersion++;
+        $this->sessionRepo?->revokeAllForEndUser($endUser);
+        $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
         $this->em->remove($token);
         $this->em->flush();
 

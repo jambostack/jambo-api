@@ -67,4 +67,30 @@ class AuditLogRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    /**
+     * Supprime les logs d'audit antérieurs au seuil de rétention spécifié.
+     */
+    public function deleteOlderThan(\DateTimeImmutable $threshold): int
+    {
+        return (int) $this->createQueryBuilder('a')
+            ->delete()
+            ->where('a.createdAt < :threshold')
+            ->setParameter('threshold', $threshold)
+            ->getQuery()
+            ->execute();
+    }
+
+    /**
+     * Compte les logs d'audit antérieurs au seuil de rétention (mode dry-run).
+     */
+    public function countOlderThan(\DateTimeImmutable $threshold): int
+    {
+        return (int) $this->createQueryBuilder('a')
+            ->select('COUNT(a.id)')
+            ->where('a.createdAt < :threshold')
+            ->setParameter('threshold', $threshold)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
 }

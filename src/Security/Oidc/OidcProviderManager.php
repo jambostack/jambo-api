@@ -3,6 +3,7 @@
 namespace App\Security\Oidc;
 
 use App\Dto\OidcConfig;
+use App\Service\Security\SsrfProtectionService;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
@@ -10,12 +11,17 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class OidcProviderManager
 {
+    private SsrfProtectionService $ssrfProtection;
+
     public function __construct(
         private HttpClientInterface $httpClient,
         private RequestStack $requestStack,
         private string $appSecret,
         private ?CacheInterface $cache = null,
-    ) {}
+        ?SsrfProtectionService $ssrfProtection = null,
+    ) {
+        $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
+    }
 
     // ─── Discovery ──────────────────────────────────────────────────────
 
@@ -42,9 +48,11 @@ class OidcProviderManager
         $wellKnownUrl = rtrim($issuer, '/').'/.well-known/openid-configuration';
         $this->validateDiscoveryUrl($wellKnownUrl);
 
-        $response = $this->httpClient->request('GET', $wellKnownUrl, [
-            'max_redirects' => 0,
+        $options = $this->ssrfProtection->buildSafeHttpClientOptions($wellKnownUrl, [
+            'timeout'      => 5.0,
+            'max_duration' => 10.0,
         ]);
+        $response = $this->httpClient->request('GET', $wellKnownUrl, $options);
         $data = $response->toArray();
 
         // OIDC Discovery spec (RFC 8414): issuer in response must match requested issuer
@@ -175,7 +183,7 @@ class OidcProviderManager
         string $clientSecret,
         string $codeVerifier,
     ): array {
-        $response = $this->httpClient->request('POST', $config->tokenEndpoint, [
+        $options = $this->ssrfProtection->buildSafeHttpClientOptions($config->tokenEndpoint, [
             'auth_basic' => $clientId.':'.$clientSecret,
             'body' => [
                 'grant_type' => 'authorization_code',
@@ -185,7 +193,10 @@ class OidcProviderManager
                 'client_secret' => $clientSecret,
                 'code_verifier' => $codeVerifier,
             ],
+            'timeout'      => 5.0,
+            'max_duration' => 10.0,
         ]);
+        $response = $this->httpClient->request('POST', $config->tokenEndpoint, $options);
 
         $data = $response->toArray();
 
@@ -273,59 +284,10 @@ class OidcProviderManager
 
     private function validateDiscoveryUrl(string $url): void
     {
-        $parts = parse_url($url);
-        if (!$parts || !isset($parts['scheme'], $parts['host'])) {
-            throw new \RuntimeException('Invalid discovery URL.');
-        }
-
-        if (strtolower($parts['scheme']) !== 'https') {
-            throw new \RuntimeException('Discovery URL must use HTTPS.');
-        }
-
-        $host = $parts['host'];
-
-        // Resolve hostname to IP addresses
-        $ips = [];
-        $records = dns_get_record($host, DNS_A | DNS_AAAA);
-        if ($records === false || count($records) === 0) {
-            throw new \RuntimeException('Discovery hostname could not be resolved.');
-        }
-
-        foreach ($records as $record) {
-            $ip = $record['ip'] ?? ($record['ipv6'] ?? null);
-            if ($ip !== null) {
-                $ips[] = $ip;
-            }
-        }
-
-        if (empty($ips)) {
-            throw new \RuntimeException('Discovery hostname could not be resolved.');
-        }
-
-        foreach ($ips as $ip) {
-            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
-                // Check loopback (127.0.0.0/8)
-                if (ip2long($ip) >= ip2long('127.0.0.0') && ip2long($ip) <= ip2long('127.255.255.255')) {
-                    throw new \RuntimeException('Discovery URL must not point to loopback address.');
-                }
-                // Check RFC1918 private ranges
-                if (
-                    (ip2long($ip) >= ip2long('10.0.0.0') && ip2long($ip) <= ip2long('10.255.255.255'))
-                    || (ip2long($ip) >= ip2long('172.16.0.0') && ip2long($ip) <= ip2long('172.31.255.255'))
-                    || (ip2long($ip) >= ip2long('192.168.0.0') && ip2long($ip) <= ip2long('192.168.255.255'))
-                ) {
-                    throw new \RuntimeException('Discovery URL must not point to a private IP address.');
-                }
-                // Check link-local (169.254.0.0/16)
-                if (ip2long($ip) >= ip2long('169.254.0.0') && ip2long($ip) <= ip2long('169.254.255.255')) {
-                    throw new \RuntimeException('Discovery URL must not point to a link-local address.');
-                }
-            } elseif (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
-                // Reject IPv6 loopback (::1)
-                if (strtolower($ip) === '::1') {
-                    throw new \RuntimeException('Discovery URL must not point to loopback address.');
-                }
-            }
+        try {
+            $this->ssrfProtection->assertSafeUrl($url, true);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('Discovery URL rejected: ' . $e->getMessage(), 0, $e);
         }
     }
 }
