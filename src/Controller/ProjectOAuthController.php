@@ -31,7 +31,11 @@ class ProjectOAuthController extends AbstractController
     #[Route('/authorize', name: 'authorize', methods: ['GET', 'POST'])]
     public function authorize(string $projectUuid, Request $request): Response
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+        }
         if (!$project) {
             return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
         }
@@ -181,14 +185,18 @@ class ProjectOAuthController extends AbstractController
     #[Route('/token', name: 'token', methods: ['POST'])]
     public function token(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+        }
         if (!$project) {
             return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
         }
 
-        $clientId = $request->request->get('client_id') ?? $request->query->get('client_id');
-        $clientSecret = $request->request->get('client_secret') ?? $request->query->get('client_secret');
-        $grantType = $request->request->get('grant_type') ?? $request->query->get('grant_type');
+        $clientId = $this->getRequestParam($request, 'client_id');
+        $clientSecret = $this->getRequestParam($request, 'client_secret');
+        $grantType = $this->getRequestParam($request, 'grant_type');
 
         // Vérifier protection lockout sur l'IP cliente
         $clientIp = $request->getClientIp() ?? 'unknown';
@@ -204,9 +212,9 @@ class ProjectOAuthController extends AbstractController
             $client = $this->oauthService->validateClient((string) $clientId, $clientSecret);
 
             if ($grantType === 'authorization_code') {
-                $code = (string) $request->request->get('code');
-                $redirectUri = (string) $request->request->get('redirect_uri');
-                $codeVerifier = $request->request->get('code_verifier');
+                $code = (string) $this->getRequestParam($request, 'code', '');
+                $redirectUri = (string) $this->getRequestParam($request, 'redirect_uri', '');
+                $codeVerifier = $this->getRequestParam($request, 'code_verifier');
 
                 $tokens = $this->oauthService->exchangeAuthorizationCode($client, $code, $redirectUri, $codeVerifier);
                 $this->lockoutService->clearAttempts($clientIp);
@@ -214,7 +222,7 @@ class ProjectOAuthController extends AbstractController
             }
 
             if ($grantType === 'refresh_token') {
-                $refreshToken = (string) $request->request->get('refresh_token');
+                $refreshToken = (string) $this->getRequestParam($request, 'refresh_token', '');
                 $tokens = $this->oauthService->refreshAccessToken($client, $refreshToken);
                 $this->lockoutService->clearAttempts($clientIp);
                 return new JsonResponse($tokens);
@@ -267,9 +275,18 @@ class ProjectOAuthController extends AbstractController
     #[Route('/revoke', name: 'revoke', methods: ['POST'])]
     public function revoke(string $projectUuid, Request $request): JsonResponse
     {
-        $clientId = (string) $request->request->get('client_id');
-        $clientSecret = $request->request->get('client_secret');
-        $token = (string) $request->request->get('token');
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+        }
+        if (!$project) {
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+        }
+
+        $clientId = (string) $this->getRequestParam($request, 'client_id', '');
+        $clientSecret = $this->getRequestParam($request, 'client_secret');
+        $token = (string) $this->getRequestParam($request, 'token', '');
 
         try {
             $client = $this->oauthService->validateClient($clientId, $clientSecret);
@@ -283,6 +300,12 @@ class ProjectOAuthController extends AbstractController
     private function getRequestParam(Request $request, string $key, ?string $default = null): ?string
     {
         $val = $request->request->get($key) ?? $request->query->get($key);
+        if ($val === null) {
+            try {
+                $payload = $request->toArray();
+                $val = $payload[$key] ?? null;
+            } catch (\Throwable) {}
+        }
         return $val !== null ? (string) $val : $default;
     }
 }

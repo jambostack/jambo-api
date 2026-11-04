@@ -27,7 +27,11 @@ class DirectUploadController extends AbstractController
     #[Route('/intent', name: 'intent', methods: ['POST'])]
     public function createIntent(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return new JsonResponse(['error' => 'Project not found'], 404);
         }
@@ -36,7 +40,11 @@ class DirectUploadController extends AbstractController
             $this->denyAccessUnlessGranted('content.create', $project);
         }
 
-        $payload = json_decode($request->getContent(), true) ?? [];
+        try {
+            $payload = $request->toArray();
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Invalid JSON body'], 400);
+        }
 
         try {
             $intent = $this->directUploadService->createIntent($project, $payload);
@@ -57,11 +65,19 @@ class DirectUploadController extends AbstractController
     #[Route('/sign-part', name: 'sign_part', methods: ['POST'])]
     public function signPart(string $projectUuid, Request $request): JsonResponse
     {
-        $payload = json_decode($request->getContent(), true) ?? [];
+        try {
+            $payload = $request->toArray();
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Invalid JSON body'], 400);
+        }
         $intentUuid = $payload['intent_uuid'] ?? '';
         $partNumber = (int) ($payload['part_number'] ?? 1);
 
-        $intent = $this->intentRepository->findPendingByUuid($intentUuid);
+        try {
+            $intent = $this->intentRepository->findPendingByUuid((string) $intentUuid);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+        }
         if (!$intent || $intent->project->uuid?->toRfc4122() !== $projectUuid) {
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
         }
@@ -80,12 +96,20 @@ class DirectUploadController extends AbstractController
     #[Route('/complete', name: 'complete', methods: ['POST'])]
     public function complete(string $projectUuid, Request $request, #[CurrentUser] ?User $user = null): JsonResponse
     {
-        $payload = json_decode($request->getContent(), true) ?? [];
+        try {
+            $payload = $request->toArray();
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Invalid JSON body'], 400);
+        }
         $intentUuid = $payload['intent_uuid'] ?? '';
         $parts = $payload['parts'] ?? [];
         $fileSize = isset($payload['file_size']) ? (int) $payload['file_size'] : null;
 
-        $intent = $this->intentRepository->findPendingByUuid($intentUuid);
+        try {
+            $intent = $this->intentRepository->findPendingByUuid((string) $intentUuid);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+        }
         if (!$intent || $intent->project->uuid?->toRfc4122() !== $projectUuid) {
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
         }
@@ -103,10 +127,18 @@ class DirectUploadController extends AbstractController
     #[Route('/abort', name: 'abort', methods: ['POST'])]
     public function abort(string $projectUuid, Request $request): JsonResponse
     {
-        $payload = json_decode($request->getContent(), true) ?? [];
+        try {
+            $payload = $request->toArray();
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Invalid JSON body'], 400);
+        }
         $intentUuid = $payload['intent_uuid'] ?? '';
 
-        $intent = $this->intentRepository->findPendingByUuid($intentUuid);
+        try {
+            $intent = $this->intentRepository->findPendingByUuid((string) $intentUuid);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+        }
         if (!$intent || $intent->project->uuid?->toRfc4122() !== $projectUuid) {
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
         }

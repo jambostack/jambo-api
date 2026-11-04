@@ -36,7 +36,11 @@ class ImportController extends AbstractController
     {
         $this->requireScope($request, 'content:write');
 
-        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) return $this->json(['error' => 'Project not found'], 404);
 
         $collection = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
@@ -44,14 +48,14 @@ class ImportController extends AbstractController
 
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         $csvData = $body['data'] ?? [];
         $fieldMapping = $body['field_mapping'] ?? [];
         $locale = $body['locale'] ?? $project->defaultLocale;
 
-        if (empty($csvData) || empty($fieldMapping)) {
+        if (!is_array($csvData) || !is_array($fieldMapping) || empty($csvData) || empty($fieldMapping)) {
             return $this->json(['error' => 'Champs requis manquants : data[], field_mapping{}'], 422);
         }
 

@@ -47,7 +47,7 @@ class PersonalAccessToken
 
     public function can(string $scope): bool
     {
-        return in_array($scope, $this->scopes, true);
+        return in_array('*', $this->scopes, true) || in_array($scope, $this->scopes, true);
     }
 
     public function isExpired(): bool

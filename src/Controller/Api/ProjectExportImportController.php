@@ -52,7 +52,11 @@ class ProjectExportImportController extends AbstractController
     #[Route('/{uuid}/export', name: 'export', methods: ['GET'])]
     public function export(string $uuid, Request $request): Response
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -83,7 +87,11 @@ class ProjectExportImportController extends AbstractController
     #[Route('/{uuid}/export/preview', name: 'export_preview', methods: ['GET'])]
     public function exportPreview(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -146,7 +154,9 @@ class ProjectExportImportController extends AbstractController
     #[Route('/import', name: 'import_new', methods: ['POST'])]
     public function importNew(Request $request): JsonResponse
     {
-        $this->denyAccessUnlessGranted('IS_AUTHENTICATED_FULLY');
+        if (!$this->getUser()) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
 
         $uploadedFile = $request->files->get('file');
         if (!$uploadedFile) {
@@ -254,7 +264,9 @@ class ProjectExportImportController extends AbstractController
     #[Route('/import/preview', name: 'import_preview', methods: ['POST'])]
     public function importPreview(Request $request): JsonResponse
     {
-        $this->denyAccessUnlessGranted('IS_AUTHENTICATED_FULLY');
+        if (!$this->getUser()) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
 
         $uploadedFile = $request->files->get('file');
         if (!$uploadedFile) {
@@ -317,7 +329,11 @@ class ProjectExportImportController extends AbstractController
     #[Route('/{uuid}/import/merge', name: 'import_merge', methods: ['POST'])]
     public function importMerge(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }

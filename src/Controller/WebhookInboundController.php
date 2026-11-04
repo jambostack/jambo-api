@@ -36,7 +36,11 @@ class WebhookInboundController extends AbstractController
     public function receive(string $automationUuid, Request $request): JsonResponse
     {
         // Requête ciblée par UUID — pas de findAll()
-        $automation = $this->automationRepo->findOneByUuid($automationUuid);
+        try {
+            $automation = $this->automationRepo->findOneByUuid($automationUuid);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Webhook endpoint not found'], 404);
+        }
 
         if (!$automation) {
             return $this->json(['error' => 'Webhook endpoint not found'], 404);

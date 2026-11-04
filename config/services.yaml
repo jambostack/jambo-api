@@ -171,6 +171,9 @@ services:
     App\Service\DynamicTemplateRenderer:
         public: true
 
+    App\Service\ProjectAuthLockoutService:
+        public: true
+
     # ── Bac à sable Twig Hermétique (Sandbox) ─────────────────────────────────
     App\Twig\NativeTwigSecurityPolicy:
         public: true

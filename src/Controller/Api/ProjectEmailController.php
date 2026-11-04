@@ -59,7 +59,7 @@ class ProjectEmailController extends AbstractController
         // Parser le body
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return new JsonResponse(['error' => 'JSON invalide'], 400);
         }
 
@@ -139,7 +139,7 @@ class ProjectEmailController extends AbstractController
         // Parser le body
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return new JsonResponse(['error' => 'JSON invalide'], 400);
         }
 

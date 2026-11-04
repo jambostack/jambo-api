@@ -1384,4 +1384,130 @@ class CoreApiHardeningTest extends WebTestCase
         $client->request('GET', '/api/deployments');
         $this->assertSame(401, $client->getResponse()->getStatusCode());
     }
+
+    public function testProjectExportImportHardening(): void
+    {
+        $client = static::createClient();
+
+        // 1. Unauthenticated import -> 401
+        $client->request('POST', '/api/projects/import');
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('Authentication required', $data['error']);
+
+        // 2. Malformed UUID export -> 404 when authenticated as admin
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $admin = new User();
+        $admin->email = 'admin-export-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+        $client->request('GET', '/api/projects/not-a-uuid/export');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+    }
+
+    public function testAdminApiCsvImportHardening(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User();
+        $user->email = 'pat-import-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->password = 'hashed';
+        $user->roles = ['ROLE_USER', 'ROLE_SUPER_ADMIN'];
+        $em->persist($user);
+
+        $pat = new \App\Entity\PersonalAccessToken();
+        $pat->user = $user;
+        $pat->name = 'import-pat';
+        $plainPat = bin2hex(random_bytes(20));
+        $pat->tokenHash = \App\Entity\ApiToken::hashTokenLegacy($plainPat);
+        $pat->tokenVersion = 1;
+        $pat->scopes = ['*'];
+        $em->persist($pat);
+
+        $member = new \App\Entity\ProjectMember();
+        $member->project = $em->getRepository(Project::class)->findOneBy(['uuid' => $this->projectUuid]);
+        $member->user = $user;
+        $member->email = $user->email;
+        $member->status = \App\Enum\ProjectMemberStatus::Active;
+        $member->joinedAt = new \DateTimeImmutable();
+        $em->persist($member);
+
+        $em->flush();
+
+        // 1. Non-existent collection -> 404
+        $client->request('POST', "/admin-api/projects/{$this->projectUuid}/collections/nonexistent/import-csv", [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $plainPat,
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['data' => [['title' => 'Test']], 'field_mapping' => ['title' => 'title']]));
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // 2. Invalid JSON on valid project -> 400
+        $client->request('POST', "/admin-api/projects/{$this->projectUuid}/collections/articles/import-csv", [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $plainPat,
+            'CONTENT_TYPE' => 'application/json',
+        ], 'bad json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // 3. Non-array data/mapping -> 422
+        $client->request('POST', "/admin-api/projects/{$this->projectUuid}/collections/articles/import-csv", [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $plainPat,
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['data' => 'not an array', 'field_mapping' => 'not an array']));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+    }
+
+    public function testProjectOAuthJsonPayloadSupportAndUuidSafety(): void
+    {
+        $client = static::createClient();
+        self::getContainer()->get(\App\Service\ProjectAuthLockoutService::class)->clearAttempts('127.0.0.1');
+
+        // 1. Malformed project UUID on token -> 404
+        $client->request('POST', '/api/v1/projects/not-a-valid-uuid/oauth/token', [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['grant_type' => 'authorization_code']));
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // 2. JSON body on token with non-existent client -> 400 invalid_client
+        $client->request('POST', "/api/v1/projects/{$this->projectUuid}/oauth/token", [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['grant_type' => 'authorization_code', 'client_id' => 'nonexistent']));
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('invalid_grant', $data['error']);
+    }
+
+    public function testWebhookInboundMalformedUuidSafety(): void
+    {
+        $client = static::createClient();
+
+        // Malformed UUID -> 404 instead of uncaught exception 500
+        $client->request('POST', '/api/webhooks/inbound/invalid-uuid-string');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertSame('Webhook endpoint not found', $data['error']);
+    }
+
+    public function testDirectUploadHardening(): void
+    {
+        $client = static::createClient();
+
+        // 1. Cross-project token mismatch -> 403
+        $client->request('POST', '/api/projects/not-a-valid-uuid/media/direct-upload/intent', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['filename' => 'test.png', 'file_size' => 1024]));
+        $this->assertSame(403, $client->getResponse()->getStatusCode());
+
+        // 2. Malformed JSON on sign-part -> 400
+        $client->request('POST', "/api/projects/{$this->projectUuid}/media/direct-upload/sign-part", [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+            'CONTENT_TYPE' => 'application/json',
+        ], 'malformed json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+    }
 }

@@ -7,6 +7,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.43] — 2026-11-04
+
+### Fixed & Hardened
+- **Personal Access Token Wildcard Scope (`PersonalAccessToken`)**:
+  - Added wildcard scope matching (`*`) in `PersonalAccessToken::can()`, resolving issue where tokens configured with `*` failed specific scope checks.
+- **OAuth JSON Payload Support & DBAL UUID Protection (`ProjectOAuthController`)**:
+  - Added support for `application/json` payloads on `/token` and `/revoke` endpoints in addition to form-urlencoded bodies.
+  - Wrapped project UUID lookups in `try / catch` to return HTTP 404 cleanly on malformed UUID strings instead of throwing DBAL conversion exceptions.
+- **Export & Import Project Resilience (`ProjectExportImportController`)**:
+  - Wrapped project UUID lookup in `try / catch` returning 404 for invalid UUID strings across export and merge endpoints.
+  - Replaced firewall redirect with explicit in-method authentication check returning 401 JSON for unauthenticated import requests.
+- **CSV Import Validation (`AdminApi/ImportController`)**:
+  - Enforced array type checks for `data` and `field_mapping` payloads returning 422 Unprocessable Entity instead of triggering PHP `TypeError` during iteration.
+  - Caught `\Throwable` on request body JSON decoding.
+- **Direct Upload & Inbound Webhook Safety (`DirectUploadController` & `WebhookInboundController`)**:
+  - Standardized JSON decoding with `\Throwable` safety returning 400 Bad Request.
+  - Protected automation and intent UUID lookups against malformed UUID conversion errors, returning 404.
+- **Email Body Parsing Resilience (`ProjectEmailController`)**:
+  - Caught `\Throwable` on `$request->toArray()` preventing unhandled Symfony JSON exception bubbling.
+
+---
+
 ## [1.26.42] — 2026-11-04
 
 ### Fixed & Hardened
