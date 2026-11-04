@@ -10,8 +10,10 @@ use App\Repository\StorageRuleRepository;
 use App\Service\StorageDriverFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
@@ -23,6 +25,8 @@ class ProjectStorageController extends AbstractController
         private readonly ProjectStorageProfileRepository $profileRepo,
         private readonly StorageRuleRepository $ruleRepo,
         private readonly StorageDriverFactory $driverFactory,
+        #[Autowire(service: 'limiter.storage_test_limiter')]
+        private readonly ?RateLimiterFactory $storageTestLimiter = null,
     ) {}
 
     // ── Stratégie ──────────────────────────────────────────────────────
@@ -147,11 +151,18 @@ class ProjectStorageController extends AbstractController
     }
 
     #[Route('/api/admin/projects/{uuid}/storage/profiles/{id}/test', name: 'admin_project_storage_profile_test', methods: ['POST'])]
-    public function testProfile(string $uuid, int $id): JsonResponse
+    public function testProfile(Request $request, string $uuid, int $id): JsonResponse
     {
         $project = $this->findProject($uuid);
         if ($project instanceof JsonResponse) {
             return $project;
+        }
+
+        if ($this->storageTestLimiter !== null) {
+            $limiter = $this->storageTestLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many test requests. Please retry later.'], 429);
+            }
         }
 
         $profile = $this->profileRepo->find($id);

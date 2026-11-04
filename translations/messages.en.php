@@ -1831,6 +1831,7 @@ return [
     'invitation.invalid_link' => 'This invitation link is invalid.',
     'invitation.expired_link' => 'This invitation link has expired.',
     'invitation.wrong_recipient' => 'This invitation is intended for {email}.',
+    'invitation.too_many_attempts' => 'Too many invitation attempts. Please retry later.',
 
     'forms.new_form' => 'New form',
     'forms.total_forms' => 'Total forms',

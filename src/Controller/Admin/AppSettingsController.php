@@ -75,6 +75,19 @@ class AppSettingsController extends AbstractController
             if (empty($baseUrl)) {
                 return $this->json(['error' => 'Ollama URL not configured'], 422);
             }
+            if (!filter_var($baseUrl, FILTER_VALIDATE_URL)) {
+                return $this->json(['error' => 'Invalid Ollama URL'], 422);
+            }
+            $parsed = parse_url($baseUrl);
+            $scheme = strtolower($parsed['scheme'] ?? '');
+            if (!in_array($scheme, ['http', 'https'], true)) {
+                return $this->json(['error' => 'Only http and https schemes are allowed for Ollama'], 422);
+            }
+            $host = strtolower($parsed['host'] ?? '');
+            if ($this->isCloudMetadataOrForbiddenHost($host)) {
+                return $this->json(['error' => 'Ollama URL cannot target cloud metadata or reserved infrastructure'], 403);
+            }
+
             $url = rtrim($baseUrl, '/') . '/api/tags';
             $raw = $this->fetchUrl($url, [], 6);
             if ($raw === null) {
@@ -136,6 +149,29 @@ class AppSettingsController extends AbstractController
         return $this->json(['models' => $models]);
     }
 
+    private function isCloudMetadataOrForbiddenHost(string $host): bool
+    {
+        $blockedHosts = [
+            '169.254.169.254',
+            'metadata.google.internal',
+            'instance-data',
+            '100.100.100.200',
+            '169.254.169.250',
+            'fd00:ec2::254',
+        ];
+
+        if (in_array(strtolower($host), $blockedHosts, true)) {
+            return true;
+        }
+
+        $ip = filter_var($host, FILTER_VALIDATE_IP) ? $host : gethostbyname($host);
+        if ($ip && (str_starts_with($ip, '169.254.') || str_starts_with($ip, '100.100.'))) {
+            return true;
+        }
+
+        return false;
+    }
+
     private function fetchUrl(string $url, array $headers, int $timeout): ?string
     {
         if (!filter_var($url, FILTER_VALIDATE_URL)) {
@@ -148,9 +184,9 @@ class AppSettingsController extends AbstractController
             \CURLOPT_TIMEOUT        => $timeout,
             \CURLOPT_HTTPHEADER     => $headers,
             \CURLOPT_SSL_VERIFYPEER => true,
-            \CURLOPT_FOLLOWLOCATION => true,
+            \CURLOPT_FOLLOWLOCATION => false, // Anti-SSRF: interdire les redirections
             \CURLOPT_PROTOCOLS      => \CURLPROTO_HTTP | \CURLPROTO_HTTPS,
-            \CURLOPT_REDIR_PROTOCOLS => \CURLPROTO_HTTP | \CURLPROTO_HTTPS,
+            \CURLOPT_REDIR_PROTOCOLS => 0,
         ]);
         $body = curl_exec($ch);
         $code = curl_getinfo($ch, \CURLINFO_HTTP_CODE);
@@ -370,18 +406,22 @@ class AppSettingsController extends AbstractController
         return null;
     }
 
-    /** Supprime les scripts et gestionnaires d'événements des fichiers SVG uploadés. */
+    /** Supprime les scripts, XXE et gestionnaires d'événements des fichiers SVG uploadés. */
     private function sanitizeSvg(\Symfony\Component\HttpFoundation\File\UploadedFile $file): void
     {
         $content = file_get_contents($file->getPathname());
         if ($content === false) return;
 
+        // Supprimer les déclarations DOCTYPE et ENTITY (anti-XXE)
+        $content = preg_replace('/<!(?:DOCTYPE|ENTITY)\b[^>]*>/i', '', $content);
         // Supprimer les balises <script> et leur contenu
         $content = preg_replace('/<script[^>]*>.*?<\/script>/is', '', $content);
-        // Supprimer les gestionnaires d'événements inline (onload, onclick, etc.)
-        $content = preg_replace('/\s+on\w+\s*=\s*["\'][^"\']*["\']/i', '', $content);
+        // Supprimer les gestionnaires d'événements inline (onload, onclick, on*, etc.)
+        $content = preg_replace('/\s+on[a-z0-9_-]+\s*=\s*["\'][^"\']*["\']/i', '', $content);
         // Supprimer les <foreignObject> (peuvent contenir du HTML arbitraire)
         $content = preg_replace('/<foreignObject[^>]*>.*?<\/foreignObject>/is', '', $content);
+        // Neutraliser les attributs href / xlink:href avec javascript: ou data:text/html
+        $content = preg_replace('/(href|xlink:href)\s*=\s*["\']\s*(?:javascript:|data:\s*text\/html)[^"\']*["\']/i', '$1=""', $content);
 
         file_put_contents($file->getPathname(), $content);
     }

@@ -105,6 +105,66 @@ class UploadSecurityValidatorTest extends TestCase
         }
     }
 
+    public function testValidateFileContentRejectsSvgWithDoctypeXxe(): void
+    {
+        $tempFile = tempnam(sys_get_temp_dir(), 'test_xxe_svg');
+        file_put_contents($tempFile, '<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><svg>&xxe;</svg>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('XML/SVG file containing DOCTYPE or ENTITY');
+
+        try {
+            $this->validator->validateFileContent($tempFile, 'svg');
+        } finally {
+            @unlink($tempFile);
+        }
+    }
+
+    public function testValidateFileContentRejectsSvgWithInlineEventHandler(): void
+    {
+        $tempFile = tempnam(sys_get_temp_dir(), 'test_attr_svg');
+        file_put_contents($tempFile, '<svg onload="alert(1)"></svg>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('SVG file contains dangerous inline event handler attributes.');
+
+        try {
+            $this->validator->validateFileContent($tempFile, 'svg');
+        } finally {
+            @unlink($tempFile);
+        }
+    }
+
+    public function testValidateFileContentRejectsSvgWithJavascriptHref(): void
+    {
+        $tempFile = tempnam(sys_get_temp_dir(), 'test_href_svg');
+        file_put_contents($tempFile, '<svg><a href="javascript:alert(1)"><text>Click</text></a></svg>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('SVG file contains dangerous script or data URI in href attribute.');
+
+        try {
+            $this->validator->validateFileContent($tempFile, 'svg');
+        } finally {
+            @unlink($tempFile);
+        }
+    }
+
+    public function testValidateFileContentRejectsSvgWithForeignObject(): void
+    {
+        $tempFile = tempnam(sys_get_temp_dir(), 'test_fo_svg');
+        file_put_contents($tempFile, '<svg><foreignObject width="100" height="50"><div>test</div></foreignObject></svg>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('SVG file contains dangerous active script pattern');
+
+        try {
+            $this->validator->validateFileContent($tempFile, 'svg');
+        } finally {
+            @unlink($tempFile);
+        }
+    }
+
     public function testValidateSizeAndQuotaEnforcesMaxFileSize(): void
     {
         $project = new Project();

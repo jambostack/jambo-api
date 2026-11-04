@@ -1800,6 +1800,7 @@ return [
     'invitation.invalid_link' => 'Este enlace de invitación no es válido.',
     'invitation.expired_link' => 'Este enlace de invitación ha caducado.',
     'invitation.wrong_recipient' => 'Esta invitación está destinada a {email}.',
+    'invitation.too_many_attempts' => 'Demasiados intentos de invitación. Por favor, inténtelo de nuevo más tarde.',
 
     'forms.new_form' => 'Nuevo formulario',
     'forms.total_forms' => 'Total formularios',

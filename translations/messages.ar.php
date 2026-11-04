@@ -1800,6 +1800,7 @@ return [
     'invitation.invalid_link' => 'رابط الدعوة هذا غير صالح.',
     'invitation.expired_link' => 'انتهت صلاحية رابط الدعوة هذا.',
     'invitation.wrong_recipient' => 'هذه الدعوة مخصصة لـ {email}.',
+    'invitation.too_many_attempts' => 'عدد كبير جداً من محاولات الدعوة. يرجى المحاولة مرة أخرى لاحقاً.',
 
     'forms.new_form' => 'نموذج جديد',
     'forms.total_forms' => 'إجمالي النماذج',

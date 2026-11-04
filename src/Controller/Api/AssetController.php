@@ -13,6 +13,7 @@ use App\Repository\StorageRuleRepository;
 use App\Service\ApiTokenChecker;
 use App\Service\StorageDriverFactory;
 use App\Service\StorageManager;
+use App\Service\UploadSecurityValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -36,6 +37,7 @@ class AssetController extends AbstractController
         private ProjectStorageProfileRepository $profileRepo,
         private StorageRuleRepository $ruleRepo,
         private StorageDriverFactory $driverFactory,
+        private ?UploadSecurityValidator $uploadValidator = null,
     ) {}
 
     #[OA\Get(
@@ -162,9 +164,18 @@ class AssetController extends AbstractController
             return $this->corsResponse($this->json(['error' => 'No file uploaded'], 422));
         }
 
-        // Validation: 10 Mo max
-        if ($uploadedFile->getSize() > 10 * 1024 * 1024) {
-            return $this->corsResponse($this->json(['error' => 'File too large. Maximum size is 10 MB.'], 422));
+        // Validation sécurité et quotas via UploadSecurityValidator
+        if ($this->uploadValidator !== null) {
+            try {
+                $this->uploadValidator->validateUploadedFile($uploadedFile, $project);
+            } catch (\InvalidArgumentException $e) {
+                return $this->corsResponse(new JsonResponse(['error' => $e->getMessage()], 422));
+            }
+        } else {
+            // Validation fallback taille: 10 Mo max
+            if ($uploadedFile->getSize() > 10 * 1024 * 1024) {
+                return $this->corsResponse($this->json(['error' => 'File too large. Maximum size is 10 MB.'], 422));
+            }
         }
 
         $media = new Media();

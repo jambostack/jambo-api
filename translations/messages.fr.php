@@ -1849,6 +1849,7 @@ return [
     'invitation.invalid_link' => 'Ce lien d\'invitation est invalide.',
     'invitation.expired_link' => 'Ce lien d\'invitation a expiré.',
     'invitation.wrong_recipient' => 'Cette invitation est destinée à {email}.',
+    'invitation.too_many_attempts' => 'Trop de tentatives d\'invitation. Veuillez réessayer plus tard.',
 
     'forms.new_form' => 'Nouveau formulaire',
     'forms.total_forms' => 'Total formulaires',

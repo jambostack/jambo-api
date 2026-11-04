@@ -68,18 +68,46 @@ class StorageDriverFactory
     }
 
     /**
-     * Valide qu'un endpoint S3 ne pointe pas vers une IP privée/interne (SSRF).
+     * Valide qu'un endpoint S3 ne pointe pas vers une IP privée, locale ou métadonnées Cloud (SSRF).
      */
     private function validateS3Endpoint(string $endpoint): void
     {
-        $host = parse_url($endpoint, PHP_URL_HOST);
-        if ($host === null || $host === false) {
-            throw new \RuntimeException("Invalid S3 endpoint URL: could not parse host from \"$endpoint\". Use a valid URL like \"https://xxx.r2.cloudflarestorage.com\".");
+        $parsed = parse_url($endpoint);
+        if ($parsed === false || !is_array($parsed)) {
+            throw new \RuntimeException("Invalid S3 endpoint URL: could not parse \"$endpoint\". Use a valid URL like \"https://xxx.r2.cloudflarestorage.com\".");
         }
-        $ip = gethostbyname($host);
 
-        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-            throw new \RuntimeException("S3 endpoint \"$endpoint\" resolves to a private/internal IP — rejected for security.");
+        $scheme = strtolower($parsed['scheme'] ?? '');
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            throw new \RuntimeException("Invalid S3 endpoint scheme \"$scheme\": only http and https are allowed.");
+        }
+
+        $host = strtolower($parsed['host'] ?? '');
+        if ($host === '') {
+            throw new \RuntimeException("Invalid S3 endpoint URL: missing host in \"$endpoint\".");
+        }
+
+        $blockedHosts = [
+            '169.254.169.254',
+            'metadata.google.internal',
+            'instance-data',
+            '100.100.100.200',
+            '169.254.169.250',
+            'fd00:ec2::254',
+            'localhost',
+            '127.0.0.1',
+            '::1',
+        ];
+        if (in_array($host, $blockedHosts, true)) {
+            throw new \RuntimeException("S3 endpoint \"$endpoint\" targets a forbidden or reserved host — rejected for security.");
+        }
+
+        $ip = filter_var($host, FILTER_VALIDATE_IP) ? $host : gethostbyname($host);
+
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)
+            || str_starts_with($ip, '127.')
+            || str_starts_with($ip, '169.254.')) {
+            throw new \RuntimeException("S3 endpoint \"$endpoint\" resolves to a private/internal IP ($ip) — rejected for security.");
         }
     }
 
@@ -87,6 +115,10 @@ class StorageDriverFactory
     {
         if ($profile->driver !== 's3') {
             throw new \InvalidArgumentException("Storage profile {$profile->name} is not an S3 driver.");
+        }
+
+        if ($profile->s3Endpoint !== null && $profile->s3Endpoint !== '') {
+            $this->validateS3Endpoint($profile->s3Endpoint);
         }
 
         $secret = $this->decrypt($profile->s3Secret ?? '');
@@ -101,7 +133,6 @@ class StorageDriverFactory
         ];
 
         if ($profile->s3Endpoint !== null && $profile->s3Endpoint !== '') {
-            $this->validateS3Endpoint($profile->s3Endpoint);
             $clientConfig['endpoint'] = $profile->s3Endpoint;
         }
 
@@ -130,7 +161,11 @@ class StorageDriverFactory
         if ($encrypted === '') {
             throw new \RuntimeException('S3 secret not configured.');
         }
-        $decoded = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL);
+        try {
+            $decoded = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL);
+        } catch (\Throwable) {
+            throw new \RuntimeException('Failed to decode S3 secret — ciphertext is not valid base64.');
+        }
         if ($decoded === '') {
             throw new \RuntimeException('Failed to decode S3 secret — ciphertext may be corrupted.');
         }

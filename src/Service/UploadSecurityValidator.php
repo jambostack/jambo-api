@@ -103,7 +103,7 @@ class UploadSecurityValidator
         // 2. Détection polyglotte / injection PHP dans le fichier
         $handle = fopen($filePath, 'rb');
         if ($handle) {
-            $sample = fread($handle, 8192);
+            $sample = fread($handle, 65536);
             fclose($handle);
 
             if ($sample !== false) {
@@ -148,25 +148,36 @@ class UploadSecurityValidator
             }
         }
 
-        // 4. Protection XSS pour les fichiers SVG
-        if ($extension === 'svg') {
+        // 4. Protection anti-XXE et anti-XSS pour les fichiers SVG et XML
+        if (in_array($extension, ['svg', 'xml'], true)) {
             $content = file_get_contents($filePath);
             if ($content !== false) {
-                $lower = strtolower($content);
-                $forbiddenPatterns = [
-                    '<script',
-                    'javascript:',
-                    'onload=',
-                    'onerror=',
-                    'onclick=',
-                    'onmouseover=',
-                    'xmlns:script',
-                    'xlink:href="javascript:',
-                    "xlink:href='javascript:",
-                ];
-                foreach ($forbiddenPatterns as $pattern) {
-                    if (str_contains($lower, $pattern)) {
-                        throw new \InvalidArgumentException(sprintf('SVG file contains dangerous active script pattern: %s', $pattern));
+                // Détection XXE / DTD injection (DOCTYPE ou ENTITY)
+                if (preg_match('/<!(?:DOCTYPE|ENTITY)\b/i', $content)) {
+                    throw new \InvalidArgumentException('XML/SVG file containing DOCTYPE or ENTITY definitions is strictly forbidden.');
+                }
+
+                if ($extension === 'svg') {
+                    $lower = strtolower($content);
+                    // 4a. Balises actives dangereuses
+                    if (preg_match('/<\s*(?:script|foreignobject|iframe|object|embed|applet|meta|form|input)\b/i', $content)) {
+                        throw new \InvalidArgumentException('SVG file contains dangerous active script pattern: <script>');
+                    }
+                    // 4b. Gestionnaires d'événements inline (onload, onclick, onmouseover, onfocus, etc.)
+                    if (preg_match('/\bon[a-z0-9_-]+\s*=/i', $content)) {
+                        throw new \InvalidArgumentException('SVG file contains dangerous inline event handler attributes.');
+                    }
+                    // 4c. URLs actives ou data:text/html dans href ou xlink:href
+                    if (preg_match('/(?:href|xlink:href)\s*=\s*["\']?\s*(?:javascript:|data:\s*text\/html)/i', $content)) {
+                        throw new \InvalidArgumentException('SVG file contains dangerous script or data URI in href attribute.');
+                    }
+                    // 4d. Animations injectant javascript dans les attributs (animate/set)
+                    if (preg_match('/<\s*(?:animate|set)\b[^>]*\bvalues?\s*=\s*["\']?[^"\'>]*javascript:/i', $content)) {
+                        throw new \InvalidArgumentException('SVG file contains dangerous script animation pattern.');
+                    }
+                    // 4e. Recherche globale javascript: ou XML namespaces frauduleux (ex: xmlns:script)
+                    if (str_contains($lower, 'xmlns:script') || str_contains($lower, 'javascript:')) {
+                        throw new \InvalidArgumentException('SVG file contains forbidden script pattern or namespace.');
                     }
                 }
             }

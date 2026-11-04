@@ -8,8 +8,10 @@ use App\Repository\ProjectMailerSettingsRepository;
 use App\Service\ProjectMailerService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
@@ -20,6 +22,8 @@ class ProjectMailerSettingsController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly ProjectMailerSettingsRepository $settingsRepository,
         private readonly ProjectMailerService $mailerService,
+        #[Autowire(service: 'limiter.mailer_test_limiter')]
+        private readonly ?RateLimiterFactory $mailerTestLimiter = null,
     ) {}
 
     #[Route('/api/admin/projects/{uuid}/mailer', name: 'admin_project_mailer_get', methods: ['GET'])]
@@ -121,13 +125,20 @@ class ProjectMailerSettingsController extends AbstractController
     }
 
     #[Route('/api/admin/projects/{uuid}/mailer/test', name: 'admin_project_mailer_test', methods: ['POST'])]
-    public function test(string $uuid): JsonResponse
+    public function test(Request $request, string $uuid): JsonResponse
     {
         $project = $this->resolveProject($uuid);
         if (!$project) {
             return new JsonResponse(['error' => 'Projet introuvable'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $project);
+
+        if ($this->mailerTestLimiter !== null) {
+            $limiter = $this->mailerTestLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many test requests. Please retry later.'], 429);
+            }
+        }
 
         $settings = $this->settingsRepository->findByProject($project);
         if ($settings === null || !$settings->enabled) {

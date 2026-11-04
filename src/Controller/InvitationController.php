@@ -7,9 +7,11 @@ use App\Enum\ProjectMemberStatus;
 use App\Repository\ProjectMemberRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -19,6 +21,8 @@ class InvitationController extends AbstractController
         private ProjectMemberRepository $memberRepo,
         private EntityManagerInterface $em,
         private TranslatorInterface $translator,
+        #[Autowire(service: 'limiter.invitation_limiter')]
+        private ?RateLimiterFactory $invitationLimiter = null,
     ) {}
 
     #[Route('/invitation/accept/{token}', name: 'invitation_accept', methods: ['GET', 'POST'])]
@@ -27,6 +31,17 @@ class InvitationController extends AbstractController
     {
         $wantsJson = str_contains((string) $request->headers->get('Accept'), 'application/json')
             || str_starts_with($request->getPathInfo(), '/api/');
+
+        if ($this->invitationLimiter !== null) {
+            $limiter = $this->invitationLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                $msg = $this->translator->trans('invitation.too_many_attempts') ?: 'Too many attempts. Please retry later.';
+                if ($wantsJson) {
+                    return new JsonResponse(['error' => $msg], 429);
+                }
+                return new Response($msg, 429, ['Content-Type' => 'text/plain']);
+            }
+        }
 
         $member = $this->memberRepo->findOneBy(['invitationToken' => $token]);
 
