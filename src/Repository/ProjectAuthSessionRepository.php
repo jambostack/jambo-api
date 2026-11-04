@@ -93,6 +93,16 @@ class ProjectAuthSessionRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
+    public function countInactive(\DateTimeImmutable $threshold): int
+    {
+        return (int) $this->createQueryBuilder('s')
+            ->select('COUNT(s.id)')
+            ->where('s.lastActiveAt < :threshold')
+            ->setParameter('threshold', $threshold)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     public function deleteInactive(\DateTimeImmutable $threshold): int
     {
         return $this->createQueryBuilder('s')

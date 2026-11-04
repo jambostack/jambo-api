@@ -237,4 +237,32 @@ class ProjectOAuthControllerTest extends TestCase
         $data = json_decode($response->getContent(), true);
         $this->assertSame('code_via_bearer', $data['code']);
     }
+
+    public function testAuthorizeWithUnsupportedCodeChallengeMethodReturns400(): void
+    {
+        $project = new Project();
+        $project->id = 1;
+        $this->projectRepo->method('findOneBy')->willReturn($project);
+
+        $client = new ProjectAuthClient();
+        $client->project = $project;
+        $client->redirectUris = ['https://myapp.test/callback'];
+        $this->oauthService->method('validateClient')->willReturn($client);
+
+        $request = new Request([
+            'client_id'             => 'client_123',
+            'redirect_uri'          => 'https://myapp.test/callback',
+            'response_type'         => 'code',
+            'code_challenge'        => 'some_challenge_value',
+            'code_challenge_method' => 'MD5', // Unsupported
+        ]);
+
+        $response = $this->controller->authorize('proj-uuid', $request);
+
+        $this->assertInstanceOf(JsonResponse::class, $response);
+        $this->assertSame(400, $response->getStatusCode());
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame('invalid_request', $data['error']);
+        $this->assertStringContainsString('Transform algorithm', $data['error_description']);
+    }
 }

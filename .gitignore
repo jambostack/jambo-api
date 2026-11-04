@@ -36,6 +36,7 @@ yarn-error.log
 /others/
 /scripts/*
 !/scripts/deploy.sh
+!/scripts/setup-o2switch-cron.sh
 /.kilo/
 /.claude/
 /.ultraplan/var/realtime/

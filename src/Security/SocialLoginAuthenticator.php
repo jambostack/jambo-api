@@ -31,6 +31,7 @@ class SocialLoginAuthenticator extends AbstractAuthenticator
     {
         $provider = $request->attributes->get('provider');
         $code = $request->query->get('code');
+        $state = $request->query->get('state');
 
         if (!$code || !$provider) {
             throw new AuthenticationException('No authorization code provided.');
@@ -38,6 +39,21 @@ class SocialLoginAuthenticator extends AbstractAuthenticator
 
         if (!in_array($provider, ['google', 'microsoft', 'github', 'gitlab'], true)) {
             throw new AuthenticationException("Unknown provider: $provider");
+        }
+
+        // Protection anti-CSRF OAuth : vérification du state si une session est active
+        if ($request->hasSession()) {
+            $sessionKey = 'oauth2state_' . $provider;
+            $savedState = $request->getSession()->get($sessionKey);
+            if ($savedState !== null) {
+                if (empty($state) || !hash_equals((string) $savedState, (string) $state)) {
+                    throw new \Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException(
+                        'Invalid or expired OAuth CSRF state parameter.'
+                    );
+                }
+                // Consommer immédiatement le state pour prévenir toute attaque par rejeu
+                $request->getSession()->remove($sessionKey);
+            }
         }
 
         $redirectUri = $this->urlGenerator->generate(

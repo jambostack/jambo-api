@@ -38,7 +38,7 @@ class WebhookController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid): JsonResponse
     {
-        $project = $this->resolveProject($projectUuid);
+        $project = $this->resolveProject($projectUuid, 'project.view');
         if ($project instanceof JsonResponse) {
             return $project;
         }
@@ -53,12 +53,9 @@ class WebhookController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->resolveProject($projectUuid);
+        $project = $this->resolveProject($projectUuid, 'project.manage');
         if ($project instanceof JsonResponse) {
             return $project;
-        }
-        if ($this->getUser()) {
-            $this->denyAccessUnlessGranted('project.manage', $project);
         }
 
         try {
@@ -71,17 +68,33 @@ class WebhookController extends AbstractController
             return $this->json(['error' => 'name and url are required'], 422);
         }
 
-        $url = trim($data['url']);
+        $name = trim((string) $data['name']);
+        if (strlen($name) > 100) {
+            return $this->json(['error' => 'Webhook name cannot exceed 100 characters'], 422);
+        }
+
+        $url = trim((string) $data['url']);
         if ($err = $this->validateWebhookUrl($url)) {
             return $this->json(['error' => $err], 422);
         }
 
+        $plainSecret = null;
+        if (!empty($data['secret'])) {
+            $customSecret = (string) $data['secret'];
+            if (strlen($customSecret) < 16 || strlen($customSecret) > 256) {
+                return $this->json(['error' => 'Webhook secret must be between 16 and 256 characters long'], 422);
+            }
+            $plainSecret = $customSecret;
+        } elseif (!array_key_exists('secret', $data) || !empty($data['auto_generate_secret'])) {
+            $plainSecret = 'whsec_' . bin2hex(random_bytes(24));
+        }
+
         $webhook = new Webhook();
         $webhook->project  = $project;
-        $webhook->name     = $data['name'];
+        $webhook->name     = $name;
         $webhook->url      = $url;
-        $webhook->events   = $data['events'] ?? ['content.created', 'content.updated', 'content.deleted'];
-        $webhook->secret   = isset($data['secret']) ? $this->secretService->encrypt($data['secret']) : null;
+        $webhook->events   = is_array($data['events'] ?? null) ? $data['events'] : ['content.created', 'content.updated', 'content.deleted'];
+        $webhook->secret   = $plainSecret !== null ? $this->secretService->encrypt($plainSecret) : null;
         $webhook->isActive = (bool) ($data['is_active'] ?? true);
 
         if (!empty($data['collection_slugs'])) {
@@ -96,13 +109,18 @@ class WebhookController extends AbstractController
         $this->em->persist($webhook);
         $this->em->flush();
 
-        return $this->json(['data' => $this->serialize($webhook)], 201);
+        $response = ['data' => $this->serialize($webhook)];
+        if ($plainSecret !== null) {
+            $response['plain_secret'] = $plainSecret;
+        }
+
+        return $this->json($response, 201);
     }
 
     #[Route('/{uuid}', name: 'show', methods: ['GET'])]
     public function show(string $projectUuid, string $uuid): JsonResponse
     {
-        $webhook = $this->resolveWebhook($projectUuid, $uuid);
+        $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.view');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
         }
@@ -113,12 +131,9 @@ class WebhookController extends AbstractController
     #[Route('/{uuid}', name: 'update', methods: ['PUT', 'PATCH'])]
     public function update(string $projectUuid, string $uuid, Request $request): JsonResponse
     {
-        $webhook = $this->resolveWebhook($projectUuid, $uuid);
+        $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
-        }
-        if ($this->getUser()) {
-            $this->denyAccessUnlessGranted('project.manage', $webhook->project);
         }
 
         try {
@@ -128,20 +143,32 @@ class WebhookController extends AbstractController
         }
 
         if (isset($data['name'])) {
-            $webhook->name = $data['name'];
+            $name = trim((string) $data['name']);
+            if (strlen($name) > 100) {
+                return $this->json(['error' => 'Webhook name cannot exceed 100 characters'], 422);
+            }
+            $webhook->name = $name;
         }
         if (isset($data['url'])) {
-            $url = trim($data['url']);
+            $url = trim((string) $data['url']);
             if ($err = $this->validateWebhookUrl($url)) {
                 return $this->json(['error' => $err], 422);
             }
             $webhook->url = $url;
         }
         if (isset($data['events'])) {
-            $webhook->events = $data['events'];
+            $webhook->events = is_array($data['events']) ? $data['events'] : [];
         }
         if (array_key_exists('secret', $data)) {
-            $webhook->secret = $data['secret'] !== null ? $this->secretService->encrypt($data['secret']) : null;
+            if ($data['secret'] === null || $data['secret'] === '') {
+                $webhook->secret = null;
+            } else {
+                $customSecret = (string) $data['secret'];
+                if (strlen($customSecret) < 16 || strlen($customSecret) > 256) {
+                    return $this->json(['error' => 'Webhook secret must be between 16 and 256 characters long'], 422);
+                }
+                $webhook->secret = $this->secretService->encrypt($customSecret);
+            }
         }
         if (isset($data['is_active'])) {
             $webhook->isActive = (bool) $data['is_active'];
@@ -162,15 +189,47 @@ class WebhookController extends AbstractController
         return $this->json(['data' => $this->serialize($webhook)]);
     }
 
-    #[Route('/{uuid}', name: 'delete', methods: ['DELETE'])]
-    public function delete(string $projectUuid, string $uuid): JsonResponse
+    #[Route('/{uuid}/rotate-secret', name: 'rotate_secret', methods: ['POST'])]
+    public function rotateSecret(string $projectUuid, string $uuid, Request $request): JsonResponse
     {
-        $webhook = $this->resolveWebhook($projectUuid, $uuid);
+        $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
         }
-        if ($this->getUser()) {
-            $this->denyAccessUnlessGranted('project.manage', $webhook->project);
+
+        $data = [];
+        try {
+            $data = $request->toArray();
+        } catch (\Throwable) {}
+
+        $plainSecret = null;
+        if (!empty($data['secret'])) {
+            $customSecret = (string) $data['secret'];
+            if (strlen($customSecret) < 16 || strlen($customSecret) > 256) {
+                return $this->json(['error' => 'Webhook secret must be between 16 and 256 characters long'], 422);
+            }
+            $plainSecret = $customSecret;
+        } else {
+            $plainSecret = 'whsec_' . bin2hex(random_bytes(24));
+        }
+
+        $webhook->secret = $this->secretService->encrypt($plainSecret);
+        $this->em->flush();
+
+        return $this->json([
+            'success'      => true,
+            'message'      => 'Webhook secret rotated successfully',
+            'plain_secret' => $plainSecret,
+            'data'         => $this->serialize($webhook),
+        ]);
+    }
+
+    #[Route('/{uuid}', name: 'delete', methods: ['DELETE'])]
+    public function delete(string $projectUuid, string $uuid): JsonResponse
+    {
+        $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
+        if ($webhook instanceof JsonResponse) {
+            return $webhook;
         }
 
         $this->em->remove($webhook);
@@ -182,12 +241,9 @@ class WebhookController extends AbstractController
     #[Route('/{uuid}/logs', name: 'logs', methods: ['GET'])]
     public function logs(string $projectUuid, string $uuid, Request $request): JsonResponse
     {
-        $webhook = $this->resolveWebhook($projectUuid, $uuid);
+        $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.view');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
-        }
-        if ($this->getUser()) {
-            $this->denyAccessUnlessGranted('project.view', $webhook->project);
         }
 
         $page    = max(1, $request->query->getInt('page', 1));
@@ -219,12 +275,9 @@ class WebhookController extends AbstractController
     #[Route('/{uuid}/test', name: 'test', methods: ['POST'])]
     public function test(string $projectUuid, string $uuid): JsonResponse
     {
-        $webhook = $this->resolveWebhook($projectUuid, $uuid);
+        $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
-        }
-        if ($this->getUser()) {
-            $this->denyAccessUnlessGranted('project.manage', $webhook->project);
         }
 
         $payload = [
@@ -253,6 +306,15 @@ class WebhookController extends AbstractController
 
     private function validateWebhookUrl(string $url): ?string
     {
+        if (strlen($url) > 2048) {
+            return 'Webhook URL cannot exceed 2048 characters';
+        }
+
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+        if (!filter_var($url, FILTER_VALIDATE_URL) || !in_array($scheme, ['https', 'http'], true)) {
+            return 'Webhook URL must be a valid http or https URL';
+        }
+
         if (!$this->ssrfProtection->isSafeUrl($url, false, $reason)) {
             return $reason ?? 'Internal and private IP addresses are not allowed for webhooks';
         }
@@ -274,7 +336,7 @@ class WebhookController extends AbstractController
         ];
     }
 
-    private function resolveProject(string $projectUuid): \App\Entity\Project|JsonResponse
+    private function resolveProject(string $projectUuid, string $requiredPermission = 'project.view'): \App\Entity\Project|JsonResponse
     {
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
@@ -284,18 +346,24 @@ class WebhookController extends AbstractController
         if ($project === null) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+
         $user = $this->getUser();
         if ($user instanceof \App\Entity\User) {
-            if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true) && !$project->hasMember($user)) {
-                return $this->json(['error' => 'Access denied'], 403);
+            if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+                if (!$project->hasMember($user)) {
+                    return $this->json(['error' => 'Access denied to this project.'], 403);
+                }
+                $this->denyAccessUnlessGranted($requiredPermission, $project);
             }
+            return $project;
         }
+
         return $project;
     }
 
-    private function resolveWebhook(string $projectUuid, string $uuid): Webhook|JsonResponse
+    private function resolveWebhook(string $projectUuid, string $uuid, string $requiredPermission = 'project.view'): Webhook|JsonResponse
     {
-        $project = $this->resolveProject($projectUuid);
+        $project = $this->resolveProject($projectUuid, $requiredPermission);
         if ($project instanceof JsonResponse) {
             return $project;
         }

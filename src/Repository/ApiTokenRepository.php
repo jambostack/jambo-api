@@ -41,6 +41,16 @@ class ApiTokenRepository extends ServiceEntityRepository
         return $this->findBy(['project' => $project], ['createdAt' => 'DESC']);
     }
 
+    public function countExpired(): int
+    {
+        return (int) $this->createQueryBuilder('a')
+            ->select('COUNT(a.id)')
+            ->where('a.expiresAt IS NOT NULL AND a.expiresAt < :now')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     public function deleteExpired(): int
     {
         return $this->createQueryBuilder('a')

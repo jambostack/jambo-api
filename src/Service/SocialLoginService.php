@@ -135,7 +135,12 @@ class SocialLoginService
 
     // ─── URLs ──────────────────────────────────────────────────────────────
 
-    public function getRedirectUrl(string $provider, string $redirectUri, ?array $config = null): string
+    /**
+     * Génère l'URL d'autorisation OAuth et renvoie également l'état CSRF (state).
+     *
+     * @return array{url: string, state: string}
+     */
+    public function getAuthorizationUrlAndState(string $provider, string $redirectUri, ?array $config = null): array
     {
         $oauthProvider = $config
             ? $this->buildProvider($provider, $config)
@@ -147,11 +152,17 @@ class SocialLoginService
 
         $cfg = self::PROVIDER_CONFIG[$provider];
         $url = $oauthProvider->getAuthorizationUrl(['scope' => $cfg['scopes']]);
+        $state = (string) $oauthProvider->getState();
 
-        // Stocker l'état OAuth pour validation CSRF
-        // (simplifié ici — le state est géré par le provider league/oauth2-client)
+        return [
+            'url'   => $url,
+            'state' => $state,
+        ];
+    }
 
-        return $url;
+    public function getRedirectUrl(string $provider, string $redirectUri, ?array $config = null): string
+    {
+        return $this->getAuthorizationUrlAndState($provider, $redirectUri, $config)['url'];
     }
 
     // ─── User from Provider ────────────────────────────────────────────────

@@ -7,6 +7,34 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.67] — 2026-11-04
+
+### Security & Hardening
+- **Webhook Management & Secret Key Hardening (`WebhookController`)**:
+  - Enforced strict project authorization on all endpoints (`index`, `show`, `create`, `update`, `delete`, `logs`, `test`, `rotate-secret`). Anonymous requests and non-members without permission are rejected with 401/403.
+  - Implemented automatic generation of 256-bit CSPRNG secrets (`whsec_` + 48 hex characters) when secret is omitted or `auto_generate_secret` is enabled, returning `plain_secret` in response.
+  - Enforced secret length validation: custom secrets must be between 16 and 256 characters long to prevent weak offline-brute-forceable HMAC keys.
+  - Added new secret rotation endpoint: `POST /api/projects/{projectUuid}/webhooks/{uuid}/rotate-secret`.
+  - Hardened URL validation: maximum 2048 characters, strict http/https schemes only, and thorough SSRF protection via `SsrfProtectionService`.
+  - Added robust 32-byte key derivation in `WebhookSecretService` via SHA-256 fallback when passphrase is provided.
+- **Inbound Webhook Verification & Integrations (`WebhookInboundController`)**:
+  - Added native support for **GitLab** webhooks via `X-Gitlab-Token` header and timing-attack-safe `hash_equals`.
+  - Added native support for **Slack** webhooks via `X-Slack-Signature` (`v0=` . HMAC-SHA256) and `X-Slack-Request-Timestamp` with 300s anti-replay enforcement.
+  - Added native support for `Authorization: Bearer <secret>` webhook delivery.
+  - Added transparent on-the-fly decryption of trigger secrets prefixed with `enc:` via `WebhookSecretService`.
+- **OAuth Social Login CSRF Protection (`SocialLoginController`, `SocialLoginAuthenticator`, `SocialLoginService`)**:
+  - Generated and bound CSRF `state` parameter in `SocialLoginService::getAuthorizationUrlAndState()`.
+  - Persisted state in user session (`oauth2state_{provider}`) upon OAuth start redirect.
+  - Enforced constant-time CSRF state verification in `SocialLoginAuthenticator::authenticate()` and immediately consumed single-use state from session to neutralize OAuth Login CSRF and account connection attacks.
+- **Project OAuth 2.1 PKCE Hardening (`ProjectOAuthController`)**:
+  - Enforced validation of `code_challenge_method` (`S256` or `plain`) rejecting unsupported transform algorithms with 400 `invalid_request`.
+- **Scheduled Retention & Inactive Session Purge (`PurgeExpiredTokensCommand`, Repositories)**:
+  - Added `--dry-run` simulation flag to `app:purge-expired-tokens` to audit eligible records without deleting.
+  - Added counting queries (`countExpired()`, `countInactive()`) across `ProjectAuthSessionRepository`, `PasswordResetTokenRepository`, `PersonalAccessTokenRepository`, `ApiTokenRepository`, `ProjectAuthRefreshTokenRepository`, and `ProjectAuthAuthorizationCodeRepository`.
+  - Added production crontab configuration guide and script (`scripts/setup-o2switch-cron.sh`) for o2switch.
+
+---
+
 ## [1.26.66] — 2026-11-04
 
 ### Fixed & Hardened

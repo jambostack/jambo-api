@@ -188,6 +188,102 @@ class WebhookInboundSecurityTest extends WebTestCase
         $this->assertSame('Invalid webhook secret or signature', $data['error']);
     }
 
+    public function testAuthenticatesWithGitlabTokenHeader(): void
+    {
+        /** @var KernelBrowser $client */
+        [$client, $automation] = $this->createClientAndAutomation();
+        $payload = json_encode(['object_kind' => 'push', 'project' => ['name' => 'gitlab-app']]);
+
+        $client->request(
+            'POST',
+            '/api/webhooks/inbound/' . $automation->uuid->toRfc4122(),
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_GITLAB_TOKEN' => $this->secret,
+            ],
+            $payload
+        );
+
+        $this->assertResponseIsSuccessful();
+        $data = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+    }
+
+    public function testAuthenticatesWithSlackSignatureHeader(): void
+    {
+        /** @var KernelBrowser $client */
+        [$client, $automation] = $this->createClientAndAutomation();
+        $payload = json_encode(['command' => '/deploy', 'user_id' => 'U123']);
+        $ts = time();
+        $sig = 'v0=' . hash_hmac('sha256', "v0:{$ts}:{$payload}", $this->secret);
+
+        $client->request(
+            'POST',
+            '/api/webhooks/inbound/' . $automation->uuid->toRfc4122(),
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_SLACK_SIGNATURE' => $sig,
+                'HTTP_X_SLACK_REQUEST_TIMESTAMP' => (string) $ts,
+            ],
+            $payload
+        );
+
+        $this->assertResponseIsSuccessful();
+        $data = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+    }
+
+    public function testRejectsSlackReplayAttackWithOldTimestamp(): void
+    {
+        /** @var KernelBrowser $client */
+        [$client, $automation] = $this->createClientAndAutomation();
+        $payload = json_encode(['command' => '/replayed']);
+        $oldTs = time() - 600; // 10 minutes ago
+        $sig = 'v0=' . hash_hmac('sha256', "v0:{$oldTs}:{$payload}", $this->secret);
+
+        $client->request(
+            'POST',
+            '/api/webhooks/inbound/' . $automation->uuid->toRfc4122(),
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_SLACK_SIGNATURE' => $sig,
+                'HTTP_X_SLACK_REQUEST_TIMESTAMP' => (string) $oldTs,
+            ],
+            $payload
+        );
+
+        $this->assertResponseStatusCodeSame(403);
+    }
+
+    public function testAuthenticatesWithBearerAuthorizationHeader(): void
+    {
+        /** @var KernelBrowser $client */
+        [$client, $automation] = $this->createClientAndAutomation();
+        $payload = json_encode(['event' => 'custom.event']);
+
+        $client->request(
+            'POST',
+            '/api/webhooks/inbound/' . $automation->uuid->toRfc4122(),
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->secret,
+            ],
+            $payload
+        );
+
+        $this->assertResponseIsSuccessful();
+        $data = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+    }
+
     public function testRejectsOversizedPayload(): void
     {
         /** @var KernelBrowser $client */

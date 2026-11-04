@@ -144,6 +144,18 @@ class SocialLoginServiceTest extends TestCase
         $this->assertEmpty($providers, 'Sans configuration, la liste des providers doit etre vide');
     }
 
+    public function testGetAuthorizationUrlAndStateReturnsUrlAndCsrfState(): void
+    {
+        $service = $this->createServiceWithGoogleConfig();
+        $authData = $service->getAuthorizationUrlAndState('google', 'https://example.com/connect/google/check');
+
+        $this->assertArrayHasKey('url', $authData);
+        $this->assertArrayHasKey('state', $authData);
+        $this->assertNotEmpty($authData['url']);
+        $this->assertNotEmpty($authData['state']);
+        $this->assertStringContainsString('state=' . $authData['state'], $authData['url']);
+    }
+
     public function testGetRedirectUrlThrowsOnUnconfiguredProvider(): void
     {
         $service = $this->createServiceWithoutConfig();

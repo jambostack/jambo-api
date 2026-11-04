@@ -66,6 +66,15 @@ class ProjectOAuthController extends AbstractController
             return new JsonResponse(['error' => 'invalid_request', 'error_description' => 'Redirect URI is not allowed for this client.'], 400);
         }
 
+        if ($codeChallenge !== null && $codeChallenge !== '') {
+            if (!in_array($codeChallengeMethod, ['S256', 'plain'], true)) {
+                return new JsonResponse([
+                    'error' => 'invalid_request',
+                    'error_description' => "Transform algorithm '{$codeChallengeMethod}' not supported. Use 'S256'.",
+                ], 400);
+            }
+        }
+
         if ($responseType !== 'code') {
             $sep = str_contains($redirectUri, '?') ? '&' : '?';
             $errUrl = $redirectUri . $sep . http_build_query(array_filter([

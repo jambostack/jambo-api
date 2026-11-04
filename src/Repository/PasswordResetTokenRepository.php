@@ -25,6 +25,16 @@ class PasswordResetTokenRepository extends ServiceEntityRepository
         return $record;
     }
 
+    public function countExpired(): int
+    {
+        return (int) $this->createQueryBuilder('t')
+            ->select('COUNT(t.id)')
+            ->where('t.expiresAt < :now')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     public function deleteExpired(): int
     {
         return $this->createQueryBuilder('t')

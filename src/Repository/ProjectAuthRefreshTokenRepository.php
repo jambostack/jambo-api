@@ -83,11 +83,21 @@ class ProjectAuthRefreshTokenRepository extends ServiceEntityRepository
             ->execute();
     }
 
+    public function countExpired(): int
+    {
+        return (int) $this->createQueryBuilder('r')
+            ->select('COUNT(r.id)')
+            ->where('r.expiresAt < :now OR r.isRevoked = true')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     public function deleteExpired(): int
     {
         return $this->createQueryBuilder('r')
             ->delete()
-            ->where('r.expiresAt < :now')
+            ->where('r.expiresAt < :now OR r.isRevoked = true')
             ->setParameter('now', new \DateTimeImmutable())
             ->getQuery()
             ->execute();

@@ -8,7 +8,13 @@ class WebhookSecretService
 
     public function __construct(string $webhookSecretKey)
     {
-        $this->key = base64_decode($webhookSecretKey);
+        $decoded = base64_decode($webhookSecretKey, true);
+        if ($decoded !== false && strlen($decoded) === SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
+            $this->key = $decoded;
+        } else {
+            // Dérive une clé de chiffrement déterministe de 32 octets (256 bits)
+            $this->key = hash('sha256', $webhookSecretKey, true);
+        }
     }
 
     public function encrypt(string $plainSecret): string

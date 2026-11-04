@@ -62,4 +62,50 @@ class PurgeExpiredTokensCommandTest extends TestCase
         $this->assertStringContainsString('OAuth authorization codes purged: 4', $output);
         $this->assertStringContainsString('Inactive sessions (> 15d) purged: 12', $output);
     }
+
+    public function testExecuteDryRunReportsCountsWithoutDeleting(): void
+    {
+        $resetRepo = $this->createMock(PasswordResetTokenRepository::class);
+        $resetRepo->expects($this->once())->method('countExpired')->willReturn(10);
+        $resetRepo->expects($this->never())->method('deleteExpired');
+
+        $patRepo = $this->createMock(PersonalAccessTokenRepository::class);
+        $patRepo->expects($this->once())->method('countExpired')->willReturn(4);
+        $patRepo->expects($this->never())->method('deleteExpired');
+
+        $apiRepo = $this->createMock(ApiTokenRepository::class);
+        $apiRepo->expects($this->once())->method('countExpired')->willReturn(1);
+        $apiRepo->expects($this->never())->method('deleteExpired');
+
+        $refreshRepo = $this->createMock(ProjectAuthRefreshTokenRepository::class);
+        $refreshRepo->expects($this->once())->method('countExpired')->willReturn(8);
+        $refreshRepo->expects($this->never())->method('deleteExpired');
+
+        $codeRepo = $this->createMock(ProjectAuthAuthorizationCodeRepository::class);
+        $codeRepo->expects($this->once())->method('countExpired')->willReturn(6);
+        $codeRepo->expects($this->never())->method('deleteExpired');
+
+        $sessionRepo = $this->createMock(ProjectAuthSessionRepository::class);
+        $sessionRepo->expects($this->once())->method('countInactive')->willReturn(25);
+        $sessionRepo->expects($this->never())->method('deleteInactive');
+
+        $command = new PurgeExpiredTokensCommand(
+            $resetRepo,
+            $patRepo,
+            $apiRepo,
+            $refreshRepo,
+            $codeRepo,
+            $sessionRepo
+        );
+
+        $tester = new CommandTester($command);
+        $status = $tester->execute(['--dry-run' => true]);
+
+        $this->assertSame(0, $status);
+        $output = $tester->getDisplay();
+        $this->assertStringContainsString('DRY-RUN MODE', $output);
+        $this->assertStringContainsString('Password reset tokens', $output);
+        $this->assertStringContainsString('10', $output);
+        $this->assertStringContainsString('25', $output);
+    }
 }

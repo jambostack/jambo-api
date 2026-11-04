@@ -28,6 +28,16 @@ class ProjectAuthAuthorizationCodeRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
+    public function countExpired(): int
+    {
+        return (int) $this->createQueryBuilder('c')
+            ->select('COUNT(c.id)')
+            ->where('c.expiresAt < :now OR c.isUsed = true')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     public function deleteExpired(): int
     {
         return $this->createQueryBuilder('c')

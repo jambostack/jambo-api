@@ -31,13 +31,20 @@ class PurgeExpiredTokensCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption(
-            'session-days',
-            null,
-            InputOption::VALUE_REQUIRED,
-            'Number of days of inactivity after which sessions are purged',
-            '30'
-        );
+        $this
+            ->addOption(
+                'session-days',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Number of days of inactivity after which sessions are purged',
+                '30'
+            )
+            ->addOption(
+                'dry-run',
+                null,
+                InputOption::VALUE_NONE,
+                'Simulate the purge and report eligible expired records without deleting them'
+            );
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -45,6 +52,31 @@ class PurgeExpiredTokensCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $sessionDays = max(1, (int) $input->getOption('session-days'));
         $threshold = (new \DateTimeImmutable())->modify("-{$sessionDays} days");
+        $isDryRun = (bool) $input->getOption('dry-run');
+
+        if ($isDryRun) {
+            $countReset = $this->resetTokenRepository->countExpired();
+            $countPat = $this->patRepository->countExpired();
+            $countApi = $this->apiTokenRepository->countExpired();
+            $countRefresh = $this->refreshTokenRepository->countExpired();
+            $countCodes = $this->authCodeRepository->countExpired();
+            $countSessions = $this->sessionRepository->countInactive($threshold);
+
+            $io->note('DRY-RUN MODE — Simulation only, no records were deleted.');
+            $io->table(
+                ['Record Category', 'Eligible Records'],
+                [
+                    ['Password reset tokens', $countReset],
+                    ['Personal access tokens (PAT)', $countPat],
+                    ['Project API tokens', $countApi],
+                    ['OAuth refresh tokens (expired or revoked)', $countRefresh],
+                    ['OAuth authorization codes (expired or used)', $countCodes],
+                    ["Inactive sessions (> {$sessionDays}d)", $countSessions],
+                ]
+            );
+
+            return Command::SUCCESS;
+        }
 
         $purgedReset = $this->resetTokenRepository->deleteExpired();
         $purgedPat = $this->patRepository->deleteExpired();

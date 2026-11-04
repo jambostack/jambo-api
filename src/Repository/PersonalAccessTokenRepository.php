@@ -39,6 +39,16 @@ class PersonalAccessTokenRepository extends ServiceEntityRepository
         return $this->findBy(['user' => $user], ['createdAt' => 'DESC']);
     }
 
+    public function countExpired(): int
+    {
+        return (int) $this->createQueryBuilder('p')
+            ->select('COUNT(p.id)')
+            ->where('p.expiresAt IS NOT NULL AND p.expiresAt < :now')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     public function deleteExpired(): int
     {
         return $this->createQueryBuilder('p')

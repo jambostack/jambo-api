@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Repository\AutomationRepository;
 use App\Service\Automation\AutomationEngine;
+use App\Service\WebhookSecretService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -26,6 +27,7 @@ class WebhookInboundController extends AbstractController
         private readonly AutomationEngine $engine,
         private readonly LoggerInterface $logger,
         private readonly ?RateLimiterFactory $webhookInboundLimiter = null,
+        private readonly ?WebhookSecretService $secretService = null,
     ) {}
 
     /**
@@ -83,7 +85,16 @@ class WebhookInboundController extends AbstractController
         // Vérifie le secret ou signature HMAC si configuré
         $secret = $triggerNode['data']['config']['secret'] ?? null;
         if ($secret !== null && $secret !== '') {
-            if (!$this->verifyWebhookSecretOrSignature($request, $body, (string) $secret)) {
+            $resolvedSecret = (string) $secret;
+            if (str_starts_with($resolvedSecret, 'enc:') && $this->secretService !== null) {
+                try {
+                    $resolvedSecret = $this->secretService->decrypt(substr($resolvedSecret, 4));
+                } catch (\Throwable) {
+                    return $this->json(['error' => 'Webhook secret decryption failure'], 500);
+                }
+            }
+
+            if (!$this->verifyWebhookSecretOrSignature($request, $body, $resolvedSecret)) {
                 return $this->json(['error' => 'Invalid webhook secret or signature'], 403);
             }
         }
@@ -184,6 +195,36 @@ class WebhookInboundController extends AbstractController
                         return true;
                     }
                 }
+            }
+        }
+
+        // 5. Standard GitLab : X-Gitlab-Token
+        $gitlabToken = $request->headers->get('X-Gitlab-Token');
+        if ($gitlabToken !== null && hash_equals($secret, $gitlabToken)) {
+            return $this->verifyTimestampHeader($request);
+        }
+
+        // 6. Standard Slack : X-Slack-Signature (v0=<hex>) & X-Slack-Request-Timestamp
+        $slackSig = $request->headers->get('X-Slack-Signature');
+        $slackTs = $request->headers->get('X-Slack-Request-Timestamp');
+        if ($slackSig !== null && $slackTs !== null && is_numeric($slackTs)) {
+            if (abs(time() - (int) $slackTs) <= 300) {
+                if (str_starts_with($slackSig, 'v0=')) {
+                    $slackSig = substr($slackSig, 3);
+                }
+                $expected = hash_hmac('sha256', "v0:{$slackTs}:{$body}", $secret);
+                if (hash_equals($expected, $slackSig)) {
+                    return true;
+                }
+            }
+        }
+
+        // 7. Standard Authorization: Bearer <secret>
+        $authHeader = $request->headers->get('Authorization');
+        if ($authHeader !== null && str_starts_with($authHeader, 'Bearer ')) {
+            $bearer = substr($authHeader, 7);
+            if (hash_equals($secret, $bearer)) {
+                return $this->verifyTimestampHeader($request);
             }
         }
 
