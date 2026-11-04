@@ -51,7 +51,7 @@ class AutomationController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->json(['error' => 'Project not found'], 404);
-        $this->denyProjectAccess($project, $request);
+        $this->denyProjectAccess($project, $request, 'project.manage');
 
         try {
             $data = $request->toArray();
@@ -90,7 +90,7 @@ class AutomationController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->json(['error' => 'Project not found'], 404);
-        $this->denyProjectAccess($project, $request);
+        $this->denyProjectAccess($project, $request, 'project.manage');
 
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
@@ -116,7 +116,7 @@ class AutomationController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->json(['error' => 'Project not found'], 404);
-        $this->denyProjectAccess($project, $request);
+        $this->denyProjectAccess($project, $request, 'project.manage');
 
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
@@ -133,7 +133,7 @@ class AutomationController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->json(['error' => 'Project not found'], 404);
-        $this->denyProjectAccess($project, $request);
+        $this->denyProjectAccess($project, $request, 'project.manage');
 
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
@@ -179,7 +179,7 @@ class AutomationController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->json(['error' => 'Project not found'], 404);
-        $this->denyProjectAccess($project, $request);
+        $this->denyProjectAccess($project, $request, 'project.manage');
 
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
@@ -202,10 +202,10 @@ class AutomationController extends AbstractController
                 'error' => $run->errorMessage,
                 'action_output' => $run->actionOutput,
             ]);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return $this->json([
                 'success' => false,
-                'error' => $e->getMessage(),
+                'error' => 'Execution failed',
             ], 500);
         }
     }
@@ -216,7 +216,7 @@ class AutomationController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->json(['error' => 'Project not found'], 404);
-        $this->denyProjectAccess($project, $request);
+        $this->denyProjectAccess($project, $request, 'project.manage');
 
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
@@ -255,7 +255,7 @@ class AutomationController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->json(['error' => 'Project not found'], 404);
-        $this->denyProjectAccess($project, $request);
+        $this->denyProjectAccess($project, $request, 'project.manage');
 
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
@@ -333,17 +333,22 @@ class AutomationController extends AbstractController
         }
     }
 
-    private function denyProjectAccess(\App\Entity\Project $project, ?Request $request = null): void
+    private function denyProjectAccess(\App\Entity\Project $project, ?Request $request = null, string $attribute = 'project.view'): void
     {
+        $user = $this->getUser();
+        if ($user) {
+            if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+                return;
+            }
+            $this->denyAccessUnlessGranted($attribute, $project);
+            return;
+        }
+
         if ($request !== null && $request->attributes->get('_project') === $project) {
             return;
         }
-        $user = $this->getUser();
-        if (!$user) throw $this->createAccessDeniedException('Authentication required');
-        if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) return;
-        if ($this->memberRepo->findActiveByUserAndProject($user, $project) === null) {
-            throw $this->createAccessDeniedException();
-        }
+
+        throw $this->createAccessDeniedException('Authentication required');
     }
 
     private function serialize(Automation $a): array

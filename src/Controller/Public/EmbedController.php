@@ -85,9 +85,13 @@ class EmbedController extends AbstractController
     // ── PostMessage listener (reçoit la hauteur de l'iframe) ─────────────────
     window.addEventListener('message', function (event) {
         if (!event.data || event.data.type !== 'jambo-form-height') return;
-        var iframes = document.querySelectorAll('iframe[data-jambo-id="' + event.data.formSlug + '"]');
+        var slug = String(event.data.formSlug || '');
+        if (!/^[a-zA-Z0-9_\-]+$/.test(slug)) return;
+        var height = parseInt(event.data.height, 10);
+        if (isNaN(height) || height < 0 || height > 10000) return;
+        var iframes = document.querySelectorAll('iframe[data-jambo-id="' + slug + '"]');
         for (var i = 0; i < iframes.length; i++) {
-            iframes[i].style.height = event.data.height + 'px';
+            iframes[i].style.height = height + 'px';
         }
     });
 
@@ -102,6 +106,8 @@ class EmbedController extends AbstractController
     function mountForm(container) {
         var formUrl = container.getAttribute('data-jambo-form');
         if (!formUrl) return;
+        formUrl = formUrl.trim();
+        if (!/^(https?:\/\/|\/)/i.test(formUrl) || /^(javascript:|data:|vbscript:|\/\/)/i.test(formUrl)) return;
 
         container.classList.add('jambo-form-container');
 

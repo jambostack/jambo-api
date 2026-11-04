@@ -65,6 +65,9 @@ class CommentController extends AbstractController
         if ($body === '') {
             return $this->json(['error' => 'Comment body cannot be empty.'], 422);
         }
+        if (mb_strlen($body) > 10000) {
+            return $this->json(['error' => 'Comment body cannot exceed 10000 characters.'], 422);
+        }
 
         $comment = new Comment();
         $comment->entry = $entry;
@@ -87,10 +90,12 @@ class CommentController extends AbstractController
     }
 
     #[Route('/{id}', name: 'update', methods: ['PUT'])]
-    public function update(int $id, Request $request): JsonResponse
+    public function update(string $projectUuid, string $collectionSlug, int $entryId, int $id, Request $request): JsonResponse
     {
         $comment = $this->commentRepository->find($id);
-        if (!$comment) return $this->json(['error' => 'Not found.'], 404);
+        if (!$comment || $comment->entry?->id !== $entryId || $comment->entry?->project?->uuid?->toRfc4122() !== $projectUuid || $comment->entry?->collection?->slug !== $collectionSlug) {
+            return $this->json(['error' => 'Not found.'], 404);
+        }
 
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
@@ -111,6 +116,9 @@ class CommentController extends AbstractController
             if ($body === '') {
                 return $this->json(['error' => 'Comment body cannot be empty.'], 422);
             }
+            if (mb_strlen($body) > 10000) {
+                return $this->json(['error' => 'Comment body cannot exceed 10000 characters.'], 422);
+            }
             $comment->body = $body;
         }
         $comment->updatedAt = new \DateTimeImmutable();
@@ -119,10 +127,12 @@ class CommentController extends AbstractController
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
-    public function delete(int $id): JsonResponse
+    public function delete(string $projectUuid, string $collectionSlug, int $entryId, int $id): JsonResponse
     {
         $comment = $this->commentRepository->find($id);
-        if (!$comment) return $this->json(['error' => 'Not found.'], 404);
+        if (!$comment || $comment->entry?->id !== $entryId || $comment->entry?->project?->uuid?->toRfc4122() !== $projectUuid || $comment->entry?->collection?->slug !== $collectionSlug) {
+            return $this->json(['error' => 'Not found.'], 404);
+        }
 
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {

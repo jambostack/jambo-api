@@ -40,6 +40,9 @@ class MediaController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
 
         $page    = max(1, (int) $request->query->get('page', 1));
         $perPage = min(100, max(1, (int) $request->query->get('per_page', 20)));
@@ -157,6 +160,9 @@ class MediaController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.create', $project);
+        }
 
         $uploadedFile = $request->files->get('file');
         if (!$uploadedFile) {
@@ -212,6 +218,9 @@ class MediaController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.delete', $project);
+        }
 
         try {
             $data = $request->toArray();
@@ -249,6 +258,9 @@ class MediaController extends AbstractController
         if ($media instanceof JsonResponse) {
             return $media;
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $media->project);
+        }
 
         return $this->json(['data' => $this->mediaSerializer->serialize($media)]);
     }
@@ -259,6 +271,9 @@ class MediaController extends AbstractController
         $media = $this->findMedia($projectUuid, $uuid);
         if ($media instanceof JsonResponse) {
             return $media;
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.update', $media->project);
         }
 
         try {
@@ -285,6 +300,9 @@ class MediaController extends AbstractController
         $media = $this->findMedia($projectUuid, $uuid);
         if ($media instanceof JsonResponse) {
             return $media;
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.update', $media->project);
         }
 
         try {
@@ -324,6 +342,9 @@ class MediaController extends AbstractController
         if ($media instanceof JsonResponse) {
             return $media;
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.update', $media->project);
+        }
 
         $uploadedFile = $request->files->get('file');
         if (!$uploadedFile) {
@@ -343,6 +364,9 @@ class MediaController extends AbstractController
         $media = $this->findMedia($projectUuid, $uuid);
         if ($media instanceof JsonResponse) {
             return $media;
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.delete', $media->project);
         }
 
         $filename = $media->originalName ?? $media->fileName ?? $uuid;
@@ -369,6 +393,9 @@ class MediaController extends AbstractController
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $project);
         }
 
         try {

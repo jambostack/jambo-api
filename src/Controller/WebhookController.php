@@ -57,6 +57,9 @@ class WebhookController extends AbstractController
         if ($project instanceof JsonResponse) {
             return $project;
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.manage', $project);
+        }
 
         try {
             $data = $request->toArray();
@@ -114,6 +117,9 @@ class WebhookController extends AbstractController
         if ($webhook instanceof JsonResponse) {
             return $webhook;
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.manage', $webhook->project);
+        }
 
         try {
             $data = $request->toArray();
@@ -163,6 +169,9 @@ class WebhookController extends AbstractController
         if ($webhook instanceof JsonResponse) {
             return $webhook;
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.manage', $webhook->project);
+        }
 
         $this->em->remove($webhook);
         $this->em->flush();
@@ -176,6 +185,9 @@ class WebhookController extends AbstractController
         $webhook = $this->resolveWebhook($projectUuid, $uuid);
         if ($webhook instanceof JsonResponse) {
             return $webhook;
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $webhook->project);
         }
 
         $page    = max(1, $request->query->getInt('page', 1));
@@ -210,6 +222,9 @@ class WebhookController extends AbstractController
         $webhook = $this->resolveWebhook($projectUuid, $uuid);
         if ($webhook instanceof JsonResponse) {
             return $webhook;
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.manage', $webhook->project);
         }
 
         $payload = [

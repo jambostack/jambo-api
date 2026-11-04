@@ -28,6 +28,9 @@ class MediaFolderController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
 
         $folders = $this->folderRepository->findByProject($project);
 
@@ -43,6 +46,9 @@ class MediaFolderController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
 
         $roots = $this->folderRepository->findTree($project);
 
@@ -57,6 +63,9 @@ class MediaFolderController extends AbstractController
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.create', $project);
         }
 
         try {
@@ -110,6 +119,9 @@ class MediaFolderController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.update', $project);
+        }
 
         $folder = $this->folderRepository->findOneBy(['id' => $id, 'project' => $project]);
         if (!$folder || $folder->isDeleted()) {
@@ -137,6 +149,9 @@ class MediaFolderController extends AbstractController
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.update', $project);
         }
 
         $folder = $this->folderRepository->findOneBy(['id' => $id, 'project' => $project]);
@@ -189,6 +204,9 @@ class MediaFolderController extends AbstractController
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.delete', $project);
         }
 
         $folder = $this->folderRepository->findOneBy(['id' => $id, 'project' => $project]);

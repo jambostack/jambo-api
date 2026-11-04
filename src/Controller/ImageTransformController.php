@@ -52,9 +52,21 @@ class ImageTransformController extends AbstractController
         $params = $request->query->all();
         $hasParams = !empty(array_intersect_key($params, array_flip(['w', 'h', 'fit', 'fmt', 'q', 'bg'])));
 
+        // Protection: SVG or non-raster media types cannot be transformed by GD/Imagick
+        $isSvg = str_contains((string) $media->mimeType, 'svg') || strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) === 'svg';
+        if ($isSvg) {
+            return new BinaryFileResponse($filePath, 200, [
+                'Content-Type' => 'image/svg+xml',
+                'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none';",
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'public, max-age=31536000, immutable',
+            ]);
+        }
+
         if (!$hasParams) {
             return new BinaryFileResponse($filePath, 200, [
                 'Content-Type' => $media->mimeType ?? 'application/octet-stream',
+                'X-Content-Type-Options' => 'nosniff',
                 'Cache-Control' => 'public, max-age=31536000, immutable',
             ]);
         }
@@ -67,6 +79,7 @@ class ImageTransformController extends AbstractController
 
         return new BinaryFileResponse($cachePath, 200, [
             'Content-Type' => $this->imageTransform->getMimeType($cachePath),
+            'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'public, max-age=31536000, immutable',
             'X-Image-Transform' => 'cached',
         ]);
