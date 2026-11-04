@@ -138,6 +138,10 @@ class AppSettingsController extends AbstractController
 
     private function fetchUrl(string $url, array $headers, int $timeout): ?string
     {
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             \CURLOPT_RETURNTRANSFER => true,
@@ -145,6 +149,8 @@ class AppSettingsController extends AbstractController
             \CURLOPT_HTTPHEADER     => $headers,
             \CURLOPT_SSL_VERIFYPEER => true,
             \CURLOPT_FOLLOWLOCATION => true,
+            \CURLOPT_PROTOCOLS      => \CURLPROTO_HTTP | \CURLPROTO_HTTPS,
+            \CURLOPT_REDIR_PROTOCOLS => \CURLPROTO_HTTP | \CURLPROTO_HTTPS,
         ]);
         $body = curl_exec($ch);
         $code = curl_getinfo($ch, \CURLINFO_HTTP_CODE);

@@ -1780,7 +1780,7 @@ PROMPT;
             try {
                 $imageUrl = $this->aiService->generateImage($p['description'] ?? $p['label'] ?? '');
                 if ($imageUrl) {
-                    $imageData = @file_get_contents($imageUrl);
+                    $imageData = $this->downloadExternalImage($imageUrl);
                     if ($imageData) {
                         $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_ai_');
                         file_put_contents($tmpFile, $imageData);

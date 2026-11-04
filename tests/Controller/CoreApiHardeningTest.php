@@ -1872,5 +1872,27 @@ class CoreApiHardeningTest extends WebTestCase
         // Malformed UUID on End-User Auth login -> 404 (not 500)
         $client->request('POST', '/api/not-a-uuid/auth/login', [], [], ['CONTENT_TYPE' => 'application/json'], '{"email":"test@example.com","password":"pwd"}');
         $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on webhooks list -> 404 (not 500)
+        $client->request('GET', '/api/projects/not-a-uuid/webhooks');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Invalid webhook URL format -> 422
+        $client->request('POST', '/api/projects/' . $this->projectUuid . '/webhooks', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Bad Hook',
+            'url'  => 'not-a-valid-url',
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+
+        // Non http/https webhook URL scheme -> 422
+        $client->request('POST', '/api/projects/' . $this->projectUuid . '/webhooks', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Gopher Hook',
+            'url'  => 'gopher://example.com/ssrf',
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on webhook detail -> 404 (not 500)
+        $client->request('GET', '/api/projects/' . $this->projectUuid . '/webhooks/not-a-uuid');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
     }
 }

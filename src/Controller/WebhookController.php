@@ -248,12 +248,25 @@ class WebhookController extends AbstractController
         }
 
         $appEnv = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? 'prod';
-        if ($appEnv !== 'test' && (
-            $host === 'localhost' ||
-            str_ends_with($host, '.local') ||
-            (filter_var($host, FILTER_VALIDATE_IP) && !filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE))
-        )) {
-            return 'Internal and private IP addresses are not allowed for webhooks';
+        if ($appEnv !== 'test') {
+            if ($host === 'localhost' || str_ends_with($host, '.local') || str_ends_with($host, '.internal') || str_ends_with($host, '.lan')) {
+                return 'Internal and private IP addresses are not allowed for webhooks';
+            }
+            if (filter_var($host, FILTER_VALIDATE_IP)) {
+                if (!filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    return 'Internal and private IP addresses are not allowed for webhooks';
+                }
+            } else {
+                $ips = @dns_get_record($host, DNS_A + DNS_AAAA);
+                if (!empty($ips)) {
+                    foreach ($ips as $record) {
+                        $ip = $record['ip'] ?? $record['ipv6'] ?? null;
+                        if ($ip && !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                            return 'Internal and private IP addresses are not allowed for webhooks';
+                        }
+                    }
+                }
+            }
         }
 
         return null;

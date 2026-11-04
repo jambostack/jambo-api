@@ -44,6 +44,42 @@ class SendWebhookMessageHandler
             $headers['X-JamboApi-Signature'] = 'sha256=' . hash_hmac('sha256', $payloadJson, $plainSecret);
         }
 
+        $parts = parse_url($webhook->url);
+        $host = strtolower($parts['host'] ?? '');
+        $appEnv = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? 'prod';
+        if ($appEnv !== 'test') {
+            $isPrivate = false;
+            if ($host === 'localhost' || str_ends_with($host, '.local') || str_ends_with($host, '.internal') || str_ends_with($host, '.lan')) {
+                $isPrivate = true;
+            } elseif (filter_var($host, FILTER_VALIDATE_IP)) {
+                if (!filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    $isPrivate = true;
+                }
+            } else {
+                $ips = @dns_get_record($host, DNS_A + DNS_AAAA);
+                if (!empty($ips)) {
+                    foreach ($ips as $record) {
+                        $ip = $record['ip'] ?? $record['ipv6'] ?? null;
+                        if ($ip && !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                            $isPrivate = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if ($isPrivate) {
+                $log = new WebhookLog();
+                $log->webhook        = $webhook;
+                $log->event          = $message->event;
+                $log->requestPayload = $payloadJson;
+                $log->status         = 'failed';
+                $log->errorMessage   = 'Blocked outbound request to private/internal IP';
+                $this->em->persist($log);
+                $this->em->flush();
+                return;
+            }
+        }
+
         $log = new WebhookLog();
         $log->webhook        = $webhook;
         $log->event          = $message->event;

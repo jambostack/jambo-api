@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.49] — 2026-11-04
+
+### Fixed & Hardened
+- **SSRF Prevention & Outbound URL Safety (`WebhookController`, `SendWebhookMessageHandler`)**:
+  - Hardened `WebhookController::validateWebhookUrl` to resolve and block DNS records pointing to private or reserved IP ranges (RFC 1918, link-local, loopback, multicast) in addition to hostname checks, thwarting DNS-rebinding SSRF attacks.
+  - Implemented pre-flight IP validation in `SendWebhookMessageHandler` before dispatching HTTP POST requests, immediately halting and logging outbound transmissions aimed at internal infrastructure.
+- **AI Image Pipeline Security Alignment (`StudioController`)**:
+  - Replaced unconstrained `@file_get_contents` in `executeGenerateImages` with the anti-SSRF hardened `downloadExternalImage` helper, strictly enforcing HTTPS, DNS resolution filtering, and timeout policies on all batch AI asset ingestion paths.
+- **Admin cURL Protocol Restriction (`AppSettingsController`)**:
+  - Added URL format validation and restricted cURL to HTTP/HTTPS protocols (`CURLOPT_PROTOCOLS` and `CURLOPT_REDIR_PROTOCOLS`), preventing protocol smuggling attacks against local or external AI endpoints.
+- **Automated Test Coverage (`CoreApiHardeningTest`)**:
+  - Added test cases covering malformed UUIDs on webhooks and validation for invalid URLs and non-HTTP/HTTPS webhook schemes.
+
+---
+
 ## [1.26.48] — 2026-11-04
 
 ### Fixed & Hardened
