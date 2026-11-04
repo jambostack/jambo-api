@@ -3,6 +3,7 @@
 namespace App\Controller\Settings;
 
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
@@ -14,14 +15,17 @@ use Symfony\Component\Routing\Attribute\Route;
  * Servie sous /api/settings (firewall session) afin que le Swagger UI de la page
  * « Jetons d'accès » puisse la charger sans PAT. Les requêtes « Try it out »
  * partent vers /admin-api et sont authentifiées par le Bearer PAT (bouton Authorize).
+ * Également disponible sur /admin-api/openapi.json pour l'outillage externe.
  */
 class AdminApiOpenApiController extends AbstractController
 {
     public function __construct(
+        #[Autowire(service: 'limiter.openapi_limiter')]
         private readonly ?RateLimiterFactory $openapiLimiter = null,
     ) {}
 
     #[Route('/api/settings/admin-api/openapi.json', name: 'api_settings_admin_api_openapi', methods: ['GET'])]
+    #[Route('/admin-api/openapi.json', name: 'admin_api_openapi_spec', methods: ['GET'])]
     public function spec(Request $request): JsonResponse
     {
         if ($this->openapiLimiter !== null) {

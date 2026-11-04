@@ -10,13 +10,19 @@ class ConditionHandler implements FlowNodeHandler
 {
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
-        $inputData = array_values($input)[0] ?? [];
+        $firstInput = array_values($input)[0] ?? null;
+        $inputData = $firstInput instanceof NodeOutput ? $firstInput->data : (is_array($firstInput) ? $firstInput : []);
         $config = $this->resolveConfig($ctx);
-        $field = $config['field'] ?? '';
-        $operator = $config['operator'] ?? 'eq';
+        $field = (string) ($config['field'] ?? '');
+        $operator = (string) ($config['operator'] ?? 'eq');
         $expected = $config['value'] ?? null;
 
-        $actual = $this->getNestedValue($inputData, $field);
+        // Prévention d'accès aux variables d'environnement globales ou propriétés privées
+        if (str_starts_with($field, '_') || preg_match('/(?:env|server|globals|secret|password|token)/i', $field)) {
+            $actual = null;
+        } else {
+            $actual = $this->getNestedValue($inputData, $field);
+        }
         $result = $this->evaluate($actual, $operator, $expected);
 
         return new NodeOutput(

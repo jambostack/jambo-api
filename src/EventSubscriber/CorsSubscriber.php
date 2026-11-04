@@ -105,6 +105,8 @@ class CorsSubscriber implements EventSubscriberInterface
             '#^/api/projects/[^/]+/public#',
             '#^/api/[^/]+/auth/#',
             '#^/api/[^/]+/openapi\.json#',
+            '#^/api/settings/admin-api/openapi\.json#',
+            '#^/admin-api/openapi\.json#',
             '#^/api/docs#',
             '#^/api/forms/submit#',
             '#^/storage/#',

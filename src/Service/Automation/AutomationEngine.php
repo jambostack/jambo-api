@@ -84,7 +84,17 @@ class AutomationEngine
             $run->errorMessage = $e->getMessage();
 
             if ($automation->debugMode) {
-                $run->actionOutput = ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()];
+                $rawTrace = $e->getTraceAsString();
+                // Assainissement strict de la stack trace : masquage des mots de passe, jetons, et chaînes de connexion DB
+                $sanitizedTrace = preg_replace('/:[^:@\s\r\n\t\'"]+@/', ':***REDACTED***@', $rawTrace);
+                $sanitizedTrace = preg_replace('/(?:password|secret|token|credential|api_?key|auth)[\'"]?\s*[:=]\s*[\'"][^\'"]+[\'"]/i', '***REDACTED***', (string) $sanitizedTrace);
+
+                $run->actionOutput = [
+                    'error' => $e->getMessage(),
+                    'trace' => substr((string) $sanitizedTrace, 0, 4096),
+                    'stepLog' => $ctx->getSanitizedStepLog(),
+                    'variables' => $ctx->getSafeVariables(),
+                ];
             }
         }
 

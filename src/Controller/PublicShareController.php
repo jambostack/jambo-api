@@ -56,13 +56,15 @@ class PublicShareController extends AbstractController
         $data = $this->formatter->formatEntry($entry);
 
         if ($wantsJson) {
-            return new JsonResponse($data);
+            return new JsonResponse($data, 200, [
+                'Cache-Control' => 'no-store, private',
+            ]);
         }
 
         return $this->render('share/show.html.twig', [
             'entry'      => $data,
             'collection' => $entry->collection?->name ?? $data['collection'],
-        ]);
+        ], new Response('', 200, ['Cache-Control' => 'no-store, private']));
     }
 
     private function renderError(int $status, string $reason, bool $wantsJson = false): Response

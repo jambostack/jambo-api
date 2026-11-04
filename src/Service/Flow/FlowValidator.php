@@ -48,17 +48,12 @@ class FlowValidator
                 $errors[] = 'Le nombre de variables de flow ne peut excéder 50';
                 return ['valid' => false, 'errors' => $errors];
             }
-            $forbiddenVarPatterns = [
-                '/^_/i',
-                '/^(?:_?env|_?server|globals|env|server)$/i',
-                '/(?:secret|password|token|credential|key|database|mailer|mercure|jwt|auth)/i',
-            ];
             foreach ($flowGraph['variables'] as $varKey => $varValue) {
                 if (!is_string($varKey) || !preg_match('/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/', $varKey)) {
                     $errors[] = sprintf("Variable '%s' invalide : doit débuter par une lettre et comporter uniquement alphanumériques et underscores (max 64 car)", (string) $varKey);
                     continue;
                 }
-                foreach ($forbiddenVarPatterns as $pattern) {
+                foreach (FlowContext::FORBIDDEN_VARIABLE_PATTERNS as $pattern) {
                     if (preg_match($pattern, $varKey)) {
                         $errors[] = sprintf("Variable '%s' interdite : nom réservé ou sensible", $varKey);
                         break;

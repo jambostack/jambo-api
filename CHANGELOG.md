@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.75] — 2026-11-04
+
+### Security & Hardening
+- **Universal Rate Limiter Service Binding (`config/services.yaml`)**:
+  - Bound all 20+ specialized `RateLimiterFactory` services globally under `_defaults.bind` (`$previewLimiter`, `$realtimeLimiter`, `$directUploadLimiter`, `$webhookInboundLimiter`, `$tokenLimiter`, `$shareLimiter`, `$aiStreamLimiter`, `$aiLimiter`, `$searchLimiter`, `$reindexLimiter`, `$exportLimiter`, `$importLimiter`, `$graphqlLimiter`, `$hookLimiter`, `$mailerTestLimiter`, `$storageTestLimiter`, `$invitationLimiter`, `$notificationLimiter`, `$openapiLimiter`, `$mcpLimiter`), resolving a silent autowiring gap where optional limiters defaulted to `null`.
+- **Preview & Share Cache/SSRF Defense (`PreviewController`, `PublicShareController`)**:
+  - Enhanced SSRF defense in `PreviewController::validatePreviewTargetUrl`: strictly filtered target URL ports against dangerous services (blocking ports 21, 22, 23, 25, 53, 110, 143, 3306, 5432, 6379, 11211, 27017, 9200, 9300).
+  - Hardened Live Preview draft content and Public Shared entries endpoints: enforced `Cache-Control: no-store, private` across both JSON and HTML responses to prevent unauthorized proxy or browser caching of draft or revoked content.
+- **GraphQL Anti-DoS & Response Isolation (`GraphQLController`)**:
+  - Enforced `Cache-Control: no-store, private` on all GraphQL query/mutation responses and Mercure subscription tokens.
+  - Active rate limiting enforcement via bound `@limiter.graphql` factory.
+- **Automated Test Suite**:
+  - Added `tests/Controller/Cycle28HardeningTest.php` covering preview SSRF port filtering, preview/share `no-store` cache headers, and GraphQL rate limiting and response headers.
+  - Full PHPUnit suite: 947 tests passing (3,069 assertions).
+
 ## [1.26.74] — 2026-11-04
 
 ### Security & Hardening

@@ -11,6 +11,7 @@ use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -35,6 +36,7 @@ class ProjectOpenApiController extends AbstractController
         private ProjectMemberRepository $memberRepo,
         private ApiTokenChecker $tokenChecker,
         private Security $security,
+        #[Autowire(service: 'limiter.openapi_limiter')]
         private ?RateLimiterFactory $openapiLimiter = null,
     ) {}
 
@@ -249,7 +251,11 @@ class ProjectOpenApiController extends AbstractController
     private function endUserProfileSchema(array $endUserFields): array
     {
         $customProperties = [];
-        $sensitiveSlugs = ['password', 'hash', 'salt', 'secret', 'token', 'credential', 'auth_token', 'api_key'];
+        $sensitiveSlugs = [
+            'password', 'hash', 'salt', 'secret', 'token', 'credential',
+            'internal_id', 'api_key', 'auth_token', 'private_key', 'access_token',
+            'refresh_token', 'totp', 'otp', 'session', 'cookie', 'remember_me',
+        ];
         foreach ($endUserFields as $field) {
             if (!$field->isSystem) {
                 $slug = strtolower($field->slug);
@@ -260,7 +266,13 @@ class ProjectOpenApiController extends AbstractController
                         break;
                     }
                 }
-                if ($isSensitive || str_starts_with($slug, '_') || str_starts_with($slug, 'system_')) {
+                if (
+                    $isSensitive
+                    || str_starts_with($slug, '_')
+                    || str_starts_with($slug, 'system_')
+                    || str_starts_with($slug, 'internal_')
+                    || str_starts_with($slug, 'private_')
+                ) {
                     continue;
                 }
                 $customProperties[$field->slug] = $this->fieldTypeToSchema($field->type, $field->options);
@@ -294,7 +306,11 @@ class ProjectOpenApiController extends AbstractController
             'created_at' => ['type' => 'string', 'format' => 'date-time'],
             'updated_at' => ['type' => 'string', 'format' => 'date-time'],
         ];
-        $sensitiveSlugs = ['password', 'hash', 'salt', 'secret', 'token', 'credential', 'internal_id', 'api_key', 'auth_token'];
+        $sensitiveSlugs = [
+            'password', 'hash', 'salt', 'secret', 'token', 'credential',
+            'internal_id', 'api_key', 'auth_token', 'private_key', 'access_token',
+            'refresh_token', 'totp', 'otp', 'session', 'cookie', 'remember_me',
+        ];
         foreach ($fields as $field) {
             if ($field->isDeleted()) {
                 continue;
@@ -307,7 +323,13 @@ class ProjectOpenApiController extends AbstractController
                     break;
                 }
             }
-            if ($isSensitive || str_starts_with($slug, '_internal_') || str_starts_with($slug, '_')) {
+            if (
+                $isSensitive
+                || str_starts_with($slug, '_')
+                || str_starts_with($slug, 'system_')
+                || str_starts_with($slug, 'internal_')
+                || str_starts_with($slug, 'private_')
+            ) {
                 continue;
             }
             $properties[$field->slug] = $this->fieldTypeToSchema($field->type, $field->options);
@@ -671,6 +693,7 @@ class ProjectOpenApiController extends AbstractController
 
         $values = array_column($choices, 'value') ?: array_values($choices);
         $values = array_values(array_filter($values, 'is_string'));
+        $values = array_values(array_filter($values, fn ($v) => strlen(trim($v)) > 0 && strlen($v) <= 128));
 
         return empty($values)
             ? ['type' => 'string']

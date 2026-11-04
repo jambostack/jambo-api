@@ -22,16 +22,18 @@ class TemplateHandler implements FlowNodeHandler
 
     private function renderTemplate(string $template, array $data, array $contextVars = []): string
     {
-        // 1. Anti-escape de variables globales d'environnement
+        // 1. Anti-escape de variables globales d'environnement et secrets
         $forbiddenEnvPatterns = [
-            '/\{\{\s*(?:_?ENV|_?SERVER|GLOBALS|getenv|putenv|env|server)\b[^\}]*\}\}/i',
-            '/\{\{\s*(?:APP_SECRET|DATABASE_URL|MAILER_DSN|JWT_SECRET|MERCURE_JWT_SECRET)[^\}]*\}\}/i',
+            '/\{\{\s*(?:_?ENV|_?SERVER|GLOBALS|getenv|putenv|env|server|system|exec|passthru|shell_exec|eval)\b[^\}]*\}\}/i',
+            '/\{\{\s*(?:APP_SECRET|APP_ENV|DATABASE_URL|MAILER_DSN|JWT_SECRET|MERCURE_JWT_SECRET|PHP_SELF|DOCUMENT_ROOT)[^\}]*\}\}/i',
+            '/\{\{\s*(?:[a-zA-Z0-9_\.]*(?:password|secret|token|credential|hash|salt|bearer|jwt|database_url))[^\}]*\}\}/i',
         ];
         $result = (string) preg_replace($forbiddenEnvPatterns, '', $template);
 
         // 2. Fusionne les variables contextuelles sûres et les données en entrée
         $merged = array_merge($contextVars, $data);
 
+        // Remplacement de clés simples directes
         foreach ($merged as $key => $value) {
             if (!is_string($key) || str_starts_with($key, '_')) {
                 continue;
@@ -40,6 +42,32 @@ class TemplateHandler implements FlowNodeHandler
                 $valStr = (string) ($value ?? '');
                 $result = str_replace('{{ ' . $key . ' }}', $valStr, $result);
                 $result = str_replace('{{' . $key . '}}', $valStr, $result);
+            }
+        }
+
+        // Remplacement sécurisé des chemins avec notation pointée (ex: {{ entry.title }})
+        if (preg_match_all('/\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}/', $result, $matches)) {
+            foreach ($matches[1] as $fullMatch) {
+                if (str_starts_with($fullMatch, '_') || preg_match('/(?:env|server|globals|secret|password|token|key|credential|jwt|auth)/i', $fullMatch)) {
+                    continue;
+                }
+                if (str_contains($fullMatch, '.')) {
+                    $parts = explode('.', $fullMatch);
+                    $val = $merged;
+                    foreach ($parts as $part) {
+                        if (is_array($val) && array_key_exists($part, $val)) {
+                            $val = $val[$part];
+                        } else {
+                            $val = null;
+                            break;
+                        }
+                    }
+                    if (is_scalar($val) || $val === null) {
+                        $valStr = (string) ($val ?? '');
+                        $result = str_replace('{{ ' . $fullMatch . ' }}', $valStr, $result);
+                        $result = str_replace('{{' . $fullMatch . '}}', $valStr, $result);
+                    }
+                }
             }
         }
 

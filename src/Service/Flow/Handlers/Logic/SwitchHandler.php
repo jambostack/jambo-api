@@ -10,12 +10,18 @@ class SwitchHandler implements FlowNodeHandler
 {
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
-        $inputData = array_values($input)[0] ?? [];
+        $firstInput = array_values($input)[0] ?? null;
+        $inputData = $firstInput instanceof NodeOutput ? $firstInput->data : (is_array($firstInput) ? $firstInput : []);
         $config = $ctx->variables['_node_config'] ?? [];
-        $fieldPath = $config['field'] ?? '';
-        $cases = $config['cases'] ?? [];
+        $fieldPath = (string) ($config['field'] ?? '');
+        $cases = is_array($config['cases'] ?? null) ? $config['cases'] : [];
 
-        $actual = $this->getNestedValue($inputData, $fieldPath);
+        // Prévention d'accès aux variables d'environnement globales ou propriétés privées
+        if (str_starts_with($fieldPath, '_') || preg_match('/(?:env|server|globals|secret|password|token)/i', $fieldPath)) {
+            $actual = null;
+        } else {
+            $actual = $this->getNestedValue($inputData, $fieldPath);
+        }
 
         foreach ($cases as $case) {
             if ((string)$actual === (string)($case['value'] ?? '')) {

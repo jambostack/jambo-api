@@ -19,6 +19,9 @@ class SendEmailHandler implements FlowNodeHandler
     {
         $config = $ctx->variables['_node_config'] ?? [];
         $project = $this->projectRepo->findOneBy(['uuid' => $ctx->projectUuid]);
+        if (!$project) {
+            return new NodeOutput(data: ['sent' => false, 'error' => 'Project not found for UUID: ' . $ctx->projectUuid]);
+        }
 
         try {
             $this->mailerService->send(

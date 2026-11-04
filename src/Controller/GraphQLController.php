@@ -169,7 +169,9 @@ class GraphQLController extends AbstractController
             ? DebugFlag::INCLUDE_DEBUG_MESSAGE | DebugFlag::INCLUDE_TRACE
             : DebugFlag::NONE;
 
-        return new JsonResponse($result->toArray($debug));
+        return new JsonResponse($result->toArray($debug), 200, [
+            'Cache-Control' => 'no-store, private',
+        ]);
     }
 
     // ─── Subscription ───────────────────────────────────────────────────
@@ -251,6 +253,8 @@ class GraphQLController extends AbstractController
                     'token'   => $token,
                 ],
             ],
+        ], 200, [
+            'Cache-Control' => 'no-store, private',
         ]);
     }
 

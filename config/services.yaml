@@ -15,6 +15,27 @@ services:
     _defaults:
         autowire: true      # Automatically injects dependencies in your services.
         autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+        bind:
+            $previewLimiter: '@limiter.preview_limiter'
+            $realtimeLimiter: '@limiter.realtime_limiter'
+            $directUploadLimiter: '@limiter.direct_upload_limiter'
+            $webhookInboundLimiter: '@limiter.webhook_inbound_limiter'
+            $tokenLimiter: '@limiter.token_management_limiter'
+            $shareLimiter: '@limiter.share_limiter'
+            $aiStreamLimiter: '@limiter.ai_stream_limiter'
+            $aiLimiter: '@limiter.ai_limiter'
+            $searchLimiter: '@limiter.search_limiter'
+            $reindexLimiter: '@limiter.search_reindex_limiter'
+            $exportLimiter: '@limiter.export_limiter'
+            $importLimiter: '@limiter.import_limiter'
+            $graphqlLimiter: '@limiter.graphql'
+            $hookLimiter: '@limiter.deployment_hook_limiter'
+            $mailerTestLimiter: '@limiter.mailer_test_limiter'
+            $storageTestLimiter: '@limiter.storage_test_limiter'
+            $invitationLimiter: '@limiter.invitation_limiter'
+            $notificationLimiter: '@limiter.notification_limiter'
+            $openapiLimiter: '@limiter.openapi_limiter'
+            $mcpLimiter: '@limiter.mcp_limiter'
 
     _instanceof:
         App\Service\Flow\FlowNodeHandler:
@@ -90,10 +111,6 @@ services:
     App\Service\ImageTransformService:
         arguments:
             $projectDir: '%kernel.project_dir%'
-
-    App\Controller\McpController:
-        arguments:
-            $mcpLimiter: '@limiter.mcp_limiter'
 
     App\Mcp\JamboApiMcpServer:
         lazy: true

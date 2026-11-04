@@ -177,6 +177,7 @@ class PreviewController extends AbstractController
         if (isset($parts['user']) || isset($parts['pass'])) {
             return 'Invalid preview target URL: credentials in URL are strictly forbidden.';
         }
+
         $host = strtolower(trim($parts['host'] ?? '', " \t\n\r\0\x0B[]"));
         if ($host === '') {
             return 'Invalid preview target URL: missing host in URL.';
@@ -185,6 +186,12 @@ class PreviewController extends AbstractController
         $reason = null;
         if (!$this->ssrfProtection->isSafeHost($host, $reason)) {
             return 'Invalid preview target URL: target must not point to private or reserved addresses.';
+        }
+
+        $port = $parts['port'] ?? ($scheme === 'https' ? 443 : 80);
+        $forbiddenPorts = [21, 22, 23, 25, 53, 110, 143, 3306, 5432, 6379, 11211, 27017, 9200, 9300];
+        if (in_array($port, $forbiddenPorts, true)) {
+            return sprintf('Invalid preview target URL: port %d is not allowed for preview.', $port);
         }
 
         return null;
@@ -259,6 +266,8 @@ class PreviewController extends AbstractController
             return $this->json(['error' => 'Entry not found'], 404);
         }
 
-        return $this->json($this->formatter->formatEntry($entry));
+        return new JsonResponse($this->formatter->formatEntry($entry), 200, [
+            'Cache-Control' => 'no-store, private',
+        ]);
     }
 }

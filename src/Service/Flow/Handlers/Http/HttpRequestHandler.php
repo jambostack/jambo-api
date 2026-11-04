@@ -19,12 +19,22 @@ class HttpRequestHandler implements FlowNodeHandler
 
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
-        $inputData = array_values($input)[0]->data ?? [];
+        $firstInput = array_values($input)[0] ?? null;
+        $inputData = $firstInput instanceof NodeOutput ? $firstInput->data : (is_array($firstInput) ? $firstInput : []);
         $config = $ctx->variables['_node_config'] ?? [];
-        $url = $config['url'] ?? '';
+        $url = (string) ($config['url'] ?? '');
         $method = strtoupper($config['method'] ?? 'GET');
-        $headers = $config['headers'] ?? [];
-        $body = $config['body'] ?? '';
+        $headers = is_array($config['headers'] ?? null) ? $config['headers'] : [];
+        $body = (string) ($config['body'] ?? '');
+
+        // Cloisonnement contextuel strict : interpolation sécurisée sans échappement environnement
+        $safeVars = $ctx->getSafeVariables();
+        $url  = trim($this->interpolateSafe($url, $inputData, $safeVars));
+        $body = $this->interpolateSafe($body, $inputData, $safeVars);
+
+        if ($url === '') {
+            return new NodeOutput(data: ['error' => 'URL is empty', 'status_code' => 0]);
+        }
 
         try {
             $options = $this->ssrfProtection->buildSafeHttpClientOptions($url, [
@@ -42,6 +52,34 @@ class HttpRequestHandler implements FlowNodeHandler
         } catch (\Throwable $e) {
             return new NodeOutput(data: ['error' => $e->getMessage(), 'status_code' => 0]);
         }
+    }
+
+    private function interpolateSafe(string $text, array $data, array $safeVars): string
+    {
+        if (!str_contains($text, '{{')) {
+            return $text;
+        }
+
+        $forbiddenEnvPatterns = [
+            '/\{\{\s*(?:_?ENV|_?SERVER|GLOBALS|getenv|putenv|env|server|system|exec|passthru|shell_exec|eval)\b[^\}]*\}\}/i',
+            '/\{\{\s*(?:APP_SECRET|APP_ENV|DATABASE_URL|MAILER_DSN|JWT_SECRET|MERCURE_JWT_SECRET|PHP_SELF|DOCUMENT_ROOT)[^\}]*\}\}/i',
+            '/\{\{\s*(?:[a-zA-Z0-9_\.]*(?:password|secret|token|credential|hash|salt|bearer|jwt|database_url))[^\}]*\}\}/i',
+        ];
+        $result = (string) preg_replace($forbiddenEnvPatterns, '', $text);
+        $merged = array_merge($safeVars, $data);
+
+        foreach ($merged as $key => $value) {
+            if (!is_string($key) || str_starts_with($key, '_')) {
+                continue;
+            }
+            if (is_scalar($value) || $value === null) {
+                $valStr = (string) ($value ?? '');
+                $result = str_replace('{{ ' . $key . ' }}', $valStr, $result);
+                $result = str_replace('{{' . $key . '}}', $valStr, $result);
+            }
+        }
+
+        return $result;
     }
 
     public static function getCategory(): string { return 'http'; }

@@ -80,11 +80,16 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
 
         $isStudioRoute = str_contains($path, '/studio');
 
+        $isStrictDenyRoute = str_starts_with($path, '/admin-api/tokens')
+            || str_starts_with($path, '/settings/tokens');
+
         if (!$headers->has('X-Frame-Options')) {
             $csp = (string) $headers->get('Content-Security-Policy', '');
             if (!str_contains($csp, 'frame-ancestors')) {
                 if ($isEmbedRoute) {
                     // Embed widgets allow iframe framing; do not set X-Frame-Options
+                } elseif ($isStrictDenyRoute) {
+                    $headers->set('X-Frame-Options', 'DENY');
                 } else {
                     $headers->set('X-Frame-Options', 'SAMEORIGIN');
                 }
@@ -96,17 +101,27 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
             $headers->set('X-Permitted-Cross-Domain-Policies', 'none');
         }
 
-        // 7. Défense en profondeur CSP pour SVG et studio
+        // 7. Défense en profondeur CSP pour SVG, Studio et flux sensibles
         $contentType = (string) $headers->get('Content-Type', '');
         if (str_contains($contentType, 'image/svg+xml') && !$headers->has('Content-Security-Policy')) {
             $headers->set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
-        } elseif (!$headers->has('Content-Security-Policy') && $isStudioRoute) {
-            $headers->set('Content-Security-Policy', "frame-ancestors 'self';");
+        } elseif ($isStrictDenyRoute) {
+            $existingCsp = (string) $headers->get('Content-Security-Policy', '');
+            if (!str_contains($existingCsp, 'frame-ancestors')) {
+                $headers->set('Content-Security-Policy', trim($existingCsp . " frame-ancestors 'none';"));
+            }
+        } elseif ($isStudioRoute) {
+            $existingCsp = (string) $headers->get('Content-Security-Policy', '');
+            if (!str_contains($existingCsp, 'frame-ancestors')) {
+                $headers->set('Content-Security-Policy', trim($existingCsp . " frame-ancestors 'self';"));
+            }
         }
 
-        // 8. Cross-Origin-Opener-Policy (COOP) : isolation d'exécution top-level
+        // 8. Cross-Origin-Opener-Policy (COOP) : isolation d'exécution top-level (omis sur embeds iframes)
         if (!$headers->has('Cross-Origin-Opener-Policy')) {
-            $headers->set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+            if (!$isEmbedRoute) {
+                $headers->set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+            }
         }
 
         // 9. Cross-Origin-Resource-Policy (CORP) : protection des ressources contre l'inclusion illicite

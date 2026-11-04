@@ -7,10 +7,11 @@ class FlowContext
     public const MAX_VARIABLES = 50;
     public const MAX_VARIABLE_VALUE_LENGTH = 65536; // 64 KB
 
-    private const FORBIDDEN_VARIABLE_PATTERNS = [
+    public const FORBIDDEN_VARIABLE_PATTERNS = [
         '/^_/i',
         '/^(?:_?env|_?server|globals|env|server)$/i',
-        '/(?:secret|password|token|credential|key|database|mailer|mercure|jwt|auth)/i',
+        '/(?:secret|password|token|credential|key|database|mailer|mercure|jwt|auth|session|cookie|hash|salt|bearer)/i',
+        '/^(?:app_env|app_secret|database_url|mailer_dsn|jwt_secret|mercure_|http_|path|shell|php_|sys_|system|document_root)/i',
     ];
 
     public readonly string $runId;
@@ -70,6 +71,43 @@ class FlowContext
     }
 
     /**
+     * Assainit récursivement les valeurs complexes de variables.
+     */
+    public function sanitizeVariableValue(mixed $value, int $depth = 0): mixed
+    {
+        if ($depth > 5) {
+            return null;
+        }
+
+        if (is_array($value)) {
+            $clean = [];
+            foreach ($value as $k => $v) {
+                $strKey = strtolower((string) $k);
+                if (preg_match('/(?:password|secret|token|credential|key|auth|bearer|hash|salt)/i', $strKey)) {
+                    continue; // Supprime les sous-clés sensibles
+                }
+                if (is_scalar($v) || $v === null) {
+                    if (is_string($v) && strlen($v) > self::MAX_VARIABLE_VALUE_LENGTH) {
+                        $v = substr($v, 0, self::MAX_VARIABLE_VALUE_LENGTH);
+                    }
+                    $clean[$k] = $v;
+                } elseif (is_array($v)) {
+                    $clean[$k] = $this->sanitizeVariableValue($v, $depth + 1);
+                }
+            }
+            return $clean;
+        }
+
+        if (is_string($value)) {
+            return strlen($value) > self::MAX_VARIABLE_VALUE_LENGTH
+                ? substr($value, 0, self::MAX_VARIABLE_VALUE_LENGTH)
+                : $value;
+        }
+
+        return is_scalar($value) || $value === null ? $value : null;
+    }
+
+    /**
      * Définit une variable utilisateur avec validation et cloisonnement strict.
      */
     public function setVariable(string $key, mixed $value): bool
@@ -82,13 +120,16 @@ class FlowContext
             return false;
         }
 
-        if (is_string($value) && strlen($value) > self::MAX_VARIABLE_VALUE_LENGTH) {
-            $value = substr($value, 0, self::MAX_VARIABLE_VALUE_LENGTH);
-        } elseif (!is_scalar($value) && !is_array($value) && $value !== null) {
+        if (!is_scalar($value) && !is_array($value) && $value !== null) {
             return false;
         }
 
-        $this->variables[$key] = $value;
+        $sanitizedValue = $this->sanitizeVariableValue($value);
+        if ($sanitizedValue === null && $value !== null) {
+            return false;
+        }
+
+        $this->variables[$key] = $sanitizedValue;
         return true;
     }
 
