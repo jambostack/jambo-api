@@ -28,6 +28,7 @@ use App\Service\Flow\Handlers\Transform\SetHandler;
 use App\Service\Flow\Handlers\Transform\TemplateHandler;
 use App\Service\Flow\NodeOutput;
 use App\Service\Flow\NodeRegistry;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -53,7 +54,7 @@ class Cycle27HardeningTest extends TestCase
 {
     private function makeResponseEvent(Request $request, Response $response, bool $mainRequest = true): ResponseEvent
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
+        $kernel = $this->createStub(HttpKernelInterface::class);
         return new ResponseEvent(
             $kernel,
             $request,
@@ -64,7 +65,7 @@ class Cycle27HardeningTest extends TestCase
 
     private function makeRequestEvent(Request $request, bool $mainRequest = true): RequestEvent
     {
-        $kernel = $this->createMock(HttpKernelInterface::class);
+        $kernel = $this->createStub(HttpKernelInterface::class);
         return new RequestEvent(
             $kernel,
             $request,
@@ -130,6 +131,7 @@ class Cycle27HardeningTest extends TestCase
     // 2. ProjectOpenApiController Tests
     // ──────────────────────────────────────────────────────────────────────────
 
+    #[AllowMockObjectsWithoutExpectations]
     public function testProjectSpecOptionsPreflightReturnsCorsNoBody(): void
     {
         $projectRepo = $this->createMock(ProjectRepository::class);
@@ -158,6 +160,7 @@ class Cycle27HardeningTest extends TestCase
         $this->assertStringContainsString('GET', (string) $response->headers->get('Access-Control-Allow-Methods'));
     }
 
+    #[AllowMockObjectsWithoutExpectations]
     public function testProjectSpecRateLimitingReturns429(): void
     {
         $projectRepo = $this->createMock(ProjectRepository::class);
@@ -191,6 +194,7 @@ class Cycle27HardeningTest extends TestCase
         $this->assertStringContainsString('Too many requests', $data['error']);
     }
 
+    #[AllowMockObjectsWithoutExpectations]
     public function testProjectSpecMasksSensitiveFieldsAndDeletedFields(): void
     {
         $projectUuid = '00000000-0000-0000-0000-000000000001';
@@ -451,8 +455,8 @@ class Cycle27HardeningTest extends TestCase
 
     public function testFlowValidatorAcceptsCleanVariables(): void
     {
-        $registry = $this->createMock(NodeRegistry::class);
-        $handler = $this->createMock(FlowNodeHandler::class);
+        $registry = $this->createStub(NodeRegistry::class);
+        $handler = $this->createStub(FlowNodeHandler::class);
         $registry->method('resolve')->willReturn($handler);
         $validator = new FlowValidator();
 
