@@ -28,6 +28,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
+import { useTranslation } from "@/lib/i18n";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateRange } from "react-day-picker";
@@ -112,6 +113,7 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
 }, ref) => {
     const [search, setSearch] = useState('');
     const [itemsPerPage, setItemsPerPage] = useState('10');
+    const t = useTranslation();
     const [internalSelectedItems, setInternalSelectedItems] = useState<any[]>([]);
     const [sortColumn, setSortColumn] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -805,7 +807,7 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
                         ) : (!data?.data || data.data.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={visibleColumns.length + (selectable ? 1 : 0)} className="text-center h-24 text-muted-foreground">
-                                    No items found
+                                    {t('common.no_items_found')}
                                 </TableCell>
                             </TableRow>
                         ) : (
@@ -962,13 +964,11 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
                     </div>
                     <div className="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-4 w-full sm:w-1/2">
                         <div className="text-sm text-muted-foreground">
-                            Showing <span className="font-semibold">{data.from}</span> to{' '}
-                            <span className="font-semibold">{data.to}</span> of{' '}
-                            <span className="font-semibold">{data.total}</span> items
+                            {t('common.showing_results', { from: String(data.from), to: String(data.to), total: String(data.total) })}
                         </div>
 
                         <div className="flex items-center">
-                            <span className="text-sm text-muted-foreground mr-2">Per page:</span>
+                            <span className="text-sm text-muted-foreground mr-2">{t('common.per_page')}</span>
                             <Select
                                 value={itemsPerPage}
                                 onValueChange={handleItemsPerPageChange}

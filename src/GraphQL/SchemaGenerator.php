@@ -280,7 +280,7 @@ class SchemaGenerator
     private function resolveEntries(Collection $collection, array $args): array
     {
         $limit = min(100, max(1, (int) ($args['limit'] ?? 50)));
-        $offset = max(0, (int) ($args['offset'] ?? 0));
+        $offset = max(0, min(10000, (int) ($args['offset'] ?? 0)));
         $page = (int) floor($offset / $limit) + 1;
         $entries = $this->entryRepo->findByCollectionPaginated(
             $collection, $page, $limit, $args['locale'] ?? null, $args['status'] ?? null
@@ -446,6 +446,7 @@ class SchemaGenerator
             'args'    => [
                 'uuid' => ['type' => Type::nonNull(Type::string()), 'description' => 'UUID du projet'],
             ],
+            'complexity' => fn(int $childrenComplexity): int => max(1, $childrenComplexity) * 50 + 10,
             'resolve' => $makeResolver(),
         ];
 
@@ -462,6 +463,7 @@ class SchemaGenerator
                         'defaultValue' => null,
                     ],
                 ],
+                'complexity' => fn(int $childrenComplexity): int => max(1, $childrenComplexity) + 5,
                 'resolve' => $makeResolver(['created', 'updated', 'deleted']),
             ];
         }

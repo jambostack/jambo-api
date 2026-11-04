@@ -2,6 +2,7 @@ import React from 'react';
 import moment from 'moment';
 import { Badge } from '@/components/ui/badge';
 import { FileText } from 'lucide-react';
+import { useTranslation } from '@/lib/i18n';
 
 import type { Field, ContentEntry } from '@/types';
 
@@ -29,6 +30,7 @@ export default function RelationEntriesTable({
     showStatus = true,
     showCreated = true,
 }: RelationEntriesTableProps) {
+    const t = useTranslation();
     /** Render a single field value similar to ContentList logic */
     const renderFieldValue = (field: Field, value: any) => {
         if (value === null || value === undefined || value === '') return '-';
@@ -139,7 +141,7 @@ export default function RelationEntriesTable({
                                                 : 'text-amber-600 border-amber-300'
                                         }
                                     >
-                                        {ent.status === 'published' ? 'Published' : ent.status === 'trashed' ? 'Trashed' : 'Draft'}
+                                        {ent.status === 'published' ? t('content.status_published') : ent.status === 'trashed' ? t('content.status_trashed') : t('content.status_draft')}
                                     </Badge>
                                 </td>
                             )}
@@ -161,7 +163,7 @@ export default function RelationEntriesTable({
                                 className="px-4 py-6 text-muted-foreground text-center"
                                 colSpan={fields.length + (showStatus ? 1 : 0) + (showCreated ? 1 : 0)}
                             >
-                                No related entries
+                                {t('common.no_related_entries')}
                             </td>
                         </tr>
                     )}

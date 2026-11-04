@@ -3,8 +3,10 @@ import { useForm } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/lib/i18n';
 
 export default function TwoFactorChallenge({ error }: { error?: string }) {
+    const t = useTranslation();
     const [code, setCode] = useState('');
     const [useBackup, setUseBackup] = useState(false);
     const [sending, setSending] = useState(false);
@@ -30,11 +32,11 @@ export default function TwoFactorChallenge({ error }: { error?: string }) {
         <div className="flex min-h-screen items-center justify-center p-4">
             <div className="w-full max-w-sm space-y-6">
                 <div className="text-center">
-                    <h1 className="text-xl font-semibold">Vérification en deux étapes</h1>
+                    <h1 className="text-xl font-semibold">{t('auth.2fa.title')}</h1>
                     <p className="text-sm text-muted-foreground mt-2">
                         {useBackup
-                            ? 'Entrez un de vos codes de secours.'
-                            : 'Entrez le code à 6 chiffres depuis votre application d\'authentification.'}
+                            ? t('auth.2fa.backup_desc')
+                            : t('auth.2fa.totp_desc')}
                     </p>
                 </div>
 
@@ -64,11 +66,11 @@ export default function TwoFactorChallenge({ error }: { error?: string }) {
                     )}
 
                     {error && (
-                        <p className="text-sm text-red-500 text-center">{error}</p>
+                        <p className="text-sm text-red-500 text-center">{t(error)}</p>
                     )}
 
                     <Button type="submit" disabled={processing || code.length < 6} className="w-full">
-                        Vérifier
+                        {t('auth.2fa.verify_btn')}
                     </Button>
                 </form>
 
@@ -79,14 +81,14 @@ export default function TwoFactorChallenge({ error }: { error?: string }) {
                         disabled={sending}
                         className="text-xs text-primary hover:underline"
                     >
-                        {sending ? 'Envoi en cours...' : 'Envoyer un code par email'}
+                        {sending ? t('auth.2fa.sending') : t('auth.2fa.resend_email')}
                     </button>
                     <button
                         type="button"
                         onClick={() => { setUseBackup(!useBackup); setCode(''); }}
                         className="text-xs text-muted-foreground hover:underline"
                     >
-                        {useBackup ? 'Utiliser l\'application d\'authentification' : 'Utiliser un code de secours'}
+                        {useBackup ? t('auth.2fa.use_totp') : t('auth.2fa.use_backup')}
                     </button>
                 </div>
             </div>

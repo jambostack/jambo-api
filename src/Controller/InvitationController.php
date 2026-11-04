@@ -11,12 +11,14 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class InvitationController extends AbstractController
 {
     public function __construct(
         private ProjectMemberRepository $memberRepo,
         private EntityManagerInterface $em,
+        private TranslatorInterface $translator,
     ) {}
 
     #[Route('/invitation/accept/{token}', name: 'invitation_accept', methods: ['GET', 'POST'])]
@@ -29,23 +31,25 @@ class InvitationController extends AbstractController
         $member = $this->memberRepo->findOneBy(['invitationToken' => $token]);
 
         if ($member === null || $member->status !== ProjectMemberStatus::Pending) {
+            $msg = $this->translator->trans('invitation.invalid_link');
             if ($wantsJson) {
-                return new JsonResponse(['error' => 'Ce lien d\'invitation est invalide.'], 404);
+                return new JsonResponse(['error' => $msg], 404);
             }
             return $this->render('invitation/invalid.html.twig', [
-                'error' => 'Ce lien d\'invitation est invalide.',
+                'error' => $msg,
             ]);
         }
 
         if ($member->isTokenExpired()) {
+            $msg = $this->translator->trans('invitation.expired_link');
             if ($wantsJson) {
                 return new JsonResponse([
-                    'error'        => 'Ce lien d\'invitation a expiré.',
+                    'error'        => $msg,
                     'project_name' => $member->project->name,
                 ], 410);
             }
             return $this->render('invitation/invalid.html.twig', [
-                'error' => 'Ce lien d\'invitation a expiré.',
+                'error' => $msg,
                 'project_name' => $member->project->name,
             ]);
         }
@@ -60,11 +64,12 @@ class InvitationController extends AbstractController
         }
 
         if (strtolower((string) $member->email) !== strtolower((string) $user->email)) {
+            $msg = $this->translator->trans('invitation.wrong_recipient', ['{email}' => $member->email]);
             if ($wantsJson) {
-                return new JsonResponse(['error' => 'Cette invitation est destinée à ' . $member->email . '.'], 403);
+                return new JsonResponse(['error' => $msg], 403);
             }
             return $this->render('invitation/invalid.html.twig', [
-                'error' => 'Cette invitation est destinée à ' . $member->email . '.',
+                'error' => $msg,
             ]);
         }
 
@@ -73,9 +78,10 @@ class InvitationController extends AbstractController
         if ($existingActive !== null) {
             $this->em->remove($member);
             $this->em->flush();
+            $alreadyMsg = $this->translator->trans('invitation.already_member', ['{project}' => $member->project->name]);
             if ($wantsJson) {
                 return new JsonResponse([
-                    'message' => 'Vous êtes déjà membre du projet "' . $member->project->name . '".',
+                    'message' => $alreadyMsg,
                     'project' => [
                         'id'   => $member->project->id,
                         'uuid' => $member->project->uuid?->toRfc4122(),
@@ -83,7 +89,7 @@ class InvitationController extends AbstractController
                     ],
                 ]);
             }
-            $this->addFlash('info', 'Vous êtes déjà membre du projet "' . $member->project->name . '".');
+            $this->addFlash('info', $alreadyMsg);
             return $this->redirectToRoute('projects_show', ['project' => $member->project->id]);
         }
 
@@ -95,10 +101,12 @@ class InvitationController extends AbstractController
 
         $this->em->flush();
 
+        $joinedMsg = $this->translator->trans('invitation.joined_success', ['{project}' => $member->project->name]);
+
         if ($wantsJson) {
             return new JsonResponse([
                 'success' => true,
-                'message' => 'Vous avez rejoint le projet "' . $member->project->name . '".',
+                'message' => $joinedMsg,
                 'project' => [
                     'id'   => $member->project->id,
                     'uuid' => $member->project->uuid?->toRfc4122(),
@@ -107,7 +115,7 @@ class InvitationController extends AbstractController
             ]);
         }
 
-        $this->addFlash('success', 'Vous avez rejoint le projet "' . $member->project->name . '".');
+        $this->addFlash('success', $joinedMsg);
 
         return $this->redirectToRoute('projects_show', ['project' => $member->project->id]);
     }

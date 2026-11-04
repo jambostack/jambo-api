@@ -65,7 +65,7 @@ class TwoFactorChallengeController extends InertiaController
         $limiter = $this->twoFactorLimiter->create($request->getClientIp());
         if (!$limiter->consume()->isAccepted()) {
             return $this->inertia($request, 'auth/two-factor-challenge', [
-                'error' => 'Too many attempts. Please wait 60 seconds.',
+                'error' => 'auth.2fa.too_many_attempts',
             ]);
         }
 
@@ -109,7 +109,7 @@ class TwoFactorChallengeController extends InertiaController
 
         if (!$valid) {
             return $this->inertia($request, 'auth/two-factor-challenge', [
-                'error' => 'Invalid code. Please try again.',
+                'error' => 'auth.2fa.invalid_code',
             ]);
         }
 
@@ -149,7 +149,7 @@ class TwoFactorChallengeController extends InertiaController
         $session->set('two_factor_email_expires', time() + 300);
         $this->twoFactorMailer->sendCode($user->email, $code, 'JamboAPI');
 
-        return $this->json(['message' => 'Code sent.']);
+        return $this->json(['message' => 'auth.2fa.code_sent']);
     }
 
     private function getUserById(int $id): ?User

@@ -66,6 +66,10 @@ class ImportController extends AbstractController
             return $this->json(['error' => 'Champs requis manquants : data[], field_mapping{}'], 422);
         }
 
+        if (count($csvData) > 1000) {
+            return $this->json(['error' => 'Le nombre de lignes dépasse la limite autorisée (max 1000 lignes par import).'], 422);
+        }
+
         // Find all collection fields for validation
         $collectionFields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
         $fieldMap = [];
@@ -161,7 +165,7 @@ class ImportController extends AbstractController
         $slug = $base;
         $counter = 1;
 
-        while (true) {
+        while ($counter <= 100) {
             $qb = $this->em->createQueryBuilder();
             $qb->select('COUNT(e.id)')
                ->from(ContentEntry::class, 'e')
@@ -180,5 +184,8 @@ class ImportController extends AbstractController
             $slug = substr($base, 0, max(1, 50 - strlen($suffix))) . $suffix;
             $counter++;
         }
+
+        // En cas de collisions répétées, ajouter un suffixe aléatoire sécurisé
+        return substr($base, 0, 40) . '-' . bin2hex(random_bytes(4));
     }
 }

@@ -5,12 +5,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Badge } from '@/components/ui/badge';
 import { router } from '@inertiajs/react';
 import moment from 'moment';
+import { useTranslation } from '@/lib/i18n';
 
 function formatRelative(date: string): string {
     return moment(date).fromNow();
 }
 
 export default function NotificationBell() {
+    const t = useTranslation();
     const [notifs, setNotifs] = useState<any[]>([]);
     const [count, setCount] = useState(0);
 
@@ -67,21 +69,21 @@ export default function NotificationBell() {
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0" align="end">
                 <div className="p-2 border-b flex items-center justify-between">
-                    <span className="text-xs font-semibold">Notifications</span>
+                    <span className="text-xs font-semibold">{t('notifications.title')}</span>
                     {count > 0 && (
                         <button
                             type="button"
                             className="text-xs text-primary hover:underline"
                             onClick={markAllAsRead}
                         >
-                            Tout marquer comme lu
+                            {t('notifications.mark_all_read')}
                         </button>
                     )}
                 </div>
                 <div className="max-h-80 overflow-y-auto">
                     {notifs.length === 0 ? (
                         <p className="text-xs text-muted-foreground p-4 text-center">
-                            Aucune notification
+                            {t('notifications.empty')}
                         </p>
                     ) : (
                         notifs.map(n => (

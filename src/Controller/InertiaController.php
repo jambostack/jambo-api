@@ -21,7 +21,7 @@ abstract class InertiaController extends AbstractController
 {
     private FrontendRouteManifestService $routeManifest;
     private CacheInterface $cache;
-    private TranslatorInterface $translator;
+    protected TranslatorInterface $translator;
     private AppSettingsRepository $appSettingsRepository;
 
     #[Required]

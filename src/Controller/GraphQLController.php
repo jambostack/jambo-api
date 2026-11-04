@@ -26,14 +26,29 @@ use Symfony\Component\Routing\Attribute\Route;
 
 class GraphQLController extends AbstractController
 {
+    public const MAX_QUERY_LENGTH = 65536; // 64 KB
+
     public function __construct(
         private EntityManagerInterface $em,
         private SchemaGenerator $schemaGenerator,
+        private ?\Symfony\Component\RateLimiter\RateLimiterFactory $graphqlLimiter = null,
     ) {}
 
     #[Route('/api/projects/{uuid}/graphql', name: 'graphql_endpoint', methods: ['POST', 'GET'])]
     public function handle(string $uuid, Request $request): Response
     {
+        $identifier = $request->getClientIp() ?? 'anonymous';
+        try {
+            $user = $this->getUser();
+            if ($user !== null) {
+                $identifier = $user->getUserIdentifier();
+            }
+        } catch (\Throwable) {}
+
+        if ($this->graphqlLimiter !== null && false === $this->graphqlLimiter->create($identifier)->consume(1)->isAccepted()) {
+            return new JsonResponse(['errors' => [['message' => 'Trop de requêtes GraphQL. Veuillez réessayer plus tard.']]], 429);
+        }
+
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
@@ -51,7 +66,11 @@ class GraphQLController extends AbstractController
             $query = $request->query->get('query');
             $variables = $request->query->all('variables') ?? null;
         } else {
-            $body = json_decode($request->getContent(), true);
+            $rawContent = $request->getContent();
+            if (strlen($rawContent) > self::MAX_QUERY_LENGTH) {
+                return new JsonResponse(['errors' => [['message' => 'Taille de payload GraphQL dépassée (max 64 Ko)']]], 413);
+            }
+            $body = json_decode($rawContent, true);
             if (!is_array($body)) {
                 return new JsonResponse(['errors' => [['message' => 'Invalid JSON body']]], 400);
             }
@@ -59,14 +78,22 @@ class GraphQLController extends AbstractController
             $variables = $body['variables'] ?? null;
         }
 
-        if (!$query) {
+        if (!$query || !is_string($query)) {
             return new JsonResponse(['errors' => [['message' => 'Query GraphQL requise']]], 400);
+        }
+
+        if (strlen($query) > self::MAX_QUERY_LENGTH) {
+            return new JsonResponse(['errors' => [['message' => 'Query GraphQL dépasse la taille maximale autorisée (64 Ko)']]], 413);
+        }
+
+        if ($variables !== null && !is_array($variables)) {
+            return new JsonResponse(['errors' => [['message' => 'Les variables GraphQL doivent être un objet ou tableau']]], 400);
         }
 
         // ── Détection subscription ───────────────────────────────────
         $document = null;
         try {
-            $document = Parser::parse($query);
+            $document = Parser::parse($query, ['maxTokens' => 5000]);
         } catch (\Throwable) {
             // Parse error — laisser l'exécuteur GraphQL standard gérer l'erreur
         }
@@ -80,14 +107,14 @@ class GraphQLController extends AbstractController
         // ── Query / Mutation standard ────────────────────────────────
         $schema = $this->schemaGenerator->buildSchema($project);
 
-        $maxDepth = (int) ($_ENV['GRAPHQL_MAX_DEPTH'] ?? 15);
-        if ($maxDepth <= 0) {
-            $maxDepth = 15;
+        $maxDepth = (int) ($_ENV['GRAPHQL_MAX_DEPTH'] ?? 10);
+        if ($maxDepth <= 0 || $maxDepth > 15) {
+            $maxDepth = 10;
         }
 
-        $maxComplexity = (int) ($_ENV['GRAPHQL_MAX_COMPLEXITY'] ?? 1000);
-        if ($maxComplexity <= 0) {
-            $maxComplexity = 1000;
+        $maxComplexity = (int) ($_ENV['GRAPHQL_MAX_COMPLEXITY'] ?? 500);
+        if ($maxComplexity <= 0 || $maxComplexity > 1000) {
+            $maxComplexity = 500;
         }
 
         $validationRules = array_merge(

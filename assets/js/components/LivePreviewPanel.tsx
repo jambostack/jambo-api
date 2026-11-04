@@ -3,6 +3,7 @@ import { Loader2, ExternalLink, Monitor, Tablet, Smartphone, X } from 'lucide-re
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { Collection } from '@/types';
+import { useTranslation } from '@/lib/i18n';
 
 type Device = 'desktop' | 'tablet' | 'mobile';
 
@@ -37,6 +38,7 @@ export default function LivePreviewPanel({
   onFieldSelect,
   onInlineUpdate,
 }: LivePreviewPanelProps) {
+  const t = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // Helper: extraire l'origine de la previewUrl, ou null si invalide
   const getTargetOrigin = useCallback((): string | null => {
@@ -61,12 +63,12 @@ export default function LivePreviewPanel({
         if (data.token) {
           setToken(data.token);
         } else {
-          setError('Token preview non disponible');
+          setError(t('preview.token_unavailable'));
           setLoading(false);
         }
       })
       .catch(() => {
-        setError('Erreur lors de la recuperation du token');
+        setError(t('preview.token_error'));
         setLoading(false);
       });
   }, [projectUuid, entryUuid]);
@@ -100,7 +102,7 @@ export default function LivePreviewPanel({
           break;
 
         case 'jambo-error':
-          setError(event.data.error || 'Erreur dans le frontend');
+          setError(event.data.error || t('preview.frontend_error'));
           break;
 
         // -- v1.14b : Visual Editing ------------------------------------------
@@ -176,7 +178,7 @@ export default function LivePreviewPanel({
   if (!entryUuid) {
     return (
       <Card className="p-6 text-center text-muted-foreground relative">
-        <p>La preview sera disponible apres la creation de l'entree.</p>
+        <p>{t('preview.available_after_creation')}</p>
         {onClose && (
           <Button variant="ghost" size="icon" className="absolute top-2 right-2" onClick={onClose}>
             <X className="h-4 w-4" />
@@ -215,7 +217,7 @@ export default function LivePreviewPanel({
         </div>
 
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={openInNewTab} title="Ouvrir dans un nouvel onglet">
+          <Button variant="ghost" size="icon" onClick={openInNewTab} title={t('preview.open_new_tab')}>
             <ExternalLink className="h-4 w-4" />
           </Button>
           {onClose && (
@@ -237,7 +239,7 @@ export default function LivePreviewPanel({
       {loading && (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-muted-foreground">Chargement de la preview...</span>
+          <span className="ml-2 text-muted-foreground">{t('preview.loading')}</span>
         </div>
       )}
 
@@ -254,7 +256,7 @@ export default function LivePreviewPanel({
             margin: '0 auto',
             transition: 'width 0.3s ease',
           }}
-          title="Live Preview"
+          title={t('preview.title')}
           sandbox="allow-scripts allow-same-origin"
         />
       )}

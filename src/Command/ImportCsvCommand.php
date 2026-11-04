@@ -95,6 +95,15 @@ class ImportCsvCommand extends Command
             } catch (\Exception $e) {
                 $errors[] = "Ligne " . ($created + 1) . " : " . $e->getMessage();
                 $this->em->clear();
+                $project = $this->projects->findOneBy(['uuid' => $i->getArgument('project-uuid')]);
+                $collection = $this->collections->findOneByProjectAndSlug($project, $i->getArgument('collection-slug'));
+                if (!$project || !$collection) {
+                    $io->error('Impossible de recharger le projet/collection après erreur');
+                    return Command::FAILURE;
+                }
+                $collFields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
+                $fieldMap = [];
+                foreach ($collFields as $f) { $fieldMap[$f->slug] = $f; }
             }
             $io->progressAdvance();
         }

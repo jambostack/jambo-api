@@ -63,7 +63,7 @@ export default function FormIndex({ project }: Props) {
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: project.name, href: `/projects/${project.uuid}` },
-        { title: 'Formulaires', href: `/projects/${project.uuid}/forms` },
+        { title: t('forms.title'), href: `/projects/${project.uuid}/forms` },
     ];
 
     const fetchForms = () => {
@@ -77,7 +77,7 @@ export default function FormIndex({ project }: Props) {
     const fetchSubmissions = (formId: number) => {
         axios.get(`/admin-api/${project.uuid}/forms/${formId}/submissions`)
             .then(r => { setSubmissions(r.data); setShowSubmissions(formId); })
-            .catch(() => alert('Erreur de chargement des soumissions'));
+            .catch(() => alert(t('common.error')));
     };
 
     useEffect(() => { fetchForms(); }, []);
@@ -87,7 +87,7 @@ export default function FormIndex({ project }: Props) {
         try {
             fields = JSON.parse(submissionForm.fields);
         } catch {
-            alert('JSON invalide pour les champs');
+            alert(t('studio.fopts.json_invalid'));
             return;
         }
         let settings = {};
@@ -108,26 +108,26 @@ export default function FormIndex({ project }: Props) {
                 setSubmissionForm({ name: '', slug: '', fields: '[]', settings: '{}' });
                 fetchForms();
             })
-            .catch(err => alert(err.response?.data?.error || 'Erreur'));
+            .catch(err => alert(err.response?.data?.error || t('common.error')));
     };
 
     const handleDelete = (id: number) => {
-        if (!confirm('Supprimer ce formulaire et toutes ses soumissions ?')) return;
+        if (!confirm(t('forms.delete_confirm'))) return;
         axios.delete(`/admin-api/${project.uuid}/forms/${id}`)
             .then(() => fetchForms());
     };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title={`Formulaires — ${project.name}`} />
+            <Head title={`${t('forms.title')} — ${project.name}`} />
             <div className="flex h-full">
                 <ProjectSidebar project={project} />
                 <div className="flex-1 overflow-auto p-6 space-y-6">
                     {/* Header */}
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold">Formulaires ({forms?.data?.length ?? 0})</h2>
+                        <h2 className="text-lg font-semibold">{t('forms.title')} ({forms?.data?.length ?? 0})</h2>
                         <Button onClick={() => setShowCreate(true)}>
-                            <Plus className="h-4 w-4 mr-2" />Nouveau formulaire
+                            <Plus className="h-4 w-4 mr-2" />{t('forms.new_form')}
                         </Button>
                     </div>
 
@@ -135,7 +135,7 @@ export default function FormIndex({ project }: Props) {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <Card>
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">Total formulaires</CardTitle>
+                                <CardTitle className="text-sm font-medium text-muted-foreground">{t('forms.total_forms')}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="flex items-center gap-2">
@@ -146,7 +146,7 @@ export default function FormIndex({ project }: Props) {
                         </Card>
                         <Card>
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">Total soumissions</CardTitle>
+                                <CardTitle className="text-sm font-medium text-muted-foreground">{t('forms.total_submissions')}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="flex items-center gap-2">
@@ -159,7 +159,7 @@ export default function FormIndex({ project }: Props) {
                         </Card>
                         <Card>
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">Non lues</CardTitle>
+                                <CardTitle className="text-sm font-medium text-muted-foreground">{t('forms.unread')}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="flex items-center gap-2">
@@ -177,23 +177,23 @@ export default function FormIndex({ project }: Props) {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Nom</TableHead>
-                                    <TableHead>Slug</TableHead>
-                                    <TableHead className="w-[80px]">Champs</TableHead>
-                                    <TableHead className="w-[100px]">Soumissions</TableHead>
-                                    <TableHead className="w-[80px]">Non lues</TableHead>
-                                    <TableHead className="w-[120px]">Actions</TableHead>
+                                    <TableHead>{t('common.name')}</TableHead>
+                                    <TableHead>{t('fields.slug')}</TableHead>
+                                    <TableHead className="w-[80px]">{t('forms.fields')}</TableHead>
+                                    <TableHead className="w-[100px]">{t('forms.submissions')}</TableHead>
+                                    <TableHead className="w-[80px]">{t('forms.unread')}</TableHead>
+                                    <TableHead className="w-[120px]">{t('forms.actions')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {loading && (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Chargement…</TableCell>
+                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t('common.loading')}</TableCell>
                                     </TableRow>
                                 )}
                                 {!loading && (!forms || forms.data.length === 0) && (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Aucun formulaire trouvé.</TableCell>
+                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t('forms.no_forms')}</TableCell>
                                     </TableRow>
                                 )}
                                 {!loading && forms?.data.map(f => (
@@ -212,10 +212,10 @@ export default function FormIndex({ project }: Props) {
                                                 : <span className="text-muted-foreground">0</span>}
                                         </TableCell>
                                         <TableCell>
-                                            <Button variant="ghost" size="icon" onClick={() => fetchSubmissions(f.id)} title="Voir les soumissions">
+                                            <Button variant="ghost" size="icon" onClick={() => fetchSubmissions(f.id)} title={t('forms.view_submissions')}>
                                                 <Eye className="h-4 w-4" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(f.id)} title="Supprimer">
+                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(f.id)} title={t('common.delete')}>
                                                 <Trash2 className="h-4 w-4 text-red-500" />
                                             </Button>
                                         </TableCell>
@@ -229,21 +229,21 @@ export default function FormIndex({ project }: Props) {
                     <Dialog open={showCreate} onOpenChange={setShowCreate}>
                         <DialogContent className="max-w-2xl">
                             <DialogHeader>
-                                <DialogTitle>Nouveau formulaire</DialogTitle>
+                                <DialogTitle>{t('forms.new_form')}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4 py-4">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label htmlFor="formName">Nom</Label>
+                                        <Label htmlFor="formName">{t('common.name')}</Label>
                                         <Input id="formName" value={submissionForm.name} onChange={e => setSubmissionForm({ ...submissionForm, name: e.target.value })} placeholder="Contact" />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="formSlug">Slug</Label>
+                                        <Label htmlFor="formSlug">{t('fields.slug')}</Label>
                                         <Input id="formSlug" value={submissionForm.slug} onChange={e => setSubmissionForm({ ...submissionForm, slug: e.target.value })} placeholder="contact" />
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="formFields">Champs (JSON)</Label>
+                                    <Label htmlFor="formFields">{t('forms.fields_json')}</Label>
                                     <Textarea
                                         id="formFields"
                                         value={submissionForm.fields}
@@ -254,7 +254,7 @@ export default function FormIndex({ project }: Props) {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="formSettings">Paramètres (JSON)</Label>
+                                    <Label htmlFor="formSettings">{t('forms.settings_json')}</Label>
                                     <Textarea
                                         id="formSettings"
                                         value={submissionForm.settings}
@@ -266,8 +266,8 @@ export default function FormIndex({ project }: Props) {
                                 </div>
                             </div>
                             <DialogFooter>
-                                <Button variant="outline" onClick={() => setShowCreate(false)}>Annuler</Button>
-                                <Button onClick={handleCreate}>Créer</Button>
+                                <Button variant="outline" onClick={() => setShowCreate(false)}>{t('common.cancel')}</Button>
+                                <Button onClick={handleCreate}>{t('common.create')}</Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
@@ -276,19 +276,19 @@ export default function FormIndex({ project }: Props) {
                     <Dialog open={showSubmissions !== null} onOpenChange={() => setShowSubmissions(null)}>
                         <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
                             <DialogHeader>
-                                <DialogTitle>Soumissions ({submissions?.meta?.total ?? 0})</DialogTitle>
+                                <DialogTitle>{t('forms.submissions')} ({submissions?.meta?.total ?? 0})</DialogTitle>
                             </DialogHeader>
                             <div className="py-4">
                                 {!submissions || submissions.data.length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">Aucune soumission.</p>
+                                    <p className="text-center text-muted-foreground py-8">{t('forms.no_submissions')}</p>
                                 ) : (
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead>ID</TableHead>
-                                                <TableHead>Données</TableHead>
+                                                <TableHead>{t('forms.data_col')}</TableHead>
                                                 <TableHead className="w-[80px]">Spam</TableHead>
-                                                <TableHead className="w-[120px]">Date</TableHead>
+                                                <TableHead className="w-[120px]">{t('forms.date_col')}</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
