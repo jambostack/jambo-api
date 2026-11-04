@@ -298,7 +298,7 @@ class SecurityController extends AbstractController
     {
         try {
             return $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return [];
         }
     }

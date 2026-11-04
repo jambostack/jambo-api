@@ -89,7 +89,7 @@ class EndUserSchemaController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
         foreach ($data['fields'] ?? [] as $item) {
@@ -137,7 +137,7 @@ class EndUserSchemaController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -215,7 +215,7 @@ class EndUserSchemaController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 

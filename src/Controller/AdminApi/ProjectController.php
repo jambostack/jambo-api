@@ -34,7 +34,7 @@ class ProjectController extends AbstractController
         $this->requireScope($request, 'projects:write');
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         try {
@@ -48,7 +48,11 @@ class ProjectController extends AbstractController
     #[Route('/{uuid}', name: 'show', methods: ['GET'])]
     public function show(string $uuid): JsonResponse
     {
-        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -61,14 +65,18 @@ class ProjectController extends AbstractController
     public function update(string $uuid, Request $request): JsonResponse
     {
         $this->requireScope($request, 'projects:write');
-        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         $this->provisioner->updateProject($project, $body);
@@ -79,7 +87,11 @@ class ProjectController extends AbstractController
     public function delete(string $uuid, Request $request): JsonResponse
     {
         $this->requireScope($request, 'projects:write');
-        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }

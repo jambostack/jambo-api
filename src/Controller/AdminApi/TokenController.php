@@ -40,7 +40,7 @@ class TokenController extends AbstractController
     {
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
 
@@ -82,7 +82,7 @@ class TokenController extends AbstractController
         }
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         if (isset($data['name'])) {

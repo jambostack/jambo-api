@@ -52,7 +52,7 @@ class ProjectController extends AbstractController
     {
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
 
@@ -107,7 +107,7 @@ class ProjectController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
 
@@ -251,7 +251,7 @@ class ProjectController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
 
@@ -351,7 +351,7 @@ class ProjectController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         $roleId = $data['role_id'] ?? null;
@@ -468,7 +468,7 @@ class ProjectController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         $roleId       = $data['role_id'] ?? null;

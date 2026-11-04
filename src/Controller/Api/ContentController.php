@@ -134,7 +134,11 @@ class ContentController extends AbstractController
             return $this->json(['error' => 'Collection not found.'], 404);
         }
 
-        $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
+        try {
+            $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Entry not found.'], 404);
+        }
         if ($entry === null) {
             return $this->json(['error' => 'Entry not found.'], 404);
         }
@@ -199,7 +203,11 @@ class ContentController extends AbstractController
             $data = $request->request->all();
             $uploadedFiles = $request->files->all();
         } else {
-            $data = $request->toArray();
+            try {
+                $data = $request->toArray();
+            } catch (\Throwable) {
+                return $this->json(['error' => 'Invalid JSON'], 400);
+            }
             $uploadedFiles = [];
         }
 
@@ -384,14 +392,18 @@ class ContentController extends AbstractController
             return $this->json(['error' => 'Collection not found.'], 404);
         }
 
-        $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
+        try {
+            $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Entry not found.'], 404);
+        }
         if ($entry === null) {
             return $this->json(['error' => 'Entry not found.'], 404);
         }
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -529,7 +541,11 @@ class ContentController extends AbstractController
             return $this->json(['error' => 'Collection not found.'], 404);
         }
 
-        $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
+        try {
+            $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Entry not found.'], 404);
+        }
         if ($entry === null) {
             return $this->json(['error' => 'Entry not found.'], 404);
         }
@@ -542,7 +558,11 @@ class ContentController extends AbstractController
 
     private function resolvePublicProject(string $projectId): Project|JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found.'], 404);
+        }
         if ($project === null) {
             return $this->json(['error' => 'Project not found.'], 404);
         }

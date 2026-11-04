@@ -65,7 +65,7 @@ class ProjectStorageController extends AbstractController
 
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return new JsonResponse(['error' => 'Invalid JSON'], 400);
         }
 
@@ -94,7 +94,7 @@ class ProjectStorageController extends AbstractController
 
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return new JsonResponse(['error' => 'Invalid JSON'], 400);
         }
 
@@ -128,7 +128,7 @@ class ProjectStorageController extends AbstractController
 
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return new JsonResponse(['error' => 'Invalid JSON'], 400);
         }
 
@@ -218,7 +218,7 @@ class ProjectStorageController extends AbstractController
 
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return new JsonResponse(['error' => 'Invalid JSON'], 400);
         }
 
@@ -248,7 +248,7 @@ class ProjectStorageController extends AbstractController
 
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return new JsonResponse(['error' => 'Invalid JSON'], 400);
         }
 
@@ -284,7 +284,11 @@ class ProjectStorageController extends AbstractController
 
     private function findProject(string $uuid): Project|JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Project not found'], 404);
+        }
         if ($project === null) {
             return new JsonResponse(['error' => 'Project not found'], 404);
         }

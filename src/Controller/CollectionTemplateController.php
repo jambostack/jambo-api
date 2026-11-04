@@ -53,7 +53,7 @@ class CollectionTemplateController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -94,7 +94,11 @@ class CollectionTemplateController extends AbstractController
     #[Route('/from-collection/{projectUuid}/{collectionSlug}', name: 'save_from_collection', methods: ['POST'])]
     public function saveFromCollection(string $projectUuid, string $collectionSlug, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if ($project === null) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -110,7 +114,7 @@ class CollectionTemplateController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 

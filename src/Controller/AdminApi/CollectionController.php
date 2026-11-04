@@ -4,6 +4,7 @@ namespace App\Controller\AdminApi;
 
 use App\Entity\Collection;
 use App\Entity\Field;
+use App\Entity\Project;
 use App\Exception\SchemaException;
 use App\Repository\CollectionRepository;
 use App\Repository\FieldRepository;
@@ -30,7 +31,7 @@ class CollectionController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $uuid): JsonResponse
     {
-        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        $project = $this->resolveProject($uuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -44,7 +45,7 @@ class CollectionController extends AbstractController
     #[Route('/{slug}', name: 'show', methods: ['GET'])]
     public function show(string $uuid, string $slug): JsonResponse
     {
-        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        $project = $this->resolveProject($uuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -60,14 +61,14 @@ class CollectionController extends AbstractController
     public function create(string $uuid, Request $request): JsonResponse
     {
         $this->requireScope($request, 'schema:write');
-        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        $project = $this->resolveProject($uuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         try {
@@ -82,7 +83,7 @@ class CollectionController extends AbstractController
     public function update(string $uuid, string $slug, Request $request): JsonResponse
     {
         $this->requireScope($request, 'schema:write');
-        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        $project = $this->resolveProject($uuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -93,7 +94,7 @@ class CollectionController extends AbstractController
         }
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         $this->provisioner->updateCollection($c, $body);
@@ -104,7 +105,7 @@ class CollectionController extends AbstractController
     public function delete(string $uuid, string $slug, Request $request): JsonResponse
     {
         $this->requireScope($request, 'schema:write');
-        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        $project = $this->resolveProject($uuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -115,6 +116,15 @@ class CollectionController extends AbstractController
         }
         $this->provisioner->deleteCollection($c);
         return new JsonResponse(null, 204);
+    }
+
+    private function resolveProject(string $uuid): ?Project
+    {
+        try {
+            return $this->projects->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function serialize(Collection $c, bool $withFields = false): array

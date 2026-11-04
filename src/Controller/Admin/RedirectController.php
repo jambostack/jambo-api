@@ -31,7 +31,7 @@ class RedirectController extends AbstractController
     #[Route('/admin-api/{projectUuid}/redirects', name: 'admin_redirects_list', methods: ['GET'])]
     public function index(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
@@ -64,7 +64,7 @@ class RedirectController extends AbstractController
     #[Route('/admin-api/{projectUuid}/redirects/chains', name: 'admin_redirects_chains', methods: ['GET'])]
     public function chains(string $projectUuid): JsonResponse
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
@@ -87,7 +87,7 @@ class RedirectController extends AbstractController
     #[Route('/admin-api/{projectUuid}/redirects', name: 'admin_redirects_create', methods: ['POST'])]
     public function create(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
@@ -95,7 +95,7 @@ class RedirectController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -171,7 +171,7 @@ class RedirectController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -265,6 +265,15 @@ class RedirectController extends AbstractController
     // ── Helper ─────────────────────────────────────────────────────────────
 
     /** @return array<string, mixed> */
+    private function resolveProject(string $projectUuid): ?\App\Entity\Project
+    {
+        try {
+            return $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function serializeRedirect(Redirect $r): array
     {
         return [

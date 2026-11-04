@@ -7,6 +7,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.45] — 2026-11-04
+
+### Fixed & Hardened
+- **System-wide Malformed JSON Exception Safety (`src/Controller/`)**:
+  - Replaced improper `catch (\JsonException)` with `catch (\Throwable)` across all controllers handling `$request->toArray()`. Symfony throws `Symfony\Component\HttpFoundation\Exception\JsonException` (which extends `\UnexpectedValueException`), which previously bypassed `\JsonException` catches and resulted in 500 crashes instead of clean HTTP 400 Bad Request responses.
+- **UUID DBAL Conversion Exception Prevention (`src/Controller/Api/`, `src/Controller/AdminApi/`, `src/Controller/`)**:
+  - Wrapped project, entry, asset, and automation UUID lookups in `try / catch (\Throwable)` across `ContentController`, `AssetController`, `ProjectInfoController`, `ProjectAwareControllerTrait`, `CollectionController`, `FieldController`, `WebhookController`, `AutomationController`, `MediaFolderController`, and `MediaController` to cleanly return 404 on malformed UUID strings instead of bubbling unhandled DBAL `ConversionException` (500).
+- **User & Super Admin Deletion Protections (`UserController`)**:
+  - Added protection preventing deletion or bulk deletion of the last super administrator (`ROLE_SUPER_ADMIN`).
+  - Added strict email format validation (`FILTER_VALIDATE_EMAIL`) upon user creation in `UserController::create`.
+- **Role Integrity Protections (`RoleController`)**:
+  - Prevented deleting or bulk deleting roles assigned to one or more active users to avoid foreign key constraint violations and orphaned accounts.
+  - Added payload array type check on `permissions` in role updates and creations returning 422.
+
+---
+
 ## [1.26.44] — 2026-11-04
 
 ### Fixed & Hardened

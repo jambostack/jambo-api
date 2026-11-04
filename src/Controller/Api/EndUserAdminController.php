@@ -120,7 +120,7 @@ class EndUserAdminController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
         $email    = trim($data['email'] ?? '');
@@ -171,7 +171,7 @@ class EndUserAdminController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -243,7 +243,7 @@ class EndUserAdminController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
         $newStatus = $data['status'] ?? '';

@@ -1588,4 +1588,181 @@ class CoreApiHardeningTest extends WebTestCase
         $this->assertSame(302, $client->getResponse()->getStatusCode());
         $this->assertSame('/', $client->getResponse()->headers->get('Location'));
     }
+
+    public function testUserCreationEmailValidationAndMalformedJson(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'admin-user-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->name = 'Super Admin';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // Malformed JSON -> 400
+        $client->request('POST', '/api/users', [], [], ['CONTENT_TYPE' => 'application/json'], '{invalid json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // Invalid email format -> 422
+        $client->request('POST', '/api/users', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'New User',
+            'email' => 'invalid-email-format',
+            'password' => 'secret123',
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('errors', $data);
+        $this->assertSame('Invalid email address.', $data['errors']['email']);
+    }
+
+    public function testUserDeletionProtectsLastSuperAdmin(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        // Ensure we find or create exactly one super admin
+        $allUsers = $em->getRepository(User::class)->findAll();
+        $superAdmin = null;
+        foreach ($allUsers as $u) {
+            if (in_array('ROLE_SUPER_ADMIN', $u->getRoles(), true)) {
+                if ($superAdmin === null) {
+                    $superAdmin = $u;
+                } else {
+                    // Downgrade any extra super admins so exactly one exists
+                    $u->roles = ['ROLE_USER'];
+                }
+            }
+        }
+        if ($superAdmin === null) {
+            $superAdmin = new User();
+            $superAdmin->email = 'superadmin-' . bin2hex(random_bytes(4)) . '@example.com';
+            $superAdmin->name = 'Super Admin';
+            $superAdmin->password = 'hashed';
+            $superAdmin->roles = ['ROLE_SUPER_ADMIN'];
+            $em->persist($superAdmin);
+        }
+
+        // Create an admin caller with users.manage permission
+        $perm = $em->getRepository(\App\Entity\Permission::class)->findOneBy(['name' => 'users.manage']);
+        if (!$perm) {
+            $perm = new \App\Entity\Permission();
+            $perm->name = 'users.manage';
+            $perm->label = 'Manage Users';
+            $perm->group = 'users';
+            $em->persist($perm);
+        }
+
+        $role = new \App\Entity\Role();
+        $role->name = 'user_manager_' . bin2hex(random_bytes(4));
+        $role->label = 'User Manager';
+        $role->permissions->add($perm);
+        $em->persist($role);
+
+        $caller = new User();
+        $caller->email = 'caller-' . bin2hex(random_bytes(4)) . '@example.com';
+        $caller->name = 'Caller';
+        $caller->password = 'hashed';
+        $caller->roles = ['ROLE_USER'];
+        $caller->userRoles->add($role);
+        $em->persist($caller);
+
+        $em->flush();
+
+        $client->loginUser($caller);
+
+        // Now since $superAdmin is the sole super admin in DB, attempting to delete $superAdmin returns 422
+        $client->request('DELETE', '/api/users/' . $superAdmin->id);
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertStringContainsString('last super administrator', $data['error']);
+    }
+
+    public function testRoleDeletionProtectionAndPermissionsArrayValidation(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = new User();
+        $admin->email = 'role-admin-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->name = 'Role Admin';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+
+        $role = new \App\Entity\Role();
+        $role->name = 'assigned_role_' . bin2hex(random_bytes(4));
+        $role->label = 'Assigned Role';
+        $em->persist($role);
+
+        $user = new User();
+        $user->email = 'assigned-user-' . bin2hex(random_bytes(4)) . '@example.com';
+        $user->name = 'Assigned User';
+        $user->password = 'hashed';
+        $user->userRoles->add($role);
+        $em->persist($user);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        // Malformed JSON on role creation -> 400
+        $client->request('POST', '/api/roles', [], [], ['CONTENT_TYPE' => 'application/json'], '{invalid-json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // Updating with non-array permissions -> 422
+        $client->request('PUT', '/api/roles/' . $role->id, [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'permissions' => 'not-an-array',
+        ]));
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('permissions', $data['errors']);
+
+        // Deleting a role assigned to users -> 422
+        $client->request('DELETE', '/api/roles/' . $role->id);
+        $this->assertSame(422, $client->getResponse()->getStatusCode());
+        $deleteData = json_decode($client->getResponse()->getContent(), true);
+        $this->assertStringContainsString('assigned to users', $deleteData['error']);
+    }
+
+    public function testPublicContentAndAssetMalformedUuidSafety(): void
+    {
+        $client = static::createClient();
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $project = new Project();
+        $project->name = 'Public Project ' . bin2hex(random_bytes(4));
+        $project->publicApi = true;
+        $em->persist($project);
+
+        $collection = new Collection();
+        $collection->project = $project;
+        $collection->name = 'Posts';
+        $collection->slug = 'posts';
+        $collection->order = 0;
+        $collection->settings = ['public_create' => true];
+        $em->persist($collection);
+        $em->flush();
+
+        $projectUuid = $project->uuid->toString();
+
+        // 1) Malformed JSON body on public_create -> 400 Bad Request
+        $client->request('POST', "/api/{$projectUuid}/posts", [], [], ['CONTENT_TYPE' => 'application/json'], '{bad-json');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // 2) Malformed UUID on content show -> 404 (not 500 DBAL exception)
+        $client->request('GET', "/api/{$projectUuid}/posts/not-a-valid-uuid");
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // 3) Malformed UUID on asset show -> 404 (not 500 DBAL exception)
+        $client->request('GET', "/api/{$projectUuid}/files/not-a-valid-uuid");
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // 4) Malformed UUID in ProjectInfoController route -> 404
+        $client->request('GET', "/api/not-a-valid-uuid");
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+    }
 }

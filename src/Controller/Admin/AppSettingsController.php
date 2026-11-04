@@ -171,7 +171,7 @@ class AppSettingsController extends AbstractController
         if ($request->getContentTypeFormat() === 'json') {
             try {
                 $jsonData = $request->toArray();
-            } catch (\JsonException) {
+            } catch (\Throwable) {
                 return $this->json(['error' => 'Invalid JSON body'], 400);
             }
             if (isset($jsonData['appName']) && trim($jsonData['appName']) !== '') {

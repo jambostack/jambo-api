@@ -681,7 +681,7 @@ class EndUserAuthController extends AbstractController
     {
         try {
             return $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
     }

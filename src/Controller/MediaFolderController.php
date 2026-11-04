@@ -24,7 +24,7 @@ class MediaFolderController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -39,7 +39,7 @@ class MediaFolderController extends AbstractController
     #[Route('/tree', name: 'tree', methods: ['GET'])]
     public function tree(string $projectUuid): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -54,14 +54,14 @@ class MediaFolderController extends AbstractController
     #[Route('', name: 'store', methods: ['POST'])]
     public function store(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         $name = trim($data['name'] ?? '');
@@ -106,7 +106,7 @@ class MediaFolderController extends AbstractController
     #[Route('/{id}', name: 'update', methods: ['PUT', 'PATCH'])]
     public function update(string $projectUuid, int $id, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -118,7 +118,7 @@ class MediaFolderController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         if (!empty($data['name'])) {
@@ -134,7 +134,7 @@ class MediaFolderController extends AbstractController
     #[Route('/{id}/move', name: 'move', methods: ['PATCH'])]
     public function move(string $projectUuid, int $id, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -146,7 +146,7 @@ class MediaFolderController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         if (!array_key_exists('parent_id', $data)) {
@@ -186,7 +186,7 @@ class MediaFolderController extends AbstractController
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
     public function delete(string $projectUuid, int $id): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -201,6 +201,15 @@ class MediaFolderController extends AbstractController
         $this->em->flush();
 
         return $this->json(null, 204);
+    }
+
+    private function resolveProject(string $projectUuid): ?\App\Entity\Project
+    {
+        try {
+            return $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function serializeFolder(MediaFolder $folder): array

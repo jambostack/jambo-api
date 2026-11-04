@@ -94,7 +94,11 @@ class SeoController extends AbstractController
     #[Route('/admin-api/{projectUuid}/seo/bulk', name: 'admin_seo_bulk', methods: ['PUT'])]
     public function bulkUpdate(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found.'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
@@ -102,7 +106,7 @@ class SeoController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
         $entries = $data['entries'] ?? [];

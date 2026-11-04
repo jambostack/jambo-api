@@ -25,7 +25,7 @@ class ProjectMailerSettingsController extends AbstractController
     #[Route('/api/admin/projects/{uuid}/mailer', name: 'admin_project_mailer_get', methods: ['GET'])]
     public function show(string $uuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->resolveProject($uuid);
         if (!$project) {
             return new JsonResponse(['error' => 'Projet introuvable'], 404);
         }
@@ -50,7 +50,7 @@ class ProjectMailerSettingsController extends AbstractController
     #[Route('/api/admin/projects/{uuid}/mailer', name: 'admin_project_mailer_update', methods: ['PUT'])]
     public function update(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->resolveProject($uuid);
         if (!$project) {
             return new JsonResponse(['error' => 'Projet introuvable'], 404);
         }
@@ -65,7 +65,7 @@ class ProjectMailerSettingsController extends AbstractController
 
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return new JsonResponse(['error' => 'JSON invalide'], 400);
         }
 
@@ -123,7 +123,7 @@ class ProjectMailerSettingsController extends AbstractController
     #[Route('/api/admin/projects/{uuid}/mailer/test', name: 'admin_project_mailer_test', methods: ['POST'])]
     public function test(string $uuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->resolveProject($uuid);
         if (!$project) {
             return new JsonResponse(['error' => 'Projet introuvable'], 404);
         }
@@ -146,5 +146,14 @@ class ProjectMailerSettingsController extends AbstractController
         }
 
         return new JsonResponse(['sent' => true]);
+    }
+
+    private function resolveProject(string $uuid): ?Project
+    {
+        try {
+            return $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

@@ -78,7 +78,7 @@ class RoleController extends AbstractController
     {
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
         $ids      = $data['ids'] ?? [];
@@ -97,7 +97,7 @@ class RoleController extends AbstractController
         $deleted = 0;
         foreach ($ids as $id) {
             $role = $this->roleRepository->find((int) $id);
-            if ($role === null) {
+            if ($role === null || $role->users->count() > 0) {
                 continue;
             }
             $this->em->remove($role);
@@ -125,7 +125,7 @@ class RoleController extends AbstractController
     {
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -143,7 +143,8 @@ class RoleController extends AbstractController
         $role->name  = $name;
         $role->label = $data['label'] ?? $name;
 
-        $this->attachPermissions($role, $data['permissions'] ?? []);
+        $permissions = is_array($data['permissions'] ?? null) ? $data['permissions'] : [];
+        $this->attachPermissions($role, $permissions);
 
         $this->em->persist($role);
         $this->em->flush();
@@ -162,7 +163,7 @@ class RoleController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -183,6 +184,9 @@ class RoleController extends AbstractController
             $role->label = $data['name'];
         }
         if (isset($data['permissions'])) {
+            if (!is_array($data['permissions'])) {
+                return $this->json(['errors' => ['permissions' => 'Permissions must be an array.']], 422);
+            }
             $role->permissions->clear();
             $this->attachPermissions($role, $data['permissions']);
         }
@@ -199,6 +203,10 @@ class RoleController extends AbstractController
         $role = $this->roleRepository->find($id);
         if ($role === null) {
             return $this->json(['error' => 'Role not found'], 404);
+        }
+
+        if ($role->users->count() > 0) {
+            return $this->json(['error' => 'Cannot delete a role assigned to users.'], 422);
         }
 
         $this->em->remove($role);

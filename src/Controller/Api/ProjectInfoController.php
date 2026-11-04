@@ -57,7 +57,11 @@ class ProjectInfoController extends AbstractController
     #[Route('', name: 'show', methods: ['GET'])]
     public function show(string $projectId): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found.'], 404);
+        }
         if ($project === null) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
@@ -70,7 +74,7 @@ class ProjectInfoController extends AbstractController
 
         return $this->json([
             'project' => [
-                'uuid'          => $project->uuid->toString(),
+                'uuid'          => $project->uuid?->toString(),
                 'name'          => $project->name,
                 'defaultLocale' => $project->defaultLocale,
                 'locales'       => $project->locales,

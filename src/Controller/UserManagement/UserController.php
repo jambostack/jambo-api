@@ -87,7 +87,7 @@ class UserController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
         $ids      = $data['ids'] ?? [];
@@ -108,6 +108,18 @@ class UserController extends AbstractController
             $user = $this->userRepository->find((int) $id);
             if ($user === null || $user === $currentUser) {
                 continue;
+            }
+            if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+                $allUsers = $this->userRepository->findAll();
+                $superAdminCount = 0;
+                foreach ($allUsers as $u) {
+                    if (in_array('ROLE_SUPER_ADMIN', $u->getRoles(), true)) {
+                        $superAdminCount++;
+                    }
+                }
+                if ($superAdminCount <= 1) {
+                    continue;
+                }
             }
             $this->em->remove($user);
             $deleted++;
@@ -134,22 +146,30 @@ class UserController extends AbstractController
     {
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
-        if (empty($data['email']) || empty($data['password']) || empty($data['name'])) {
+        $email = trim((string) ($data['email'] ?? ''));
+        $name = trim((string) ($data['name'] ?? ''));
+        $password = (string) ($data['password'] ?? '');
+
+        if ($email === '' || $password === '' || $name === '') {
             return $this->json(['error' => 'name, email, and password are required'], 422);
         }
 
-        if ($this->userRepository->findByEmail($data['email']) !== null) {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->json(['errors' => ['email' => 'Invalid email address.']], 422);
+        }
+
+        if ($this->userRepository->findByEmail($email) !== null) {
             return $this->json(['errors' => ['email' => 'Email already taken.']], 422);
         }
 
         $user = new User();
-        $user->name  = $data['name'];
-        $user->email = $data['email'];
-        $user->password = $this->hasher->hashPassword($user, $data['password']);
+        $user->name  = $name;
+        $user->email = $email;
+        $user->password = $this->hasher->hashPassword($user, $password);
 
         if (!empty($data['roles']) && is_array($data['roles'])) {
             foreach ($data['roles'] as $roleId) {
@@ -182,7 +202,7 @@ class UserController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -233,6 +253,19 @@ class UserController extends AbstractController
 
         if ($user === $this->getUser()) {
             return $this->json(['error' => 'You cannot delete your own account.'], 422);
+        }
+
+        if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+            $allUsers = $this->userRepository->findAll();
+            $superAdminCount = 0;
+            foreach ($allUsers as $u) {
+                if (in_array('ROLE_SUPER_ADMIN', $u->getRoles(), true)) {
+                    $superAdminCount++;
+                }
+            }
+            if ($superAdminCount <= 1) {
+                return $this->json(['error' => 'Cannot delete the last super administrator.'], 422);
+            }
         }
 
         $this->em->remove($user);

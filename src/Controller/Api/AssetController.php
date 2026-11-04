@@ -105,7 +105,11 @@ class AssetController extends AbstractController
             return $this->corsResponse($project);
         }
 
-        $media = $this->mediaRepository->findOneBy(['uuid' => $identifier, 'project' => $project, 'deletedAt' => null]);
+        try {
+            $media = $this->mediaRepository->findOneBy(['uuid' => $identifier, 'project' => $project, 'deletedAt' => null]);
+        } catch (\Throwable) {
+            return $this->corsResponse($this->json(['error' => 'File not found.'], 404));
+        }
 
         if ($media === null) {
             return $this->corsResponse($this->json(['error' => 'File not found.'], 404));
@@ -220,7 +224,11 @@ class AssetController extends AbstractController
             return $this->corsResponse($this->json(['error' => 'Unauthorized. Token requires delete ability.'], 401));
         }
 
-        $media = $this->mediaRepository->findOneBy(['uuid' => $uuid, 'project' => $project, 'deletedAt' => null]);
+        try {
+            $media = $this->mediaRepository->findOneBy(['uuid' => $uuid, 'project' => $project, 'deletedAt' => null]);
+        } catch (\Throwable) {
+            return $this->corsResponse($this->json(['error' => 'File not found.'], 404));
+        }
         if ($media === null) {
             return $this->corsResponse($this->json(['error' => 'File not found.'], 404));
         }
@@ -255,7 +263,11 @@ class AssetController extends AbstractController
 
     private function resolvePublicProject(string $projectId): Project|JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found.'], 404);
+        }
         if ($project === null) {
             return $this->json(['error' => 'Project not found.'], 404);
         }

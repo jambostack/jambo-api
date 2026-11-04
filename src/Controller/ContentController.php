@@ -105,7 +105,7 @@ class ContentController extends AbstractController
         $project = $collection->project;
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         $user    = $this->getUser();
@@ -237,7 +237,7 @@ class ContentController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
 
@@ -561,7 +561,11 @@ class ContentController extends AbstractController
 
     private function resolveCollection(string $projectUuid, string $collectionSlug): Collection|JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if ($project === null) {
             return $this->json(['error' => 'Project not found'], 404);
         }

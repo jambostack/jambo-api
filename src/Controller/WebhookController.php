@@ -54,7 +54,7 @@ class WebhookController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
 
@@ -111,7 +111,7 @@ class WebhookController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
 
@@ -275,7 +275,11 @@ class WebhookController extends AbstractController
 
     private function resolveProject(string $projectUuid): \App\Entity\Project|JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if ($project === null) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -294,7 +298,11 @@ class WebhookController extends AbstractController
         if ($project instanceof JsonResponse) {
             return $project;
         }
-        $webhook = $this->webhookRepository->findOneBy(['uuid' => $uuid, 'project' => $project]);
+        try {
+            $webhook = $this->webhookRepository->findOneBy(['uuid' => $uuid, 'project' => $project]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Webhook not found'], 404);
+        }
         if ($webhook === null) {
             return $this->json(['error' => 'Webhook not found'], 404);
         }

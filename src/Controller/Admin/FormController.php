@@ -33,7 +33,7 @@ class FormController extends AbstractController
     #[Route('/admin-api/{projectUuid}/forms', name: 'admin_forms_list', methods: ['GET'])]
     public function index(string $projectUuid): JsonResponse
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
@@ -61,7 +61,7 @@ class FormController extends AbstractController
     #[Route('/admin-api/{projectUuid}/forms', name: 'admin_forms_create', methods: ['POST'])]
     public function create(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
@@ -69,7 +69,7 @@ class FormController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -139,7 +139,7 @@ class FormController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -274,7 +274,7 @@ class FormController extends AbstractController
 
         try {
             $data = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
@@ -297,6 +297,15 @@ class FormController extends AbstractController
     // ── Helper ─────────────────────────────────────────────────────────────
 
     /** @return array<string, mixed> */
+    private function resolveProject(string $projectUuid): ?\App\Entity\Project
+    {
+        try {
+            return $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function serializeForm(Form $f): array
     {
         $definition = $this->formBuilder->validateDefinition($f->fields);

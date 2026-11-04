@@ -28,7 +28,11 @@ class FieldController extends AbstractController
     /** @return array{0: ?\App\Entity\Collection, 1: ?JsonResponse} */
     private function resolveCollection(string $uuid, string $slug): array
     {
-        $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->projects->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return [null, $this->json(['error' => 'Project not found'], 404)];
+        }
         if (!$project) {
             return [null, $this->json(['error' => 'Project not found'], 404)];
         }
@@ -70,7 +74,7 @@ class FieldController extends AbstractController
         }
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         try {
@@ -95,7 +99,7 @@ class FieldController extends AbstractController
         }
         try {
             $body = $request->toArray();
-        } catch (\JsonException) {
+        } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
         try {
