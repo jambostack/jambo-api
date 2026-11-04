@@ -134,4 +134,69 @@ class PasswordPolicyValidatorTest extends TestCase
         $this->assertTrue($res['valid']);
         $this->assertNull($res['error']);
     }
+
+    public function testAdminPasswordRejectsCommonPasswords(): void
+    {
+        $res = $this->validator->validateAdminPassword('12345678', 'admin@example.com', 'Administrator');
+        $this->assertFalse($res['valid']);
+        $this->assertContains('Password is too common or easily guessable.', $res['errors']);
+
+        $resAdmin = $this->validator->validateAdminPassword('admin1234', 'super@example.com', 'SuperUser');
+        $this->assertFalse($resAdmin['valid']);
+        $this->assertContains('Password is too common or easily guessable.', $resAdmin['errors']);
+    }
+
+    public function testAdminPasswordRejectsEmailPrefixOrName(): void
+    {
+        $resEmail = $this->validator->validateAdminPassword('jamboteam2026!', 'jamboteam@example.com', 'Admin');
+        $this->assertFalse($resEmail['valid']);
+        $this->assertContains('Password cannot contain your email prefix.', $resEmail['errors']);
+
+        $resName = $this->validator->validateAdminPassword('AliceSuperSafe2026', 'random@example.com', 'Alice');
+        $this->assertFalse($resName['valid']);
+        $this->assertContains('Password cannot contain your name.', $resName['errors']);
+    }
+
+    public function testAdminPasswordComplexityRequirement(): void
+    {
+        $resMissingDigit = $this->validator->validateAdminPassword('LowercaseAndUppercase', null, null, true);
+        $this->assertFalse($resMissingDigit['valid']);
+        $this->assertContains('Password must include at least one number.', $resMissingDigit['errors']);
+
+        $resValid = $this->validator->validateAdminPassword('ValidStrongPass2026#', 'john@example.com', 'Johnny', true);
+        $this->assertTrue($resValid['valid']);
+        $this->assertEmpty($resValid['errors']);
+    }
+
+    public function testRotationWorksWithAdminUser(): void
+    {
+        $admin = new \App\Entity\User();
+        $admin->name = 'Super Admin';
+        $admin->email = 'admin@example.com';
+        $admin->password = '$2y$13$hashedadminpassword';
+
+        $hasher = $this->createMock(UserPasswordHasherInterface::class);
+        $hasher->expects($this->exactly(2))
+            ->method('isPasswordValid')
+            ->willReturnCallback(fn ($user, $pwd) => $pwd === 'CurrentAdminPass123');
+
+        // Rejection when new matches current
+        $resSame = $this->validator->validateRotation('CurrentAdminPass123', 'CurrentAdminPass123', $admin, $hasher);
+        $this->assertFalse($resSame['valid']);
+        $this->assertSame('New password must be different from current password.', $resSame['error']);
+    }
+
+    public function testPasswordLifecycleAndAgeCalculations(): void
+    {
+        $this->assertNull($this->validator->getPasswordAgeDays(null));
+        $this->assertFalse($this->validator->isPasswordExpired(null));
+
+        $fresh = new \DateTimeImmutable('-10 days');
+        $this->assertSame(10, $this->validator->getPasswordAgeDays($fresh));
+        $this->assertFalse($this->validator->isPasswordExpired($fresh, 90));
+
+        $old = new \DateTimeImmutable('-95 days');
+        $this->assertSame(95, $this->validator->getPasswordAgeDays($old));
+        $this->assertTrue($this->validator->isPasswordExpired($old, 90));
+    }
 }

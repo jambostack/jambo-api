@@ -5,6 +5,7 @@ namespace App\Controller\UserManagement;
 use App\Entity\User;
 use App\Repository\RoleRepository;
 use App\Repository\UserRepository;
+use App\Service\Security\PasswordPolicyValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -158,10 +159,6 @@ class UserController extends AbstractController
             return $this->json(['error' => 'name, email, and password are required'], 422);
         }
 
-        if (mb_strlen($password) < 8 || mb_strlen($password) > 4096) {
-            return $this->json(['errors' => ['password' => 'Password must be between 8 and 4096 characters.']], 422);
-        }
-
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return $this->json(['errors' => ['email' => 'Invalid email address.']], 422);
         }
@@ -170,10 +167,21 @@ class UserController extends AbstractController
             return $this->json(['errors' => ['email' => 'Email already taken.']], 422);
         }
 
+        if (mb_strlen($password) < 8 || mb_strlen($password) > 4096) {
+            return $this->json(['errors' => ['password' => 'Password must be between 8 and 4096 characters.']], 422);
+        }
+
+        $pwdValidator = new PasswordPolicyValidator();
+        $pwdResult = $pwdValidator->validateAdminPassword($password, $email, $name);
+        if (!$pwdResult['valid']) {
+            return $this->json(['errors' => ['password' => $pwdResult['errors'][0]]], 422);
+        }
+
         $user = new User();
         $user->name  = $name;
         $user->email = $email;
         $user->password = $this->hasher->hashPassword($user, $password);
+        $user->passwordChangedAt = new \DateTimeImmutable();
 
         if (!empty($data['roles']) && is_array($data['roles'])) {
             foreach ($data['roles'] as $roleId) {
@@ -229,7 +237,16 @@ class UserController extends AbstractController
             if (mb_strlen($newPassword) < 8 || mb_strlen($newPassword) > 4096) {
                 return $this->json(['errors' => ['password' => 'Password must be between 8 and 4096 characters.']], 422);
             }
+            $pwdValidator = new PasswordPolicyValidator();
+            $pwdResult = $pwdValidator->validateAdminPassword($newPassword, $user->email, $user->name);
+            if (!$pwdResult['valid']) {
+                return $this->json(['errors' => ['password' => $pwdResult['errors'][0]]], 422);
+            }
+            if ($user->password !== null && $this->hasher->isPasswordValid($user, $newPassword)) {
+                return $this->json(['errors' => ['password' => 'New password must be different from current password.']], 422);
+            }
             $user->password = $this->hasher->hashPassword($user, $newPassword);
+            $user->passwordChangedAt = new \DateTimeImmutable();
         }
         if (isset($data['roles']) && is_array($data['roles'])) {
             $user->userRoles->clear();
@@ -293,6 +310,7 @@ class UserController extends AbstractController
             'email'      => $user->email,
             'roles'      => $roles,
             'userRoles'  => $roles,
+            'password_changed_at' => $user->passwordChangedAt?->format(\DateTimeInterface::ATOM),
             'created_at' => $user->createdAt->format(\DateTimeInterface::ATOM),
             'updated_at' => $user->createdAt->format(\DateTimeInterface::ATOM),
         ];

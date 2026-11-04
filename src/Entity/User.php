@@ -82,10 +82,14 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column]
     public \DateTimeImmutable $createdAt;
 
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    public ?\DateTimeImmutable $passwordChangedAt = null;
+
     public function __construct()
     {
         $this->userRoles = new ArrayCollection();
         $this->createdAt = new \DateTimeImmutable();
+        $this->passwordChangedAt = new \DateTimeImmutable();
     }
 
     public function hasRole(string $roleName): bool

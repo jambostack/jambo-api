@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\User;
 use App\Repository\UserRepository;
+use App\Service\Security\PasswordPolicyValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -88,16 +89,23 @@ class InstallController extends AbstractController
             return new JsonResponse(['error' => 'Invalid JSON body.'], 400);
         }
         $email = trim($payload['email'] ?? '');
-        $password = $payload['password'] ?? '';
+        $password = (string) ($payload['password'] ?? '');
 
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 8) {
-            return new JsonResponse(['error' => 'Valid email and password (min 8 chars) required.'], 400);
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return new JsonResponse(['error' => 'Valid email address required.'], 400);
+        }
+
+        $pwdValidator = new PasswordPolicyValidator();
+        $valResult = $pwdValidator->validateAdminPassword($password, $email);
+        if (!$valResult['valid']) {
+            return new JsonResponse(['error' => $valResult['errors'][0]], 400);
         }
 
         $user = new User();
         $user->email = $email;
         $user->roles = ['ROLE_SUPER_ADMIN'];
         $user->password = $this->passwordHasher->hashPassword($user, $password);
+        $user->passwordChangedAt = new \DateTimeImmutable();
 
         $this->em->persist($user);
         $this->em->flush();

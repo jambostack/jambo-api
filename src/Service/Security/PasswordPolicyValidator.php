@@ -7,16 +7,18 @@ namespace App\Service\Security;
 use App\Entity\EndUser;
 use App\Entity\Project;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 
 /**
- * Validateur de politique de complexité et de rotation des mots de passe EndUser.
- * Conforme aux directives OWASP ASVS :
+ * Validateur de politique de complexité, rotation et cycle de vie des mots de passe.
+ * Conforme aux directives OWASP ASVS & NIST SP 800-63B :
  * - Longueur minimale configurable (défaut 8)
  * - Longueur maximale bornée (4096 octets, protection DoS hashing)
  * - Exigence de diversité de caractères activable ou stricte
- * - Blocage des mots de passe faibles/usuels
+ * - Blocage systématique des mots de passe faibles/usuels
  * - Vérification de la rotation de mot de passe (interdiction de réutilisation du mot de passe en cours)
- * - Contrôle de l'ancien mot de passe lors de la mise à jour par l'utilisateur.
+ * - Contrôle de l'ancien mot de passe lors de la mise à jour par l'utilisateur
+ * - Suivi du cycle de vie et expiration des identifiants d'administrateurs et membres.
  */
 class PasswordPolicyValidator
 {
@@ -24,16 +26,17 @@ class PasswordPolicyValidator
     public const MAX_LENGTH = 4096;
 
     /**
-     * Mots de passe extrêmement fréquents / faibles à rejeter lorsque la complexité est active.
+     * Mots de passe extrêmement fréquents / faibles à rejeter.
      */
-    private const COMMON_PASSWORDS = [
+    public const COMMON_PASSWORDS = [
         'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
         'qwerty123', 'qwertyuiop', 'azerty123', 'admin123', 'admin1234', 'welcome1',
-        'welcome123', 'letmein1', 'changeme1', 'iloveyou1', 'secret123',
+        'welcome123', 'letmein1', 'changeme1', 'iloveyou1', 'secret123', 'root1234',
+        'administrator', 'adminadmin', 'jamboadmin',
     ];
 
     /**
-     * Valide un mot de passe vis-à-vis des critères de sécurité.
+     * Valide un mot de passe vis-à-vis des critères de sécurité EndUser.
      *
      * @return array{valid: bool, errors: list<string>}
      */
@@ -98,31 +101,127 @@ class PasswordPolicyValidator
     }
 
     /**
+     * Valide le mot de passe d'un administrateur ou membre d'équipe (User).
+     *
+     * @return array{valid: bool, errors: list<string>}
+     */
+    public function validateAdminPassword(
+        string $password,
+        ?string $email = null,
+        ?string $name = null,
+        bool $requireComplexity = false,
+        int $minLength = self::DEFAULT_MIN_LENGTH
+    ): array {
+        $errors = [];
+        $length = mb_strlen($password, '8bit');
+
+        if ($minLength < 8) {
+            $minLength = 8;
+        }
+
+        if ($length < $minLength) {
+            $errors[] = sprintf('Password must be at least %d characters.', $minLength);
+        }
+
+        if ($length > self::MAX_LENGTH) {
+            $errors[] = sprintf('Password must not exceed %d characters.', self::MAX_LENGTH);
+        }
+
+        $normalized = strtolower(trim($password));
+        if (in_array($normalized, self::COMMON_PASSWORDS, true)) {
+            $errors[] = 'Password is too common or easily guessable.';
+        }
+
+        if ($email !== null && $email !== '') {
+            $emailParts = explode('@', strtolower($email));
+            $localPart = $emailParts[0] ?? '';
+            if (strlen($localPart) >= 4 && str_contains($normalized, $localPart)) {
+                $errors[] = 'Password cannot contain your email prefix.';
+            }
+        }
+
+        if ($name !== null && strlen($name) >= 4) {
+            $normalizedName = strtolower(trim($name));
+            if (str_contains($normalized, $normalizedName)) {
+                $errors[] = 'Password cannot contain your name.';
+            }
+        }
+
+        if ($requireComplexity && $length >= $minLength) {
+            if (!preg_match('/[a-z]/', $password)) {
+                $errors[] = 'Password must include at least one lowercase letter.';
+            }
+            if (!preg_match('/[A-Z]/', $password)) {
+                $errors[] = 'Password must include at least one uppercase letter.';
+            }
+            if (!preg_match('/[0-9]/', $password)) {
+                $errors[] = 'Password must include at least one number.';
+            }
+        }
+
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors,
+        ];
+    }
+
+    /**
      * Valide les règles de rotation lors d'un changement de mot de passe par l'utilisateur connecté.
+     * Compatible avec User et EndUser (PasswordAuthenticatedUserInterface).
      *
      * @return array{valid: bool, error: ?string}
      */
     public function validateRotation(
         ?string $currentPassword,
         string $newPassword,
-        EndUser $endUser,
-        UserPasswordHasherInterface $hasher
+        PasswordAuthenticatedUserInterface $user,
+        UserPasswordHasherInterface $hasher,
+        bool $requireCurrentPassword = true
     ): array {
-        // Si l'utilisateur possède déjà un mot de passe
-        if ($endUser->password !== null && $endUser->password !== '') {
-            if ($currentPassword === null || $currentPassword === '') {
-                return ['valid' => false, 'error' => 'Current password is required to change password.'];
+        $existingHash = $user->getPassword();
+        if ($existingHash !== null && $existingHash !== '') {
+            if ($requireCurrentPassword) {
+                if ($currentPassword === null || $currentPassword === '') {
+                    return ['valid' => false, 'error' => 'Current password is required to change password.'];
+                }
+
+                if (!$hasher->isPasswordValid($user, $currentPassword)) {
+                    return ['valid' => false, 'error' => 'Current password is incorrect.'];
+                }
             }
 
-            if (!$hasher->isPasswordValid($endUser, $currentPassword)) {
-                return ['valid' => false, 'error' => 'Current password is incorrect.'];
-            }
-
-            if ($hasher->isPasswordValid($endUser, $newPassword)) {
+            if ($hasher->isPasswordValid($user, $newPassword)) {
                 return ['valid' => false, 'error' => 'New password must be different from current password.'];
             }
         }
 
         return ['valid' => true, 'error' => null];
     }
+
+    /**
+     * Calcule l'ancienneté d'un mot de passe en jours.
+     */
+    public function getPasswordAgeDays(?\DateTimeImmutable $passwordChangedAt): ?int
+    {
+        if ($passwordChangedAt === null) {
+            return null;
+        }
+
+        $now = new \DateTimeImmutable();
+        return (int) $now->diff($passwordChangedAt)->days;
+    }
+
+    /**
+     * Vérifie si un mot de passe a dépassé sa durée maximale de rétention.
+     */
+    public function isPasswordExpired(?\DateTimeImmutable $passwordChangedAt, int $maxAgeDays = 90): bool
+    {
+        $age = $this->getPasswordAgeDays($passwordChangedAt);
+        if ($age === null) {
+            return false;
+        }
+
+        return $age >= $maxAgeDays;
+    }
 }
+

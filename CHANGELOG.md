@@ -7,6 +7,40 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.68] — 2026-11-04
+
+### Security & Hardening
+- **Password Policies & Lifecycle for Administrators & Team Members (`PasswordPolicyValidator`, `User`, Controllers)**:
+  - Extended `PasswordPolicyValidator` to support all `PasswordAuthenticatedUserInterface` accounts, covering both `User` (administrators, staff, team members) and `EndUser`.
+  - Added `validateAdminPassword()` enforcing OWASP ASVS Level 2 baseline:
+    - Minimum length bounded (default 8, configurable).
+    - Maximum length bounded at 4096 bytes (anti-DoS against bcrypt / argon2 hash amplification attacks).
+    - Blacklist rejection of common dictionary passwords (`COMMON_PASSWORDS`) on all administrative accounts.
+    - Contextual checks rejecting passwords containing the user's email prefix (>= 4 chars) or full name.
+    - Character diversity validation (uppercase, lowercase, digits).
+  - Added anti-reuse rotation rule: `validateRotation()` ensures new passwords differ from the current existing password on update and reset.
+  - Added `password_changed_at` tracking to `User` entity, migration `Version20261104170000.php`, and serialized in user management endpoints.
+  - Added password lifecycle / age calculation helpers: `getPasswordAgeDays()` and `isPasswordExpired()`.
+  - Hardened endpoints:
+    - `Settings\PasswordController::update`: validates current password, verifies rotation / non-reuse, validates admin complexity, updates `passwordChangedAt`.
+    - `Auth\RegisteredUserController::store`: validates admin password policy, sets `passwordChangedAt`.
+    - `Auth\NewPasswordController::store`: validates admin password policy, prevents resetting to current password, sets `passwordChangedAt`.
+    - `UserManagement\UserController::store` & `update`: validates email before password, checks length bounds, validates admin password policy, checks non-reuse on update, sets `passwordChangedAt`.
+    - `InstallController::setupAdmin`: validates initial super admin password against common weak credentials and length boundaries.
+- **Automation Export/Import & Flow Graph Integrity (`AutomationExportImportService`, `FlowValidator`, `AutomationController`)**:
+  - Implemented `AutomationExportImportService` supporting structured JSON export with SHA-256 canonical integrity checksum:
+    - Single automation export: `GET /api/projects/{projectUuid}/automations/{id}/export`.
+    - Project automation bundle export: `GET /api/projects/{projectUuid}/automations/export-all`.
+    - Safe import endpoint: `POST /api/projects/{projectUuid}/automations/import` with 2MB payload cap, anti-tampering checksum verification, project isolation, and reset of runtime state.
+  - Hardened `FlowValidator`:
+    - Enforced anti-DoS resource boundaries: `MAX_NODES = 100`, `MAX_EDGES = 250`, `MAX_ID_LENGTH = 64`.
+    - Sanitized node ID format (`^[a-zA-Z0-9_\-]+$`) blocking injection, control characters, and null bytes.
+    - Verified unique node IDs, valid node and edge structures, and verified type resolution against `NodeRegistry`.
+    - Acyclic DAG check via Kahn's topological sort and orphan non-trigger node rejection.
+  - Hardened `AutomationController::store` and `update` to strictly validate `flow_graph` with `FlowValidator` before database persistence.
+
+---
+
 ## [1.26.67] — 2026-11-04
 
 ### Security & Hardening

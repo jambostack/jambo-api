@@ -4,6 +4,7 @@ namespace App\Controller\Auth;
 
 use App\Controller\InertiaController;
 use App\Entity\User;
+use App\Service\Security\PasswordPolicyValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -67,10 +68,17 @@ class RegisteredUserController extends InertiaController
             return $this->json(['errors' => ['email' => 'This email is already in use.']], 422);
         }
 
+        $pwdValidator = new PasswordPolicyValidator();
+        $pwdResult = $pwdValidator->validateAdminPassword($data['password'], $data['email'], $data['name']);
+        if (!$pwdResult['valid']) {
+            return $this->json(['errors' => ['password' => $pwdResult['errors'][0]]], 422);
+        }
+
         $user = new User();
         $user->name  = $data['name'];
         $user->email = $data['email'];
         $user->password = $this->hasher->hashPassword($user, $data['password']);
+        $user->passwordChangedAt = new \DateTimeImmutable();
 
         $this->em->persist($user);
         $this->em->flush();

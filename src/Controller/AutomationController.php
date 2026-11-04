@@ -8,8 +8,10 @@ use App\Repository\AutomationRunRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\Automation\AutomationEngine;
+use App\Service\Automation\AutomationExportImportService;
 use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowInterpreter;
+use App\Service\Flow\FlowValidator;
 use App\Service\Flow\NodeOutput;
 use App\Service\Flow\NodeRegistry;
 use Doctrine\ORM\EntityManagerInterface;
@@ -21,6 +23,9 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/projects/{projectUuid}/automations', name: 'api_automation_')]
 class AutomationController extends AbstractController
 {
+    private readonly FlowValidator $validator;
+    private readonly AutomationExportImportService $exportImport;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ProjectRepository $projectRepository,
@@ -30,7 +35,12 @@ class AutomationController extends AbstractController
         private readonly FlowInterpreter $flowInterpreter,
         private readonly NodeRegistry $nodeRegistry,
         private readonly AutomationEngine $engine,
-    ) {}
+        ?FlowValidator $flowValidator = null,
+        ?AutomationExportImportService $exportImportService = null,
+    ) {
+        $this->validator = $flowValidator ?? new FlowValidator();
+        $this->exportImport = $exportImportService ?? new AutomationExportImportService($em, $automationRepo, $this->validator, $nodeRegistry);
+    }
 
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, Request $request): JsonResponse
@@ -59,10 +69,18 @@ class AutomationController extends AbstractController
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
+        $flowGraph = $data['flow_graph'] ?? null;
+        if (!empty($flowGraph)) {
+            $validation = $this->validator->validate($flowGraph, $this->nodeRegistry);
+            if (!$validation['valid']) {
+                return $this->json(['error' => 'Invalid flow graph', 'details' => $validation['errors']], 422);
+            }
+        }
+
         $automation = new Automation();
         $automation->project    = $project;
         $automation->name       = $data['name'] ?? 'Sans nom';
-        $automation->flowGraph  = $data['flow_graph'] ?? null;
+        $automation->flowGraph  = $flowGraph;
         $automation->isActive   = $data['is_active'] ?? true;
         $automation->debugMode  = $data['debug_mode'] ?? false;
 
@@ -72,7 +90,69 @@ class AutomationController extends AbstractController
         return $this->json(['data' => $this->serialize($automation)], 201);
     }
 
-    #[Route('/{id}', name: 'show', methods: ['GET'])]
+    #[Route('/export-all', name: 'export_all', methods: ['GET'], priority: 10)]
+    public function exportAll(string $projectUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($projectUuid);
+        if (!$project) return $this->json(['error' => 'Project not found'], 404);
+        $this->denyProjectAccess($project, $request);
+
+        $bundle = $this->exportImport->exportProjectAutomations($project);
+        return $this->json($bundle);
+    }
+
+    #[Route('/import', name: 'import', methods: ['POST'], priority: 10)]
+    public function import(string $projectUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($projectUuid);
+        if (!$project) return $this->json(['error' => 'Project not found'], 404);
+        $this->denyProjectAccess($project, $request, 'project.manage');
+
+        $content = $request->getContent();
+        if (strlen($content) > AutomationExportImportService::MAX_PAYLOAD_SIZE) {
+            return $this->json(['error' => 'Payload exceeds maximum size limit (2MB)'], 413);
+        }
+
+        try {
+            $data = $request->toArray();
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Invalid JSON body'], 400);
+        }
+
+        try {
+            if (isset($data['automations'])) {
+                $imported = $this->exportImport->importProjectAutomations($project, $data);
+                return $this->json([
+                    'message' => sprintf('%d automation(s) imported successfully.', count($imported)),
+                    'data'    => array_map(fn (Automation $a) => $this->serialize($a), $imported),
+                ], 201);
+            }
+
+            $automation = $this->exportImport->importAutomation($project, $data);
+            return $this->json([
+                'message' => 'Automation imported successfully.',
+                'data'    => $this->serialize($automation),
+            ], 201);
+        } catch (\InvalidArgumentException $e) {
+            return $this->json(['error' => $e->getMessage()], 422);
+        }
+    }
+
+    #[Route('/{id}/export', name: 'export_single', methods: ['GET'], priority: 10, requirements: ['id' => '\d+'])]
+    public function export(string $projectUuid, int $id, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($projectUuid);
+        if (!$project) return $this->json(['error' => 'Project not found'], 404);
+        $this->denyProjectAccess($project, $request);
+
+        $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
+        if (!$automation) return $this->json(['error' => 'Automation not found'], 404);
+
+        $export = $this->exportImport->exportAutomation($automation);
+        return $this->json($export);
+    }
+
+    #[Route('/{id}', name: 'show', methods: ['GET'], requirements: ['id' => '\d+'])]
     public function show(string $projectUuid, int $id, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
@@ -85,7 +165,7 @@ class AutomationController extends AbstractController
         return $this->json(['data' => $this->serialize($automation)]);
     }
 
-    #[Route('/{id}', name: 'update', methods: ['PUT', 'PATCH'])]
+    #[Route('/{id}', name: 'update', methods: ['PUT', 'PATCH'], requirements: ['id' => '\d+'])]
     public function update(string $projectUuid, int $id, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
@@ -102,7 +182,16 @@ class AutomationController extends AbstractController
         }
 
         if (isset($data['name']))        $automation->name      = $data['name'];
-        if (isset($data['flow_graph']))  $automation->flowGraph  = $data['flow_graph'];
+        if (isset($data['flow_graph'])) {
+            $flowGraph = $data['flow_graph'];
+            if (!empty($flowGraph)) {
+                $validation = $this->validator->validate($flowGraph, $this->nodeRegistry);
+                if (!$validation['valid']) {
+                    return $this->json(['error' => 'Invalid flow graph', 'details' => $validation['errors']], 422);
+                }
+            }
+            $automation->flowGraph  = $flowGraph;
+        }
         if (isset($data['is_active']))   $automation->isActive   = $data['is_active'];
         if (isset($data['debug_mode']))  $automation->debugMode  = $data['debug_mode'];
 
@@ -111,7 +200,7 @@ class AutomationController extends AbstractController
         return $this->json(['data' => $this->serialize($automation)]);
     }
 
-    #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
+    #[Route('/{id}', name: 'delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
     public function delete(string $projectUuid, int $id, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
@@ -128,7 +217,7 @@ class AutomationController extends AbstractController
     }
 
     /** Dry-run : exécute le flow en mode debug avec un payload simulé */
-    #[Route('/{id}/test', name: 'test', methods: ['POST'])]
+    #[Route('/{id}/test', name: 'test', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function test(string $projectUuid, int $id, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
@@ -174,7 +263,7 @@ class AutomationController extends AbstractController
     }
 
     /** Exécute le flow pour de vrai (run) — persiste un AutomationRun */
-    #[Route('/{id}/run', name: 'run', methods: ['POST'])]
+    #[Route('/{id}/run', name: 'run', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function run(string $projectUuid, int $id, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
@@ -211,7 +300,7 @@ class AutomationController extends AbstractController
     }
 
     /** Dry-run : exécute le flow avec un payload fourni par l'utilisateur */
-    #[Route('/{id}/dry-run', name: 'dry_run', methods: ['POST'])]
+    #[Route('/{id}/dry-run', name: 'dry_run', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function dryRun(string $projectUuid, int $id, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
@@ -250,7 +339,7 @@ class AutomationController extends AbstractController
     }
 
     /** Teste un node isolé */
-    #[Route('/{id}/test-node', name: 'test_node', methods: ['POST'])]
+    #[Route('/{id}/test-node', name: 'test_node', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function testNode(string $projectUuid, int $id, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
@@ -286,7 +375,7 @@ class AutomationController extends AbstractController
         ]);
     }
 
-    #[Route('/{id}/runs', name: 'runs', methods: ['GET'])]
+    #[Route('/{id}/runs', name: 'runs', methods: ['GET'], requirements: ['id' => '\d+'])]
     public function runs(string $projectUuid, int $id, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);

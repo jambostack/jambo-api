@@ -5,6 +5,7 @@ namespace App\Controller\Auth;
 use App\Controller\InertiaController;
 use App\Repository\PasswordResetTokenRepository;
 use App\Repository\UserRepository;
+use App\Service\Security\PasswordPolicyValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
@@ -96,7 +97,26 @@ class NewPasswordController extends InertiaController
             ]);
         }
 
+        $pwdValidator = new PasswordPolicyValidator();
+        $valResult = $pwdValidator->validateAdminPassword($password, $user->email, $user->name);
+        if (!$valResult['valid']) {
+            return $this->inertia($request, 'auth/reset-password', [
+                'token' => $token,
+                'email' => $resetToken->email,
+                'errors' => ['password' => $valResult['errors'][0]],
+            ]);
+        }
+
+        if ($user->password !== null && $this->hasher->isPasswordValid($user, $password)) {
+            return $this->inertia($request, 'auth/reset-password', [
+                'token' => $token,
+                'email' => $resetToken->email,
+                'errors' => ['password' => 'New password must be different from current password.'],
+            ]);
+        }
+
         $user->password = $this->hasher->hashPassword($user, $password);
+        $user->passwordChangedAt = new \DateTimeImmutable();
         $this->em->remove($resetToken);
         $this->em->flush();
 

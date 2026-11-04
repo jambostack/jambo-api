@@ -134,4 +134,44 @@ class FlowValidatorTest extends TestCase
         $this->assertFalse($result['valid']);
         $this->assertStringContainsString('orphelin', $result['errors'][0]);
     }
+
+    public function testRejectsExceedingMaxNodes(): void
+    {
+        $this->registry->method('resolve')->willReturn($this->createMock(\App\Service\Flow\FlowNodeHandler::class));
+
+        $nodes = [$this->node('t1', 'trigger.content_created')];
+        for ($i = 1; $i <= FlowValidator::MAX_NODES + 1; $i++) {
+            $nodes[] = $this->node('node_' . $i, 'action.send_email');
+        }
+
+        $result = $this->validator->validate(['nodes' => $nodes, 'edges' => []], $this->registry);
+        $this->assertFalse($result['valid']);
+        $this->assertStringContainsString('dépasse la limite de', $result['errors'][0]);
+    }
+
+    public function testRejectsInvalidNodeIdFormat(): void
+    {
+        $this->registry->method('resolve')->willReturn($this->createMock(\App\Service\Flow\FlowNodeHandler::class));
+
+        $graph = $this->makeGraph(
+            [$this->node('t1<script>', 'trigger.content_created')],
+            [],
+        );
+        $result = $this->validator->validate($graph, $this->registry);
+        $this->assertFalse($result['valid']);
+        $this->assertStringContainsString('id invalide', $result['errors'][0]);
+    }
+
+    public function testRejectsDuplicateNodeIds(): void
+    {
+        $this->registry->method('resolve')->willReturn($this->createMock(\App\Service\Flow\FlowNodeHandler::class));
+
+        $graph = $this->makeGraph(
+            [$this->node('t1', 'trigger.content_created'), $this->node('t1', 'action.send_email')],
+            [],
+        );
+        $result = $this->validator->validate($graph, $this->registry);
+        $this->assertFalse($result['valid']);
+        $this->assertStringContainsString('doublon', $result['errors'][0]);
+    }
 }
