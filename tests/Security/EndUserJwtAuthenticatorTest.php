@@ -62,6 +62,20 @@ class EndUserJwtAuthenticatorTest extends TestCase
         $this->authenticator->authenticate($req);
     }
 
+    public function testRejectsTwoFactorTokenUsedAsAccessToken(): void
+    {
+        $this->jwtService->method('validateToken')->willReturn(['tfa' => true, 'ref' => false]);
+        $this->jwtService->method('isRefreshToken')->willReturn(false);
+
+        $req = new Request();
+        $req->headers->set('Authorization', 'Bearer 2fa_challenge_jwt');
+
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionMessage('2FA challenge tokens cannot be used for API access.');
+
+        $this->authenticator->authenticate($req);
+    }
+
     public function testRejectsRevokedTokenVersionMismatch(): void
     {
         $userUuid = Uuid::v4()->toString();

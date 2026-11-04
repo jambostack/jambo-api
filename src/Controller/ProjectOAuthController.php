@@ -83,7 +83,7 @@ class ProjectOAuthController extends AbstractController
             $token = substr($authHeader, 7);
             $claims = $this->jwtService->validateToken($token);
             $userId = $claims['sub'] ?? $claims['euid'] ?? null;
-            if ($claims && $userId !== null) {
+            if ($claims && empty($claims['ref']) && empty($claims['tfa']) && $userId !== null) {
                 $candidate = is_numeric($userId)
                     ? $this->endUserRepository->find((int) $userId)
                     : $this->endUserRepository->findOneBy(['uuid' => $userId, 'project' => $project]);
@@ -264,7 +264,7 @@ class ProjectOAuthController extends AbstractController
 
         $token = substr($authHeader, 7);
         $claims = $this->jwtService->validateToken($token);
-        if ($claims === null) {
+        if ($claims === null || !empty($claims['ref']) || !empty($claims['tfa'])) {
             return new JsonResponse(['error' => 'invalid_token', 'error_description' => 'Invalid or expired token.'], 401);
         }
 

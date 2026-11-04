@@ -118,4 +118,92 @@ class EndUserJwtServiceTest extends TestCase
         $token = $creator->createAccessToken($this->createEndUser());
         $this->assertNull($validator->validateToken($token), 'Un token avec iat dans le futur doit être rejeté');
     }
+
+    public function testAlgorithmConfusionNoneIsRejected(): void
+    {
+        $clock = $this->createStub(ClockInterface::class);
+        $clock->method('now')->willReturn(new \DateTimeImmutable());
+
+        $service = new EndUserJwtService('secret-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $clock);
+
+        // JWT avec header alg: "none"
+        $header = rtrim(strtr(base64_encode(json_encode(['typ' => 'JWT', 'alg' => 'none'])), '+/', '-_'), '=');
+        $payload = rtrim(strtr(base64_encode(json_encode(['sub' => '123', 'pid' => 'abc', 'exp' => time() + 3600, 'iat' => time(), 'nbf' => time()])), '+/', '-_'), '=');
+        $token = $header . '.' . $payload . '.';
+
+        $this->assertNull($service->validateToken($token), 'Token avec alg: none doit être rejeté');
+    }
+
+    public function testAlgorithmConfusionAsymmetricIsRejected(): void
+    {
+        $clock = $this->createStub(ClockInterface::class);
+        $clock->method('now')->willReturn(new \DateTimeImmutable());
+
+        $service = new EndUserJwtService('secret-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $clock);
+
+        // JWT avec header alg: "RS256"
+        $header = rtrim(strtr(base64_encode(json_encode(['typ' => 'JWT', 'alg' => 'RS256'])), '+/', '-_'), '=');
+        $payload = rtrim(strtr(base64_encode(json_encode(['sub' => '123', 'pid' => 'abc', 'exp' => time() + 3600, 'iat' => time(), 'nbf' => time()])), '+/', '-_'), '=');
+        $signature = rtrim(strtr(base64_encode('fake-rsa-signature'), '+/', '-_'), '=');
+        $token = $header . '.' . $payload . '.' . $signature;
+
+        $this->assertNull($service->validateToken($token), 'Token avec alg: RS256 doit être rejeté');
+    }
+
+    public function testTwoFactorTokenCanBeCreatedAndValidated(): void
+    {
+        $clock = $this->createStub(ClockInterface::class);
+        $clock->method('now')->willReturn(new \DateTimeImmutable());
+
+        $service = new EndUserJwtService('secret-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $clock);
+        $endUser = $this->createEndUser();
+
+        $emailCodeHash = hash('sha256', '123456');
+        $tfaToken = $service->createTwoFactorToken($endUser, $emailCodeHash);
+
+        $this->assertNotEmpty($tfaToken);
+        $claims = $service->validateTwoFactorToken($tfaToken);
+
+        $this->assertNotNull($claims);
+        $this->assertTrue($claims['tfa']);
+        $this->assertSame($emailCodeHash, $claims['ech']);
+        $this->assertSame($endUser->uuid->toRfc4122(), $claims['euid']);
+        $this->assertFalse($service->isAccessToken($claims));
+    }
+
+    public function testAbnormalTtlExceedingMaxIsRejected(): void
+    {
+        $clock = $this->createStub(ClockInterface::class);
+        $now = new \DateTimeImmutable();
+        $clock->method('now')->willReturn($now);
+
+        $service = new EndUserJwtService('secret-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $clock);
+        $endUser = $this->createEndUser();
+        // Définir un TTL excessif de 10 ans
+        $endUser->project->jwtAccessTtl = 315360000;
+
+        $token = $service->createAccessToken($endUser);
+        $this->assertNull($service->validateToken($token), 'Un token avec un TTL anormal dépassant le plafond MAX_TTL doit être rejeté');
+    }
+
+    public function testIsAccessTokenHelper(): void
+    {
+        $clock = $this->createStub(ClockInterface::class);
+        $clock->method('now')->willReturn(new \DateTimeImmutable());
+
+        $service = new EndUserJwtService('secret-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $clock);
+        $endUser = $this->createEndUser();
+
+        $accessToken = $service->createAccessToken($endUser);
+        $accessClaims = $service->validateToken($accessToken);
+        $this->assertTrue($service->isAccessToken($accessClaims));
+
+        $refreshToken = $service->createRefreshToken($endUser);
+        $refreshClaims = $service->validateToken($refreshToken);
+        $this->assertFalse($service->isAccessToken($refreshClaims));
+
+        $tfaToken = $service->createTwoFactorToken($endUser);
+        $tfaClaims = $service->validateTwoFactorToken($tfaToken);
+        $this->assertFalse($service->isAccessToken($tfaClaims));
+    }
 }

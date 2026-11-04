@@ -6,6 +6,7 @@ use App\Entity\EndUser;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
+use Lcobucci\JWT\Token\RegisteredClaims;
 use Lcobucci\JWT\Validation\Constraint\StrictValidAt;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
 use Psr\Clock\ClockInterface;
@@ -52,11 +53,38 @@ class EndUserJwtService
     {
         try {
             $token = $this->config->parser()->parse($jwt);
+
+            // 1. Durcissement anti-confusion d'algorithme (refuse formellement "none", asymétrique, etc.)
+            $alg = $token->headers()->get('alg');
+            if ($alg !== 'HS256') {
+                $this->logger?->warning('JWT rejected: forbidden algorithm "{alg}"', ['alg' => $alg]);
+                return null;
+            }
+
+            // 2. Vérification du header typ s'il est spécifié
+            $typ = $token->headers()->get('typ');
+            if ($typ !== null && !in_array(strtoupper((string) $typ), ['JWT', 'JOSE'], true)) {
+                $this->logger?->warning('JWT rejected: invalid header typ "{typ}"', ['typ' => $typ]);
+                return null;
+            }
+
             $constraints = [
                 new SignedWith($this->config->signer(), $this->config->signingKey()),
                 new StrictValidAt($this->clock, new \DateInterval('PT30S')),
             ];
             $this->config->validator()->assert($token, ...$constraints);
+
+            // 3. Contrôle de cohérence de l'expiration et du TTL
+            $exp = $token->claims()->get(RegisteredClaims::EXPIRATION_TIME);
+            $iat = $token->claims()->get(RegisteredClaims::ISSUED_AT);
+            if ($exp instanceof \DateTimeInterface && $iat instanceof \DateTimeInterface) {
+                $ttl = $exp->getTimestamp() - $iat->getTimestamp();
+                if ($ttl <= 0 || $ttl > (self::MAX_TTL + 60)) {
+                    $this->logger?->warning('JWT rejected: abnormal expiration lifespan {ttl}s', ['ttl' => $ttl]);
+                    return null;
+                }
+            }
+
             $sub = null;
             try {
                 $sub = $token->claims()->get('sub');
@@ -73,6 +101,10 @@ class EndUserJwtService
             try {
                 $jti = $token->claims()->get('jti');
             } catch (\Throwable) {}
+            $ech = null;
+            try {
+                $ech = $token->claims()->get('ech');
+            } catch (\Throwable) {}
 
             return [
                 'sub'  => $sub ?? $euid,
@@ -82,6 +114,7 @@ class EndUserJwtService
                 'ref'  => $token->claims()->get('ref') ?? false,
                 'tfa'  => $token->claims()->get('tfa') ?? false,
                 'code' => $token->claims()->get('code'),
+                'ech'  => $ech,
                 'fml'  => $fml,
                 'jti'  => $jti,
             ];
@@ -100,13 +133,23 @@ class EndUserJwtService
         return ($claims['ref'] ?? false) === true;
     }
 
+    /** Returns true if the token claims represent a standard access token (neither refresh nor 2FA) */
+    public function isAccessToken(array $claims): bool
+    {
+        return !($claims['ref'] ?? false) && !($claims['tfa'] ?? false);
+    }
+
     /** Generate a short-lived 2FA challenge token (TTL 60 seconds).
      *  @param string|null $emailCodeHash sha256 hash of the email code (never the plaintext code) */
     public function createTwoFactorToken(EndUser $endUser, ?string $emailCodeHash = null): string
     {
-        $now = new \DateTimeImmutable();
+        $now = $this->clock->now();
         $builder = $this->config->builder()
+            ->issuedBy('jamboapi')
+            ->permittedFor('jamboapi')
+            ->identifiedBy(bin2hex(random_bytes(16)))
             ->issuedAt($now)
+            ->canOnlyBeUsedAfter($now)
             ->expiresAt($now->modify('+60 seconds'))
             ->relatedTo($endUser->uuid->toRfc4122())
             ->withClaim('euid', $endUser->uuid->toRfc4122())

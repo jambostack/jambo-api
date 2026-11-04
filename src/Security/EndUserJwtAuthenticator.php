@@ -40,6 +40,10 @@ class EndUserJwtAuthenticator extends AbstractAuthenticator
             throw new AuthenticationException('Refresh tokens cannot be used for API access.');
         }
 
+        if (($claims['tfa'] ?? false) === true) {
+            throw new AuthenticationException('2FA challenge tokens cannot be used for API access.');
+        }
+
         $endUserUuid = $claims['euid'] ?? $claims['sub'] ?? null;
         if ($endUserUuid === null) {
             throw new AuthenticationException('Invalid token: missing subject.');

@@ -5,6 +5,9 @@ namespace App\Controller;
 use App\Entity\Media;
 use App\Entity\MediaFolder;
 use App\Entity\Project;
+use App\Exception\TusChunkOutOfBoundsException;
+use App\Exception\TusConflictException;
+use App\Exception\TusOffsetMismatchException;
 use App\Repository\MediaFolderRepository;
 use App\Repository\MediaRepository;
 use App\Repository\ProjectMemberRepository;
@@ -86,7 +89,11 @@ class TusController extends AbstractController
 
         // Vérifier le header obligatoire
         if ($request->headers->get('Tus-Resumable') !== '1.0.0') {
-            return $this->json(['error' => 'Missing Tus-Resumable header'], 400);
+            return new Response('', 412, ['Tus-Version' => '1.0.0']);
+        }
+
+        if (!$request->headers->has('Upload-Length')) {
+            return $this->json(['error' => 'Missing Upload-Length header'], 400);
         }
 
         $uploadLength = (int) $request->headers->get('Upload-Length', '0');
@@ -101,7 +108,9 @@ class TusController extends AbstractController
             if (isset($metadata['filename'])) {
                 $this->uploadValidator->sanitizeAndValidateFilename($metadata['filename']);
             }
-            $this->uploadValidator->validateSizeAndQuota($project, $uploadLength);
+            // Contrôle atomique du quota incluant les uploads TUS actifs en cours pour le projet
+            $pendingBytes = $this->tusServer->getPendingUploadsSize($projectUuid);
+            $this->uploadValidator->validateSizeAndQuota($project, $uploadLength + $pendingBytes);
         } catch (\InvalidArgumentException $e) {
             return $this->json(['error' => $e->getMessage()], 400);
         }
@@ -123,14 +132,18 @@ class TusController extends AbstractController
      * PATCH — Reçoit un chunk et l'écrit à l'offset spécifié.
      *
      * La réponse inclut Upload-Offset avec le nouvel offset.
-     * Si le chunk final est reçu (offset + chunk_size >= upload_length),
-     * le serveur finalise automatiquement.
      */
     #[Route('/{uploadId}', name: 'process', methods: ['PATCH'])]
     public function patch(string $projectUuid, string $uploadId, Request $request): Response
     {
         if ($request->headers->get('Tus-Resumable') !== '1.0.0') {
-            return $this->json(['error' => 'Missing Tus-Resumable header'], 400);
+            return new Response('', 412, ['Tus-Version' => '1.0.0']);
+        }
+
+        // Protocole TUS 1.0.0 : Content-Type strict
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if (!str_starts_with(strtolower($contentType), 'application/offset+octet-stream')) {
+            return $this->json(['error' => 'Content-Type must be application/offset+octet-stream'], 415);
         }
 
         $project = $this->findProject($projectUuid);
@@ -143,35 +156,37 @@ class TusController extends AbstractController
             return $this->json(['error' => 'Upload not found'], 404);
         }
 
-        $info = $this->tusServer->getInfo($projectUuid, $uploadId);
-        if ($info['finalized'] ?? false) {
-            return $this->json(['error' => 'Upload already finalized'], 409);
+        if (!$request->headers->has('Upload-Offset')) {
+            return $this->json(['error' => 'Missing Upload-Offset header'], 400);
         }
 
         $offset = (int) $request->headers->get('Upload-Offset', '0');
+        if ($offset < 0) {
+            return $this->json(['error' => 'Invalid Upload-Offset header'], 400);
+        }
 
         // Lire le corps brut comme flux
         $stream = $request->getContent(true); // resource
 
         try {
             $newOffset = $this->tusServer->patch($projectUuid, $uploadId, $offset, $stream);
+        } catch (TusOffsetMismatchException $e) {
+            return new Response('', 409, [
+                'Upload-Offset' => (string) $e->getCurrentOffset(),
+                'Tus-Resumable' => '1.0.0',
+            ]);
+        } catch (TusChunkOutOfBoundsException $e) {
+            return $this->json(['error' => $e->getMessage()], 413, ['Tus-Resumable' => '1.0.0']);
+        } catch (TusConflictException $e) {
+            return $this->json(['error' => $e->getMessage()], 409, ['Tus-Resumable' => '1.0.0']);
         } catch (\RuntimeException $e) {
-            return $this->json(['error' => $e->getMessage()], 404);
+            return $this->json(['error' => $e->getMessage()], 404, ['Tus-Resumable' => '1.0.0']);
         }
 
-        $headers = [
+        return new Response('', 204, [
             'Upload-Offset' => (string) $newOffset,
             'Tus-Resumable' => '1.0.0',
-        ];
-
-        // Finalisation automatique si upload complet
-        if ($this->tusServer->isComplete($projectUuid, $uploadId) && !($info['finalized'] ?? false)) {
-            $this->tusServer->markFinalized($projectUuid, $uploadId);
-            // Finalisation asynchrone ? Non, on le fait ici.
-            // Le client s'attend à recevoir le JSON du Media créé.
-        }
-
-        return new Response('', 204, $headers);
+        ]);
     }
 
     /**
@@ -238,111 +253,135 @@ class TusController extends AbstractController
             return $this->json(['error' => 'Upload not found'], 404);
         }
 
-        $info = $this->tusServer->getInfo($projectUuid, $uploadId);
-        if ($info === null) {
-            return $this->json(['error' => 'Upload not found'], 404);
-        }
+        $result = $this->tusServer->withLock($projectUuid, $uploadId, function () use ($project, $projectUuid, $uploadId): JsonResponse {
+            $info = $this->tusServer->getInfo($projectUuid, $uploadId);
+            if ($info === null) {
+                return $this->json(['error' => 'Upload not found'], 404);
+            }
 
-        $metadata = $info['metadata'] ?? [];
-        try {
-            $filename = $this->uploadValidator->sanitizeAndValidateFilename($metadata['filename'] ?? 'file');
-        } catch (\InvalidArgumentException $e) {
-            return $this->json(['error' => $e->getMessage()], 400);
-        }
+            if ($info['finalized'] ?? false) {
+                return $this->json(['error' => 'Upload already finalized'], 409);
+            }
 
-        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+            if ($info['finalizing'] ?? false) {
+                return $this->json(['error' => 'Upload is currently being finalized'], 409);
+            }
 
-        // Validation du contenu réel (MIME magique & signatures de sécurité)
-        $sourcePath = $this->tusServer->getFilePath($projectUuid, $uploadId);
-        if (!file_exists($sourcePath)) {
-            return $this->json(['error' => 'Upload file missing'], 404);
-        }
+            if (!$this->tusServer->isComplete($projectUuid, $uploadId)) {
+                return $this->json(['error' => 'Upload is not complete yet'], 400);
+            }
 
-        try {
-            $mimeType = $this->uploadValidator->validateFileContent($sourcePath, $ext);
-            $this->uploadValidator->validateSizeAndQuota($project, filesize($sourcePath) ?: 0);
-        } catch (\InvalidArgumentException $e) {
-            @unlink($sourcePath);
+            $sourcePath = $this->tusServer->getFilePath($projectUuid, $uploadId);
+            if (!file_exists($sourcePath)) {
+                return $this->json(['error' => 'Upload file missing'], 404);
+            }
+
+            $fileSize = filesize($sourcePath);
+            if ($fileSize !== (int) ($info['size'] ?? 0)) {
+                return $this->json(['error' => 'Uploaded file size does not match declared size'], 400);
+            }
+
+            $metadata = $info['metadata'] ?? [];
+            try {
+                $filename = $this->uploadValidator->sanitizeAndValidateFilename($metadata['filename'] ?? 'file');
+            } catch (\InvalidArgumentException $e) {
+                return $this->json(['error' => $e->getMessage()], 400);
+            }
+
+            $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+            try {
+                $mimeType = $this->uploadValidator->validateFileContent($sourcePath, $ext);
+                $this->uploadValidator->validateSizeAndQuota($project, $fileSize ?: 0);
+            } catch (\InvalidArgumentException $e) {
+                @unlink($sourcePath);
+                $this->tusServer->cleanup($projectUuid, $uploadId);
+                return $this->json(['error' => $e->getMessage()], 400);
+            }
+
+            // Marquer en cours de finalisation
+            $this->tusServer->markFinalizing($projectUuid, $uploadId);
+
+            // Générer un nom unique (comme Vich UniqidNamer)
+            $uniqueName = uniqid() . '.' . $ext;
+
+            // Destination finale dans public/uploads/media/{projectUuid}/
+            $publicDir = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . $projectUuid;
+            if (!is_dir($publicDir)) {
+                mkdir($publicDir, 0755, true);
+            }
+            $destPath = $publicDir . '/' . $uniqueName;
+
+            // Déplacer le fichier assemblé vers la destination publique
+            if (!rename($sourcePath, $destPath)) {
+                // Fallback: copier si rename échoue (volumes différents)
+                copy($sourcePath, $destPath);
+                @unlink($sourcePath);
+            }
+
+            $finalSize = filesize($destPath);
+
+            // Créer l'entité Media
+            $media = new Media();
+            $media->project      = $project;
+            $media->fileName     = $uniqueName;
+            $media->originalName = $filename;
+            $media->mimeType     = $mimeType;
+            $media->fileSize     = $finalSize !== false ? $finalSize : 0;
+
+            // Dossier optionnel
+            $folderId = $metadata['folder_id'] ?? null;
+            if ($folderId !== null && $folderId !== '') {
+                $folder = $this->folderRepository->findOneBy(['id' => (int) $folderId, 'project' => $project]);
+                if ($folder) {
+                    $media->folder = $folder;
+                }
+            }
+
+            // ── Sync multi-stockage ──
+            $storage = new StorageManager($project, $this->profileRepo, $this->ruleRepo, $this->driverFactory);
+            $relativePath = $projectUuid . '/' . $uniqueName;
+
+            try {
+                $fp = fopen($destPath, 'rb');
+                $paths = $storage->write($relativePath, $fp, [
+                    'mime_type' => $mimeType,
+                    'filename'  => $filename,
+                    'size'      => $media->fileSize,
+                ]);
+                fclose($fp);
+
+                $media->storagePaths = $paths;
+                $firstProfileUuid = array_key_first($paths);
+                if ($firstProfileUuid !== null) {
+                    // Trouver le profil pour déterminer le driver (local/s3)
+                    try {
+                        $firstProfile = $this->profileRepo->findOneBy(['uuid' => $firstProfileUuid]);
+                        if ($firstProfile !== null) {
+                            $media->storageProfile = $firstProfile;
+                        }
+                    } catch (\Throwable) {}
+                }
+            } catch (\Throwable $e) {
+                // Même si la sync distante échoue, on garde le fichier local
+                trigger_error("TusController::finalize storage sync failed: " . $e->getMessage(), E_USER_WARNING);
+            }
+
+            $this->em->persist($media);
+            $this->em->flush();
+
+            // Notification temps réel
+            $serialized = $this->mediaSerializer->serialize($media);
+            $this->mercure->mediaUploaded($projectUuid, $serialized);
+
+            // Marquer finalisé et nettoyer les fichiers temporaires TUS
+            $this->tusServer->markFinalized($projectUuid, $uploadId);
             $this->tusServer->cleanup($projectUuid, $uploadId);
-            return $this->json(['error' => $e->getMessage()], 400);
-        }
 
-        // Générer un nom unique (comme Vich UniqidNamer)
-        $uniqueName = uniqid() . '.' . $ext;
+            return $this->json(['data' => $serialized], 201);
+        });
 
-        // Destination finale dans public/uploads/media/{projectUuid}/
-        $publicDir = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . $projectUuid;
-        if (!is_dir($publicDir)) {
-            mkdir($publicDir, 0755, true);
-        }
-        $destPath = $publicDir . '/' . $uniqueName;
-
-        // Déplacer le fichier assemblé vers la destination publique
-        if (!rename($sourcePath, $destPath)) {
-            // Fallback: copier si rename échoue (volumes différents)
-            copy($sourcePath, $destPath);
-            @unlink($sourcePath);
-        }
-
-        $fileSize = filesize($destPath);
-
-        // Créer l'entité Media
-        $media = new Media();
-        $media->project      = $project;
-        $media->fileName     = $uniqueName;
-        $media->originalName = $filename;
-        $media->mimeType     = $mimeType;
-        $media->fileSize     = $fileSize !== false ? $fileSize : 0;
-
-        // Dossier optionnel
-        $folderId = $metadata['folder_id'] ?? null;
-        if ($folderId !== null && $folderId !== '') {
-            $folder = $this->folderRepository->findOneBy(['id' => (int) $folderId, 'project' => $project]);
-            if ($folder) {
-                $media->folder = $folder;
-            }
-        }
-
-        // ── Sync multi-stockage ──
-        $storage = new StorageManager($project, $this->profileRepo, $this->ruleRepo, $this->driverFactory);
-        $relativePath = $projectUuid . '/' . $uniqueName;
-
-        try {
-            $fp = fopen($destPath, 'rb');
-            $paths = $storage->write($relativePath, $fp, [
-                'mime_type' => $mimeType,
-                'filename'  => $filename,
-                'size'      => $media->fileSize,
-            ]);
-            fclose($fp);
-
-            $media->storagePaths = $paths;
-            $firstProfileUuid = array_key_first($paths);
-            if ($firstProfileUuid !== null) {
-                // Trouver le profil pour déterminer le driver (local/s3)
-                try {
-                    $firstProfile = $this->profileRepo->findOneBy(['uuid' => $firstProfileUuid]);
-                    if ($firstProfile !== null) {
-                        $media->storageProfile = $firstProfile;
-                    }
-                } catch (\Throwable) {}
-            }
-        } catch (\Throwable $e) {
-            // Même si la sync distante échoue, on garde le fichier local
-            trigger_error("TusController::finalize storage sync failed: " . $e->getMessage(), E_USER_WARNING);
-        }
-
-        $this->em->persist($media);
-        $this->em->flush();
-
-        // Notification temps réel
-        $serialized = $this->mediaSerializer->serialize($media);
-        $this->mercure->mediaUploaded($projectUuid, $serialized);
-
-        // Nettoyer les fichiers temporaires TUS
-        $this->tusServer->cleanup($projectUuid, $uploadId);
-
-        return $this->json(['data' => $serialized], 201);
+        return $result ?? $this->json(['error' => 'Upload is currently busy'], 409);
     }
 
     // ─── Private ─────────────────────────────────────────────────────────
