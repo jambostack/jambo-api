@@ -184,4 +184,100 @@ class GraphQLSecurityTest extends WebTestCase
         $this->assertArrayNotHasKey('errors', $data);
         $this->assertIsArray($data['data']['postsList']);
     }
+
+    public function testBatchQueryArrayIsRejected(): void
+    {
+        $client = static::createClient();
+        // Send a JSON array (batch) instead of a single operation object
+        $client->request(
+            'POST',
+            '/api/projects/' . $this->projectUuid . '/graphql',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            json_encode([
+                ['query' => '{ _ping }'],
+                ['query' => '{ _ping }'],
+            ])
+        );
+
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('errors', $data);
+        $this->assertStringContainsString('batch', strtolower($data['errors'][0]['message']));
+    }
+
+    public function testAliasAmplificationIsRejected(): void
+    {
+        $client = static::createClient();
+        // Build a query with 35 aliases (exceeding MAX_ALIASES = 30)
+        $aliases = '';
+        for ($i = 1; $i <= 35; $i++) {
+            $aliases .= "  alias{$i}: _ping\n";
+        }
+        $client->request(
+            'POST',
+            '/api/projects/' . $this->projectUuid . '/graphql',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            json_encode(['query' => "{\n{$aliases}}"])
+        );
+
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('errors', $data);
+        $this->assertStringContainsString('alias', strtolower($data['errors'][0]['message']));
+    }
+
+    public function testAliasesWithinLimitAreAllowed(): void
+    {
+        $client = static::createClient();
+        // 5 aliases — should be accepted (< MAX_ALIASES = 30)
+        $aliases = '';
+        for ($i = 1; $i <= 5; $i++) {
+            $aliases .= "  a{$i}: _ping\n";
+        }
+        $client->request(
+            'POST',
+            '/api/projects/' . $this->projectUuid . '/graphql',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            json_encode(['query' => "{\n{$aliases}}"])
+        );
+
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayNotHasKey('errors', $data);
+    }
+
+    public function testMaxPayloadSizeIsEnforced(): void
+    {
+        $client = static::createClient();
+        // 65 KB body — exceeds MAX_QUERY_LENGTH = 64 KB
+        $largeQuery = str_repeat('x', 66_000);
+        $client->request(
+            'POST',
+            '/api/projects/' . $this->projectUuid . '/graphql',
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret,
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            json_encode(['query' => $largeQuery])
+        );
+
+        $this->assertSame(413, $client->getResponse()->getStatusCode());
+    }
 }

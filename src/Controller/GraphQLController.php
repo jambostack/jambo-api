@@ -10,6 +10,7 @@ use GraphQL\Error\DebugFlag;
 use GraphQL\GraphQL as GraphQLExecutor;
 use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\OperationDefinitionNode;
+use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Language\Parser;
 use GraphQL\Validator\DocumentValidator;
 use GraphQL\Validator\Rules\DisableIntrospection;
@@ -26,7 +27,9 @@ use Symfony\Component\Routing\Attribute\Route;
 
 class GraphQLController extends AbstractController
 {
-    public const MAX_QUERY_LENGTH = 65536; // 64 KB
+    public const MAX_QUERY_LENGTH   = 65536; // 64 KB
+    public const MAX_ALIASES        = 30;    // Limit alias amplification attacks
+    public const MAX_OPERATIONS     = 1;     // No batched queries via POST body array
 
     public function __construct(
         private EntityManagerInterface $em,
@@ -74,6 +77,12 @@ class GraphQLController extends AbstractController
             if (!is_array($body)) {
                 return new JsonResponse(['errors' => [['message' => 'Invalid JSON body']]], 400);
             }
+            // ── Blocage des requêtes GraphQL en batch (array de queries) ─────────
+            // Un tableau JSON au niveau racine indique un batch de plusieurs opérations.
+            // Cela contourne les limites de complexité/profondeur par requête → rejeté.
+            if (isset($body[0])) {
+                return new JsonResponse(['errors' => [['message' => 'Les requêtes GraphQL en batch ne sont pas autorisées. Envoyez une seule opération par requête.']]], 400);
+            }
             $query = $body['query'] ?? null;
             $variables = $body['variables'] ?? null;
         }
@@ -98,6 +107,18 @@ class GraphQLController extends AbstractController
             // Parse error — laisser l'exécuteur GraphQL standard gérer l'erreur
         }
         $isSubscription = $document !== null && $this->isSubscriptionDocument($document);
+
+        // ── Anti-amplification par alias ─────────────────────────────
+        // Limite le nombre total de champs (alias inclus) dans le document parsé
+        // pour éviter l'explosion mémoire via des centaines d'alias identiques.
+        if ($document !== null && $this->countAliasedFields($document) > self::MAX_ALIASES) {
+            return new JsonResponse([
+                'errors' => [['message' => sprintf(
+                    'Trop d\'alias de champs GraphQL (max %d). Réduisez le nombre d\'alias dans votre requête.',
+                    self::MAX_ALIASES
+                )]],
+            ], 400);
+        }
 
         if ($isSubscription) {
             $projectUuid = $project->uuid->toRfc4122();
@@ -152,6 +173,33 @@ class GraphQLController extends AbstractController
     }
 
     // ─── Subscription ───────────────────────────────────────────────────
+
+    /**
+     * Counts all field selections (including aliases) recursively across all
+     * operations in the document. Used to detect alias-amplification attacks.
+     */
+    private function countAliasedFields($document): int
+    {
+        $count = 0;
+        foreach ($document->definitions as $def) {
+            if ($def instanceof OperationDefinitionNode && $def->selectionSet !== null) {
+                $count += $this->countSelectionsRecursive($def->selectionSet);
+            }
+        }
+        return $count;
+    }
+
+    private function countSelectionsRecursive(SelectionSetNode $set): int
+    {
+        $count = 0;
+        foreach ($set->selections as $sel) {
+            $count++;
+            if ($sel instanceof FieldNode && $sel->selectionSet !== null) {
+                $count += $this->countSelectionsRecursive($sel->selectionSet);
+            }
+        }
+        return $count;
+    }
 
     private function isSubscriptionDocument($document): bool
     {

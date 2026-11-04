@@ -160,9 +160,10 @@ class Cycle12HardeningTest extends WebTestCase
     {
         $this->client->loginUser($this->adminUser);
 
-        // Generate query with 600 aliases exceeding max complexity 500
+        // Generate query with 40 aliases to test alias amplification guard (MAX_ALIASES=30)
+        // which now catches this before the complexity checker runs → HTTP 400
         $aliases = [];
-        for ($i = 0; $i < 600; $i++) {
+        for ($i = 0; $i < 40; $i++) {
             $aliases[] = "p{$i}: _ping";
         }
         $query = 'query HeavyQuery { ' . implode(' ', $aliases) . ' }';
@@ -176,10 +177,11 @@ class Cycle12HardeningTest extends WebTestCase
             json_encode(['query' => $query])
         );
 
-        $this->assertSame(200, $this->client->getResponse()->getStatusCode());
+        // Alias amplification guard (MAX_ALIASES=30) now fires first → 400 Bad Request
+        $this->assertSame(400, $this->client->getResponse()->getStatusCode());
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
         $this->assertNotEmpty($data['errors'] ?? []);
-        $this->assertStringContainsString('complexity', strtolower($data['errors'][0]['message'] ?? ''));
+        $this->assertStringContainsString('alias', strtolower($data['errors'][0]['message'] ?? ''));
     }
 
     public function testGraphQLMandatoryPaginationClamp(): void
