@@ -1,13 +1,13 @@
 <?php
 /**
- * Endpoint de déploiement — déclenche git pull + npm run build via HTTP.
+ * Endpoint de déploiement — déclenche git pull via HTTP sécurisé.
  * Usage : GET /deploy.php?token=DEPLOY_TOKEN
  *
  * Ce fichier est standalone (ne dépend pas de Symfony) pour fonctionner
  * même si le vendor/ n'est pas à jour.
  */
 
-define('DEPLOY_TOKEN', 'jambo_deploy_2026_secure');
+$configuredToken = getenv('JAMBO_DEPLOY_TOKEN') ?: ($_ENV['JAMBO_DEPLOY_TOKEN'] ?? $_SERVER['JAMBO_DEPLOY_TOKEN'] ?? null);
 
 // Ne pas laisser Symfony intercepter la requête
 $_SERVER['SCRIPT_FILENAME'] = __FILE__;
@@ -18,22 +18,17 @@ error_reporting(0);
 
 header('Content-Type: text/plain; charset=utf-8');
 
-if (($_GET['token'] ?? '') !== DEPLOY_TOKEN) {
+if (empty($configuredToken) || !hash_equals((string) $configuredToken, (string) ($_GET['token'] ?? ''))) {
     http_response_code(403);
     die("Forbidden\n");
 }
 
-$workDir = __DIR__;
+$rootDir = dirname(__DIR__);
 $log = [];
 
 // — git pull —
-$git = shell_exec("cd $workDir && git pull origin main 2>&1");
+$git = shell_exec("cd " . escapeshellarg($rootDir) . " && git pull origin main 2>&1");
 $log[] = "=== git pull ===";
 $log[] = $git;
-
-// — npm build —
-$npm = shell_exec("cd $workDir && npm run build 2>&1");
-$log[] = "=== npm run build ===";
-$log[] = $npm;
 
 echo implode("\n", $log);

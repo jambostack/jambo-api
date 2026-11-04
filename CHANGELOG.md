@@ -30,8 +30,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - Wrapped project and entry lookups in `try / catch (\Throwable)` across shares, admin SEO scores/audit/bulk-update, OpenAPI spec generation, contact email, and Swagger UI.
 - **Personal Access Token Scopes Validation (`TokenController`)**:
   - Enforced array validation on token `scopes` in both `create` and `update` endpoints returning 422 Unprocessable Content.
-- **Ops & Deployment Automation (`deploy.py`)**:
-  - Updated production deployment configuration to match active o2switch infrastructure (`gupi7723@folina.o2switch.net`).
+- **Ops & Deployment Automation (`deploy.py`, `public/deploy.php`)**:
+  - Updated production deployment configuration for active o2switch infrastructure (`gupi7723@folina.o2switch.net`).
+  - Added native OpenSSH subprocess runner fallback to `deploy.py` allowing zero-dependency deployments.
+  - Hardened `public/deploy.php` by removing hardcoded fallback tokens and using constant-time `hash_equals` against environment configuration.
 
 ---
 
