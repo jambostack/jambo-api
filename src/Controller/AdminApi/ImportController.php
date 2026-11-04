@@ -13,6 +13,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\String\Slugger\SluggerInterface;
 
@@ -29,12 +30,18 @@ class ImportController extends AbstractController
         private SluggerInterface $slugger,
         private ?\App\Service\EavFieldHelperService $fieldHelper = null,
         private ?\Doctrine\Persistence\ManagerRegistry $doctrine = null,
+        private ?RateLimiterFactory $importLimiter = null,
     ) {}
 
     #[Route('/import-csv', name: 'csv', methods: ['POST'])]
     public function importCsv(string $uuid, string $slug, Request $request): JsonResponse
     {
         $this->requireScope($request, 'content:write');
+
+        $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?? 'anonymous';
+        if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
+            return $this->json(['error' => 'Too many import requests. Please retry later.'], 429);
+        }
 
         try {
             $project = $this->projects->findOneBy(['uuid' => $uuid]);

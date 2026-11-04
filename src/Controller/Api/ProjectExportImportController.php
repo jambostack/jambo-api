@@ -19,6 +19,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[OA\Tag(name: 'Export / Import')]
@@ -31,6 +32,8 @@ class ProjectExportImportController extends AbstractController
         private ProjectImporter $importer,
         private EntityManagerInterface $em,
         private EndUserSchemaSeeder $endUserSchemaSeeder,
+        private ?RateLimiterFactory $exportLimiter = null,
+        private ?RateLimiterFactory $importLimiter = null,
     ) {}
 
     #[OA\Get(
@@ -49,9 +52,26 @@ class ProjectExportImportController extends AbstractController
             new OA\Response(response: 404, description: 'Project not found', content: new OA\JsonContent(ref: '#/components/schemas/Error')),
         ]
     )]
+    private function resolveIdentifier(Request $request): string
+    {
+        try {
+            $user = $this->getUser();
+            if ($user !== null) {
+                return $user->getUserIdentifier();
+            }
+        } catch (\Throwable) {}
+
+        return $request->getClientIp() ?? 'anonymous';
+    }
+
     #[Route('/{uuid}/export', name: 'export', methods: ['GET'])]
     public function export(string $uuid, Request $request): Response
     {
+        $identifier = $this->resolveIdentifier($request);
+        if ($this->exportLimiter !== null && false === $this->exportLimiter->create($identifier)->consume(1)->isAccepted()) {
+            return new JsonResponse(['error' => 'Too many export requests. Please retry later.'], 429);
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
@@ -156,6 +176,11 @@ class ProjectExportImportController extends AbstractController
     {
         if (!$this->getUser()) {
             return $this->json(['error' => 'Authentication required'], 401);
+        }
+
+        $identifier = $this->resolveIdentifier($request);
+        if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
+            return new JsonResponse(['error' => 'Too many import requests. Please retry later.'], 429);
         }
 
         $uploadedFile = $request->files->get('file');
@@ -268,6 +293,11 @@ class ProjectExportImportController extends AbstractController
             return $this->json(['error' => 'Authentication required'], 401);
         }
 
+        $identifier = $this->resolveIdentifier($request);
+        if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
+            return new JsonResponse(['error' => 'Too many import requests. Please retry later.'], 429);
+        }
+
         $uploadedFile = $request->files->get('file');
         if (!$uploadedFile) {
             return $this->json(['error' => 'No file uploaded'], 422);
@@ -329,6 +359,11 @@ class ProjectExportImportController extends AbstractController
     #[Route('/{uuid}/import/merge', name: 'import_merge', methods: ['POST'])]
     public function importMerge(string $uuid, Request $request): JsonResponse
     {
+        $identifier = $this->resolveIdentifier($request);
+        if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
+            return new JsonResponse(['error' => 'Too many import requests. Please retry later.'], 429);
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {

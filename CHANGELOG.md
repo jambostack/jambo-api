@@ -7,6 +7,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.51] — 2026-11-04
+
+### Fixed & Hardened
+- **Data Export & Bulk Import Rate Limiting (`ProjectExportImportController`, `ImportController`)**:
+  - Implemented dedicated rate limiters for resource-intensive export and import operations:
+    - `export_limiter`: sliding window policy capped at 10 requests / minute.
+    - `import_limiter`: sliding window policy capped at 5 requests / minute.
+  - Applied throttling across `export()`, `importNew()`, `importPreview()`, `importMerge()`, and Admin API CSV batch import (`importCsv()`).
+  - Graceful identification falling back to client IP for unauthenticated or public pre-flight callers.
+- **Production File Permissions Hardening (`deploy.py`, o2switch runtime)**:
+  - Audited and restricted permissions across the o2switch shared environment:
+    - Restricted `.env`, `.env.local`, and backup configuration files to `600` (read/write by application user only).
+    - Hardened `var`, `var/cache`, and `var/log` directories to `700`.
+  - Added automated permission hardening step to remote OpenSSH deployment pipeline (`deploy.py`).
+- **Automated Test Coverage**:
+  - Added unit and functional test coverage for rate limiter rejection on bulk exports and imports (`ProjectExportImportRateLimiterTest`).
+
+---
+
 ## [1.26.50] — 2026-11-04
 
 ### Fixed & Hardened

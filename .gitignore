@@ -8,6 +8,8 @@
 /public/uploads/
 /var/
 /vendor/
+__pycache__/
+*.pyc
 ###< symfony/framework-bundle ###
 
 # Playwright MCP — captured browser artifacts, never commit
