@@ -1941,4 +1941,8 @@ return [
     'studio.versions.count' => '{count} إصدار(إصدارات) محفوظ(ة)',
     'studio.versions.current' => 'الحالي',
     'email.attachment.forbidden_extension' => 'ملحق الملف ذو الامتداد .%s ممنوع تماما.',
+    'versioning.entry_not_found' => 'المدخل غير موجود.',
+    'versioning.version_not_found' => 'النسخة غير موجودة.',
+    'versioning.invalid_version' => 'رقم النسخة غير صالح.',
+    'versioning.restored_successfully' => 'تمت استعادة النسخة %version% بنجاح.',
 ];

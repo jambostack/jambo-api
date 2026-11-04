@@ -7,6 +7,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.64] — 2026-11-04
+
+### Fixed & Hardened
+- **Media Crop Upload Defense & Image Validation (`MediaController::crop`)**:
+  - Closed arbitrary upload vulnerability in `MediaController::crop`: enforced full `UploadSecurityValidator::validateUploadedFile` lifecycle (quota validation, polyglot PHP execution defense, MIME verification, filename sanitization).
+  - Restricted cropped uploads strictly to validated image formats (`jpg`, `jpeg`, `png`, `webp`, `gif`, `avif`).
+- **Realtime Fallback Polling Rate Limiting & Path Traversal Guard (`RealtimeController`, `MercurePublisher`)**:
+  - Implemented `realtime_limiter` rate limiter (120 req / 60 seconds) on `/realtime` polling and `/realtime/token` endpoints to prevent disk I/O exhaustion and file-lock DoS.
+  - Added strict UUID format verification on `RealtimeController` routes and sanitized file path generation in `MercurePublisher::appendToJsonl`.
+- **Cross-Project & Cross-Entry Comment Resolution Guard (`CommentController::resolve`)**:
+  - Hardened `CommentController::resolve` to verify matching entry and project isolation parameters, preventing resolving comments belonging to other collections or projects.
+- **Media Folder & Column Settings Input Hardening (`MediaFolderController`, `ColumnSettingController`)**:
+  - Enforced 150-char maximum length and control character rejection on folder creation and update operations.
+  - Validated `visible_columns` array format and capped payload to 50 items with sanitization.
+- **Automation Node Catalog Auth Protection & Versioning i18n (`FlowController`, `VersioningController`)**:
+  - Added `#[IsGranted('ROLE_USER')]` to protect `/api/automations/node-catalog` from unauthenticated scanning.
+  - Enforced version bounds on `VersioningController` and translated versioning messages across EN, FR, ES, and AR.
+- **Automated Test Coverage**:
+  - Added comprehensive automated test suite `Cycle17HardeningTest` covering all new defenses.
+
+---
+
 ## [1.26.51] — 2026-11-04
 
 ### Fixed & Hardened

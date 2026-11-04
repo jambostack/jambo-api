@@ -73,9 +73,15 @@ class MediaFolderController extends AbstractController
         } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
-        $name = trim($data['name'] ?? '');
+        $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
             return $this->json(['error' => 'Name is required'], 422);
+        }
+        if (mb_strlen($name) > 150) {
+            return $this->json(['error' => 'Name cannot exceed 150 characters'], 422);
+        }
+        if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
+            return $this->json(['error' => 'Name contains forbidden control characters'], 422);
         }
 
         $folder = new MediaFolder();
@@ -133,8 +139,18 @@ class MediaFolderController extends AbstractController
         } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
-        if (!empty($data['name'])) {
-            $folder->name = trim($data['name']);
+        if (array_key_exists('name', $data)) {
+            $name = trim((string) $data['name']);
+            if ($name === '') {
+                return $this->json(['error' => 'Name cannot be empty'], 422);
+            }
+            if (mb_strlen($name) > 150) {
+                return $this->json(['error' => 'Name cannot exceed 150 characters'], 422);
+            }
+            if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
+                return $this->json(['error' => 'Name contains forbidden control characters'], 422);
+            }
+            $folder->name = $name;
             $folder->slug = (new AsciiSlugger())->slug($folder->name)->lower()->toString();
         }
 

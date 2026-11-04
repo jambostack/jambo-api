@@ -1941,4 +1941,8 @@ return [
     'studio.schema.save_success' => 'Schema saved.',
     'studio.schema.save_error' => 'Failed to save schema.',
     'email.attachment.forbidden_extension' => 'Attachment extension .%s is strictly forbidden.',
+    'versioning.entry_not_found' => 'Entry not found.',
+    'versioning.version_not_found' => 'Version not found.',
+    'versioning.invalid_version' => 'Invalid version number.',
+    'versioning.restored_successfully' => 'Restoration to version %version% completed.',
 ];

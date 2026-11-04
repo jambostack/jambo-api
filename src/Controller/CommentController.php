@@ -149,10 +149,12 @@ class CommentController extends AbstractController
     }
 
     #[Route('/{id}/resolve', name: 'resolve', methods: ['POST'])]
-    public function resolve(int $id, Request $request): JsonResponse
+    public function resolve(string $projectUuid, string $collectionSlug, int $entryId, int $id, Request $request): JsonResponse
     {
         $comment = $this->commentRepository->find($id);
-        if (!$comment) return $this->json(['error' => 'Not found.'], 404);
+        if (!$comment || $comment->entry?->id !== $entryId || $comment->entry?->project?->uuid?->toRfc4122() !== $projectUuid || $comment->entry?->collection?->slug !== $collectionSlug) {
+            return $this->json(['error' => 'Not found.'], 404);
+        }
 
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {

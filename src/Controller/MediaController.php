@@ -351,8 +351,23 @@ class MediaController extends AbstractController
             return $this->json(['error' => 'No file provided'], 422);
         }
 
+        $clientName = $uploadedFile->getClientOriginalName();
+        $ext = strtolower(pathinfo($clientName, PATHINFO_EXTENSION));
+        $allowedCropExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'];
+        if (!in_array($ext, $allowedCropExts, true)) {
+            return $this->json(['error' => sprintf('Cropping requires an image file (allowed: %s).', implode(', ', $allowedCropExts))], 422);
+        }
+
+        try {
+            $this->uploadValidator->validateUploadedFile($uploadedFile, $media->project);
+        } catch (\InvalidArgumentException $e) {
+            return $this->json(['error' => $e->getMessage()], 422);
+        }
+
+        $cleanFilename = $this->uploadValidator->sanitizeAndValidateFilename($clientName);
+
         $media->setFile($uploadedFile);
-        $media->originalName = $uploadedFile->getClientOriginalName();
+        $media->originalName = $cleanFilename;
         $this->em->flush();
 
         return $this->json(['data' => $this->mediaSerializer->serialize($media)]);

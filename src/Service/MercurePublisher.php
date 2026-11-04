@@ -63,6 +63,10 @@ class MercurePublisher
      */
     private function appendToJsonl(string $projectUuid, string $payload): void
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return;
+        }
+
         $dir = $this->projectDir . '/var/realtime';
         if (!is_dir($dir)) {
             mkdir($dir, 0700, true);

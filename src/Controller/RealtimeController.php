@@ -12,6 +12,7 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -20,7 +21,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * - /realtime?since=N        → short-polling (fallback, lecture JSONL)
  * - /realtime/token          → génère un JWT de souscription Mercure (SSE primaire)
  */
-#[Route('/api/projects/{projectUuid}/realtime', name: 'api_realtime_')]
+#[Route('/api/projects/{projectUuid}/realtime', name: 'api_realtime_', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
 class RealtimeController extends AbstractController
 {
     public function __construct(
@@ -28,6 +29,7 @@ class RealtimeController extends AbstractController
         private readonly ProjectMemberRepository $memberRepo,
         #[Autowire(param: 'mercure_enabled')]
         private readonly bool $mercureEnabled = false,
+        private readonly ?RateLimiterFactory $realtimeLimiter = null,
     ) {}
 
     /**
@@ -36,6 +38,18 @@ class RealtimeController extends AbstractController
     #[Route('/token', name: 'token', methods: ['GET'])]
     public function token(string $projectUuid, Request $request): JsonResponse
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return $this->json(['error' => 'Invalid project UUID format'], 400);
+        }
+
+        if ($this->realtimeLimiter !== null) {
+            $identifier = ($this->getUser()?->getUserIdentifier() ?? $request->getClientIp()) ?: '127.0.0.1';
+            $limiter = $this->realtimeLimiter->create($identifier);
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return $this->json(['error' => 'Too many realtime requests. Try again later.'], 429);
+            }
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
@@ -109,6 +123,18 @@ class RealtimeController extends AbstractController
     #[Route('', name: 'poll', methods: ['GET'])]
     public function poll(string $projectUuid, Request $request): JsonResponse
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return $this->json(['error' => 'Invalid project UUID format'], 400);
+        }
+
+        if ($this->realtimeLimiter !== null) {
+            $identifier = ($this->getUser()?->getUserIdentifier() ?? $request->getClientIp()) ?: '127.0.0.1';
+            $limiter = $this->realtimeLimiter->create($identifier);
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return $this->json(['error' => 'Too many realtime requests. Try again later.'], 429);
+            }
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
@@ -122,8 +148,9 @@ class RealtimeController extends AbstractController
         }
 
         $since = max(0, (int) $request->query->get('since', '0'));
+        $safeUuid = $project->uuid?->toRfc4122() ?? $projectUuid;
 
-        $eventFile = $this->getParameter('kernel.project_dir') . '/var/realtime/' . $projectUuid . '.jsonl';
+        $eventFile = $this->getParameter('kernel.project_dir') . '/var/realtime/' . $safeUuid . '.jsonl';
 
         $events = [];
         $lastId = $since;

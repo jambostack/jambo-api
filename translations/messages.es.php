@@ -1941,4 +1941,8 @@ return [
     'studio.versions.count' => '{count} versión(es) guardada(s)',
     'studio.versions.current' => 'Actual',
     'email.attachment.forbidden_extension' => 'La extensión del archivo adjunto .%s está estrictamente prohibida.',
+    'versioning.entry_not_found' => 'Entrada no encontrada.',
+    'versioning.version_not_found' => 'Versión no encontrada.',
+    'versioning.invalid_version' => 'Número de versión inválido.',
+    'versioning.restored_successfully' => 'Restauración a la versión %version% completada.',
 ];

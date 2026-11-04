@@ -12,6 +12,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class VersioningController extends AbstractController
 {
@@ -19,13 +20,14 @@ class VersioningController extends AbstractController
         private EntityManagerInterface $em,
         private VersioningService $versioning,
         private ContentVersionRepository $versionRepo,
+        private ?TranslatorInterface $translator = null,
     ) {}
 
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions', name: 'versions_list', methods: ['GET'])]
     public function list(string $projectUuid, string $collectionSlug, string $uuid, Request $request): JsonResponse
     {
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
-        if (!$entry) return $this->json(['error' => 'Entrée introuvable'], 404);
+        if (!$entry) return $this->json(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
 
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $entry->project);
@@ -45,8 +47,12 @@ class VersioningController extends AbstractController
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}/restore', name: 'versions_restore', methods: ['POST'])]
     public function restore(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
     {
+        if ($versionNumber < 1 || $versionNumber > 1000000) {
+            return $this->json(['error' => $this->trans('versioning.invalid_version', 'Numéro de version invalide.')], 422);
+        }
+
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
-        if (!$entry) return $this->json(['error' => 'Entrée introuvable'], 404);
+        if (!$entry) return $this->json(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
 
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.update', $entry->project);
@@ -54,17 +60,18 @@ class VersioningController extends AbstractController
 
         $ok = $this->versioning->restoreVersion($entry, $versionNumber);
         if (!$ok) {
-            return $this->json(['error' => 'Version introuvable'], 404);
+            return $this->json(['error' => $this->trans('versioning.version_not_found', 'Version introuvable')], 404);
         }
 
-        return $this->json(['success' => true, 'message' => "Restauration à la version $versionNumber effectuée"]);
+        $msg = $this->trans('versioning.restored_successfully', "Restauration à la version %version% effectuée", ['%version%' => $versionNumber]);
+        return $this->json(['success' => true, 'message' => $msg]);
     }
 
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/diff', name: 'versions_diff', methods: ['GET'])]
     public function diff(string $projectUuid, string $collectionSlug, string $uuid, Request $request): JsonResponse
     {
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
-        if (!$entry) return $this->json(['error' => 'Entrée introuvable'], 404);
+        if (!$entry) return $this->json(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
 
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $entry->project);
@@ -73,12 +80,27 @@ class VersioningController extends AbstractController
         $v1 = (int) $request->query->get('v1', 1);
         $v2 = (int) $request->query->get('v2', $this->versionRepo->getNextVersionNumber($entry) - 1);
 
+        if ($v1 < 1 || $v2 < 1 || $v1 > 1000000 || $v2 > 1000000) {
+            return $this->json(['error' => $this->trans('versioning.invalid_version', 'Numéro de version invalide.')], 422);
+        }
+
         $diff = $this->versioning->diff($entry, $v1, $v2);
         if (isset($diff['error'])) {
-            return $this->json($diff, 404);
+            return $this->json(['error' => $this->trans('versioning.version_not_found', 'Version introuvable')], 404);
         }
 
         return $this->json($diff);
+    }
+
+    private function trans(string $key, string $default, array $parameters = []): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($key, $parameters, 'messages');
+            if ($translated !== $key) {
+                return $translated;
+            }
+        }
+        return strtr($default, $parameters);
     }
 
     private function findEntry(string $projectUuid, string $collectionSlug, string $uuid): ?ContentEntry

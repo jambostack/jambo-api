@@ -1959,4 +1959,8 @@ return [
     'studio.schema.save_success' => 'Schéma enregistré.',
     'studio.schema.save_error' => 'Échec de l\'enregistrement du schéma.',
     'email.attachment.forbidden_extension' => 'L\'extension de pièce jointe .%s est strictement interdite.',
+    'versioning.entry_not_found' => 'Entrée introuvable.',
+    'versioning.version_not_found' => 'Version introuvable.',
+    'versioning.invalid_version' => 'Numéro de version invalide.',
+    'versioning.restored_successfully' => 'Restauration à la version %version% effectuée.',
 ];

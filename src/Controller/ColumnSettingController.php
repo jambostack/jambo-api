@@ -62,7 +62,19 @@ class ColumnSettingController extends AbstractController
         } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
-        $columns = $data['visible_columns'] ?? [];
+        $rawColumns = $data['visible_columns'] ?? [];
+        if (!is_array($rawColumns)) {
+            return $this->json(['error' => 'visible_columns must be an array'], 422);
+        }
+        $columns = [];
+        foreach (array_slice($rawColumns, 0, 50) as $col) {
+            if (is_scalar($col)) {
+                $trimmed = trim((string) $col);
+                if ($trimmed !== '' && mb_strlen($trimmed) <= 100 && !preg_match('/[\x00-\x1F\x7F]/', $trimmed)) {
+                    $columns[] = $trimmed;
+                }
+            }
+        }
 
         $setting = $this->columnSettingRepository->findOneByUserAndCollection($user, $collection);
 
