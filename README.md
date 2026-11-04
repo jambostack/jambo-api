@@ -8,7 +8,7 @@
 
 **Open-source headless CMS — Symfony 8 · PHP 8.4 · React 19**
 
-[![Version](https://img.shields.io/badge/version-1.26.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.26.47-blue.svg)](CHANGELOG.md)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-2fcf8f.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![PHP](https://img.shields.io/badge/PHP-8.4%20%7C%208.5-777BB4?logo=php&logoColor=white)](https://php.net)
 [![Symfony](https://img.shields.io/badge/Symfony-8.0-000000?logo=symfony&logoColor=white)](https://symfony.com)
@@ -341,6 +341,7 @@ Full reference → [docs.jambostack.site/api/introduction](https://docs.jambosta
 - [x] **v1.24** : Moteur Flow DAG avec détection de boucles, streaming IA SSE inline & formulaires anti-spam avec A/B testing
 - [x] **v1.25** : Bac à sable Twig hermétique (`NativeTwigSecurityPolicy`) & perfectionnement de l'AI Schema Studio
 - [x] **v1.26** : Moteur d'hébergement statique sandboxé, résilience stockage multi-cloud & invalidation de cache instantanée
+- [x] **v1.26.47 (Hardening & Security)** : Durcissement global des payloads JSON (`\Throwable`), sécurisation des paramètres UUID (404 propre), isolation stricte tenant OAuth2, uploads TUS résilients et protections d'intégrité utilisateurs/rôles
 - [ ] Jambo Cloud (hébergement infogéré multi-régions)
 
 👉 **Spécifications fonctionnelles complètes : [ROADMAP.md](ROADMAP.md)**
