@@ -33,7 +33,11 @@ class RedirectPublicController extends AbstractController
             return new JsonResponse(['error' => 'Project not found.'], 404);
         }
 
-        $path = $request->query->get('path', '/');
+        $rawPath = (string) $request->query->get('path', '/');
+        if (strlen($rawPath) > 2048) {
+            return new JsonResponse(['error' => 'Path exceeds maximum length of 2048 characters.'], 400);
+        }
+        $path = $rawPath;
         $redirect = $this->redirectResolver->resolve($path, $project);
 
         if ($redirect === null) {
@@ -44,15 +48,29 @@ class RedirectPublicController extends AbstractController
         $acceptHeader = (string) $request->headers->get('Accept', '');
         $wantsJson = str_contains($acceptHeader, 'application/json') || $request->query->getBoolean('json');
         if (!$wantsJson && str_contains($acceptHeader, 'text/html')) {
-            $dest = $redirect->toPath;
+            $dest = trim($redirect->toPath);
             $lowerDest = strtolower($dest);
             if (
+                preg_match('/[\r\n\x00-\x1F\x7F]/', $dest) ||
                 str_starts_with($lowerDest, 'javascript:') ||
                 str_starts_with($lowerDest, 'data:') ||
                 str_starts_with($lowerDest, 'vbscript:') ||
-                str_starts_with($dest, '//')
+                str_starts_with($lowerDest, 'file:') ||
+                str_starts_with($lowerDest, 'ftp:') ||
+                str_starts_with($lowerDest, 'blob:') ||
+                str_starts_with($dest, '//') ||
+                str_starts_with($dest, '/\\') ||
+                str_starts_with($dest, '\\\\') ||
+                str_starts_with($dest, '\\/')
             ) {
                 return new JsonResponse(['error' => 'Unsafe redirect destination.'], 400);
+            }
+
+            if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $dest, $matches)) {
+                $scheme = strtolower(rtrim($matches[0], ':'));
+                if (!in_array($scheme, ['http', 'https'], true)) {
+                    return new JsonResponse(['error' => 'Unsafe redirect destination.'], 400);
+                }
             }
 
             return new RedirectResponse(

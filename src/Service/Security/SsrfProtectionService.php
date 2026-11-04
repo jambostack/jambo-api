@@ -100,6 +100,56 @@ class SsrfProtectionService
     }
 
     /**
+     * Valide un nom d'hôte ou une IP contre les attaques SSRF (RFC 1918, Cloud metadata, loopback).
+     *
+     * @param string $host Nom d'hôte ou adresse IP
+     * @param string|null $reason Explication de rejet en cas d'hôte non sûr
+     * @return bool True si l'hôte est sûr, false sinon
+     */
+    public function isSafeHost(string $host, ?string &$reason = null): bool
+    {
+        try {
+            $this->assertSafeHost($host);
+            return true;
+        } catch (\Throwable $e) {
+            $reason = $e->getMessage();
+            return false;
+        }
+    }
+
+    /**
+     * Valide rigoureusement un nom d'hôte ou une IP.
+     *
+     * @return string[] Liste des IPs publiques résolues
+     * @throws \InvalidArgumentException En cas d'hôte dangereux ou invalide
+     */
+    public function assertSafeHost(string $host): array
+    {
+        if (preg_match('/[\r\n\x00-\x1F\x7F]/', $host)) {
+            throw new \InvalidArgumentException('Host contains invalid control or newline characters');
+        }
+
+        $cleanHost = strtolower(trim($host, " \t[]"));
+        if ($cleanHost === '') {
+            throw new \InvalidArgumentException('Host cannot be empty');
+        }
+
+        if (strlen($cleanHost) > 255) {
+            throw new \InvalidArgumentException('Host exceeds maximum length of 255 characters');
+        }
+
+        if ($this->isEvasiveIpNotation($cleanHost)) {
+            throw new \InvalidArgumentException('Accès aux adresses privées ou réservées interdit (SSRF protection)');
+        }
+
+        if ($this->isBlockedHostname($cleanHost)) {
+            throw new \InvalidArgumentException('Accès aux adresses privées ou réservées interdit (SSRF protection)');
+        }
+
+        return $this->resolveAndValidateHost($cleanHost);
+    }
+
+    /**
      * Valide rigoureusement une URL et résout ses adresses IP sûres.
      * Lève une exception si l'URL présente un risque SSRF.
      *
@@ -274,7 +324,10 @@ class SsrfProtectionService
             // Support de l'environnement de test (offline / CI sans DNS)
             $appEnv = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? 'prod';
             if (empty($resolvedIps) && $appEnv === 'test') {
-                if (in_array($host, ['example.com', 'example.org', 'test.com', 'api.external.service'], true)) {
+                if (in_array($host, [
+                    'example.com', 'example.org', 'test.com', 'api.external.service',
+                    'smtp.example.com', 'mail.example.com', 'smtp.mailgun.org', 'smtp.sendgrid.net',
+                ], true)) {
                     $resolvedIps[] = '93.184.216.34'; // Safe public IP (example.com)
                 }
             }

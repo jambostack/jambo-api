@@ -79,14 +79,20 @@ class FormController extends AbstractController
 
         // Valider la définition des champs
         $fields = $data['fields'] ?? [];
+        if (!is_array($fields) || count($fields) > 100) {
+            return $this->json(['error' => 'Fields must be an array of at most 100 fields.'], 422);
+        }
         $validation = $this->formBuilder->validateDefinition($fields);
-        if (!$validation['valid']) {
-            return $this->json(['error' => 'Invalid field definition.', 'field_errors' => $validation['errors']], 422);
+        if (empty($validation['valid'])) {
+            return $this->json(['error' => 'Invalid field definition.', 'field_errors' => $validation['errors'] ?? []], 422);
         }
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
             return $this->json(['error' => 'Form name is required.'], 422);
+        }
+        if (mb_strlen($name) > 255 || preg_match('/[\r\n\x00-\x1F\x7F]/', $name)) {
+            return $this->json(['error' => 'Form name must not exceed 255 characters and cannot contain control characters.'], 422);
         }
 
         $slug = trim((string) ($data['slug'] ?? ''));
@@ -95,6 +101,21 @@ class FormController extends AbstractController
             if ($slug === '') {
                 $slug = 'form-' . bin2hex(random_bytes(3));
             }
+        }
+        if (strlen($slug) > 128 || !preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $slug)) {
+            return $this->json(['error' => 'Form slug must be lowercase alphanumeric with hyphens (max 128 characters).'], 422);
+        }
+
+        $steps = $data['steps'] ?? null;
+        if ($steps !== null) {
+            if (!is_array($steps) || count($steps) > 50) {
+                return $this->json(['error' => 'Form steps must be an array of at most 50 steps.'], 422);
+            }
+        }
+
+        $settings = $data['settings'] ?? [];
+        if (!is_array($settings) || strlen(json_encode($settings)) > 65536) {
+            return $this->json(['error' => 'Form settings must be an array and not exceed 64KB.'], 422);
         }
 
         $existing = $this->formRepo->findOneBy(['project' => $project, 'slug' => $slug]);
@@ -107,8 +128,8 @@ class FormController extends AbstractController
         $form->name = $name;
         $form->slug = $slug;
         $form->fields = $fields;
-        $form->steps = $data['steps'] ?? null;
-        $form->settings = $data['settings'] ?? [];
+        $form->steps = $steps;
+        $form->settings = $settings;
 
         $this->em->persist($form);
         $this->em->flush();
@@ -152,12 +173,18 @@ class FormController extends AbstractController
             if ($newName === '') {
                 return $this->json(['error' => 'Form name cannot be empty.'], 422);
             }
+            if (mb_strlen($newName) > 255 || preg_match('/[\r\n\x00-\x1F\x7F]/', $newName)) {
+                return $this->json(['error' => 'Form name must not exceed 255 characters and cannot contain control characters.'], 422);
+            }
             $form->name = $newName;
         }
         if (array_key_exists('slug', $data)) {
             $newSlug = trim((string) $data['slug']);
             if ($newSlug === '') {
                 return $this->json(['error' => 'Form slug cannot be empty.'], 422);
+            }
+            if (strlen($newSlug) > 128 || !preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $newSlug)) {
+                return $this->json(['error' => 'Form slug must be lowercase alphanumeric with hyphens (max 128 characters).'], 422);
             }
             $existing = $this->formRepo->findOneBy(['project' => $form->project, 'slug' => $newSlug]);
             if ($existing !== null && $existing->id !== $form->id) {
@@ -166,16 +193,25 @@ class FormController extends AbstractController
             $form->slug = $newSlug;
         }
         if (array_key_exists('fields', $data)) {
+            if (!is_array($data['fields']) || count($data['fields']) > 100) {
+                return $this->json(['error' => 'Fields must be an array of at most 100 fields.'], 422);
+            }
             $validation = $this->formBuilder->validateDefinition($data['fields']);
-            if (!$validation['valid']) {
-                return $this->json(['error' => 'Invalid field definition.', 'field_errors' => $validation['errors']], 422);
+            if (empty($validation['valid'])) {
+                return $this->json(['error' => 'Invalid field definition.', 'field_errors' => $validation['errors'] ?? []], 422);
             }
             $form->fields = $data['fields'];
         }
         if (array_key_exists('steps', $data)) {
+            if ($data['steps'] !== null && (!is_array($data['steps']) || count($data['steps']) > 50)) {
+                return $this->json(['error' => 'Form steps must be an array of at most 50 steps.'], 422);
+            }
             $form->steps = $data['steps'];
         }
         if (array_key_exists('settings', $data)) {
+            if (!is_array($data['settings']) || strlen(json_encode($data['settings'])) > 65536) {
+                return $this->json(['error' => 'Form settings must be an array and not exceed 64KB.'], 422);
+            }
             $form->settings = $data['settings'];
         }
 

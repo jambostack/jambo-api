@@ -25,7 +25,7 @@ class CollectionController extends AbstractController
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
-    public function index(string $projectUuid): JsonResponse
+    public function index(string $projectUuid, ?Request $request = null): JsonResponse
     {
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
@@ -34,6 +34,10 @@ class CollectionController extends AbstractController
         }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        if (!$this->getUser() && $request?->attributes->get('_project') !== $project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -57,6 +61,10 @@ class CollectionController extends AbstractController
         }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -91,6 +99,10 @@ class CollectionController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
+        if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('collection.update', $project);
         }
@@ -117,11 +129,15 @@ class CollectionController extends AbstractController
     }
 
     #[Route('/{slug}', name: 'show', methods: ['GET'])]
-    public function show(string $projectUuid, string $slug): JsonResponse
+    public function show(string $projectUuid, string $slug, ?Request $request = null): JsonResponse
     {
         $collection = $this->findCollection($projectUuid, $slug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if (!$this->getUser() && $request?->attributes->get('_project') !== $collection->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -137,6 +153,10 @@ class CollectionController extends AbstractController
         $collection = $this->findCollection($projectUuid, $slug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $collection->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -176,6 +196,10 @@ class CollectionController extends AbstractController
         $collection = $this->findCollection($projectUuid, $slug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $collection->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {

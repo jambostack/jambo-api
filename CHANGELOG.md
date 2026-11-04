@@ -7,6 +7,37 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.69] — 2026-11-04
+
+### Security & Hardening
+- **SSRF & SMTP Egress Protection (`SsrfProtectionService`, `ProjectMailerSettingsController`)**:
+  - Added `assertSafeHost()` and `isSafeHost()` methods in `SsrfProtectionService` validating hostnames and IPs against private/reserved ranges (RFC 1918, CGNAT, 6to4, multicast), loopback, evasive IP representations, and Cloud metadata services (169.254.169.254, `metadata.google.internal`, `host.docker.internal`).
+  - Hardened `ProjectMailerSettingsController`:
+    - Enforced host SSRF validation via `SsrfProtectionService`.
+    - Whitelisted legitimate SMTP ports (`25`, `465`, `587`, `2525`) and encryption protocols (`tls`, `ssl`, null).
+    - Enforced strict length limits and rejected control characters/CRLF in hostname, username, and password.
+    - Sanitized and validated `from_email` against email header injection (CRLF injection) and RFC email specification.
+- **Open-Redirect & URL Scheme Defense (`RedirectController`, `RedirectPublicController`)**:
+  - Added unified `validateRedirectPaths()` in `RedirectController`:
+    - Rejected dangerous schemes (`javascript:`, `data:`, `vbscript:`, `file:`, `ftp:`, `blob:`).
+    - Blocked protocol-relative and backslash bypass attempts (`//`, `/\\`, `\\\\`, `\\/`).
+    - Enforced ReDoS bounds on pattern redirects (pattern regex capped at 256 characters) and path length limits (2048 characters).
+    - Blocked CRLF response splitting in both target paths and public resolution.
+  - Hardened `RedirectPublicController::resolve`: validated resolved destination safety prior to issuing redirect responses.
+- **Deployment Webhook Hardening (`DeploymentController`)**:
+  - Enforced a 1MB payload size cap returning 413 Payload Too Large against memory exhaustion DoS attacks.
+  - Enforced strict hex formatting on `commit_sha` (`^[a-fA-F0-9]{4,40}$`).
+  - Enforced control character and CRLF checks on branch names.
+  - Restricted preview and run URLs to `http` and `https` schemes.
+- **Form Builder Boundary Hardening (`FormController`)**:
+  - Bounded form field definitions to 100 fields max and multi-step forms to 50 steps max.
+  - Capped settings payload to 64KB.
+  - Enforced strict alphanumeric slug formatting (max 128 characters) and form name limits (max 255 characters, no CRLF/control characters).
+- **Defense-in-Depth Authentication (`CollectionController`, `FieldController`, `ShareController`, `VersioningController`)**:
+  - Enforced explicit 401 unauthenticated challenge when neither an authenticated `User` nor an authenticated `_project` attribute exists on incoming requests.
+- **Test Coverage**:
+  - Added `tests/Controller/Cycle22HardeningTest.php` with 16 automated test suites covering all cycle 22 defenses.
+
 ## [1.26.68] — 2026-11-04
 
 ### Security & Hardening

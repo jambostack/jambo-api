@@ -100,6 +100,10 @@ class DeploymentController extends AbstractController
         }
 
         $payload = $request->getContent();
+        if (strlen($payload) > 1048576) {
+            return $this->json(['error' => 'Payload too large (max 1MB)'], 413);
+        }
+
         $signature = $request->headers->get('X-Jambo-Signature', '');
         if (!str_starts_with($signature, 'sha256=')) {
             return $this->json(['error' => 'Signature manquante'], 401);
@@ -126,15 +130,67 @@ class DeploymentController extends AbstractController
             Deployment::STATUS_CANCELED,
         ], true) ? $data['status'] : Deployment::STATUS_PENDING;
 
+        $commitSha = trim((string) ($data['commit_sha'] ?? ''));
+        if ($commitSha !== '' && !preg_match('/^[a-fA-F0-9]{4,40}$/', $commitSha)) {
+            return $this->json(['error' => 'Invalid commit_sha format.'], 422);
+        }
+
+        $branch = isset($data['branch']) ? trim((string) $data['branch']) : null;
+        if ($branch !== null) {
+            if (strlen($branch) > 100 || preg_match('/[\r\n\x00-\x1F\x7F]/', $branch)) {
+                return $this->json(['error' => 'Invalid branch name.'], 422);
+            }
+        }
+
+        $previewUrl = null;
+        if (!empty($data['preview_url'])) {
+            $pUrl = trim((string) $data['preview_url']);
+            if (strlen($pUrl) > 2048 || preg_match('/[\r\n\x00-\x1F\x7F]/', $pUrl) || !filter_var($pUrl, FILTER_VALIDATE_URL)) {
+                return $this->json(['error' => 'Invalid preview_url: must be a valid URL.'], 422);
+            }
+            $pScheme = strtolower((string) parse_url($pUrl, PHP_URL_SCHEME));
+            if (!in_array($pScheme, ['http', 'https'], true)) {
+                return $this->json(['error' => 'Invalid preview_url: only http and https allowed.'], 422);
+            }
+            $previewUrl = $pUrl;
+        }
+
+        $runUrl = null;
+        if (!empty($data['run_url'])) {
+            $rUrl = trim((string) $data['run_url']);
+            if (strlen($rUrl) > 2048 || preg_match('/[\r\n\x00-\x1F\x7F]/', $rUrl) || !filter_var($rUrl, FILTER_VALIDATE_URL)) {
+                return $this->json(['error' => 'Invalid run_url: must be a valid URL.'], 422);
+            }
+            $rScheme = strtolower((string) parse_url($rUrl, PHP_URL_SCHEME));
+            if (!in_array($rScheme, ['http', 'https'], true)) {
+                return $this->json(['error' => 'Invalid run_url: only http and https allowed.'], 422);
+            }
+            $runUrl = $rUrl;
+        }
+
+        $imageRef = null;
+        if (isset($data['image'])) {
+            $img = trim((string) $data['image']);
+            if (strlen($img) > 500 || preg_match('/[\r\n\x00-\x1F\x7F]/', $img)) {
+                return $this->json(['error' => 'Invalid image reference.'], 422);
+            }
+            $imageRef = $img !== '' ? $img : null;
+        }
+
+        $errorMessage = null;
+        if (isset($data['error'])) {
+            $errorMessage = substr((string) $data['error'], 0, 2048);
+        }
+
         $deployment = new Deployment();
-        $deployment->commitSha = substr((string) ($data['commit_sha'] ?? ''), 0, 40);
-        $deployment->branch = isset($data['branch']) ? substr((string) $data['branch'], 0, 100) : null;
+        $deployment->commitSha = substr($commitSha, 0, 40);
+        $deployment->branch = $branch;
         $deployment->environment = $environment;
         $deployment->status = $status;
-        $deployment->imageRef = isset($data['image']) ? (string) $data['image'] : null;
-        $deployment->previewUrl = isset($data['preview_url']) ? (string) $data['preview_url'] : null;
-        $deployment->runUrl = isset($data['run_url']) ? (string) $data['run_url'] : null;
-        $deployment->errorMessage = isset($data['error']) ? (string) $data['error'] : null;
+        $deployment->imageRef = $imageRef;
+        $deployment->previewUrl = $previewUrl;
+        $deployment->runUrl = $runUrl;
+        $deployment->errorMessage = $errorMessage;
 
         if (in_array($status, [Deployment::STATUS_SUCCEEDED, Deployment::STATUS_FAILED, Deployment::STATUS_CANCELED], true)) {
             $deployment->finishedAt = new \DateTimeImmutable();

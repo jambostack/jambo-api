@@ -30,11 +30,15 @@ class FieldController extends AbstractController
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
-    public function index(string $projectUuid, string $collectionSlug): JsonResponse
+    public function index(string $projectUuid, string $collectionSlug, ?Request $request = null): JsonResponse
     {
         $collection = $this->findCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if (!$this->getUser() && $request?->attributes->get('_project') !== $collection->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -54,6 +58,10 @@ class FieldController extends AbstractController
         $collection = $this->findCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $collection->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -78,11 +86,15 @@ class FieldController extends AbstractController
     }
 
     #[Route('/{fieldSlug}', name: 'show', methods: ['GET'])]
-    public function show(string $projectUuid, string $collectionSlug, string $fieldSlug): JsonResponse
+    public function show(string $projectUuid, string $collectionSlug, string $fieldSlug, ?Request $request = null): JsonResponse
     {
         $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug);
         if ($field instanceof JsonResponse) {
             return $field;
+        }
+
+        if (!$this->getUser() && $request?->attributes->get('_project') !== $field->collection->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -98,6 +110,10 @@ class FieldController extends AbstractController
         $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug);
         if ($field instanceof JsonResponse) {
             return $field;
+        }
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $field->collection->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {
@@ -127,6 +143,10 @@ class FieldController extends AbstractController
             return $collection;
         }
 
+        if (!$this->getUser() && $request->attributes->get('_project') !== $collection->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('collection.update', $collection->project);
         }
@@ -149,11 +169,15 @@ class FieldController extends AbstractController
     }
 
     #[Route('/{fieldSlug}', name: 'delete', methods: ['DELETE'])]
-    public function delete(string $projectUuid, string $collectionSlug, string $fieldSlug): JsonResponse
+    public function delete(string $projectUuid, string $collectionSlug, string $fieldSlug, ?Request $request = null): JsonResponse
     {
         $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug);
         if ($field instanceof JsonResponse) {
             return $field;
+        }
+
+        if (!$this->getUser() && $request?->attributes->get('_project') !== $field->collection->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
 
         if ($this->getUser()) {

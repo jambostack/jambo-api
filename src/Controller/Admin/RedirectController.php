@@ -101,37 +101,11 @@ class RedirectController extends AbstractController
 
         $fromPath = trim((string) ($data['fromPath'] ?? ''));
         $toPath = trim((string) ($data['toPath'] ?? ''));
-
-        if ($fromPath === '' || $toPath === '') {
-            return $this->json(['error' => 'Both fromPath and toPath are required.'], 422);
-        }
-
-        $lowerTo = strtolower($toPath);
-        if (str_starts_with($lowerTo, 'javascript:') || str_starts_with($lowerTo, 'data:') || str_starts_with($lowerTo, 'vbscript:')) {
-            return $this->json(['error' => 'Dangerous URI schemes (javascript:, data:, vbscript:) are not allowed.'], 422);
-        }
-        if (str_starts_with($toPath, '//')) {
-            return $this->json(['error' => 'Protocol-relative URLs starting with // are not allowed.'], 422);
-        }
-
         $isPattern = (bool) ($data['isPattern'] ?? false);
-        if ($isPattern) {
-            $testRegex = '#' . str_replace('#', '\#', $fromPath) . '#';
-            if (@preg_match($testRegex, '') === false) {
-                return $this->json(['error' => 'Invalid regular expression syntax for fromPath pattern.'], 422);
-            }
-        }
 
-        // Normaliser les chemins relatifs avec un slash initial
-        if (!str_starts_with($fromPath, 'http://') && !str_starts_with($fromPath, 'https://')) {
-            $fromPath = '/' . ltrim($fromPath, '/');
-        }
-        if (!str_starts_with($toPath, 'http://') && !str_starts_with($toPath, 'https://')) {
-            $toPath = '/' . ltrim($toPath, '/');
-        }
-
-        if ($fromPath === $toPath) {
-            return $this->json(['error' => 'A redirect cannot point to itself.'], 422);
+        $pathError = $this->validateRedirectPaths($fromPath, $toPath, $isPattern);
+        if ($pathError !== null) {
+            return $pathError;
         }
 
         $httpCode = (int) ($data['httpCode'] ?? 301);
@@ -193,36 +167,11 @@ class RedirectController extends AbstractController
 
         $fromPath = array_key_exists('fromPath', $data) ? trim((string) $data['fromPath']) : $redirect->fromPath;
         $toPath = array_key_exists('toPath', $data) ? trim((string) $data['toPath']) : $redirect->toPath;
-
-        if ($fromPath === '' || $toPath === '') {
-            return $this->json(['error' => 'Both fromPath and toPath must not be empty.'], 422);
-        }
-
-        $lowerTo = strtolower($toPath);
-        if (str_starts_with($lowerTo, 'javascript:') || str_starts_with($lowerTo, 'data:') || str_starts_with($lowerTo, 'vbscript:')) {
-            return $this->json(['error' => 'Dangerous URI schemes (javascript:, data:, vbscript:) are not allowed.'], 422);
-        }
-        if (str_starts_with($toPath, '//')) {
-            return $this->json(['error' => 'Protocol-relative URLs starting with // are not allowed.'], 422);
-        }
-
         $isPattern = array_key_exists('isPattern', $data) ? (bool) $data['isPattern'] : $redirect->isPattern;
-        if ($isPattern) {
-            $testRegex = '#' . str_replace('#', '\#', $fromPath) . '#';
-            if (@preg_match($testRegex, '') === false) {
-                return $this->json(['error' => 'Invalid regular expression syntax for fromPath pattern.'], 422);
-            }
-        }
 
-        if (!str_starts_with($fromPath, 'http://') && !str_starts_with($fromPath, 'https://')) {
-            $fromPath = '/' . ltrim($fromPath, '/');
-        }
-        if (!str_starts_with($toPath, 'http://') && !str_starts_with($toPath, 'https://')) {
-            $toPath = '/' . ltrim($toPath, '/');
-        }
-
-        if ($fromPath === $toPath) {
-            return $this->json(['error' => 'A redirect cannot point to itself.'], 422);
+        $pathError = $this->validateRedirectPaths($fromPath, $toPath, $isPattern);
+        if ($pathError !== null) {
+            return $pathError;
         }
 
         if (array_key_exists('httpCode', $data)) {
@@ -302,6 +251,78 @@ class RedirectController extends AbstractController
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function validateRedirectPaths(string &$fromPath, string &$toPath, bool $isPattern): ?JsonResponse
+    {
+        if ($fromPath === '' || $toPath === '') {
+            return $this->json(['error' => 'Both fromPath and toPath are required.'], 422);
+        }
+
+        if (strlen($fromPath) > 2048) {
+            return $this->json(['error' => 'fromPath must not exceed 2048 characters.'], 422);
+        }
+
+        if (strlen($toPath) > 2048) {
+            return $this->json(['error' => 'toPath must not exceed 2048 characters.'], 422);
+        }
+
+        if (preg_match('/[\r\n\x00-\x1F\x7F]/', $fromPath)) {
+            return $this->json(['error' => 'fromPath contains invalid control or newline characters.'], 422);
+        }
+
+        if (preg_match('/[\r\n\x00-\x1F\x7F]/', $toPath)) {
+            return $this->json(['error' => 'toPath contains invalid control or newline characters.'], 422);
+        }
+
+        $cleanTo = trim($toPath);
+        $lowerTo = strtolower($cleanTo);
+
+        if (str_starts_with($cleanTo, '//') || str_starts_with($cleanTo, '/\\') || str_starts_with($cleanTo, '\\\\') || str_starts_with($cleanTo, '\\/')) {
+            return $this->json(['error' => 'Protocol-relative URLs starting with // or backslashes are not allowed.'], 422);
+        }
+
+        if (
+            str_starts_with($lowerTo, 'javascript:') ||
+            str_starts_with($lowerTo, 'data:') ||
+            str_starts_with($lowerTo, 'vbscript:') ||
+            str_starts_with($lowerTo, 'file:') ||
+            str_starts_with($lowerTo, 'ftp:') ||
+            str_starts_with($lowerTo, 'blob:')
+        ) {
+            return $this->json(['error' => 'Dangerous URI schemes (javascript:, data:, vbscript:) are not allowed.'], 422);
+        }
+
+        if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $cleanTo, $matches)) {
+            $scheme = strtolower(rtrim($matches[0], ':'));
+            if (!in_array($scheme, ['http', 'https'], true)) {
+                return $this->json(['error' => sprintf('Invalid URI scheme "%s": only http and https are allowed.', $scheme)], 422);
+            }
+        }
+
+        if ($isPattern) {
+            if (strlen($fromPath) > 256) {
+                return $this->json(['error' => 'Regular expression pattern for fromPath must not exceed 256 characters.'], 422);
+            }
+            $testRegex = '#' . str_replace('#', '\#', $fromPath) . '#';
+            if (@preg_match($testRegex, '') === false) {
+                return $this->json(['error' => 'Invalid regular expression syntax for fromPath pattern.'], 422);
+            }
+        }
+
+        // Normaliser les chemins relatifs avec un slash initial
+        if (!str_starts_with($fromPath, 'http://') && !str_starts_with($fromPath, 'https://')) {
+            $fromPath = '/' . ltrim($fromPath, '/');
+        }
+        if (!str_starts_with($toPath, 'http://') && !str_starts_with($toPath, 'https://')) {
+            $toPath = '/' . ltrim($toPath, '/');
+        }
+
+        if ($fromPath === $toPath) {
+            return $this->json(['error' => 'A redirect cannot point to itself.'], 422);
+        }
+
+        return null;
     }
 
     private function serializeRedirect(Redirect $r): array

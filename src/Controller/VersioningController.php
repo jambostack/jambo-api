@@ -29,6 +29,10 @@ class VersioningController extends AbstractController
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
         if (!$entry) return $this->json(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
 
+        if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $entry->project);
         }
@@ -54,6 +58,10 @@ class VersioningController extends AbstractController
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
         if (!$entry) return $this->json(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
 
+        if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.update', $entry->project);
         }
@@ -72,6 +80,10 @@ class VersioningController extends AbstractController
     {
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
         if (!$entry) return $this->json(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
 
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $entry->project);

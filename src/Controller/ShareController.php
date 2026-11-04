@@ -30,6 +30,9 @@ class ShareController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+        if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.update', $project);
         }
@@ -73,6 +76,9 @@ class ShareController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
+        if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.update', $project);
         }
@@ -105,6 +111,9 @@ class ShareController extends AbstractController
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+        if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
+            return $this->json(['error' => 'Authentication required'], 401);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.update', $project);
