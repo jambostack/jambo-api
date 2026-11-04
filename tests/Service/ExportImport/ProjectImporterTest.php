@@ -112,4 +112,31 @@ class ProjectImporterTest extends TestCase
             rmdir($tempDir);
         }
     }
+
+    public function testExtractZipThrowsOnDirectoryTraversal(): void
+    {
+        $projectDir = realpath(__DIR__ . '/../../../');
+        $importer = new ProjectImporter(
+            new StructureImportHandler($this->createMock(EndUserFieldRepository::class)),
+            new ContentImportHandler(),
+            new MediaImportHandler($projectDir),
+            new SettingsImportHandler(),
+            new EndUserImportHandler($this->createMock(EndUserRepository::class)),
+            $projectDir,
+        );
+
+        $zipPath = sys_get_temp_dir() . '/traversal-' . uniqid() . '.zip';
+        $zip = new \ZipArchive();
+        $zip->open($zipPath, \ZipArchive::CREATE);
+        $zip->addFromString('../../../etc/evil.txt', 'evil');
+        $zip->close();
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessage('directory traversal detected');
+            $importer->extractZip($zipPath);
+        } finally {
+            @unlink($zipPath);
+        }
+    }
 }

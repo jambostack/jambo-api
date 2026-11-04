@@ -120,4 +120,34 @@ class DirectUploadServiceTest extends TestCase
 
         $this->service->getPresignedPartUrl($intent, 1);
     }
+
+    public function testGetPresignedPutUrlThrowsWhenExpired(): void
+    {
+        $profile = new ProjectStorageProfile();
+        $profile->driver = 's3';
+
+        $intent = new AssetUploadIntent();
+        $intent->storageProfile = $profile;
+        $intent->expiresAt = (new \DateTimeImmutable())->modify('-10 minutes');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Upload intent has expired.');
+
+        $this->service->getPresignedPutUrl($intent);
+    }
+
+    public function testGetPresignedPutUrlThrowsWhenNotPending(): void
+    {
+        $profile = new ProjectStorageProfile();
+        $profile->driver = 's3';
+
+        $intent = new AssetUploadIntent();
+        $intent->storageProfile = $profile;
+        $intent->status = AssetUploadIntent::STATUS_COMPLETED;
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Cannot sign an upload intent that is not pending.');
+
+        $this->service->getPresignedPutUrl($intent);
+    }
 }

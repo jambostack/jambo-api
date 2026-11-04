@@ -82,6 +82,10 @@ class DirectUploadController extends AbstractController
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
         }
 
+        if ($request->attributes->get('_project') !== $intent->project) {
+            $this->denyAccessUnlessGranted('content.create', $intent->project);
+        }
+
         try {
             $url = $this->directUploadService->getPresignedPartUrl($intent, $partNumber);
             return new JsonResponse([
@@ -114,6 +118,10 @@ class DirectUploadController extends AbstractController
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
         }
 
+        if ($request->attributes->get('_project') !== $intent->project) {
+            $this->denyAccessUnlessGranted('content.create', $intent->project);
+        }
+
         try {
             $media = $this->directUploadService->completeUpload($intent, $parts, $fileSize, $user);
             return new JsonResponse([
@@ -141,6 +149,10 @@ class DirectUploadController extends AbstractController
         }
         if (!$intent || $intent->project->uuid?->toRfc4122() !== $projectUuid) {
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
+        }
+
+        if ($request->attributes->get('_project') !== $intent->project) {
+            $this->denyAccessUnlessGranted('content.create', $intent->project);
         }
 
         $this->directUploadService->abortUpload($intent);

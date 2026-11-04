@@ -272,6 +272,59 @@ class EndUserAuthControllerTest extends WebTestCase
         $this->assertSame(200, $client->getResponse()->getStatusCode());
     }
 
+    public function testRefreshTokenReuseDetectionAndFamilyRevocation(): void
+    {
+        $client = static::createClient();
+        $email = 'reuse-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        // 1. Inscription initiale -> émission de Refresh Token A
+        $client->jsonRequest('POST', $this->baseUrl() . '/register', [
+            'email'    => $email,
+            'password' => 'password123',
+        ]);
+        $this->assertSame(201, $client->getResponse()->getStatusCode());
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $refreshTokenA = $body['data']['refresh_token'];
+
+        // 2. Première utilisation légitime du Refresh Token A -> émission de Token B
+        $client->jsonRequest('POST', $this->baseUrl() . '/refresh', [
+            'refresh_token' => $refreshTokenA,
+        ]);
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $refreshBody = json_decode($client->getResponse()->getContent(), true);
+        $accessTokenB = $refreshBody['data']['access_token'];
+        $refreshTokenB = $refreshBody['data']['refresh_token'];
+
+        // Token B fonctionne bien
+        $client->request('GET', $this->baseUrl() . '/me', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $accessTokenB,
+            'HTTP_ACCEPT'        => 'application/json',
+        ]);
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+
+        // 3. REJEU / ATTAQUE : Tentative de réutilisation du Refresh Token A (déjà consommé)
+        $client->jsonRequest('POST', $this->baseUrl() . '/refresh', [
+            'refresh_token' => $refreshTokenA,
+        ]);
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+        $reuseBody = json_decode($client->getResponse()->getContent(), true);
+        $this->assertStringContainsString('reuse detected', $reuseBody['error']);
+
+        // 4. REVOCATION AUTOMATIQUE DE LA FAMILLE :
+        // Le Refresh Token B (qui appartenait à la même famille) doit désormais être révoqué
+        $client->jsonRequest('POST', $this->baseUrl() . '/refresh', [
+            'refresh_token' => $refreshTokenB,
+        ]);
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+
+        // 5. Et l'access token B doit être rejeté sur /me (tokenVersion incrémenté)
+        $client->request('GET', $this->baseUrl() . '/me', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $accessTokenB,
+            'HTTP_ACCEPT'        => 'application/json',
+        ]);
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+    }
+
     public function testRefreshTokenFromProjectACannotBeUsedOnProjectB(): void
     {
         self::bootKernel();

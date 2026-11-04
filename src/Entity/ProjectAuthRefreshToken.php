@@ -7,6 +7,8 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: ProjectAuthRefreshTokenRepository::class)]
 #[ORM\Table(name: 'project_auth_refresh_tokens')]
+#[ORM\Index(columns: ['family_id'], name: 'idx_part_family')]
+#[ORM\Index(columns: ['end_user_id', 'is_revoked'], name: 'idx_part_user_revoked')]
 class ProjectAuthRefreshToken
 {
     #[ORM\Id]
@@ -18,8 +20,8 @@ class ProjectAuthRefreshToken
     public string $tokenHash = '';
 
     #[ORM\ManyToOne(targetEntity: ProjectAuthClient::class)]
-    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    public ProjectAuthClient $client;
+    #[ORM\JoinColumn(nullable: true, onDelete: 'CASCADE')]
+    public ?ProjectAuthClient $client = null;
 
     #[ORM\ManyToOne(targetEntity: EndUser::class)]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
@@ -30,6 +32,12 @@ class ProjectAuthRefreshToken
 
     #[ORM\Column]
     public bool $isRevoked = false;
+
+    #[ORM\Column(length: 64, nullable: true)]
+    public ?string $familyId = null;
+
+    #[ORM\Column(length: 64, nullable: true)]
+    public ?string $parentTokenHash = null;
 
     #[ORM\Column]
     public \DateTimeImmutable $expiresAt;

@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Entity\EndUser;
 use App\Entity\PasswordResetToken;
 use App\Entity\Project;
+use App\Entity\ProjectAuthRefreshToken;
 use App\Repository\EndUserRepository;
 use App\Repository\ProjectAuthRefreshTokenRepository;
 use App\Repository\ProjectAuthSessionRepository;
@@ -112,7 +113,7 @@ class EndUserAuthController extends AbstractController
         $this->em->flush();
 
         $accessToken = $this->jwtService->createAccessToken($endUser);
-        $refreshToken = $this->jwtService->createRefreshToken($endUser);
+        $refreshToken = $this->issueRefreshToken($endUser);
         $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));
 
         return $this->json([
@@ -197,7 +198,7 @@ class EndUserAuthController extends AbstractController
         }
 
         $accessToken = $this->jwtService->createAccessToken($endUser);
-        $refreshToken = $this->jwtService->createRefreshToken($endUser);
+        $refreshToken = $this->issueRefreshToken($endUser);
         $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));
 
         return $this->json([
@@ -291,7 +292,7 @@ class EndUserAuthController extends AbstractController
         }
 
         $accessToken = $this->jwtService->createAccessToken($endUser);
-        $refreshToken = $this->jwtService->createRefreshToken($endUser);
+        $refreshToken = $this->issueRefreshToken($endUser);
         $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));
 
         return $this->json([
@@ -359,8 +360,46 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Token has been revoked'], 401);
         }
 
+        $tokenHash = ProjectAuthRefreshToken::hash($refreshJwt);
+        $storedToken = $this->refreshTokenRepo?->findByHash($tokenHash);
+
+        if ($storedToken !== null && $storedToken->isRevoked) {
+            // Détection de réutilisation de Refresh Token (RFC 6819 & RFC 9068)
+            // L'ancien jeton a déjà été échangé : alerte compromission / rejeu !
+            if ($storedToken->familyId !== null) {
+                $this->refreshTokenRepo->revokeFamily($storedToken->familyId);
+            }
+            $this->refreshTokenRepo->revokeAllForEndUser($endUser);
+            $this->sessionRepo?->revokeAllForEndUser($endUser);
+            $endUser->tokenVersion++;
+            $this->em->flush();
+
+            return $this->json([
+                'error' => 'Refresh token reuse detected. All tokens and sessions have been revoked.',
+            ], 401);
+        }
+
+        if ($storedToken !== null && $storedToken->isExpired()) {
+            return $this->json(['error' => 'Invalid or expired refresh token'], 401);
+        }
+
+        $familyId = $storedToken?->familyId ?? ($claims['fml'] ?? bin2hex(random_bytes(16)));
+
+        if ($storedToken !== null) {
+            // Rotation : invalider le token utilisé
+            $storedToken->isRevoked = true;
+        } elseif ($this->refreshTokenRepo !== null) {
+            // Enregistrement du token hérité comme consommé pour détecter tout rejeu ultérieur
+            $legacyToken = new ProjectAuthRefreshToken();
+            $legacyToken->tokenHash = $tokenHash;
+            $legacyToken->endUser = $endUser;
+            $legacyToken->familyId = $familyId;
+            $legacyToken->isRevoked = true;
+            $this->em->persist($legacyToken);
+        }
+
         $accessToken = $this->jwtService->createAccessToken($endUser);
-        $refreshToken = $this->jwtService->createRefreshToken($endUser);
+        $refreshToken = $this->issueRefreshToken($endUser, $familyId, $tokenHash);
         $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));
 
         return $this->json([
@@ -783,7 +822,7 @@ class EndUserAuthController extends AbstractController
             }
 
             $accessToken = $this->jwtService->createAccessToken($endUser);
-            $refreshToken = $this->jwtService->createRefreshToken($endUser);
+            $refreshToken = $this->issueRefreshToken($endUser);
 
             return $this->json([
                 'data' => [
@@ -813,5 +852,26 @@ class EndUserAuthController extends AbstractController
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function issueRefreshToken(EndUser $endUser, ?string $familyId = null, ?string $parentTokenHash = null): string
+    {
+        $familyId ??= bin2hex(random_bytes(16));
+        $refreshToken = $this->jwtService->createRefreshToken($endUser, $familyId);
+
+        if ($this->refreshTokenRepo !== null) {
+            $ttl = EndUserJwtService::resolveTtl($endUser->project?->jwtRefreshTtl, EndUserJwtService::DEFAULT_REFRESH_TTL);
+            $tokenEntity = new ProjectAuthRefreshToken();
+            $tokenEntity->tokenHash = ProjectAuthRefreshToken::hash($refreshToken);
+            $tokenEntity->endUser = $endUser;
+            $tokenEntity->familyId = $familyId;
+            $tokenEntity->parentTokenHash = $parentTokenHash;
+            $tokenEntity->expiresAt = (new \DateTimeImmutable())->modify("+{$ttl} seconds");
+
+            $this->em->persist($tokenEntity);
+            $this->em->flush();
+        }
+
+        return $refreshToken;
     }
 }

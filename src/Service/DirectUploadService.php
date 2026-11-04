@@ -86,14 +86,27 @@ class DirectUploadService
     }
 
     /**
-     * Génère l'URL pré-signée PUT pour un upload simple.
+     * Génère l'URL pré-signée PUT pour un upload simple avec plafond strict d'expiration.
      */
-    public function getPresignedPutUrl(AssetUploadIntent $intent, int $expiresInSeconds = 3600): string
+    public function getPresignedPutUrl(AssetUploadIntent $intent, int $expiresInSeconds = 900): string
     {
+        if ($intent->status !== AssetUploadIntent::STATUS_PENDING) {
+            throw new \RuntimeException('Cannot sign an upload intent that is not pending.');
+        }
+
+        $now = new \DateTimeImmutable();
+        if ($intent->expiresAt <= $now) {
+            throw new \RuntimeException('Upload intent has expired.');
+        }
+
         $profile = $intent->storageProfile;
         if ($profile === null || $profile->driver !== 's3') {
             throw new \RuntimeException('Associated storage profile is not an S3 driver.');
         }
+
+        // L'expiration ne doit jamais dépasser le temps restant de l'intent ni le plafond de 15 minutes (900s)
+        $remainingSeconds = $intent->expiresAt->getTimestamp() - $now->getTimestamp();
+        $effectiveTtl = max(1, min($expiresInSeconds, $remainingSeconds, 900));
 
         $s3Client = $this->storageDriverFactory->getS3Client($profile);
         $cmd = $s3Client->getCommand('PutObject', [
@@ -102,15 +115,24 @@ class DirectUploadService
             'ContentType' => $intent->clientMimeType ?? 'application/octet-stream',
         ]);
 
-        $request = $s3Client->createPresignedRequest($cmd, "+{$expiresInSeconds} seconds");
+        $request = $s3Client->createPresignedRequest($cmd, "+{$effectiveTtl} seconds");
         return (string) $request->getUri();
     }
 
     /**
-     * Génère l'URL pré-signée pour une partie spécifique d'un upload multipart.
+     * Génère l'URL pré-signée pour une partie spécifique d'un upload multipart avec plafond strict d'expiration.
      */
-    public function getPresignedPartUrl(AssetUploadIntent $intent, int $partNumber, int $expiresInSeconds = 3600): string
+    public function getPresignedPartUrl(AssetUploadIntent $intent, int $partNumber, int $expiresInSeconds = 900): string
     {
+        if ($intent->status !== AssetUploadIntent::STATUS_PENDING) {
+            throw new \RuntimeException('Cannot sign a part for an upload intent that is not pending.');
+        }
+
+        $now = new \DateTimeImmutable();
+        if ($intent->expiresAt <= $now) {
+            throw new \RuntimeException('Upload intent has expired.');
+        }
+
         if ($intent->mode !== AssetUploadIntent::MODE_MULTIPART || !$intent->s3MultipartUploadId) {
             throw new \LogicException('Cannot sign a part for a non-multipart upload intent.');
         }
@@ -120,6 +142,10 @@ class DirectUploadService
             throw new \RuntimeException('Associated storage profile is not an S3 driver.');
         }
 
+        // L'expiration ne doit jamais dépasser le temps restant de l'intent ni le plafond de 15 minutes (900s)
+        $remainingSeconds = $intent->expiresAt->getTimestamp() - $now->getTimestamp();
+        $effectiveTtl = max(1, min($expiresInSeconds, $remainingSeconds, 900));
+
         $s3Client = $this->storageDriverFactory->getS3Client($profile);
         $cmd = $s3Client->getCommand('UploadPart', [
             'Bucket'     => $profile->s3Bucket,
@@ -128,7 +154,7 @@ class DirectUploadService
             'PartNumber' => $partNumber,
         ]);
 
-        $request = $s3Client->createPresignedRequest($cmd, "+{$expiresInSeconds} seconds");
+        $request = $s3Client->createPresignedRequest($cmd, "+{$effectiveTtl} seconds");
         return (string) $request->getUri();
     }
 

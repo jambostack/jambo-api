@@ -61,12 +61,23 @@ class ProjectImporter
             }
             $entryName = $stat['name'];
 
-            // Prevent Zip Slip / path traversal
+            // Reject symbolic links in ZIP archives
+            $extAttr = $stat['external_attributes'] ?? 0;
+            $mode = ($extAttr >> 16) & 0170000;
+            if ($mode === 0120000) {
+                $zip->close();
+                throw new \RuntimeException('Symbolic links are strictly forbidden in ZIP archives: ' . $entryName);
+            }
+
+            // Prevent Zip Slip / path traversal, null bytes and Windows drive paths
             if (
+                str_contains($entryName, "\0") ||
                 str_contains($entryName, '../') ||
                 str_contains($entryName, '..\\') ||
+                str_contains($entryName, '..') ||
                 str_starts_with($entryName, '/') ||
-                str_starts_with($entryName, '\\')
+                str_starts_with($entryName, '\\') ||
+                preg_match('/^[a-zA-Z]:/', $entryName)
             ) {
                 $zip->close();
                 throw new \RuntimeException('Invalid file path in ZIP archive (directory traversal detected): ' . $entryName);

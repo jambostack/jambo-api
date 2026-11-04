@@ -73,12 +73,29 @@ class MediaImportHandler implements ImportHandlerInterface
             $media->alt = $mediaData['alt'] ?? null;
             $media->caption = $mediaData['caption'] ?? null;
 
-            // Copy binary file from extracted archive to project's upload directory
+            // Copy binary file from extracted archive to project's upload directory with strict security checks
             $fileName = basename((string) ($mediaData['file_name'] ?? ''));
-            if ($fileName !== '' && $fileName !== '.' && $fileName !== '..') {
+            $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+            $blockedExtensions = [
+                'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'phps',
+                'sh', 'bash', 'exe', 'bat', 'cmd', 'com', 'cgi', 'pl', 'py',
+                'htaccess', 'htpasswd', 'ini', 'conf', 'env',
+            ];
+
+            $isSafeFilename = $fileName !== ''
+                && $fileName !== '.'
+                && $fileName !== '..'
+                && !str_starts_with($fileName, '.')
+                && !str_contains($fileName, "\0")
+                && !in_array($ext, $blockedExtensions, true)
+                && preg_match('/^[a-zA-Z0-9_\-\.]+$/', $fileName);
+
+            if ($isSafeFilename) {
                 $sourceFile = $extractedDir . '/media/' . $fileName;
-                if (file_exists($sourceFile)) {
-                    copy($sourceFile, $targetMediaDir . '/' . $fileName);
+                $targetFile = $targetMediaDir . '/' . $fileName;
+
+                if (file_exists($sourceFile) && is_file($sourceFile)) {
+                    copy($sourceFile, $targetFile);
                 }
             }
 

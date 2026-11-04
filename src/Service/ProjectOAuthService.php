@@ -109,6 +109,7 @@ class ProjectOAuthService
         $refreshToken->client = $client;
         $refreshToken->endUser = $code->endUser;
         $refreshToken->scopes = $code->scopes;
+        $refreshToken->familyId = bin2hex(random_bytes(16));
 
         $this->em->persist($refreshToken);
         $this->em->flush();
@@ -131,7 +132,10 @@ class ProjectOAuthService
             // Détection de réutilisation de Refresh Token (OAuth 2.0 Security BCP - RFC 6819)
             $compromised = $this->refreshTokenRepository->findByTokenHash($plainRefreshToken);
             if ($compromised !== null && $compromised->isRevoked) {
-                // Révocation proactive de l'ensemble des tokens et sessions de l'utilisateur
+                // Révocation de la famille de tokens et de toutes les sessions
+                if ($compromised->familyId !== null) {
+                    $this->refreshTokenRepository->revokeFamily($compromised->familyId);
+                }
                 $this->revokeAllTokensForEndUser($compromised->endUser);
                 throw new \InvalidArgumentException('Refresh token reuse detected. All tokens and sessions have been revoked.');
             }
@@ -154,6 +158,8 @@ class ProjectOAuthService
         $newToken->client = $client;
         $newToken->endUser = $token->endUser;
         $newToken->scopes = $token->scopes;
+        $newToken->familyId = $token->familyId ?? bin2hex(random_bytes(16));
+        $newToken->parentTokenHash = $token->tokenHash;
 
         $this->em->persist($newToken);
         $this->em->flush();

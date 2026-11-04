@@ -266,4 +266,56 @@ class MediaImportHandlerTest extends TestCase
             @rmdir($targetDir);
         }
     }
+
+    public function testImportBlocksExecutableFilesAndDotfiles(): void
+    {
+        $projectDir = sys_get_temp_dir();
+        $handler = new MediaImportHandler($projectDir);
+
+        $project = new Project();
+        $project->uuid = Uuid::v4();
+        $project->name = 'Test Security';
+
+        $tempDir = sys_get_temp_dir() . '/sec-test-' . uniqid();
+        mkdir($tempDir);
+        mkdir($tempDir . '/media');
+
+        file_put_contents($tempDir . '/media/webshell.php', '<?php phpinfo();');
+        file_put_contents($tempDir . '/media/.htaccess', 'Deny from all');
+        file_put_contents($tempDir . '/media/script.sh', '#!/bin/bash');
+        file_put_contents($tempDir . '/media/valid.png', 'fake-png');
+
+        $mediaData = [
+            'media' => [
+                ['uuid' => Uuid::v4()->toString(), 'file_name' => 'webshell.php', 'original_name' => 'webshell.php'],
+                ['uuid' => Uuid::v4()->toString(), 'file_name' => '.htaccess', 'original_name' => '.htaccess'],
+                ['uuid' => Uuid::v4()->toString(), 'file_name' => 'script.sh', 'original_name' => 'script.sh'],
+                ['uuid' => Uuid::v4()->toString(), 'file_name' => 'valid.png', 'original_name' => 'valid.png'],
+            ],
+        ];
+        file_put_contents($tempDir . '/media.json', json_encode($mediaData));
+
+        $targetDir = $projectDir . '/public/uploads/media/' . $project->uuid->toString();
+
+        try {
+            $uuidMap = [];
+            $options = new ImportOptions();
+            $handler->import($project, $tempDir, $options, $uuidMap);
+
+            $this->assertFileDoesNotExist($targetDir . '/webshell.php');
+            $this->assertFileDoesNotExist($targetDir . '/.htaccess');
+            $this->assertFileDoesNotExist($targetDir . '/script.sh');
+            $this->assertFileExists($targetDir . '/valid.png');
+        } finally {
+            @unlink($tempDir . '/media/webshell.php');
+            @unlink($tempDir . '/media/.htaccess');
+            @unlink($tempDir . '/media/script.sh');
+            @unlink($tempDir . '/media/valid.png');
+            @unlink($tempDir . '/media.json');
+            @rmdir($tempDir . '/media');
+            @rmdir($tempDir);
+            @unlink($targetDir . '/valid.png');
+            @rmdir($targetDir);
+        }
+    }
 }

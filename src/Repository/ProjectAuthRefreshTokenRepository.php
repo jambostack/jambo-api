@@ -35,11 +35,40 @@ class ProjectAuthRefreshTokenRepository extends ServiceEntityRepository
     {
         $hash = ProjectAuthRefreshToken::hash($plainToken);
 
+        return $this->findByHash($hash);
+    }
+
+    public function findByHash(string $hash): ?ProjectAuthRefreshToken
+    {
         return $this->createQueryBuilder('r')
             ->where('r.tokenHash = :hash')
             ->setParameter('hash', $hash)
             ->getQuery()
             ->getOneOrNullResult();
+    }
+
+    public function findValidByHash(string $hash): ?ProjectAuthRefreshToken
+    {
+        return $this->createQueryBuilder('r')
+            ->where('r.tokenHash = :hash')
+            ->andWhere('r.isRevoked = false')
+            ->andWhere('r.expiresAt > :now')
+            ->setParameter('hash', $hash)
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    public function revokeFamily(string $familyId): int
+    {
+        return (int) $this->createQueryBuilder('r')
+            ->update()
+            ->set('r.isRevoked', 'true')
+            ->where('r.familyId = :familyId')
+            ->andWhere('r.isRevoked = false')
+            ->setParameter('familyId', $familyId)
+            ->getQuery()
+            ->execute();
     }
 
     public function revokeAllForEndUser(EndUser $endUser): int
@@ -58,7 +87,7 @@ class ProjectAuthRefreshTokenRepository extends ServiceEntityRepository
     {
         return $this->createQueryBuilder('r')
             ->delete()
-            ->where('r.expiresAt < :now OR r.isRevoked = true')
+            ->where('r.expiresAt < :now')
             ->setParameter('now', new \DateTimeImmutable())
             ->getQuery()
             ->execute();

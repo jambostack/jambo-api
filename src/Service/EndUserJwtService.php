@@ -40,9 +40,9 @@ class EndUserJwtService
     }
 
     /** Generate refresh token. TTL from project settings, falls back to 30 days. */
-    public function createRefreshToken(EndUser $endUser): string
+    public function createRefreshToken(EndUser $endUser, ?string $familyId = null): string
     {
-        return $this->createToken($endUser, true);
+        return $this->createToken($endUser, true, $familyId);
     }
 
     /**
@@ -65,6 +65,14 @@ class EndUserJwtService
             try {
                 $euid = $token->claims()->get('euid');
             } catch (\Throwable) {}
+            $fml = null;
+            try {
+                $fml = $token->claims()->get('fml');
+            } catch (\Throwable) {}
+            $jti = null;
+            try {
+                $jti = $token->claims()->get('jti');
+            } catch (\Throwable) {}
 
             return [
                 'sub'  => $sub ?? $euid,
@@ -74,6 +82,8 @@ class EndUserJwtService
                 'ref'  => $token->claims()->get('ref') ?? false,
                 'tfa'  => $token->claims()->get('tfa') ?? false,
                 'code' => $token->claims()->get('code'),
+                'fml'  => $fml,
+                'jti'  => $jti,
             ];
         } catch (\Throwable $e) {
             $this->logger?->warning('JWT validation failed: {message}', [
@@ -127,7 +137,7 @@ class EndUserJwtService
 
     // ─── Private ───────────────────────────────────────────────────────────
 
-    private function createToken(EndUser $endUser, bool $isRefresh): string
+    private function createToken(EndUser $endUser, bool $isRefresh, ?string $familyId = null): string
     {
         if ($endUser->uuid === null) {
             throw new \RuntimeException('Cannot generate JWT: EndUser has no UUID.');
@@ -155,6 +165,9 @@ class EndUserJwtService
 
         if ($isRefresh) {
             $builder = $builder->withClaim('ref', true);
+            if ($familyId !== null) {
+                $builder = $builder->withClaim('fml', $familyId);
+            }
         }
 
         return $builder
