@@ -5,24 +5,47 @@ namespace App\Controller\Admin;
 use App\Repository\ProjectRepository;
 use App\Service\AiContentService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 
 class ContentAiStreamController extends AbstractController
 {
+    public const MAX_INPUT_LENGTH = 30000;
+
     public function __construct(
         private readonly ProjectRepository $projectRepository,
         private readonly AiContentService $aiService,
         private readonly ?AuthorizationCheckerInterface $authChecker = null,
+        #[Autowire(service: 'limiter.ai_stream_limiter')]
+        private readonly ?RateLimiterFactory $aiStreamLimiter = null,
     ) {}
 
     #[Route('/api/projects/{projectUuid}/ai/stream', name: 'api_project_ai_stream', methods: ['POST'])]
     #[Route('/admin/api/content-ai/stream', name: 'admin_content_ai_stream', methods: ['POST'])]
     public function streamAction(Request $request, ?string $projectUuid = null): StreamedResponse
     {
+        if ($this->aiStreamLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (!$this->aiStreamLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new StreamedResponse(function () {
+                    echo "data: " . json_encode(['error' => 'Too many AI stream requests. Please retry later.']) . "\n\n";
+                    flush();
+                }, 429, ['Content-Type' => 'text/event-stream']);
+            }
+        }
+
         if ($projectUuid !== null) {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
             if ($project === null) {
@@ -39,16 +62,23 @@ class ContentAiStreamController extends AbstractController
         }
 
         $payload = json_decode($request->getContent(), true) ?? [];
-        $action = $payload['action'] ?? 'rewrite';
-        $text = trim($payload['text'] ?? '');
-        $tone = $payload['tone'] ?? 'professional';
-        $targetLocale = $payload['target_locale'] ?? 'fr';
-        $provider = $payload['provider'] ?? null;
-        $model = $payload['model'] ?? 'gpt-4o-mini';
+        $action = (string) ($payload['action'] ?? 'rewrite');
+        $text = trim((string) ($payload['text'] ?? ''));
+        $tone = (string) ($payload['tone'] ?? 'professional');
+        $targetLocale = (string) ($payload['target_locale'] ?? 'fr');
+        $provider = isset($payload['provider']) ? (string) $payload['provider'] : null;
+        $model = (string) ($payload['model'] ?? 'gpt-4o-mini');
 
         if ($text === '') {
             return new StreamedResponse(function () {
                 echo "data: " . json_encode(['error' => 'Input text is empty']) . "\n\n";
+                flush();
+            }, 400, ['Content-Type' => 'text/event-stream']);
+        }
+
+        if (mb_strlen($text) > self::MAX_INPUT_LENGTH) {
+            return new StreamedResponse(function () {
+                echo "data: " . json_encode(['error' => 'Input text exceeds maximum allowed length of 30,000 characters.']) . "\n\n";
                 flush();
             }, 400, ['Content-Type' => 'text/event-stream']);
         }

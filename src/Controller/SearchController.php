@@ -6,8 +6,10 @@ use App\Entity\Project;
 use App\Service\SearchService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 class SearchController extends AbstractController
@@ -15,11 +17,29 @@ class SearchController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private SearchService $search,
+        #[Autowire(service: 'limiter.search_limiter')]
+        private ?RateLimiterFactory $searchLimiter = null,
+        #[Autowire(service: 'limiter.search_reindex_limiter')]
+        private ?RateLimiterFactory $reindexLimiter = null,
     ) {}
 
     #[Route('/api/projects/{uuid}/search', name: 'search_endpoint', methods: ['GET'])]
     public function search(string $uuid, Request $request): JsonResponse
     {
+        if ($this->searchLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (!$this->searchLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->json(['error' => 'Too many search requests. Please retry later.'], 429);
+            }
+        }
+
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
@@ -29,7 +49,9 @@ class SearchController extends AbstractController
             return $this->json(['error' => 'Projet introuvable'], 404);
         }
 
-        $this->denyAccessUnlessGranted('project.view', $project);
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
 
         $query = trim((string) $request->query->get('q', ''));
         if ($query === '') {
@@ -75,8 +97,22 @@ class SearchController extends AbstractController
     }
 
     #[Route('/api/projects/{uuid}/search/reindex', name: 'search_reindex', methods: ['POST'])]
-    public function reindex(string $uuid): JsonResponse
+    public function reindex(string $uuid, Request $request): JsonResponse
     {
+        if ($this->reindexLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (!$this->reindexLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->json(['error' => 'Reindexing rate limit exceeded. Please retry in a few minutes.'], 429);
+            }
+        }
+
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
@@ -86,7 +122,9 @@ class SearchController extends AbstractController
             return $this->json(['error' => 'Projet introuvable'], 404);
         }
 
-        $this->denyAccessUnlessGranted('project.manage', $project);
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('project.manage', $project);
+        }
 
         $count = $this->search->rebuildIndex($project);
 

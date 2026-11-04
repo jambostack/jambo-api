@@ -71,11 +71,11 @@ class NewPasswordController extends InertiaController
             $confirmation = (string) $request->request->get('password_confirmation', '');
         }
 
-        if (strlen($password) < 8) {
+        if (strlen($password) < 8 || strlen($password) > 4096) {
             return $this->inertia($request, 'auth/reset-password', [
                 'token' => $token,
                 'email' => $resetToken->email,
-                'errors' => ['password' => 'Password must be at least 8 characters.'],
+                'errors' => ['password' => 'Password must be between 8 and 4096 characters.'],
             ]);
         }
 

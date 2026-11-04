@@ -158,6 +158,10 @@ class UserController extends AbstractController
             return $this->json(['error' => 'name, email, and password are required'], 422);
         }
 
+        if (mb_strlen($password) < 8 || mb_strlen($password) > 4096) {
+            return $this->json(['errors' => ['password' => 'Password must be between 8 and 4096 characters.']], 422);
+        }
+
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return $this->json(['errors' => ['email' => 'Invalid email address.']], 422);
         }
@@ -221,7 +225,11 @@ class UserController extends AbstractController
             $user->email = $newEmail;
         }
         if (!empty($data['password'])) {
-            $user->password = $this->hasher->hashPassword($user, $data['password']);
+            $newPassword = (string) $data['password'];
+            if (mb_strlen($newPassword) < 8 || mb_strlen($newPassword) > 4096) {
+                return $this->json(['errors' => ['password' => 'Password must be between 8 and 4096 characters.']], 422);
+            }
+            $user->password = $this->hasher->hashPassword($user, $newPassword);
         }
         if (isset($data['roles']) && is_array($data['roles'])) {
             $user->userRoles->clear();

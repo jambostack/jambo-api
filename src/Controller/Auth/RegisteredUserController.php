@@ -51,7 +51,7 @@ class RegisteredUserController extends InertiaController
         $errors = $this->validator->validate($data, new Assert\Collection([
             'name'                  => [new Assert\NotBlank(), new Assert\Length(min: 2, max: 255)],
             'email'                 => [new Assert\NotBlank(), new Assert\Email()],
-            'password'              => [new Assert\NotBlank(), new Assert\Length(min: 8)],
+            'password'              => [new Assert\NotBlank(), new Assert\Length(min: 8, max: 4096)],
             'password_confirmation' => [new Assert\NotBlank()],
         ]));
 

@@ -7,6 +7,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.66] — 2026-11-04
+
+### Fixed & Hardened
+- **AdminApi Token Anti-Privilege Escalation (`AdminApi\TokenController`)**:
+  - Closed privilege escalation vulnerability where PAT holders could create or mutate tokens with scopes beyond those granted to the authorizer.
+  - Enforced strict sub-scoping validation: child tokens cannot exceed authorizing token's scope boundaries, and administrative scopes (`*`, `tokens:manage`) require authorizing tokens to possess them.
+  - Added strict name format validation: non-empty, capped at 255 chars, control characters rejected.
+  - Added `token_management_limiter` rate limiter (30 req / 60 seconds) on token management endpoints.
+- **AI Rate Limiting & Input Size Defense (`AiController`, `ContentAiStreamController`)**:
+  - Implemented `ai_limiter` (30 req / 60s) across all synchronous AI endpoints (`generate`, `translate`, `summarize`, `seo`, `suggestSchema`).
+  - Implemented `ai_stream_limiter` (15 req / 60s) on streaming LLM SSE endpoints (`/api/projects/{uuid}/ai/stream`, `/admin/api/content-ai/stream`).
+  - Capped input payload lengths: 10k characters on briefs, 50k on text/content, and 30k on streaming prompts, neutralizing buffer exhaustion and LLM billing DoS.
+- **Search Controller API Token Authorization & Rate Limiting (`SearchController`)**:
+  - Aligned project authorization check to inspect `_project` request attribute, resolving 403 authorization failures when accessing search via Bearer API tokens.
+  - Added dedicated rate limiters: `search_limiter` (60 req / 60s) and `search_reindex_limiter` (5 req / 300s) to protect table-scanning and Meilisearch sync operations.
+  - Updated `EnsureProjectMemberSubscriber` to resolve project identifiers passed as `{project}` route parameters.
+- **Notification Controller Link Sanitization & Deletion (`NotificationController`)**:
+  - Implemented strict URI scheme filtering on notification links, dropping dangerous `javascript:` and `data:` schemes while preserving valid relative paths and HTTPS URLs.
+  - Added `DELETE /api/notifications/{id}` endpoint with recipient ownership validation.
+  - Added `notification_limiter` rate limiter (60 req / 60 seconds).
+- **Password Length Defense Against Hashing DoS (`UserController`, `RegisteredUserController`, `NewPasswordController`)**:
+  - Enforced maximum password length of 4096 bytes across user creation, user update, registration, and password reset routes to mitigate CPU-exhaustion DoS against bcrypt/Argon2id.
+- **Automated Test Coverage**:
+  - Added comprehensive `Cycle19HardeningTest` suite (10 tests, 40 assertions) covering all new security controls.
+
+---
+
 ## [1.26.65] — 2026-11-04
 
 ### Fixed & Hardened

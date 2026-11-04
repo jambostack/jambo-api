@@ -44,7 +44,9 @@ class InsightsController extends AbstractController
         if (!$entity) {
             throw $this->createNotFoundException();
         }
-        $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $entity);
+        if ($request->attributes->get('_project') !== $entity) {
+            $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $entity);
+        }
 
         try {
             $range = InsightsRange::fromQuery($request->query->get('range'));

@@ -88,6 +88,30 @@ framework:
             policy: sliding_window
             limit: 5
             interval: '300 seconds'
+        token_management_limiter:
+            policy: sliding_window
+            limit: 30
+            interval: '60 seconds'
+        ai_limiter:
+            policy: sliding_window
+            limit: 30
+            interval: '60 seconds'
+        ai_stream_limiter:
+            policy: sliding_window
+            limit: 15
+            interval: '60 seconds'
+        search_limiter:
+            policy: sliding_window
+            limit: 60
+            interval: '60 seconds'
+        search_reindex_limiter:
+            policy: sliding_window
+            limit: 5
+            interval: '300 seconds'
+        notification_limiter:
+            policy: sliding_window
+            limit: 60
+            interval: '60 seconds'
 
 when@test:
     framework:
@@ -164,3 +188,27 @@ when@test:
                 policy: sliding_window
                 limit: 10000
                 interval: '300 seconds'
+            token_management_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            ai_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            ai_stream_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            search_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            search_reindex_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '300 seconds'
+            notification_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
