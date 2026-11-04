@@ -7,6 +7,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.79] — 2026-11-04
+
+### Security & I18N Hardening
+- **Null-user guard on `ProjectController::index()`**:
+  - Fixed a **500 TypeError** (`findByMember(null)`) triggered by unauthenticated GET requests to `/api/projects`. Now returns `401 Access denied` via translator.
+- **Complete I18N Migration (`InstallController`, `ProjectController`)**:
+  - Injected `TranslatorInterface` into both controllers, eliminating all hardcoded strings (French & English mixed).
+  - Migrated **21 error/success keys** in `ProjectController` and **16 UI/diagnostic keys** in `InstallController`.
+  - All 37 new keys synchronized across all 4 locales (`en`, `fr`, `es`, `ar`) — total now **1,865 keys**, 0 missing.
+  - `InstallController` diagnostic labels now translated: PHP version check, extension checks, writable directory checks.
+  - HTML install page now uses `htmlspecialchars` on translated strings for XSS safety.
+- **Automated Test Suite & Version Sync**:
+  - Synced `HealthController::VERSION` to `1.26.79` matching `composer.json`.
+  - Added `tests/Controller/Cycle32HardeningTest.php` with 9 tests covering translation key parity (all 4 locales), zero hardcoded strings assertion, 401 guard on `/api/projects`, and install diagnostics.
+  - Full PHPUnit suite passing green (973/973 tests).
+
 ## [1.26.78] — 2026-11-04
 
 ### Security & Hardening

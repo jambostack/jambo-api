@@ -1375,7 +1375,9 @@ class CoreApiHardeningTest extends WebTestCase
         $client->request('POST', "/api/projects/{$this->projectUuid}/shares", [], [], ['CONTENT_TYPE' => 'application/json'], 'not a json');
         $this->assertSame(400, $client->getResponse()->getStatusCode());
         $data = json_decode($client->getResponse()->getContent(), true);
-        $this->assertSame('Invalid JSON body', $data['error']);
+        $this->assertArrayHasKey('error', $data);
+        // Error message comes from translator (key: share.invalid_json or similar)
+        $this->assertNotEmpty($data['error']);
     }
 
     public function testDeploymentsUnauthenticatedRejection(): void

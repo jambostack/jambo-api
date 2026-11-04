@@ -37,7 +37,8 @@ class InstallControllerTest extends WebTestCase
         // 3. Subsequent access: must be 403 Forbidden
         $client->request('GET', '/install');
         self::assertSame(403, $client->getResponse()->getStatusCode());
-        self::assertStringContainsString('déjà installée', (string) $client->getResponse()->getContent());
+        // After I18N migration the page is translated (EN by default in test env)
+        self::assertStringContainsString('Already Installed', (string) $client->getResponse()->getContent());
 
         $client->request('GET', '/install/check');
         self::assertSame(403, $client->getResponse()->getStatusCode());
