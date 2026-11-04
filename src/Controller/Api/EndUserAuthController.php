@@ -636,10 +636,16 @@ class EndUserAuthController extends AbstractController
             }
 
             $redirectUri = $request->getSchemeAndHttpHost() . "/api/{$projectId}/auth/social/{$provider}";
+            $credentials = $this->socialLogin->getProjectCredentials($project, $provider);
+            if (!$credentials) {
+                return $this->json(['error' => "Provider '{$provider}' is not configured for this project"], 400);
+            }
+
             $socialUser = $this->socialLogin->getUserFromProvider(
                 $provider,
                 $code,
                 $redirectUri,
+                $credentials,
             );
 
             $endUser = $this->socialLogin->findOrCreateEndUser($project, $socialUser, $provider);

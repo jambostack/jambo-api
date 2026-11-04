@@ -40,54 +40,66 @@ class RealtimeController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyProjectAccess($project, $request);
-
-        $mercureSecret = $this->getParameter('mercure_jwt_secret') ?? '';
-        if (!$this->mercureEnabled || $mercureSecret === '' || strlen($mercureSecret) < 32) {
-            return $this->json([
-                'enabled' => false,
-                'token'   => null,
-                'hub_url' => null,
-                'topics'  => [],
-                'message' => 'Mercure not configured on this server. Fallback to polling.',
-            ], 200);
+        if ($error = $this->denyProjectAccess($project, $request)) {
+            return $error;
         }
 
-        $jwtConfig = Configuration::forSymmetricSigner(
-            new Sha256(),
-            InMemory::plainText($mercureSecret),
-        );
+        try {
+            $mercureSecret = $this->getParameter('mercure_jwt_secret') ?? '';
+            if (!$this->mercureEnabled || $mercureSecret === '' || strlen($mercureSecret) < 32) {
+                return $this->json([
+                    'enabled' => false,
+                    'token'   => null,
+                    'hub_url' => null,
+                    'topics'  => [],
+                    'message' => 'Mercure not configured on this server. Fallback to polling.',
+                ], 200);
+            }
 
-        $now = new \DateTimeImmutable();
-        $token = $jwtConfig->builder()
-            ->issuedAt($now)
-            ->expiresAt($now->modify('+1 hour'))
-            ->withClaim('mercure', [
-                'subscribe' => [
+            $jwtConfig = Configuration::forSymmetricSigner(
+                new Sha256(),
+                InMemory::plainText($mercureSecret),
+            );
+
+            $now = new \DateTimeImmutable();
+            $token = $jwtConfig->builder()
+                ->issuedAt($now)
+                ->expiresAt($now->modify('+1 hour'))
+                ->withClaim('mercure', [
+                    'subscribe' => [
+                        "projects/{$projectUuid}",
+                        "projects/{$projectUuid}/content",
+                        "projects/{$projectUuid}/media",
+                        "projects/{$projectUuid}/status",
+                    ],
+                    'publish' => [],
+                ])
+                ->getToken($jwtConfig->signer(), $jwtConfig->signingKey())
+                ->toString();
+
+            $hubUrl = $this->getParameter('mercure_public_url')
+                ?? $request->getSchemeAndHttpHost() . '/.well-known/mercure';
+
+            return $this->json([
+                'enabled' => true,
+                'token'   => $token,
+                'hub_url' => $hubUrl,
+                'topics'  => [
                     "projects/{$projectUuid}",
                     "projects/{$projectUuid}/content",
                     "projects/{$projectUuid}/media",
                     "projects/{$projectUuid}/status",
                 ],
-                'publish' => [],
-            ])
-            ->getToken($jwtConfig->signer(), $jwtConfig->signingKey())
-            ->toString();
-
-        $hubUrl = $this->getParameter('mercure_public_url')
-            ?? $request->getSchemeAndHttpHost() . '/.well-known/mercure';
-
-        return $this->json([
-            'enabled' => true,
-            'token'   => $token,
-            'hub_url' => $hubUrl,
-            'topics'  => [
-                "projects/{$projectUuid}",
-                "projects/{$projectUuid}/content",
-                "projects/{$projectUuid}/media",
-                "projects/{$projectUuid}/status",
-            ],
-        ]);
+            ]);
+        } catch (\Throwable) {
+            return $this->json([
+                'enabled' => false,
+                'token'   => null,
+                'hub_url' => null,
+                'topics'  => [],
+                'message' => 'Mercure initialization error. Fallback to polling.',
+            ], 200);
+        }
     }
 
     #[Route('', name: 'poll', methods: ['GET'])]
@@ -97,7 +109,9 @@ class RealtimeController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
-        $this->denyProjectAccess($project, $request);
+        if ($error = $this->denyProjectAccess($project, $request)) {
+            return $error;
+        }
 
         $since = max(0, (int) $request->query->get('since', '0'));
 
@@ -134,21 +148,22 @@ class RealtimeController extends AbstractController
 
     // ─── Private ─────────────────────────────────────────────────────────
 
-    private function denyProjectAccess(\App\Entity\Project $project, Request $request): void
+    private function denyProjectAccess(\App\Entity\Project $project, Request $request): ?JsonResponse
     {
         if ($request->attributes->get('_project') === $project) {
-            return;
+            return null;
         }
         $user = $this->getUser();
         if (!$user) {
-            throw $this->createAccessDeniedException('Authentication required');
+            return $this->json(['error' => 'Authentication required'], 401);
         }
         if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
-            return;
+            return null;
         }
         if ($this->memberRepo->findActiveByUserAndProject($user, $project) === null) {
-            throw $this->createAccessDeniedException();
+            return $this->json(['error' => 'Access denied'], 403);
         }
+        return null;
     }
 
     private function trimEventFile(string $path, array $lines): void

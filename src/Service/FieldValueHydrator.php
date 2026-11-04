@@ -11,36 +11,66 @@ class FieldValueHydrator
         switch ($fieldType) {
             case 'number':
             case 'decimal':
-                $cfv->numberValue = $value !== null ? (float) $value : null;
+            case 'rating':
+                $cfv->numberValue = ($value !== null && is_scalar($value)) ? (string) $value : null;
                 break;
             case 'boolean':
             case 'checkbox':
-                $cfv->booleanValue = (bool) $value;
+                $cfv->booleanValue = $value !== null ? (is_bool($value) ? $value : (bool) filter_var($value, FILTER_VALIDATE_BOOLEAN)) : null;
                 break;
             case 'date':
-                $cfv->dateValue = $value !== null ? new \DateTime($value) : null;
+                $cfv->dateValue = $this->parseDateTime($value);
                 break;
             case 'datetime':
-                $cfv->datetimeValue = $value !== null ? new \DateTime($value) : null;
+                $cfv->datetimeValue = $this->parseDateTime($value);
                 break;
             case 'time':
-                $cfv->textValue = (string) $value;
+                $cfv->textValue = ($value !== null && is_scalar($value)) ? (string) $value : null;
                 break;
             case 'json':
             case 'array':
             case 'repeater':
-                $cfv->jsonValue = is_array($value) ? $value : json_decode((string) $value, true);
-                break;
             case 'media':
             case 'relation':
             case 'enumeration':
             case 'tags':
-                $cfv->jsonValue = is_array($value) ? $value : (is_string($value) ? json_decode($value, true) : [$value]);
+                $cfv->jsonValue = $this->parseJsonValue($value);
                 break;
             default:
-                $cfv->textValue = (string) $value;
+                $cfv->textValue = ($value !== null && is_scalar($value)) ? (string) $value : (is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null);
                 break;
         }
         $cfv->fieldType = $fieldType;
+    }
+
+    private function parseDateTime(mixed $value): ?\DateTime
+    {
+        if (empty($value) || !is_string($value)) {
+            return null;
+        }
+        try {
+            return new \DateTime($value);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function parseJsonValue(mixed $value): ?array
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (is_array($value)) {
+            return $value;
+        }
+        if (is_string($value)) {
+            try {
+                $decoded = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+                return is_array($decoded) ? $decoded : [$decoded];
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+        return is_scalar($value) ? [(string) $value] : null;
     }
 }

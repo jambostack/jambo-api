@@ -7,6 +7,29 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.41] — 2026-11-04
+
+### Fixed & Hardened
+- **EAV Field Type Safety & Normalization (`EavFieldHelperService`)**:
+  - Normalized boolean values (`FILTER_VALIDATE_BOOLEAN`) to prevent PHP 8.4 `TypeError` when assigning string representations (`'1'`, `'0'`, `'true'`, `'false'`) to typed property `?bool $booleanValue`.
+  - Wrapped date and datetime parsing in safe handler to catch `DateMalformedStringException` on invalid date strings, returning `null` safely.
+  - Hardened JSON and default string fallback against array-to-string notices and uncaught decode errors.
+- **Field Value Hydration (`FieldValueHydrator`)**:
+  - Aligned decimal/number property hydration to string type (`?string $numberValue`) preventing `TypeError` on float assignments.
+  - Normalized boolean, datetime, and JSON array structures consistently with EAV rules.
+- **Brute Force Lockout Increment Bug (`ProjectAuthLockoutService`)**:
+  - Fixed critical bug where `recordFailedAttempt` deleted the cache key before incrementing, resetting attempt count to 1 on every failure and disabling lockout protection.
+  - Proper incrementation now enforces lockout after 5 failed attempts.
+- **Realtime SSE & Polling Resilience (`RealtimeController`)**:
+  - Replaced `createAccessDeniedException` with structured JSON 401 (`Authentication required`) and 403 (`Access denied`) responses to prevent Symfony `main` firewall from issuing 302 redirects to `/login` HTML, which triggered browser `EventSource` MIME type errors.
+  - Encapsulated JWT token generation in `try/catch` to return graceful polling fallback (`200 OK` with `enabled: false`) instead of 500/503 server errors if Mercure is not configured.
+- **Social Login Resilience & Project EndUser Scoping (`SocialLoginService` & `EndUserAuthController`)**:
+  - Exposed `getProjectCredentials` to pass project-scoped OAuth credentials for EndUser social login, preventing unintended fallback to Admin credentials.
+  - Added strict email validation in `findOrCreateAdminUser` and `findOrCreateEndUser` to reject accounts without valid email addresses.
+  - Caught external OAuth provider exceptions in `SocialLoginAuthenticator` to redirect smoothly to login with error query params instead of uncaught 500 crashes.
+
+---
+
 ## [1.26.40] — 2026-11-04
 
 ### Fixed & Hardened

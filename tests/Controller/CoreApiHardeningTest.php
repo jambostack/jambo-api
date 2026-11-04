@@ -1209,4 +1209,125 @@ class CoreApiHardeningTest extends WebTestCase
         $data = json_decode($client->getResponse()->getContent(), true);
         $this->assertArrayHasKey('hits', $data);
     }
+
+    public function testEavFieldHelperSafeHandling(): void
+    {
+        $helper = self::getContainer()->get(\App\Service\EavFieldHelperService::class);
+        $cfv = new \App\Entity\ContentFieldValue();
+
+        // 1. Boolean normalization
+        $helper->setFieldValue($cfv, 'boolean', '1');
+        $this->assertTrue($cfv->booleanValue);
+
+        $helper->setFieldValue($cfv, 'boolean', '0');
+        $this->assertFalse($cfv->booleanValue);
+
+        $helper->setFieldValue($cfv, 'checkbox', true);
+        $this->assertTrue($cfv->booleanValue);
+
+        $helper->setFieldValue($cfv, 'boolean', null);
+        $this->assertNull($cfv->booleanValue);
+
+        // 2. Date exception safety
+        $helper->setFieldValue($cfv, 'date', 'invalid-date-string');
+        $this->assertNull($cfv->dateValue);
+
+        $helper->setFieldValue($cfv, 'date', '2026-11-04');
+        $this->assertInstanceOf(\DateTimeInterface::class, $cfv->dateValue);
+
+        // 3. Json parsing
+        $helper->setFieldValue($cfv, 'json', '{"key":"val"}');
+        $this->assertSame(['key' => 'val'], $cfv->jsonValue);
+
+        $helper->setFieldValue($cfv, 'json', 'malformed json');
+        $this->assertNull($cfv->jsonValue);
+
+        // 4. Default array to string safety
+        $helper->setFieldValue($cfv, 'text', ['nested' => 'data']);
+        $this->assertSame('{"nested":"data"}', $cfv->textValue);
+    }
+
+    public function testFieldValueHydratorSafeHandling(): void
+    {
+        $hydrator = self::getContainer()->get(\App\Service\FieldValueHydrator::class);
+        $cfv = new \App\Entity\ContentFieldValue();
+
+        // 1. Decimal / number as string
+        $hydrator->hydrate($cfv, 42.5, 'decimal');
+        $this->assertSame('42.5', $cfv->numberValue);
+
+        // 2. Boolean
+        $hydrator->hydrate($cfv, '1', 'boolean');
+        $this->assertTrue($cfv->booleanValue);
+
+        // 3. Date malformed safety
+        $hydrator->hydrate($cfv, 'not-a-date', 'date');
+        $this->assertNull($cfv->dateValue);
+
+        // 4. Time
+        $hydrator->hydrate($cfv, '14:30', 'time');
+        $this->assertSame('14:30', $cfv->textValue);
+    }
+
+    public function testProjectAuthLockoutIncrementAndLockout(): void
+    {
+        $lockout = self::getContainer()->get(\App\Service\ProjectAuthLockoutService::class);
+        $id = 'test-user-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        $this->assertFalse($lockout->isLockedOut($id));
+
+        $a1 = $lockout->recordFailedAttempt($id);
+        $this->assertSame(1, $a1);
+        $this->assertFalse($lockout->isLockedOut($id));
+
+        $a2 = $lockout->recordFailedAttempt($id);
+        $this->assertSame(2, $a2);
+
+        $lockout->recordFailedAttempt($id); // 3
+        $lockout->recordFailedAttempt($id); // 4
+        $a5 = $lockout->recordFailedAttempt($id); // 5
+
+        $this->assertSame(5, $a5);
+        $this->assertTrue($lockout->isLockedOut($id));
+        $this->assertGreaterThan(0, $lockout->getRemainingLockoutSeconds($id));
+
+        $lockout->clearAttempts($id);
+        $this->assertFalse($lockout->isLockedOut($id));
+    }
+
+    public function testRealtimeControllerAuthenticationAndFallback(): void
+    {
+        $client = static::createClient();
+
+        // 1. Unauthenticated token request -> 401 JSON
+        $client->request('GET', "/api/projects/{$this->projectUuid}/realtime/token");
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+        $data = json_decode($client->getResponse()->getContent(), true);
+        $this->assertStringContainsString('Authentication required', $data['error']);
+
+        // 2. Unauthenticated poll request -> 401 JSON
+        $client->request('GET', "/api/projects/{$this->projectUuid}/realtime");
+        $this->assertSame(401, $client->getResponse()->getStatusCode());
+
+        // 3. Authenticated member -> 200 JSON
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $admin = new User();
+        $admin->email = 'admin-rt-' . bin2hex(random_bytes(4)) . '@example.com';
+        $admin->password = 'hashed';
+        $admin->roles = ['ROLE_SUPER_ADMIN'];
+        $em->persist($admin);
+        $em->flush();
+
+        $client->loginUser($admin);
+
+        $client->request('GET', "/api/projects/{$this->projectUuid}/realtime/token");
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $tokenData = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('enabled', $tokenData);
+
+        $client->request('GET', "/api/projects/{$this->projectUuid}/realtime");
+        $this->assertSame(200, $client->getResponse()->getStatusCode());
+        $pollData = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('events', $pollData);
+    }
 }

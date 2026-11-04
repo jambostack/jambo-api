@@ -38,15 +38,16 @@ class ProjectAuthLockoutService
     public function recordFailedAttempt(string $identifier): int
     {
         $key = $this->buildKey($identifier);
-        $this->cache->delete($key);
+        $current = $this->cache->get($key, fn() => ['attempts' => 0, 'locked_until' => 0]);
+        $attempts = ((int) ($current['attempts'] ?? 0)) + 1;
+        $lockedUntil = $attempts >= self::MAX_ATTEMPTS ? time() + self::LOCKOUT_DURATION : (int) ($current['locked_until'] ?? 0);
 
-        $attempts = 0;
-        $this->cache->get($key, function (ItemInterface $item) use (&$attempts) {
+        $this->cache->delete($key);
+        $this->cache->get($key, function (ItemInterface $item) use ($attempts, $lockedUntil) {
             $item->expiresAfter(self::LOCKOUT_DURATION);
-            $attempts = 1;
             return [
                 'attempts'     => $attempts,
-                'locked_until' => $attempts >= self::MAX_ATTEMPTS ? time() + self::LOCKOUT_DURATION : 0,
+                'locked_until' => $lockedUntil,
             ];
         });
 

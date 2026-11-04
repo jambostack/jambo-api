@@ -46,8 +46,17 @@ class SocialLoginAuthenticator extends AbstractAuthenticator
             UrlGeneratorInterface::ABSOLUTE_URL,
         );
 
-        $socialUser = $this->socialLogin->getUserFromProvider($provider, (string) $code, $redirectUri);
-        $user = $this->socialLogin->findOrCreateAdminUser($socialUser, $provider);
+        try {
+            $socialUser = $this->socialLogin->getUserFromProvider($provider, (string) $code, $redirectUri);
+            $user = $this->socialLogin->findOrCreateAdminUser($socialUser, $provider);
+        } catch (\Throwable $e) {
+            throw new \Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException(
+                'Social authentication failed: ' . $e->getMessage(),
+                [],
+                0,
+                $e,
+            );
+        }
 
         return new SelfValidatingPassport(
             new UserBadge($user->getUserIdentifier(), fn () => $user),

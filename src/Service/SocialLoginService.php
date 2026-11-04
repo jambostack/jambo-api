@@ -66,7 +66,7 @@ class SocialLoginService
     }
 
     /** @return array{clientId: string, clientSecret: string}|null */
-    private function getProjectCredentials(Project $project, string $provider): ?array
+    public function getProjectCredentials(Project $project, string $provider): ?array
     {
         $security = $project->settings['security'] ?? [];
         $providers = $security['endUserSocialProviders'] ?? [];
@@ -209,6 +209,10 @@ class SocialLoginService
 
     public function findOrCreateAdminUser(SocialUser $socialUser, string $provider): User
     {
+        if (empty($socialUser->email) || !filter_var($socialUser->email, FILTER_VALIDATE_EMAIL)) {
+            throw new \RuntimeException("The $provider account did not return a valid email address.");
+        }
+
         $providerField = $this->getProviderIdField($provider);
 
         // 1. Chercher par ID provider
@@ -245,6 +249,10 @@ class SocialLoginService
 
     public function findOrCreateEndUser(Project $project, SocialUser $socialUser, string $provider): EndUser
     {
+        if (empty($socialUser->email) || !filter_var($socialUser->email, FILTER_VALIDATE_EMAIL)) {
+            throw new \RuntimeException("The $provider account did not return a valid email address.");
+        }
+
         $providerField = $this->getProviderIdField($provider);
 
         // 1. Chercher par ID provider dans ce projet

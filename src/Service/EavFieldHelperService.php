@@ -14,14 +14,45 @@ class EavFieldHelperService
     public function setFieldValue(ContentFieldValue $cfv, string $type, mixed $value): void
     {
         match ($type) {
-            'number', 'decimal', 'rating' => $cfv->numberValue = $value !== null ? (string) $value : null,
-            'boolean', 'checkbox' => $cfv->booleanValue = $value,
-            'date' => $cfv->dateValue = $value ? new \DateTime($value) : null,
-            'datetime' => $cfv->datetimeValue = $value ? new \DateTime($value) : null,
+            'number', 'decimal', 'rating' => $cfv->numberValue = ($value !== null && is_scalar($value)) ? (string) $value : null,
+            'boolean', 'checkbox' => $cfv->booleanValue = $value !== null ? (is_bool($value) ? $value : (bool) filter_var($value, FILTER_VALIDATE_BOOLEAN)) : null,
+            'date' => $cfv->dateValue = $this->parseDateTime($value),
+            'datetime' => $cfv->datetimeValue = $this->parseDateTime($value),
             'json', 'array', 'repeater', 'enumeration', 'media', 'relation', 'tags'
-                => $cfv->jsonValue = is_string($value) ? json_decode($value, true) : $value,
-            default => $cfv->textValue = $value !== null ? (string) $value : null,
+                => $cfv->jsonValue = $this->parseJsonValue($value),
+            default => $cfv->textValue = ($value !== null && is_scalar($value)) ? (string) $value : (is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null),
         };
+    }
+
+    private function parseDateTime(mixed $value): ?\DateTime
+    {
+        if (empty($value) || !is_string($value)) {
+            return null;
+        }
+        try {
+            return new \DateTime($value);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function parseJsonValue(mixed $value): ?array
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (is_array($value)) {
+            return $value;
+        }
+        if (is_string($value)) {
+            try {
+                $decoded = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+                return is_array($decoded) ? $decoded : [$decoded];
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+        return is_scalar($value) ? [(string) $value] : null;
     }
 
     /**
