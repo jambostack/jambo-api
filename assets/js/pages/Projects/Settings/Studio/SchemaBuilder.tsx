@@ -530,7 +530,7 @@ function SchemaChatPanel({
         <div className="scp-capabilities" style={{ display:'flex', gap:'8px', padding:'5px 10px', fontSize:'10px', fontFamily:'var(--studio-mono)', color:'var(--studio-text-muted)', borderBottom:'1px solid var(--studio-border)', flexShrink:0 }}>
           <span style={{ color: capabilities.text ? 'var(--studio-accent)' : '#e06c75' }}>{capabilities.text ? '🟢 Texte' : '🔴 Texte'}{capabilities.provider ? ` (${capabilities.model})` : ''}</span>
           <span style={{ color: capabilities.images ? 'var(--studio-accent)' : '#e06c75' }}>{capabilities.images ? '🟢 Images' : '🔴 Images'}</span>
-          {capabilities.limits.includes('qualite_limitee') && <span style={{ color:'var(--studio-amber)' }}>⚠️ Qualité limitée</span>}
+          {capabilities.limits.includes('qualite_limitee') && <span style={{ color:'var(--studio-amber)' }}>⚠️ {t('studio.schema.limited_quality')}</span>}
         </div>
       )}
 
@@ -653,8 +653,8 @@ function SchemaChatPanel({
 
       {/* CommandBar — just above the textarea */}
       <div className="scp-command-bar">
-        <button className={`scp-cmd-btn ${activeCommand === 'schema' ? 'active' : ''}`} onClick={() => insertCommand('schema')} title="/schema — Générer uniquement le schéma de collections"><Slash className="w-3 h-3" />schema</button>
-        <button className={`scp-cmd-btn ${activeCommand === 'data' ? 'active' : ''}`} onClick={() => insertCommand('data')} title="/data — Générer du contenu professionnel"><Database className="w-3 h-3" />data</button>
+        <button className={`scp-cmd-btn ${activeCommand === 'schema' ? 'active' : ''}`} onClick={() => insertCommand('schema')} title={t('studio.schema.cmd_schema_title')}><Slash className="w-3 h-3" />schema</button>
+        <button className={`scp-cmd-btn ${activeCommand === 'data' ? 'active' : ''}`} onClick={() => insertCommand('data')} title={t('studio.schema.cmd_data_title')}><Database className="w-3 h-3" />data</button>
         <button className={`scp-cmd-btn ${activeCommand === 'all' ? 'active' : ''}`} onClick={() => insertCommand('all')} title="/all — Collections + contenu"><Table2 className="w-3 h-3" />all</button>
         <button className="scp-clear-btn" onClick={clearHistory} disabled={busy} title={t('studio.chat.clear_title')}><Trash2 className="w-3 h-3" />{t('studio.chat.clear')}</button>
       </div>
@@ -777,6 +777,7 @@ function SchemaChatPanel({
 
 /* ══════════════════════════ PREVIEW PANEL ══════════════════════════ */
 function SchemaPreviewPanel({ current, preview }: { current: SchemaCollection | null; preview: string | null }) {
+  const t = useTranslation();
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '12px', minHeight: 0 }}>
       {preview ? (
@@ -801,7 +802,7 @@ function SchemaPreviewPanel({ current, preview }: { current: SchemaCollection | 
           </div>
         </div>
       ) : (
-        <p style={{ fontSize: '12px', color: 'var(--studio-text-muted)', textAlign: 'center', padding: '24px 0' }}>Sélectionnez une collection.</p>
+        <p style={{ fontSize: '12px', color: 'var(--studio-text-muted)', textAlign: 'center', padding: '24px 0' }}>{t('studio.preview_select')}</p>
       )}
     </div>
   );
@@ -1113,12 +1114,12 @@ export default function SchemaBuilder({ project }: { project: Project }) {
         body: JSON.stringify({ collections }),
       });
       if (!res.ok) throw new Error('Failed');
-      toast.success('Schéma enregistré.');
+      toast.success(t('studio.schema.save_success'));
       // Recharge depuis le serveur pour refléter l'état réellement persisté
       // (slugs normalisés, ids, etc.).
       await loadCollections();
     } catch {
-      toast.error("Échec de l'enregistrement du schéma.");
+      toast.error(t('studio.schema.save_error'));
     } finally { setSaving(false); }
   }
   function generatePreview() {
@@ -1636,10 +1637,10 @@ function ValidationRulesEditor({ rules, onChange, fieldType, S }: {
                     </div>
                 )}
                 <div>
-                    <span style={S.label}>Message d'erreur personnalisé</span>
+                    <span style={S.label}>{t('studio.schema.custom_error_message')}</span>
                     <input value={rules.custom ?? ''} onChange={e => setRules({ ...rules, custom: e.target.value })}
                         style={{ ...S.input, width: '100%' }}
-                        placeholder="Surcharge le message d'erreur par défaut" />
+                        placeholder={t('studio.schema.custom_error_placeholder')} />
                 </div>
             </div>
         </details>
@@ -2101,7 +2102,7 @@ function EditorView({
     <div className="sb-empty">
       <Wand2 style={{ width: '36px', height: '36px' }} />
       <div>
-        <h3>{collections.length === 0 ? 'Créez votre première collection' : 'Sélectionnez une collection'}</h3>
+        <h3>{collections.length === 0 ? t('studio.schema.create_first_collection') : t('studio.preview_select')}</h3>
         <p>{collections.length === 0 ? 'Définissez votre modèle de données.' : 'Choisissez une collection dans la barre latérale.'}</p>
       </div>
       {collections.length === 0 && <Button onClick={addCollection} style={{ background: 'var(--studio-accent)', color: '#000' }}><Plus className="w-4 h-4 mr-2" />Nouvelle collection</Button>}
@@ -2292,6 +2293,7 @@ function FieldRow({
   duplicateField: (ci: number, fk: string) => void;
   moveField: (from: number, to: number) => void;
 }) {
+  const t = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [dragOver, setDragOver] = useState<number | null>(null);
   const Icon = ICON_MAP[field.type] || Type;
@@ -2340,14 +2342,14 @@ function FieldRow({
     >
       {/* ── Main row ── */}
       <div style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 10px', background:'var(--studio-raised)', cursor:'default', flexWrap:'wrap' }}>
-        <div style={{ cursor:'grab', color:'var(--studio-text-muted)', padding:'0 2px' }} title="Glisser pour réordonner">
+        <div style={{ cursor:'grab', color:'var(--studio-text-muted)', padding:'0 2px' }} title={t('studio.schema.drag_to_reorder')}>
           <GripVertical className="w-3.5 h-3.5" />
         </div>
         <span style={{ fontFamily:'var(--studio-mono)', fontSize:'9px', color:'var(--studio-text-muted)', minWidth:'14px', textAlign:'center' }}>{index + 1}</span>
 
         <div style={{ flex:'1 1 120px', minWidth:'80px', position:'relative' }}>
           <Input
-            placeholder="Nom du champ"
+            placeholder={t('fields.field_name')}
             value={field.name}
             onChange={e => updateField(selectedIdx, field.key, { name: e.target.value })}
             style={{
@@ -2435,6 +2437,7 @@ function MobileCollectionsView({
   onSelect: (idx: number) => void; onDelete: (idx: number) => void; onAdd: () => void;
   onSelectEndUsers: () => void; isEndUsers: boolean; endUserFieldCount: number;
 }) {
+  const t = useTranslation();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingBottom: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -2444,7 +2447,7 @@ function MobileCollectionsView({
       {collections.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--studio-text-muted)' }}>
           <FolderOpen style={{ width: '40px', height: '40px', opacity: .2, margin: '0 auto 12px', display: 'block' }} />
-          <p style={{ fontSize: '13px', margin: 0 }}>Aucune collection créée</p>
+          <p style={{ fontSize: '13px', margin: 0 }}>{t('studio.schema.no_collection_created')}</p>
           <p style={{ fontSize: '11px', margin: '4px 0 16px' }}>Appuyez sur "+ Nouvelle" ou utilisez le Chat IA.</p>
           <Button onClick={onAdd} style={{ background: 'var(--studio-accent)', color: '#000' }}><Plus className="w-3.5 h-3.5 mr-1" />Nouvelle collection</Button>
         </div>
@@ -2506,8 +2509,8 @@ function MobileEditorView({
       ) : (
         <div className="sb-empty" style={{ minHeight: '200px' }}>
           <FolderOpen style={{ width: '36px', height: '36px' }} />
-          <h3>Aucune collection sélectionnée</h3>
-          <p>Appuyez sur l'onglet Collections pour en choisir une ou en créer une.</p>
+          <h3>{t('studio.schema.no_collection_selected')}</h3>
+          <p>{t('studio.schema.select_tab_hint')}</p>
         </div>
       )}
     </div>

@@ -6,8 +6,10 @@ import 'prismjs/themes/prism.css';
 
 import { Button } from '@/components/ui/button';
 import { Code, Check, AlertCircle } from 'lucide-react';
+import { useTranslation } from '@/lib/i18n';
 
 export default function JSONField({ field, value, onChange, processing, errors }: FieldProps) {
+    const t = useTranslation();
     // Function to validate JSON format
     const isValidJSON = (json: string): boolean => {
         try {
@@ -42,17 +44,17 @@ export default function JSONField({ field, value, onChange, processing, errors }
                     <div className="flex items-center justify-between bg-muted py-1 px-3 border-b">
                         <div className="flex items-center">
                             <Code className="h-4 w-4 mr-2 text-muted-foreground" />
-                            <span className="text-xs font-medium text-muted-foreground">JSON Editor</span>
+                            <span className="text-xs font-medium text-muted-foreground">{t('content.json_editor')}</span>
                         </div>
                         <div className="flex items-center">
                             {isValid && !isEmpty && (
                                 <span className="flex items-center text-xs text-green-500 mr-2">
-                                    <Check className="h-3 w-3 mr-1" /> Valid JSON
+                                    <Check className="h-3 w-3 mr-1" /> {t('content.valid_json')}
                                 </span>
                             )}
                             {!isValid && !isEmpty && (
                                 <span className="flex items-center text-xs text-red-500 mr-2">
-                                    <AlertCircle className="h-3 w-3 mr-1" /> Invalid JSON
+                                    <AlertCircle className="h-3 w-3 mr-1" /> {t('content.invalid_json')}
                                 </span>
                             )}
                         </div>
@@ -86,7 +88,7 @@ export default function JSONField({ field, value, onChange, processing, errors }
                             disabled={processing}
                             className="text-xs"
                         >
-                            Initialize Empty Object
+                            {t('content.initialize_empty_object')}
                         </Button>
                     )}
                 </div>

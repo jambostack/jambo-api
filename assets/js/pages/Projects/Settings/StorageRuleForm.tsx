@@ -90,7 +90,7 @@ export default function StorageRuleForm({ open, onClose, onSaved, projectUuid, p
           <div className="grid gap-2">
             <Label>{t('projects.settings.storage.mime_pattern')}</Label>
             <Select value={mimePattern} onValueChange={v => { setMimePattern(v); setCustomMime('') }}>
-              <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t('storage.select_placeholder')} /></SelectTrigger>
               <SelectContent>
                 {MIME_PATTERNS.map(m => (
                   <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>

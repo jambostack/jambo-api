@@ -428,55 +428,55 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                     <ScrollArea className="h-[80vh] pr-4">
                     <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto p-1">
                         <div className="space-y-2">
-                            <Label htmlFor="label">Label</Label>
+                            <Label htmlFor="label">{t('fields.label')}</Label>
                             <Input
                                 id="label"
                                 name="label"
                                 value={data.label}
                                 onChange={handleChange}
-                                placeholder="Enter field label"
+                                placeholder={t('fields.enter_label')}
                                 required
                             />
                             <InputError message={errors.label} />
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="name">Field Name</Label>
+                            <Label htmlFor="name">{t('fields.field_name')}</Label>
                             <Input
                                 id="name"
                                 name="name"
                                 value={data.name}
                                 onChange={handleChange}
-                                placeholder="Enter field name"
+                                placeholder={t('fields.enter_name')}
                                 required
                             />
                             <p className="text-sm text-muted-foreground">
-                                This will be used as the field identifier in the API. It is automatically generated from the label.
+                                {t('fields.name_hint')}
                             </p>
                             <InputError message={errors.name} />
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="description">Description</Label>
+                            <Label htmlFor="description">{t('fields.description')}</Label>
                             <Textarea
                                 id="description"
                                 name="description"
                                 value={data.description}
                                 onChange={handleChange}
-                                placeholder="Enter field description"
+                                placeholder={t('fields.enter_desc')}
                                 rows={3}
                             />
                             <InputError message={errors.description} />
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="placeholder">Placeholder</Label>
+                            <Label htmlFor="placeholder">{t('fields.placeholder')}</Label>
                             <Input
                                 id="placeholder"
                                 name="placeholder"
                                 value={data.placeholder}
                                 onChange={handleChange}
-                                placeholder="Enter placeholder text"
+                                placeholder={t('fields.enter_placeholder')}
                             />
                             <InputError message={errors.placeholder} />
                         </div>
@@ -784,7 +784,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
 
                         {showValidations && (
                             <div className="space-y-4 border-t pt-4">
-                                <h2 className="font-bold">VALIDATIONS</h2>
+                                <h2 className="font-bold">{t('fields.validations')}</h2>
                                 
                                 <div className="space-y-2">
                                     <div className="flex items-start space-x-2 p-4 rounded-md border border-dashed border-gray-600 dark:border-gray-400">
@@ -797,9 +797,9 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                             className="mt-1"
                                         />
                                         <div className="space-y-1 w-full">
-                                            <Label htmlFor="required" className="font-medium">Required</Label>
+                                            <Label htmlFor="required" className="font-medium">{t('fields.required')}</Label>
                                             <p className="text-sm text-muted-foreground">
-                                                Prevents saving content if this field is empty
+                                                {t('fields.required_desc')}
                                             </p>
                                             {data.validations.required.status && (
                                                 <Input
@@ -834,10 +834,10 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                 className="mt-1"
                                             />
                                             <div className="space-y-1 w-full">
-                                                <Label htmlFor="unique" className="font-medium">Unique</Label>
+                                                <Label htmlFor="unique" className="font-medium">{t('fields.unique')}</Label>
                                                 <p className="text-sm text-muted-foreground">
                                                     {data.options.repeatable
-                                                        ? "Unique validation cannot be used with repeatable fields"
+                                                        ? t('fields.unique_desc')
                                                         : "Prevents saving content if this field value is already used"}
                                                 </p>
                                                 {data.validations.unique.status && !data.options.repeatable && (

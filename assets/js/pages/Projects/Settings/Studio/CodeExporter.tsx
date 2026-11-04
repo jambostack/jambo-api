@@ -276,7 +276,7 @@ ${methods}
           </Card>
 
           <Button className="w-full" size="lg" onClick={generateSdk} disabled={selectedCollections.length === 0}>
-            <Rocket className="w-4 h-4 mr-2" /> Générer le SDK
+            <Rocket className="w-4 h-4 mr-2" /> {t('studio.exporter.generate_sdk')}
           </Button>
         </div>
 
@@ -306,8 +306,8 @@ ${methods}
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                   <Package className="w-12 h-12 mb-3 opacity-30" />
-                  <p className="text-sm">Sélectionnez des collections et cliquez sur "Générer le SDK"</p>
-                  <p className="text-xs mt-1">Un client typé sera généré automatiquement</p>
+                  <p className="text-sm">{t('studio.exporter.select_collections_hint')}</p>
+                  <p className="text-xs mt-1">{t('studio.exporter.client_auto_generated')}</p>
                 </div>
               )}
             </CardContent>

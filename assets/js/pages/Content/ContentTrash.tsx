@@ -95,7 +95,7 @@ export default function ContentTrash({ collection, project }: Props) {
     const handleForceDeleteSingle = async (uuid: string) => {
         try {
             await axios.delete(`${baseUrl}/${uuid}/force-delete`);
-            toast.success("Entry permanently deleted");
+            toast.success(t('content.entry_deleted_permanently'));
             dataTableRef.current?.fetchData();
         } catch {
             toast.error(t('content.failed_delete_entry'));

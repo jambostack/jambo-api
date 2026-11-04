@@ -52,7 +52,7 @@ export default function RedirectIndex({ project }: Props) {
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: project.name, href: `/projects/${project.uuid}` },
-        { title: 'Redirections', href: `/projects/${project.uuid}/redirects` },
+        { title: t('redirects.title'), href: `/projects/${project.uuid}/redirects` },
     ];
 
     const fetchRedirects = () => {
@@ -71,11 +71,11 @@ export default function RedirectIndex({ project }: Props) {
     const handleCreate = () => {
         axios.post(`/admin-api/${project.uuid}/redirects`, form)
             .then(() => { setShowCreate(false); setForm({ fromPath: '', toPath: '', httpCode: 301, isPattern: false, isEnabled: true }); fetchRedirects(); })
-            .catch(err => alert(err.response?.data?.error || 'Erreur'));
+            .catch(err => alert(err.response?.data?.error || t('common.error')));
     };
 
     const handleDelete = (id: number) => {
-        if (!confirm('Supprimer cette redirection ?')) return;
+        if (!confirm(t('redirects.delete_confirm'))) return;
         axios.delete(`/admin-api/${project.uuid}/redirects/${id}`)
             .then(() => fetchRedirects());
     };
@@ -89,22 +89,22 @@ export default function RedirectIndex({ project }: Props) {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title={`Redirections — ${project.name}`} />
+            <Head title={`${t('redirects.title')} — ${project.name}`} />
             <div className="flex h-full">
                 <ProjectSidebar project={project} />
                 <div className="flex-1 overflow-auto p-6 space-y-6">
                     {/* Barre d'actions */}
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold">Redirections ({data?.meta?.total ?? 0})</h2>
+                        <h2 className="text-lg font-semibold">{t('redirects.title')} ({data?.meta?.total ?? 0})</h2>
                         <Button onClick={() => setShowCreate(true)}>
-                            <Plus className="h-4 w-4 mr-2" />Nouvelle redirection
+                            <Plus className="h-4 w-4 mr-2" />{t('redirects.new_redirect')}
                         </Button>
                     </div>
 
                     {/* Recherche */}
                     <form onSubmit={handleSearch} className="flex items-center gap-2">
                         <Input
-                            placeholder="Rechercher par chemin…"
+                            placeholder={t('redirects.search_ph')}
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             className="max-w-sm"
@@ -119,23 +119,23 @@ export default function RedirectIndex({ project }: Props) {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>De</TableHead>
-                                    <TableHead>Vers</TableHead>
-                                    <TableHead className="w-[80px]">Code</TableHead>
-                                    <TableHead className="w-[60px]">Hits</TableHead>
-                                    <TableHead className="w-[80px]">Actif</TableHead>
-                                    <TableHead className="w-[100px]">Actions</TableHead>
+                                    <TableHead>{t('redirects.from')}</TableHead>
+                                    <TableHead>{t('redirects.to')}</TableHead>
+                                    <TableHead className="w-[80px]">{t('redirects.code')}</TableHead>
+                                    <TableHead className="w-[60px]">{t('redirects.hits')}</TableHead>
+                                    <TableHead className="w-[80px]">{t('redirects.active')}</TableHead>
+                                    <TableHead className="w-[100px]">{t('redirects.actions')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {loading && (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Chargement…</TableCell>
+                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t('common.loading')}</TableCell>
                                     </TableRow>
                                 )}
                                 {!loading && data?.data.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Aucune redirection trouvée.</TableCell>
+                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t('redirects.no_redirects')}</TableCell>
                                     </TableRow>
                                 )}
                                 {!loading && data?.data.map(r => (
@@ -152,7 +152,7 @@ export default function RedirectIndex({ project }: Props) {
                                             <Switch checked={r.isEnabled} onCheckedChange={() => handleToggle(r.id)} />
                                         </TableCell>
                                         <TableCell>
-                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)} title="Supprimer">
+                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)} title={t('common.delete')}>
                                                 <Trash2 className="h-4 w-4 text-red-500" />
                                             </Button>
                                         </TableCell>
@@ -166,11 +166,11 @@ export default function RedirectIndex({ project }: Props) {
                     {data && data.meta.total > data.meta.per_page && (
                         <div className="flex items-center justify-between">
                             <Button variant="outline" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
-                                Précédent
+                                {t('common.pagination_previous')}
                             </Button>
-                            <span className="text-sm text-muted-foreground">Page {page}</span>
+                            <span className="text-sm text-muted-foreground">{page}</span>
                             <Button variant="outline" disabled={page * data.meta.per_page >= data.meta.total} onClick={() => setPage(p => p + 1)}>
-                                Suivant
+                                {t('common.pagination_next')}
                             </Button>
                         </div>
                     )}
@@ -179,35 +179,35 @@ export default function RedirectIndex({ project }: Props) {
                     <Dialog open={showCreate} onOpenChange={setShowCreate}>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>Nouvelle redirection</DialogTitle>
+                                <DialogTitle>{t('redirects.new_redirect')}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4 py-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="fromPath">Chemin source</Label>
+                                    <Label htmlFor="fromPath">{t('redirects.source_path')}</Label>
                                     <Input id="fromPath" value={form.fromPath} onChange={e => setForm({ ...form, fromPath: e.target.value })} placeholder="/ancien-chemin" />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="toPath">Chemin cible</Label>
+                                    <Label htmlFor="toPath">{t('redirects.target_path')}</Label>
                                     <Input id="toPath" value={form.toPath} onChange={e => setForm({ ...form, toPath: e.target.value })} placeholder="/nouveau-chemin" />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="httpCode">Code HTTP</Label>
+                                    <Label htmlFor="httpCode">{t('redirects.http_code')}</Label>
                                     <Input id="httpCode" type="number" value={form.httpCode} onChange={e => setForm({ ...form, httpCode: parseInt(e.target.value) || 301 })} />
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <div className="flex items-center gap-2">
                                         <Switch id="isPattern" checked={form.isPattern} onCheckedChange={v => setForm({ ...form, isPattern: v })} />
-                                        <Label htmlFor="isPattern">Pattern regex</Label>
+                                        <Label htmlFor="isPattern">{t('redirects.pattern_regex')}</Label>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Switch id="isEnabled" checked={form.isEnabled} onCheckedChange={v => setForm({ ...form, isEnabled: v })} />
-                                        <Label htmlFor="isEnabled">Activée</Label>
+                                        <Label htmlFor="isEnabled">{t('redirects.enabled')}</Label>
                                     </div>
                                 </div>
                             </div>
                             <DialogFooter>
-                                <Button variant="outline" onClick={() => setShowCreate(false)}>Annuler</Button>
-                                <Button onClick={handleCreate}>Créer</Button>
+                                <Button variant="outline" onClick={() => setShowCreate(false)}>{t('common.cancel')}</Button>
+                                <Button onClick={handleCreate}>{t('common.create')}</Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>

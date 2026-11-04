@@ -135,14 +135,14 @@ export default function StorageProfileForm({ open, onClose, onSaved, projectUuid
           )}
           {driver === 'local' && (
             <div className="grid gap-2">
-              <Label>Root path</Label>
+              <Label>{t('storage.root_path')}</Label>
               <Input value={rootPath} onChange={e => setRootPath(e.target.value)}
                 placeholder={`public/uploads/media/${projectUuid}`} />
             </div>
           )}
           <div className="flex items-center gap-2">
             <Checkbox id="is_default" checked={isDefault} onCheckedChange={v => setIsDefault(v === true)} />
-            <Label htmlFor="is_default" className="text-sm">Définir comme stockage par défaut</Label>
+            <Label htmlFor="is_default" className="text-sm">{t('storage.set_as_default')}</Label>
           </div>
         </div>
         <DialogFooter>

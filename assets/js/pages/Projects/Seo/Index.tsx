@@ -81,7 +81,7 @@ export default function SeoIndex({ project }: Props) {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title={`SEO — ${project.name}`} />
+            <Head title={`${t('seo.title')} — ${project.name}`} />
             <div className="flex h-full">
                 <ProjectSidebar project={project} />
                 <div className="flex-1 overflow-auto p-6 space-y-6">
@@ -89,7 +89,7 @@ export default function SeoIndex({ project }: Props) {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <Card>
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">Score moyen</CardTitle>
+                                <CardTitle className="text-sm font-medium text-muted-foreground">{t('seo.avg_score')}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="flex items-center gap-2">
@@ -102,7 +102,7 @@ export default function SeoIndex({ project }: Props) {
                         </Card>
                         <Card>
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">Entrées analysées</CardTitle>
+                                <CardTitle className="text-sm font-medium text-muted-foreground">{t('seo.analyzed_entries')}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="flex items-center gap-2">
@@ -113,7 +113,7 @@ export default function SeoIndex({ project }: Props) {
                         </Card>
                         <Card>
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">À améliorer</CardTitle>
+                                <CardTitle className="text-sm font-medium text-muted-foreground">{t('seo.to_improve')}</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="flex items-center gap-2">
@@ -133,14 +133,14 @@ export default function SeoIndex({ project }: Props) {
                             onChange={e => setScoreFilter(e.target.value)}
                             className="w-[180px] rounded-md border border-input bg-background px-3 py-2 text-sm"
                         >
-                            <option value="">Tous les scores</option>
-                            <option value="good">Bons (≥ 80)</option>
-                            <option value="ok">Moyens (50–79)</option>
-                            <option value="poor">Faibles (&lt; 50)</option>
+                            <option value="">{t('seo.all_scores')}</option>
+                            <option value="good">{t('seo.good_scores')}</option>
+                            <option value="ok">{t('seo.medium_scores')}</option>
+                            <option value="poor">{t('seo.poor_scores')}</option>
                         </select>
                         <form onSubmit={handleSearch} className="flex items-center gap-2">
                             <Input
-                                placeholder="Rechercher par titre…"
+                                placeholder={t('seo.search_ph')}
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                                 className="w-[250px]"
@@ -156,25 +156,25 @@ export default function SeoIndex({ project }: Props) {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Titre</TableHead>
-                                    <TableHead>Collection</TableHead>
-                                    <TableHead>Slug</TableHead>
-                                    <TableHead className="w-[100px]">Score</TableHead>
-                                    <TableHead className="w-[80px]">Actions</TableHead>
+                                    <TableHead>{t('seo.title_col')}</TableHead>
+                                    <TableHead>{t('seo.collection_col')}</TableHead>
+                                    <TableHead>{t('fields.slug')}</TableHead>
+                                    <TableHead className="w-[100px]">{t('seo.score_col')}</TableHead>
+                                    <TableHead className="w-[80px]">{t('forms.actions')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {loading && (
                                     <TableRow>
                                         <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                            Chargement…
+                                            {t('common.loading')}
                                         </TableCell>
                                     </TableRow>
                                 )}
                                 {!loading && data?.data.length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                            Aucune entrée trouvée.
+                                            {t('seo.no_entries')}
                                         </TableCell>
                                     </TableRow>
                                 )}
@@ -187,7 +187,7 @@ export default function SeoIndex({ project }: Props) {
                                         <TableCell className="text-muted-foreground font-mono text-xs">{entry.slug}</TableCell>
                                         <TableCell><ScoreBadge score={entry.score} /></TableCell>
                                         <TableCell>
-                                            <Button variant="ghost" size="icon" title="Modifier le SEO">
+                                            <Button variant="ghost" size="icon" title={t('seo.edit_seo')}>
                                                 <Edit3 className="h-4 w-4" />
                                             </Button>
                                         </TableCell>

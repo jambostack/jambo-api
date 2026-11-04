@@ -69,7 +69,7 @@ export default function Security() {
 
     const setupTotp = async () => {
         setError(''); setMessage('');
-        const pw = prompt('Entrez votre mot de passe pour continuer :');
+        const pw = prompt(t('settings.security.enter_pw_continue'));
         if (!pw) return;
         try {
             const data = await api('/api/settings/security/totp/setup', { password: pw });
@@ -91,12 +91,12 @@ export default function Security() {
 
     const setupEmail = async () => {
         setError(''); setMessage('');
-        const pw = prompt('Entrez votre mot de passe pour continuer :');
+        const pw = prompt(t('settings.security.enter_pw_continue'));
         if (!pw) return;
         try {
             await api('/api/settings/security/email/enable', { password: pw });
             setMethod('email');
-            setMessage('Code envoyé à votre adresse email.');
+            setMessage(t('settings.security.code_sent_email'));
         } catch (e: any) { setError(e.message); }
     };
 
@@ -112,7 +112,7 @@ export default function Security() {
     };
 
     const disable = async () => {
-        const pw = prompt('Entrez votre mot de passe pour confirmer :');
+        const pw = prompt(t('settings.security.enter_pw_confirm'));
         if (!pw) return;
         setError(''); setMessage('');
         try {
@@ -150,7 +150,7 @@ export default function Security() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={t('settings.security.breadcrumb')} />
             <SettingsLayout>
-                <p className="text-sm text-muted-foreground">Loading...</p>
+                <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
             </SettingsLayout>
         </AppLayout>
     );
@@ -171,35 +171,35 @@ export default function Security() {
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-base">
                                 <Shield className="h-4 w-4" />
-                                Authentification à deux facteurs
+                                {t('projects.security.two_factor_title')}
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex items-center gap-2">
-                                <span className="text-sm">Statut :</span>
+                                <span className="text-sm">{t('settings.security.status_label')}</span>
                                 {status?.two_factor_enabled ? (
-                                    <Badge variant="default" className="bg-green-600">Activée ({status.two_factor_method})</Badge>
+                                    <Badge variant="default" className="bg-green-600">{t('settings.security.enabled_badge', { method: status.two_factor_method })}</Badge>
                                 ) : (
-                                    <Badge variant="outline">Désactivée</Badge>
+                                    <Badge variant="outline">{t('settings.security.disabled_badge')}</Badge>
                                 )}
                             </div>
 
-                            {message && <p className="text-sm text-green-600 bg-green-50 dark:bg-green-950/20 p-2 rounded">{message}</p>}
-                            {error && <p className="text-sm text-red-600 bg-red-50 dark:bg-red-950/20 p-2 rounded">{error}</p>}
+                            {message && <p className="text-sm text-green-600 bg-green-50 dark:bg-green-950/20 p-2 rounded">{t(message)}</p>}
+                            {error && <p className="text-sm text-red-600 bg-red-50 dark:bg-red-950/20 p-2 rounded">{t(error)}</p>}
 
                             {!status?.two_factor_enabled && (
                                 <div className="space-y-3">
                                     {!setupData && method === 'totp' && (
                                         <Button variant="outline" onClick={setupTotp} className="w-full">
                                             <Key className="h-4 w-4 mr-2" />
-                                            Configurer avec une application d'authentification (TOTP)
+                                            {t('settings.security.totp_btn')}
                                         </Button>
                                     )}
 
                                     {setupData && (
                                         <div className="space-y-3 p-3 border rounded-lg">
                                             <p className="text-xs text-muted-foreground">
-                                                Scannez ce QR code avec Google Authenticator, Authy ou une application compatible :
+                                                {t('settings.security.scan_qr')}
                                             </p>
                                             <img src={setupData.qr_code_uri} alt="QR Code" className="w-48 h-48 mx-auto" />
                                             <p className="text-xs font-mono text-center select-all">{setupData.secret}</p>
@@ -212,7 +212,7 @@ export default function Security() {
                                                 </InputOTP>
                                             </div>
                                             <Button onClick={confirmTotp} disabled={code.length < 6} className="w-full" size="sm">
-                                                Vérifier et activer
+                                                {t('settings.security.verify_and_activate')}
                                             </Button>
                                         </div>
                                     )}
@@ -220,7 +220,7 @@ export default function Security() {
                                     <div className="border-t pt-3">
                                         <Button variant="outline" onClick={setupEmail} className="w-full">
                                             <Mail className="h-4 w-4 mr-2" />
-                                            Recevoir un code par email
+                                            {t('settings.security.email_btn')}
                                         </Button>
                                     </div>
 
@@ -228,6 +228,19 @@ export default function Security() {
                                         <div className="space-y-3 p-3 border rounded-lg">
                                             <div className="flex justify-center">
                                                 <InputOTP maxLength={6} value={code} onChange={setCode}>
+                                                    <InputOTPGroup>
+                                                        <InputOTPSlot index={0} /><InputOTPSlot index={1} /><InputOTPSlot index={2} />
+                                                        <InputOTPSlot index={3} /><InputOTPSlot index={4} /><InputOTPSlot index={5} />
+                                                    </InputOTPGroup>
+                                                </InputOTP>
+                                            </div>
+                                            <Button onClick={confirmEmail} disabled={code.length < 6} className="w-full" size="sm">
+                                                {t('settings.security.verify_and_activate')}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                                                     <InputOTPGroup>
                                                         <InputOTPSlot index={0} /><InputOTPSlot index={1} /><InputOTPSlot index={2} />
                                                         <InputOTPSlot index={3} /><InputOTPSlot index={4} /><InputOTPSlot index={5} />
@@ -246,14 +259,14 @@ export default function Security() {
                             {status?.has_backup_codes && (
                                 <div className="space-y-2 p-3 border rounded-lg">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-xs font-semibold">Codes de secours</span>
+                                        <span className="text-xs font-semibold">{t('settings.security.backup_codes_title')}</span>
                                         <div className="flex gap-2">
                                             <Button variant="ghost" size="sm" className="text-xs h-6"
                                                 onClick={() => setShowBackupCodes(!showBackupCodes)}>
-                                                {showBackupCodes ? 'Masquer' : 'Afficher'}
+                                                {showBackupCodes ? t('settings.security.hide') : t('settings.security.show')}
                                             </Button>
                                             <Button variant="ghost" size="sm" className="text-xs h-6" onClick={regenerateCodes}>
-                                                Régénérer
+                                                {t('settings.security.regenerate')}
                                             </Button>
                                         </div>
                                     </div>
@@ -265,7 +278,7 @@ export default function Security() {
                                         </div>
                                     )}
                                     {(!showBackupCodes || backupCodes.length === 0) && (
-                                        <p className="text-xs text-muted-foreground">8 codes de secours disponibles. À usage unique.</p>
+                                        <p className="text-xs text-muted-foreground">{t('settings.security.backup_codes_count')}</p>
                                     )}
                                 </div>
                             )}
@@ -275,7 +288,7 @@ export default function Security() {
                                 <div className="border-t pt-3">
                                     <Button variant="destructive" size="sm" onClick={disable} className="w-full">
                                         <AlertTriangle className="h-4 w-4 mr-2" />
-                                        Désactiver la 2FA
+                                        {t('settings.security.disable_2fa')}
                                     </Button>
                                 </div>
                             )}
@@ -287,12 +300,12 @@ export default function Security() {
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-base">
                                 <Link className="h-4 w-4" />
-                                Comptes liés
+                                {t('settings.security.linked_accounts')}
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
                             {Object.keys(socialProviders).length === 0 ? (
-                                <p className="text-xs text-muted-foreground">Chargement...</p>
+                                <p className="text-xs text-muted-foreground">{t('common.loading')}</p>
                             ) : (
                                 <div className="space-y-3">
                                     {Object.entries(socialProviders).map(([p, info]) => (
@@ -300,29 +313,29 @@ export default function Security() {
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm font-medium">{SOCIAL_LABELS[p] ?? p}</span>
                                                 {info.linked ? (
-                                                    <Badge variant="default" className="bg-green-600 text-xs">Lié</Badge>
+                                                    <Badge variant="default" className="bg-green-600 text-xs">{t('settings.security.linked')}</Badge>
                                                 ) : info.configured ? (
-                                                    <Badge variant="outline" className="text-xs">Non lié</Badge>
+                                                    <Badge variant="outline" className="text-xs">{t('settings.security.not_linked')}</Badge>
                                                 ) : (
-                                                    <Badge variant="outline" className="text-xs text-muted-foreground border-dashed">Non configuré</Badge>
+                                                    <Badge variant="outline" className="text-xs text-muted-foreground border-dashed">{t('settings.security.not_configured')}</Badge>
                                                 )}
                                             </div>
                                             {info.linked ? (
                                                 <Button variant="ghost" size="sm" className="text-xs h-7 text-destructive"
                                                     onClick={() => unlinkSocial(p)}>
                                                     <Unlink className="h-3 w-3 mr-1" />
-                                                    Dissocier
+                                                    {t('settings.security.unlink')}
                                                 </Button>
                                             ) : info.configured ? (
                                                 <a href={`/connect/${p}`}>
                                                     <Button variant="outline" size="sm" className="text-xs h-7">
                                                         <Link className="h-3 w-3 mr-1" />
-                                                        Lier
+                                                        {t('settings.security.link')}
                                                     </Button>
                                                 </a>
                                             ) : (
                                                 <span className="text-xs text-muted-foreground">
-                                                    Configurer dans AppSettings
+                                                    {t('settings.security.configure_in_appsettings')}
                                                 </span>
                                             )}
                                         </div>

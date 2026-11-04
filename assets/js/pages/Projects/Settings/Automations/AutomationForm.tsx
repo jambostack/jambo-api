@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Trash, Play, ArrowLeft, ArrowRight } from 'lucide-react';
+import { useTranslation } from '@/lib/i18n';
 
 interface Automation {
     id?: number;
@@ -27,32 +28,32 @@ interface Props {
 }
 
 const TRIGGER_TYPES = [
-    { value: 'content.created', label: 'Contenu créé', hasCollectionFilter: true },
-    { value: 'content.updated', label: 'Contenu modifié', hasCollectionFilter: true },
-    { value: 'content.deleted', label: 'Contenu supprimé', hasCollectionFilter: true },
-    { value: 'content.status_changed', label: 'Statut changé', hasCollectionFilter: true },
-    { value: 'schedule.cron', label: 'Planifié (cron)', hasCollectionFilter: false },
+    { value: 'content.created', labelKey: 'automations.trigger.content_created', hasCollectionFilter: true },
+    { value: 'content.updated', labelKey: 'automations.trigger.content_updated', hasCollectionFilter: true },
+    { value: 'content.deleted', labelKey: 'automations.trigger.content_deleted', hasCollectionFilter: true },
+    { value: 'content.status_changed', labelKey: 'automations.trigger.status_changed', hasCollectionFilter: true },
+    { value: 'schedule.cron', labelKey: 'automations.trigger.cron', hasCollectionFilter: false },
 ];
 
 const OPERATORS = [
-    { value: 'eq', label: 'égal' },
-    { value: 'neq', label: 'différent' },
-    { value: 'in', label: 'dans la liste' },
-    { value: 'contains', label: 'contient' },
+    { value: 'eq', labelKey: 'automations.operator.eq' },
+    { value: 'neq', labelKey: 'automations.operator.neq' },
+    { value: 'in', labelKey: 'automations.operator.in' },
+    { value: 'contains', labelKey: 'automations.operator.contains' },
     { value: 'gt', label: '>' },
     { value: 'gte', label: '>=' },
     { value: 'lt', label: '<' },
     { value: 'lte', label: '<=' },
-    { value: 'empty', label: 'est vide' },
-    { value: 'notEmpty', label: "n'est pas vide" },
+    { value: 'empty', labelKey: 'automations.operator.empty' },
+    { value: 'notEmpty', labelKey: 'automations.operator.not_empty' },
 ];
 
 const ACTION_TYPES = [
-    { value: 'send_email', label: 'Envoyer un email' },
-    { value: 'call_webhook', label: 'Appeler un webhook' },
-    { value: 'create_entry', label: 'Créer une entrée' },
-    { value: 'update_entry', label: 'Modifier une entrée' },
-    { value: 'send_notification', label: 'Envoyer une notification' },
+    { value: 'send_email', labelKey: 'automations.action.send_email' },
+    { value: 'call_webhook', labelKey: 'automations.action.call_webhook' },
+    { value: 'create_entry', labelKey: 'automations.action.create_entry' },
+    { value: 'update_entry', labelKey: 'automations.action.update_entry' },
+    { value: 'send_notification', labelKey: 'automations.action.send_notification' },
 ];
 
 const emptyAutomation: Automation = {
@@ -67,6 +68,7 @@ const emptyAutomation: Automation = {
 };
 
 export default function AutomationForm({ projectUuid, automation, onClose, onSaved }: Props) {
+    const t = useTranslation();
     const [step, setStep] = useState(0);
     const [form, setForm] = useState<Automation>(automation || emptyAutomation);
     const [saving, setSaving] = useState(false);
@@ -87,7 +89,7 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
         nodes.push({
             id: 'trigger_1',
             type: triggerFullType,
-            data: { label: TRIGGER_TYPES.find(t => t.value === form.trigger_type)?.label || 'Déclencheur', config: form.trigger_config || {} },
+            data: { label: TRIGGER_TYPES.find(tObj => tObj.value === form.trigger_type) ? t(TRIGGER_TYPES.find(tObj => tObj.value === form.trigger_type)!.labelKey) : t('automations.step_trigger'), config: form.trigger_config || {} },
         });
         prevId = 'trigger_1';
 
@@ -136,14 +138,14 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
             };
             if (automation?.id) {
                 await axios.put(`/api/projects/${projectUuid}/automations/${automation.id}`, payload);
-                toast.success('Automatisation mise à jour');
+                toast.success(t('automations.updated_success'));
             } else {
                 await axios.post(`/api/projects/${projectUuid}/automations`, payload);
-                toast.success('Automatisation créée');
+                toast.success(t('automations.created_success'));
             }
             onSaved();
         } catch {
-            toast.error("Erreur lors de l'enregistrement");
+            toast.error(t('automations.save_error'));
         } finally {
             setSaving(false);
         }
@@ -159,7 +161,7 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                 { description: `Résultat : ${JSON.stringify(d.condition_detail)}`, duration: 6000 }
             );
         } catch {
-            toast.error('Test échoué');
+            toast.error(t('automations.test_failed'));
         }
     };
 
@@ -169,11 +171,11 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
         <Dialog open onOpenChange={() => onClose()} modal>
             <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>{automation?.id ? 'Modifier' : 'Nouvelle'} automatisation</DialogTitle>
+                    <DialogTitle>{automation?.id ? t('flow.edit_title') : t('flow.new_title')}</DialogTitle>
                 </DialogHeader>
 
                 <div className="flex items-center gap-2 mb-4">
-                    {['Déclencheur', 'Conditions', 'Action', 'Résumé'].map((label, i) => (
+                    {[t('automations.step_trigger'), t('automations.step_conditions'), t('automations.step_action'), t('automations.step_summary')].map((label, i) => (
                         <div key={i} className={`flex-1 h-1.5 rounded-full ${i <= step ? 'bg-primary' : 'bg-muted'}`} />
                     ))}
                 </div>
@@ -182,11 +184,11 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                 {step === 0 && (
                     <div className="space-y-4">
                         <div>
-                            <Label>Nom de l'automatisation</Label>
+                            <Label>{t('common.name')}</Label>
                             <Input value={form.name} onChange={e => update({ name: e.target.value })} placeholder="Ex: Notifier publication" />
                         </div>
                         <div>
-                            <Label>Type de déclencheur</Label>
+                            <Label>{t('automations.step_trigger')}</Label>
                             <select
                                 className="w-full border rounded-md px-3 py-2 text-sm bg-background"
                                 value={form.trigger_type}
@@ -194,8 +196,8 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                                     update({ trigger_type: e.target.value, trigger_config: null });
                                 }}
                             >
-                                {TRIGGER_TYPES.map(t => (
-                                    <option key={t.value} value={t.value}>{t.label}</option>
+                                {TRIGGER_TYPES.map(trig => (
+                                    <option key={trig.value} value={trig.value}>{t(trig.labelKey)}</option>
                                 ))}
                             </select>
                         </div>
@@ -203,7 +205,7 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                             <div>
                                 <Label>Filtrer par collections (optionnel)</Label>
                                 <Input
-                                    placeholder="articles, pages (slugs séparés par des virgules)"
+                                    placeholder={t('automations.collections_placeholder')}
                                     value={(form.trigger_config?.collection_slugs || []).join(', ')}
                                     onChange={e => update({
                                         trigger_config: {
@@ -218,7 +220,7 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                             <div>
                                 <Label>Expression cron</Label>
                                 <Input
-                                    placeholder="0 9 * * * (tous les jours à 9h)"
+                                    placeholder={t('automations.cron_placeholder')}
                                     value={form.trigger_config?.schedule || ''}
                                     onChange={e => update({ trigger_config: { schedule: e.target.value } })}
                                 />
@@ -231,7 +233,7 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                 {/* Étape 2 : Conditions */}
                 {step === 1 && (
                     <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">Les conditions sont évaluées en ET. Toutes doivent être vraies.</p>
+                        <p className="text-sm text-muted-foreground">{t('automations.conditions_help')}</p>
                         {form.conditions.map((cond, i) => (
                             <div key={i} className="flex items-center gap-2">
                                 <Input
@@ -253,7 +255,7 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                                         update({ conditions: c });
                                     }}
                                 >
-                                    {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.labelKey ? t(o.labelKey) : o.label}</option>)}
                                 </select>
                                 <Input
                                     className="flex-1"
@@ -275,7 +277,7 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                         <Button variant="outline" size="sm" onClick={() => {
                             update({ conditions: [...form.conditions, { field: '', operator: 'eq', value: '' }] });
                         }}>
-                            <Plus className="h-3.5 w-3.5 mr-1" /> Ajouter une condition
+                            <Plus className="h-3.5 w-3.5 mr-1" /> {t('automations.add_condition')}
                         </Button>
                     </div>
                 )}
@@ -284,13 +286,13 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                 {step === 2 && (
                     <div className="space-y-4">
                         <div>
-                            <Label>Type d'action</Label>
+                            <Label>{t('automations.step_action')}</Label>
                             <select
                                 className="w-full border rounded-md px-3 py-2 text-sm bg-background"
                                 value={form.action_type}
                                 onChange={e => update({ action_type: e.target.value, action_config: null })}
                             >
-                                {ACTION_TYPES.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                                {ACTION_TYPES.map(a => <option key={a.value} value={a.value}>{t(a.labelKey)}</option>)}
                             </select>
                         </div>
 
@@ -307,7 +309,7 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                                 <div><Label>URL</Label><Input placeholder="https://example.com/hook" value={form.action_config?.url || ''} onChange={e => update({ action_config: { ...form.action_config, url: e.target.value } })} /></div>
                                 <div className="flex gap-2">
                                     <div className="flex-1">
-                                        <Label>Méthode</Label>
+                                        <Label>{t('automations.method')}</Label>
                                         <select className="border rounded-md px-2 py-1.5 text-sm bg-background w-full" value={form.action_config?.method || 'POST'} onChange={e => update({ action_config: { ...form.action_config, method: e.target.value } })}>
                                             <option>POST</option><option>GET</option><option>PUT</option><option>PATCH</option>
                                         </select>
@@ -326,14 +328,14 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
 
                         {form.action_type === 'update_entry' && (
                             <div className="space-y-3">
-                                <div><Label>UUID de l'entrée</Label><Input placeholder="{{ entry.uuid }}" value={form.action_config?.entry_uuid || ''} onChange={e => update({ action_config: { ...form.action_config, entry_uuid: e.target.value } })} /></div>
-                                <div><Label>Champs à modifier</Label><textarea className="w-full border rounded-md px-3 py-2 text-sm bg-background min-h-[80px]" placeholder='{"status": "published"}' value={form.action_config?.fields ? JSON.stringify(form.action_config.fields, null, 2) : ''} onChange={e => { try { update({ action_config: { ...form.action_config, fields: JSON.parse(e.target.value) } }); } catch {} }} /></div>
+                                <div><Label>{t('automations.entry_uuid')}</Label><Input placeholder="{{ entry.uuid }}" value={form.action_config?.entry_uuid || ''} onChange={e => update({ action_config: { ...form.action_config, entry_uuid: e.target.value } })} /></div>
+                                <div><Label>{t('automations.fields_to_modify')}</Label><textarea className="w-full border rounded-md px-3 py-2 text-sm bg-background min-h-[80px]" placeholder='{"status": "published"}' value={form.action_config?.fields ? JSON.stringify(form.action_config.fields, null, 2) : ''} onChange={e => { try { update({ action_config: { ...form.action_config, fields: JSON.parse(e.target.value) } }); } catch {} }} /></div>
                             </div>
                         )}
 
                         {form.action_type === 'send_notification' && (
                             <div className="space-y-3">
-                                <div><Label>Titre</Label><Input placeholder="Automatisation exécutée" value={form.action_config?.title || ''} onChange={e => update({ action_config: { ...form.action_config, title: e.target.value } })} /></div>
+                                <div><Label>{t('common.name')}</Label><Input placeholder={t('automations.action_title_placeholder')} value={form.action_config?.title || ''} onChange={e => update({ action_config: { ...form.action_config, title: e.target.value } })} /></div>
                                 <div><Label>Message</Label><textarea className="w-full border rounded-md px-3 py-2 text-sm bg-background min-h-[80px]" placeholder="{{ entry.title }} traité." value={form.action_config?.body || ''} onChange={e => update({ action_config: { ...form.action_config, body: e.target.value } })} /></div>
                             </div>
                         )}
@@ -343,13 +345,13 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                 {/* Étape 4 : Résumé */}
                 {step === 3 && (
                     <div className="space-y-3 text-sm">
-                        <div className="border rounded-md p-3"><span className="font-medium">Nom :</span> {form.name || 'Sans nom'}</div>
-                        <div className="border rounded-md p-3"><span className="font-medium">Déclencheur :</span> {TRIGGER_TYPES.find(t => t.value === form.trigger_type)?.label}</div>
-                        <div className="border rounded-md p-3"><span className="font-medium">Conditions :</span> {form.conditions.length > 0 ? form.conditions.map(c => `${c.field} ${c.operator} ${c.value}`).join(' ET ') : 'Aucune'}</div>
-                        <div className="border rounded-md p-3"><span className="font-medium">Action :</span> {ACTION_TYPES.find(a => a.value === form.action_type)?.label}</div>
+                        <div className="border rounded-md p-3"><span className="font-medium">{t('common.name')} :</span> {form.name || t('flow.unnamed')}</div>
+                        <div className="border rounded-md p-3"><span className="font-medium">{t('automations.step_trigger')} :</span> {TRIGGER_TYPES.find(trig => trig.value === form.trigger_type) ? t(TRIGGER_TYPES.find(trig => trig.value === form.trigger_type)!.labelKey) : form.trigger_type}</div>
+                        <div className="border rounded-md p-3"><span className="font-medium">{t('automations.step_conditions')} :</span> {form.conditions.length > 0 ? form.conditions.map(c => `${c.field} ${c.operator} ${c.value}`).join(' ET ') : 'Aucune'}</div>
+                        <div className="border rounded-md p-3"><span className="font-medium">{t('automations.step_action')} :</span> {ACTION_TYPES.find(a => a.value === form.action_type) ? t(ACTION_TYPES.find(a => a.value === form.action_type)!.labelKey) : form.action_type}</div>
                         <div className="flex items-center gap-4 mt-2">
-                            <label className="flex items-center gap-2"><input type="checkbox" checked={form.is_active} onChange={e => update({ is_active: e.target.checked })} /> Actif</label>
-                            <label className="flex items-center gap-2"><input type="checkbox" checked={form.debug_mode} onChange={e => update({ debug_mode: e.target.checked })} /> Mode debug</label>
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={form.is_active} onChange={e => update({ is_active: e.target.checked })} /> {t('flow.active_label')}</label>
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={form.debug_mode} onChange={e => update({ debug_mode: e.target.checked })} /> {t('flow.debug_label')}</label>
                         </div>
                     </div>
                 )}
@@ -359,24 +361,24 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                     <div className="flex gap-2">
                         {step > 0 && (
                             <Button variant="outline" size="sm" onClick={() => setStep(step - 1)}>
-                                <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Précédent
+                                <ArrowLeft className="h-3.5 w-3.5 mr-1" /> {t('common.pagination_previous')}
                             </Button>
                         )}
                         {step < 3 && (
                             <Button size="sm" onClick={() => setStep(step + 1)}>
-                                Suivant <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                                {t('common.pagination_next')} <ArrowRight className="h-3.5 w-3.5 ml-1" />
                             </Button>
                         )}
                     </div>
                     <div className="flex gap-2">
                         {automation?.id && (
                             <Button variant="outline" size="sm" onClick={handleTest}>
-                                <Play className="h-3.5 w-3.5 mr-1" /> Tester
+                                <Play className="h-3.5 w-3.5 mr-1" /> {t('automations.test_btn')}
                             </Button>
                         )}
                         {step === 3 && (
                             <Button size="sm" onClick={handleSave} disabled={saving}>
-                                {saving ? 'Enregistrement...' : 'Enregistrer'}
+                                {saving ? t('flow.saving_btn') : t('flow.save_btn')}
                             </Button>
                         )}
                     </div>

@@ -61,12 +61,12 @@ export default function ProjectSecuritySettings({ project }: Props) {
 
             <ProjectSettingsLayout project={project}>
                 <div className="space-y-6 max-w-2xl">
-                    <HeadingSmall title={t('projects.settings.security')} description="Gérez l'authentification des utilisateurs finaux" />
+                    <HeadingSmall title={t('projects.settings.security')} description={t('projects.security.manage_enduser_auth')} />
 
                     {/* 2FA for End Users */}
                     <div>
-                        <h3 className="text-sm font-semibold mb-3">Authentification à deux facteurs</h3>
-                        <p className="text-xs text-muted-foreground mb-3">Les utilisateurs finaux devront configurer la 2FA dans leur espace personnel.</p>
+                        <h3 className="text-sm font-semibold mb-3">{t('projects.security.two_factor_title')}</h3>
+                        <p className="text-xs text-muted-foreground mb-3">{t('projects.security.two_factor_desc')}</p>
                         <div className="space-y-3">
                             <label className="flex items-center gap-3">
                                 <input
@@ -76,20 +76,20 @@ export default function ProjectSecuritySettings({ project }: Props) {
                                     className="rounded"
                                 />
                                 <div>
-                                    <span className="text-sm font-medium">Exiger l'authentification à deux facteurs</span>
+                                    <span className="text-sm font-medium">{t('projects.security.require_two_factor')}</span>
                                 </div>
                             </label>
 
                             {data.security?.endUserTwoFactor && (
                                 <div className="ml-8 space-y-2">
-                                    <span className="text-xs text-muted-foreground">Méthodes autorisées :</span>
+                                    <span className="text-xs text-muted-foreground">{t('projects.security.allowed_methods')}</span>
                                     <label className="flex items-center gap-2">
                                         <input type="checkbox" defaultChecked className="rounded" />
-                                        <span className="text-sm">TOTP (application d'authentification)</span>
+                                        <span className="text-sm">{t('projects.security.totp_label')}</span>
                                     </label>
                                     <label className="flex items-center gap-2">
                                         <input type="checkbox" defaultChecked className="rounded" />
-                                        <span className="text-sm">Email</span>
+                                        <span className="text-sm">{t('projects.security.email_label')}</span>
                                     </label>
                                 </div>
                             )}
@@ -100,8 +100,8 @@ export default function ProjectSecuritySettings({ project }: Props) {
 
                     {/* Social Login for End Users */}
                     <div>
-                        <h3 className="text-sm font-semibold mb-3">Social Login</h3>
-                        <p className="text-xs text-muted-foreground mb-3">Les utilisateurs finaux pourront se connecter avec Google, Microsoft, GitHub ou GitLab.</p>
+                        <h3 className="text-sm font-semibold mb-3">{t('projects.security.social_login_title')}</h3>
+                        <p className="text-xs text-muted-foreground mb-3">{t('projects.security.social_login_desc')}</p>
                         <div className="space-y-3">
                             <label className="flex items-center gap-3">
                                 <input
@@ -114,7 +114,7 @@ export default function ProjectSecuritySettings({ project }: Props) {
                                     className="rounded"
                                 />
                                 <div>
-                                    <span className="text-sm font-medium">Autoriser la connexion via fournisseurs OAuth</span>
+                                    <span className="text-sm font-medium">{t('projects.security.allow_oauth')}</span>
                                 </div>
                             </label>
 
@@ -131,7 +131,7 @@ export default function ProjectSecuritySettings({ project }: Props) {
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-sm font-medium capitalize">{p}</span>
                                                         {isConfigured && sp?.enabled && (
-                                                            <span className="text-xs text-green-600 font-medium">Configuré</span>
+                                                            <span className="text-xs text-green-600 font-medium">{t('common.configured')}</span>
                                                         )}
                                                     </div>
                                                     <label className="flex items-center gap-2 text-xs">

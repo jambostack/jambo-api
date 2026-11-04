@@ -353,7 +353,7 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
             setData(response.data);
             setIsInitialLoad(false);
         } catch (error) {
-            toast.error('Failed to fetch data');
+            toast.error(t('common.failed_fetch_data'));
         } finally {
             setLoading(false);
         }

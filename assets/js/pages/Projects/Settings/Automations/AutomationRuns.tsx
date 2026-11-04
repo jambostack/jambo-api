@@ -3,6 +3,7 @@ import axios from 'axios';
 import { ArrowLeft, CheckCircle, XCircle, Clock, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useTranslation } from '@/lib/i18n';
 
 interface Run {
     id: number;
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export default function AutomationRuns({ projectUuid, automation, onBack }: Props) {
+    const t = useTranslation();
     const [runs, setRuns] = useState<Run[]>([]);
     const [loading, setLoading] = useState(true);
     const [expanded, setExpanded] = useState<number | null>(null);
@@ -51,26 +53,26 @@ export default function AutomationRuns({ projectUuid, automation, onBack }: Prop
         <div className="space-y-4">
             <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={onBack}>
-                    <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Retour
+                    <ArrowLeft className="h-3.5 w-3.5 mr-1" /> {t('automations.runs.back')}
                 </Button>
-                <h3 className="text-lg font-semibold">Exécutions : {automation.name}</h3>
-                {automation.debug_mode && <Badge variant="outline" className="text-xs">Debug</Badge>}
+                <h3 className="text-lg font-semibold">{t('automations.runs.title', { name: automation.name })}</h3>
+                {automation.debug_mode && <Badge variant="outline" className="text-xs">{t('automations.runs.debug')}</Badge>}
             </div>
 
             {loading ? (
                 <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" /></div>
             ) : runs.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground text-sm">Aucune exécution.</div>
+                <div className="text-center py-12 text-muted-foreground text-sm">{t('automations.runs.empty')}</div>
             ) : (
                 <div className="border rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                         <thead className="bg-muted/50">
                             <tr>
                                 <th className="text-left px-4 py-2 font-medium w-8"></th>
-                                <th className="text-left px-4 py-2 font-medium">Statut</th>
-                                <th className="text-left px-4 py-2 font-medium">Date</th>
-                                <th className="text-left px-4 py-2 font-medium">Durée</th>
-                                <th className="text-left px-4 py-2 font-medium">Erreur</th>
+                                <th className="text-left px-4 py-2 font-medium">{t('automations.runs.status')}</th>
+                                <th className="text-left px-4 py-2 font-medium">{t('forms.date_col')}</th>
+                                <th className="text-left px-4 py-2 font-medium">{t('automations.runs.duration')}</th>
+                                <th className="text-left px-4 py-2 font-medium">{t('common.error')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
@@ -107,7 +109,7 @@ export default function AutomationRuns({ projectUuid, automation, onBack }: Prop
                                                     )}
                                                     {run.condition_results && (
                                                         <div>
-                                                            <span className="font-medium">Résultats conditions :</span>
+                                                            <span className="font-medium">{t('automations.condition_results')}</span>
                                                             <pre className="mt-1 bg-muted p-2 rounded text-xs overflow-x-auto max-h-[200px]">{JSON.stringify(run.condition_results, null, 2)}</pre>
                                                         </div>
                                                     )}

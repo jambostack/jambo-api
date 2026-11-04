@@ -135,6 +135,7 @@ function LinkPopover({ onConfirm, onCancel }: { onConfirm: (url: string) => void
 
 // Toolbar component
 function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
+    const t = useTranslation();
     const [editor] = useLexicalComposerContext();
     const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
     const [blockType, setBlockType] = useState('paragraph');
@@ -208,28 +209,28 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
 
     return (
         <div className="lexical-toolbar flex flex-wrap items-center gap-0.5 border-b px-2 py-1 bg-muted/30 relative">
-            <button type="button" className={btn(false)} onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)} title="Undo"><Undo size={15} /></button>
-            <button type="button" className={btn(false)} onClick={() => editor.dispatchCommand(REDO_COMMAND, undefined)} title="Redo"><Redo size={15} /></button>
+            <button type="button" className={btn(false)} onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)} title={t('editor.undo')}><Undo size={15} /></button>
+            <button type="button" className={btn(false)} onClick={() => editor.dispatchCommand(REDO_COMMAND, undefined)} title={t('editor.redo')}><Redo size={15} /></button>
             <div className="w-px h-5 bg-border mx-1" />
-            <button type="button" className={btn(blockType === 'h1')} onClick={() => formatHeading('h1')} title="Heading 1"><Heading1 size={15} /></button>
-            <button type="button" className={btn(blockType === 'h2')} onClick={() => formatHeading('h2')} title="Heading 2"><Heading2 size={15} /></button>
-            <button type="button" className={btn(blockType === 'h3')} onClick={() => formatHeading('h3')} title="Heading 3"><Heading3 size={15} /></button>
+            <button type="button" className={btn(blockType === 'h1')} onClick={() => formatHeading('h1')} title={t('editor.heading1')}><Heading1 size={15} /></button>
+            <button type="button" className={btn(blockType === 'h2')} onClick={() => formatHeading('h2')} title={t('editor.heading2')}><Heading2 size={15} /></button>
+            <button type="button" className={btn(blockType === 'h3')} onClick={() => formatHeading('h3')} title={t('editor.heading3')}><Heading3 size={15} /></button>
             <div className="w-px h-5 bg-border mx-1" />
-            <button type="button" className={btn(activeFormats.has('bold'))} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')} title="Bold"><Bold size={15} /></button>
-            <button type="button" className={btn(activeFormats.has('italic'))} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic')} title="Italic"><Italic size={15} /></button>
-            <button type="button" className={btn(activeFormats.has('underline'))} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline')} title="Underline"><Underline size={15} /></button>
-            <button type="button" className={btn(activeFormats.has('strikethrough'))} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'strikethrough')} title="Strikethrough"><Strikethrough size={15} /></button>
-            <button type="button" className={btn(activeFormats.has('code'))} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code')} title="Inline code"><Code size={15} /></button>
+            <button type="button" className={btn(activeFormats.has('bold'))} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')} title={t('editor.bold')}><Bold size={15} /></button>
+            <button type="button" className={btn(activeFormats.has('italic'))} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic')} title={t('editor.italic')}><Italic size={15} /></button>
+            <button type="button" className={btn(activeFormats.has('underline'))} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline')} title={t('editor.underline')}><Underline size={15} /></button>
+            <button type="button" className={btn(activeFormats.has('strikethrough'))} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'strikethrough')} title={t('editor.strikethrough')}><Strikethrough size={15} /></button>
+            <button type="button" className={btn(activeFormats.has('code'))} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code')} title={t('editor.code')}><Code size={15} /></button>
             <div className="w-px h-5 bg-border mx-1" />
-            <button type="button" className={btn(blockType === 'bullet')} onClick={() => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)} title="Bullet list"><List size={15} /></button>
-            <button type="button" className={btn(blockType === 'number')} onClick={() => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined)} title="Ordered list"><ListOrdered size={15} /></button>
+            <button type="button" className={btn(blockType === 'bullet')} onClick={() => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)} title={t('editor.bullet_list')}><List size={15} /></button>
+            <button type="button" className={btn(blockType === 'number')} onClick={() => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined)} title={t('editor.ordered_list')}><ListOrdered size={15} /></button>
             <div className="w-px h-5 bg-border mx-1" />
             <div className="relative">
                 <button
                     type="button"
                     className={btn(showLinkPopover)}
                     onClick={() => setShowLinkPopover(v => !v)}
-                    title="Insert link"
+                    title={t('editor.insert_link')}
                 >
                     <Link2 size={15} />
                 </button>
@@ -240,14 +241,14 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
                     />
                 )}
             </div>
-            <button type="button" className={btn(false)} onClick={onAssetInsert} title="Insert image from library"><ImageIcon size={15} /></button>
+            <button type="button" className={btn(false)} onClick={onAssetInsert} title={t('editor.insert_image')}><ImageIcon size={15} /></button>
             <div className="w-px h-5 bg-border mx-1" />
             {/* Blockquote */}
             <button
                 type="button"
                 className={btn(isBlockquote)}
                 onClick={() => editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'quote')}
-                title="Quote"
+                title={t('editor.quote')}
             >
                 <TextQuote size={15} />
             </button>
@@ -256,7 +257,7 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
                 type="button"
                 className={btn(isCodeBlock)}
                 onClick={() => editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'code')}
-                title="Code Block"
+                title={t('editor.code_block')}
             >
                 <Code2 size={15} />
             </button>
@@ -265,7 +266,7 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
                 type="button"
                 className={btn(false)}
                 onClick={() => editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined)}
-                title="Divider"
+                title={t('editor.hr')}
             >
                 <Minus size={15} />
             </button>
@@ -273,7 +274,7 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
             {/* Table grid picker */}
             <Popover>
                 <PopoverTrigger asChild>
-                    <button type="button" className={btn(false)} title="Insert table">
+                    <button type="button" className={btn(false)} title={t('editor.insert_table')}>
                         <Table2 className="h-4 w-4" />
                     </button>
                 </PopoverTrigger>
@@ -299,7 +300,7 @@ function Toolbar({ onAssetInsert }: { onAssetInsert: () => void }) {
             {/* Callout dropdown */}
             <Popover>
                 <PopoverTrigger asChild>
-                    <button type="button" className={btn(false)} title="Insert callout">
+                    <button type="button" className={btn(false)} title={t('editor.insert_callout')}>
                         <AlertTriangle className="h-4 w-4" />
                     </button>
                 </PopoverTrigger>
