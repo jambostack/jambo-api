@@ -32,6 +32,8 @@ class CommentController extends AbstractController
             return $this->json(['error' => 'Entry not found.'], 404);
         }
 
+        $this->denyAccessUnlessGranted('project.view', $entry->project);
+
         $page = max(1, $request->query->getInt('page', 1));
         $perPage = min(50, max(1, $request->query->getInt('per_page', 15)));
         $comments = $this->commentRepository->findByEntryPaginated($entryId, $page, $perPage);
@@ -54,6 +56,8 @@ class CommentController extends AbstractController
         if (!$user instanceof \App\Entity\User) {
             return $this->json(['error' => 'Unauthorized'], 401);
         }
+
+        $this->denyAccessUnlessGranted('content.update', $entry->project);
 
         try {
             $data = $request->toArray();
@@ -101,6 +105,9 @@ class CommentController extends AbstractController
         if (!$user instanceof \App\Entity\User) {
             return $this->json(['error' => 'Unauthorized'], 401);
         }
+
+        $this->denyAccessUnlessGranted('content.update', $comment->entry?->project);
+
         if ($comment->author?->id !== $user->id) {
             return $this->json(['error' => 'Forbidden.'], 403);
         }
@@ -138,6 +145,9 @@ class CommentController extends AbstractController
         if (!$user instanceof \App\Entity\User) {
             return $this->json(['error' => 'Unauthorized'], 401);
         }
+
+        $this->denyAccessUnlessGranted('project.view', $comment->entry?->project);
+
         $isAdmin = in_array('ROLE_ADMIN', $user->getRoles(), true) || in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true);
         if ($comment->author?->id !== $user->id && !$isAdmin) {
             return $this->json(['error' => 'Forbidden.'], 403);
@@ -161,11 +171,7 @@ class CommentController extends AbstractController
             return $this->json(['error' => 'Unauthorized'], 401);
         }
 
-        $project = $comment->entry?->project;
-        $isSuperAdmin = in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true);
-        if (!$isSuperAdmin && ($project === null || !$project->hasMember($user))) {
-            return $this->json(['error' => 'Forbidden.'], 403);
-        }
+        $this->denyAccessUnlessGranted('content.update', $comment->entry?->project);
 
         try {
             $data = $request->toArray();

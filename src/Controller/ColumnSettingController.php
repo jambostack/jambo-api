@@ -36,6 +36,8 @@ class ColumnSettingController extends AbstractController
         }
         [$project, $collection] = $resolved;
 
+        $this->denyAccessUnlessGranted('project.view', $project);
+
         $setting = $this->columnSettingRepository->findOneByUserAndCollection($user, $collection);
 
         return $this->json([
@@ -56,6 +58,8 @@ class ColumnSettingController extends AbstractController
             return $resolved;
         }
         [$project, $collection] = $resolved;
+
+        $this->denyAccessUnlessGranted('project.view', $project);
 
         try {
             $data = $request->toArray();

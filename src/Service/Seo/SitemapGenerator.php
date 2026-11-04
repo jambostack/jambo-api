@@ -35,7 +35,11 @@ class SitemapGenerator
             ->findBy(['project' => $project, 'deletedAt' => null]);
 
         $urls = [];
-        $baseUrl = rtrim($project->previewUrl ?? 'https://example.com', '/');
+        $rawBaseUrl = rtrim($project->previewUrl ?? 'https://example.com', '/');
+        $baseUrl = str_replace(["\r", "\n"], '', $rawBaseUrl);
+        if (!filter_var($baseUrl, FILTER_VALIDATE_URL) || (!str_starts_with($baseUrl, 'http://') && !str_starts_with($baseUrl, 'https://'))) {
+            $baseUrl = 'https://example.com';
+        }
 
         foreach ($collections as $collection) {
             if (in_array($collection->slug, $excludeCollections, true)) {
@@ -64,11 +68,16 @@ class SitemapGenerator
         $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
         $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
         foreach ($urls as $url) {
+            $loc = htmlspecialchars((string) $url['loc'], ENT_XML1 | ENT_QUOTES, 'UTF-8');
+            $lastmod = htmlspecialchars((string) $url['lastmod'], ENT_XML1 | ENT_QUOTES, 'UTF-8');
+            $changefreq = htmlspecialchars((string) $url['changefreq'], ENT_XML1 | ENT_QUOTES, 'UTF-8');
+            $priority = htmlspecialchars((string) $url['priority'], ENT_XML1 | ENT_QUOTES, 'UTF-8');
+
             $xml .= "  <url>\n";
-            $xml .= "    <loc>{$url['loc']}</loc>\n";
-            $xml .= "    <lastmod>{$url['lastmod']}</lastmod>\n";
-            $xml .= "    <changefreq>{$url['changefreq']}</changefreq>\n";
-            $xml .= "    <priority>{$url['priority']}</priority>\n";
+            $xml .= "    <loc>{$loc}</loc>\n";
+            $xml .= "    <lastmod>{$lastmod}</lastmod>\n";
+            $xml .= "    <changefreq>{$changefreq}</changefreq>\n";
+            $xml .= "    <priority>{$priority}</priority>\n";
             $xml .= "  </url>\n";
         }
         $xml .= '</urlset>';

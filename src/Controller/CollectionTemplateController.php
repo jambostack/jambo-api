@@ -51,6 +51,8 @@ class CollectionTemplateController extends AbstractController
             return $this->json(['error' => 'Authentication required'], 401);
         }
 
+        $this->denyAccessUnlessGranted('ROLE_ADMIN');
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -62,12 +64,20 @@ class CollectionTemplateController extends AbstractController
             return $this->json(['error' => 'name is required'], 422);
         }
 
+        $rawFields = $data['fields'] ?? [];
+        if (!is_array($rawFields)) {
+            return $this->json(['error' => 'fields must be an array'], 422);
+        }
+        if (count($rawFields) > 100) {
+            return $this->json(['error' => 'A template cannot have more than 100 fields.'], 422);
+        }
+
         $template = new CollectionTemplate();
         $template->name        = $name;
         $template->description = $data['description'] ?? null;
         $template->isSingleton = (bool) ($data['is_singleton'] ?? false);
 
-        foreach ($data['fields'] ?? [] as $i => $f) {
+        foreach (array_slice($rawFields, 0, 100) as $i => $f) {
             $fieldName = trim((string) ($f['name'] ?? ''));
             $fieldSlug = trim((string) ($f['slug'] ?? ''));
             if ($fieldName === '' || $fieldSlug === '') {
@@ -112,6 +122,11 @@ class CollectionTemplateController extends AbstractController
             return $this->json(['error' => 'Collection not found'], 404);
         }
 
+        $activeFields = $collection->fields->filter(fn ($f) => !$f->isDeleted());
+        if ($activeFields->count() > 100) {
+            return $this->json(['error' => 'A template cannot have more than 100 fields.'], 422);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -123,7 +138,7 @@ class CollectionTemplateController extends AbstractController
         $template->description = $data['description'] ?? $collection->description;
         $template->isSingleton = $collection->isSingleton;
 
-        foreach ($collection->fields->filter(fn ($f) => !$f->isDeleted()) as $i => $f) {
+        foreach ($activeFields as $i => $f) {
             $field = new CollectionTemplateField();
             $field->name       = $f->name;
             $field->slug       = $f->slug;

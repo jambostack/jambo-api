@@ -71,6 +71,9 @@ class Cycle17HardeningTest extends TestCase
             $tokenStorage->method('getToken')->willReturn(null);
         }
         $container->set('security.token_storage', $tokenStorage);
+        $authChecker = $this->createMock(\Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface::class);
+        $authChecker->method('isGranted')->willReturn(true);
+        $container->set('security.authorization_checker', $authChecker);
         return $container;
     }
 

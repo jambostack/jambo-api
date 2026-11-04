@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.70] — 2026-11-04
+
+### Security & Hardening
+- **Multi-Tenant Project & Content Authorization (`CommentController`, `ColumnSettingController`)**:
+  - Enforced `denyAccessUnlessGranted('project.view')` on `CommentController::index` and `CommentController::delete`.
+  - Enforced `denyAccessUnlessGranted('content.update')` on `CommentController::create`, `CommentController::update`, and `CommentController::resolve`, ensuring fine-grained role-based permission validation instead of relying solely on entry existence or generic project membership.
+  - Enforced `denyAccessUnlessGranted('project.view')` on `ColumnSettingController::show` and `ColumnSettingController::update`, stopping cross-tenant collection enumeration and unauthorized column customization.
+- **System Template Protection & Resource Capping (`CollectionTemplateController`)**:
+  - Restricted system collection template creation (`POST /api/collection-templates`) to authenticated administrators (`ROLE_ADMIN`).
+  - Added strict bound checks capping collection templates to a maximum of 100 fields on direct creation and save-from-collection (`POST /api/collection-templates/from-collection/...`), defending against resource exhaustion.
+- **XML Injection & CRLF Defense in SEO Services (`SitemapGenerator`, `SeoPublicController`)**:
+  - Hardened `SitemapGenerator`: enforced strict XML entity escaping (`ENT_XML1 | ENT_QUOTES`) across all XML output elements (`loc`, `lastmod`, `changefreq`, `priority`), neutralizing potential XML injection attacks via malicious collection/entry slugs.
+  - Hardened `SeoPublicController::robots`: sanitized preview URL and project UUIDs against CRLF injection (`\r`, `\n`) and URL scheme tampering, neutralizing header injection, HTTP response splitting, and rogue crawler directive injection.
+- **Automated Test Suite**:
+  - Added comprehensive `Cycle23HardeningTest.php` covering all authorization checks, field caps, XML escaping, and anti-CRLF protections (11 tests, 30 assertions).
+  - Maintained 100% pass rate across the full test suite (891 tests, 2803 assertions).
+
 ## [1.26.69] — 2026-11-04
 
 ### Security & Hardening

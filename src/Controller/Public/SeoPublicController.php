@@ -67,12 +67,18 @@ class SeoPublicController extends AbstractController
         }
 
         $seo = $project->getSeoSettings();
-        $baseUrl = rtrim($project->previewUrl ?? 'https://example.com', '/');
+        $rawBaseUrl = rtrim($project->previewUrl ?? 'https://example.com', '/');
+        $baseUrl = str_replace(["\r", "\n"], '', $rawBaseUrl);
+        if (!filter_var($baseUrl, FILTER_VALIDATE_URL) || (!str_starts_with($baseUrl, 'http://') && !str_starts_with($baseUrl, 'https://'))) {
+            $baseUrl = 'https://example.com';
+        }
+
+        $cleanUuid = str_replace(["\r", "\n"], '', $projectUuid);
 
         $content = "User-agent: *\n";
         $content .= "Allow: /\n";
         if ($seo['enableSitemap']) {
-            $content .= "Sitemap: {$baseUrl}/{$projectUuid}/sitemap.xml\n";
+            $content .= "Sitemap: {$baseUrl}/{$cleanUuid}/sitemap.xml\n";
         }
 
         return new Response($content, 200, ['Content-Type' => 'text/plain']);
