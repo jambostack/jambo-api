@@ -28,8 +28,12 @@ class ContentImportHandler implements ImportHandlerInterface
         }
 
         $data = json_decode(file_get_contents($path), true);
-        if (!isset($data['entries'])) {
+        if (!isset($data['entries']) || !is_array($data['entries'])) {
             return;
+        }
+
+        if (count($data['entries']) > 10000) {
+            throw new \RuntimeException('content.json contains too many entries (max 10000).');
         }
 
         // Index collections by slug

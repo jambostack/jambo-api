@@ -7,6 +7,35 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.73] — 2026-11-04
+
+### Security & Hardening
+- **Import/Export Memory & Schema Protection (`AdminApi/ImportController`, `ProjectExportImportController`, `StructureImportHandler`, `ProjectImporter`)**:
+  - Enforced request payload size limits (max 10MB) returning 413 on oversized JSON or multipart CSV uploads.
+  - Added strict column structure validation in `ImportController::importCsv` (mapped target fields must exist in collection, max 100 columns, max 64KB per cell).
+  - Implemented stream chunking and entity memory management in `ImportController`: detaching persisted entities (`$em->detach()`) after flushes and triggering garbage collection to prevent memory exhaustion during bulk imports.
+  - Added support for streamed CSV file uploads (`processCsvFileStream`) with row chunking and bounded limits.
+  - Enforced 50MB archive size ceiling and ZIP format validation (`validateUploadedArchive`) across project export/import endpoints (`importNew`, `importPreview`, `importMerge`).
+  - Added file size caps on manifest and payload files (manifest <= 5MB, structure <= 10MB, content <= 50MB, end_users <= 20MB).
+  - Hardened `StructureImportHandler`: strictly validated collection and field slugs/names, and validated field types against `SchemaProvisioner::ALLOWED_TYPES`.
+  - Capped content entries in `ContentImportHandler` (max 10,000 entries).
+- **Strict Multi-Tenant Isolation & Bounded Pagination (`AuditController`, `NotificationController`)**:
+  - Enforced cross-project API token isolation in `AuditController`: blocked requests where token project mismatches queried project with 403 Forbidden.
+  - Required `read` capability for API tokens querying project audit logs.
+  - Bounded audit log pagination: limit capped at 100, offset capped at 10,000.
+  - Added tenant-aware filtering (`project` / `project_uuid`) in `NotificationController` with project membership verification (403 Forbidden for unauthorized projects).
+  - Added project-scoped unread count and `readAll` support in `NotificationController`.
+  - Bounded notification pagination: page capped at 1000, per_page capped at 50.
+- **Direct Upload Orphan Expiration & Cleanup (`DirectUploadController`, `DirectUploadService`, `AssetUploadIntentRepository`, `PurgeExpiredTokensCommand`)**:
+  - Added automatic expiration handling and cleanup for pending upload intents in `DirectUploadService::cleanupExpiredIntents`.
+  - Added remote S3 multipart abort handling on expired intents to prevent orphan chunk accumulation and storage billing.
+  - Added opportunistic background cleanup during intent creation in `DirectUploadController::createIntent`.
+  - Added `POST /api/projects/{projectUuid}/media/direct-upload/cleanup-orphans` endpoint for manual project-scoped orphan cleanup.
+  - Integrated upload intent cleanup and old intent deletion into `PurgeExpiredTokensCommand` with dry-run support.
+- **Automated Test Suite**:
+  - Added comprehensive security test suite `Cycle26HardeningTest.php` (11 tests, 52 assertions).
+  - Full test suite passed with 924 tests and 2968 assertions.
+
 ## [1.26.72] — 2026-11-04
 
 ### Security & Hardening

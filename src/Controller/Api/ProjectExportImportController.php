@@ -36,6 +36,28 @@ class ProjectExportImportController extends AbstractController
         private ?RateLimiterFactory $importLimiter = null,
     ) {}
 
+    public const MAX_ARCHIVE_BYTES = 52428800; // 50MB
+
+    private function validateUploadedArchive(?\Symfony\Component\HttpFoundation\File\UploadedFile $uploadedFile): ?JsonResponse
+    {
+        if (!$uploadedFile) {
+            return $this->json(['error' => 'No file uploaded'], 422);
+        }
+        if (!$uploadedFile->isValid()) {
+            return $this->json(['error' => 'File upload error: ' . $uploadedFile->getErrorMessage()], 422);
+        }
+        if ($uploadedFile->getSize() > self::MAX_ARCHIVE_BYTES) {
+            return $this->json(['error' => 'Uploaded archive exceeds the maximum allowed size of 50MB.'], 422);
+        }
+        $ext = strtolower($uploadedFile->getClientOriginalExtension());
+        $mime = $uploadedFile->getClientMimeType();
+        $allowedMimes = ['application/zip', 'application/x-zip-compressed', 'multipart/x-zip', 'application/octet-stream'];
+        if ($ext !== 'zip' && !in_array($mime, $allowedMimes, true)) {
+            return $this->json(['error' => 'Invalid file format. Only ZIP archives are permitted.'], 422);
+        }
+        return null;
+    }
+
     #[OA\Get(
         path: '/api/projects/{uuid}/export',
         summary: 'Export a project as a ZIP archive',
@@ -184,8 +206,8 @@ class ProjectExportImportController extends AbstractController
         }
 
         $uploadedFile = $request->files->get('file');
-        if (!$uploadedFile) {
-            return $this->json(['error' => 'No file uploaded'], 422);
+        if ($fileError = $this->validateUploadedArchive($uploadedFile)) {
+            return $fileError;
         }
 
         $data = $request->request->all();
@@ -299,8 +321,8 @@ class ProjectExportImportController extends AbstractController
         }
 
         $uploadedFile = $request->files->get('file');
-        if (!$uploadedFile) {
-            return $this->json(['error' => 'No file uploaded'], 422);
+        if ($fileError = $this->validateUploadedArchive($uploadedFile)) {
+            return $fileError;
         }
 
         $extractedDir = null;
@@ -378,8 +400,8 @@ class ProjectExportImportController extends AbstractController
         }
 
         $uploadedFile = $request->files->get('file');
-        if (!$uploadedFile) {
-            return $this->json(['error' => 'No file uploaded'], 422);
+        if ($fileError = $this->validateUploadedArchive($uploadedFile)) {
+            return $fileError;
         }
 
         $data = $request->request->all();

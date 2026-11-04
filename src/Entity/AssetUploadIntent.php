@@ -17,6 +17,7 @@ class AssetUploadIntent
     public const STATUS_PENDING = 'pending';
     public const STATUS_COMPLETED = 'completed';
     public const STATUS_ABORTED = 'aborted';
+    public const STATUS_EXPIRED = 'expired';
 
     #[ORM\Id]
     #[ORM\GeneratedValue]

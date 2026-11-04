@@ -103,9 +103,21 @@ class ProjectImporter
             throw new \RuntimeException('Invalid export package: manifest.json not found');
         }
 
+        if (filesize($manifestPath) > 5 * 1024 * 1024) {
+            throw new \RuntimeException('Manifest file is too large (max 5MB).');
+        }
+
         $manifest = json_decode(file_get_contents($manifestPath), true);
         if (!$manifest || !isset($manifest['version'])) {
             throw new \RuntimeException('Invalid export package: malformed manifest.json');
+        }
+
+        // Contrôle de taille des fichiers de données
+        foreach (['structure.json' => 10 * 1024 * 1024, 'content.json' => 50 * 1024 * 1024, 'end_users.json' => 20 * 1024 * 1024] as $file => $maxSize) {
+            $path = $extractedDir . '/' . $file;
+            if (file_exists($path) && filesize($path) > $maxSize) {
+                throw new \RuntimeException(sprintf('Import payload "%s" exceeds size limit (%d MB).', $file, (int) ($maxSize / 1048576)));
+            }
         }
 
         return $manifest;

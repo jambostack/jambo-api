@@ -32,6 +32,53 @@ class NotificationRepository extends ServiceEntityRepository
             ->setParameter('user', $user)->getQuery()->getSingleScalarResult();
     }
 
+    /** @return Notification[] */
+    public function findByRecipientAndProjectPaginated(User $user, \App\Entity\Project $project, int $page = 1, int $perPage = 20, bool $unreadOnly = false): array
+    {
+        $projectUuid = $project->uuid?->toRfc4122() ?? '';
+        $qb = $this->createQueryBuilder('n')
+            ->where('n.recipient = :user')
+            ->andWhere('n.link LIKE :projectPattern')
+            ->setParameter('user', $user)
+            ->setParameter('projectPattern', '%' . $projectUuid . '%')
+            ->orderBy('n.createdAt', 'DESC')
+            ->setFirstResult(($page - 1) * $perPage)
+            ->setMaxResults($perPage);
+
+        if ($unreadOnly) {
+            $qb->andWhere('n.readAt IS NULL');
+        }
+
+        return $qb->getQuery()->getResult();
+    }
+
+    public function countUnreadByUserAndProject(User $user, \App\Entity\Project $project): int
+    {
+        $projectUuid = $project->uuid?->toRfc4122() ?? '';
+        return (int) $this->createQueryBuilder('n')
+            ->select('COUNT(n.id)')
+            ->where('n.recipient = :user')
+            ->andWhere('n.readAt IS NULL')
+            ->andWhere('n.link LIKE :projectPattern')
+            ->setParameter('user', $user)
+            ->setParameter('projectPattern', '%' . $projectUuid . '%')
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    public function markAllAsReadForProject(User $user, \App\Entity\Project $project): void
+    {
+        $projectUuid = $project->uuid?->toRfc4122() ?? '';
+        $this->createQueryBuilder('n')->update()
+            ->set('n.readAt', ':now')->setParameter('now', new \DateTimeImmutable())
+            ->where('n.recipient = :user')
+            ->andWhere('n.link LIKE :projectPattern')
+            ->andWhere('n.readAt IS NULL')
+            ->setParameter('user', $user)
+            ->setParameter('projectPattern', '%' . $projectUuid . '%')
+            ->getQuery()->execute();
+    }
+
     public function markAllAsRead(User $user): void
     {
         $this->createQueryBuilder('n')->update()

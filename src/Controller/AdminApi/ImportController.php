@@ -33,6 +33,11 @@ class ImportController extends AbstractController
         private ?RateLimiterFactory $importLimiter = null,
     ) {}
 
+    public const MAX_PAYLOAD_BYTES = 10485760; // 10 MB
+    public const MAX_ROWS = 1000;
+    public const MAX_COLUMNS = 100;
+    public const MAX_CELL_LENGTH = 65536;
+
     #[Route('/import-csv', name: 'csv', methods: ['POST'])]
     public function importCsv(string $uuid, string $slug, Request $request): JsonResponse
     {
@@ -41,6 +46,12 @@ class ImportController extends AbstractController
         $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?? 'anonymous';
         if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
             return $this->json(['error' => 'Too many import requests. Please retry later.'], 429);
+        }
+
+        // Contrôle de taille globale du payload
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => 'Payload too large (max 10MB).'], 413);
         }
 
         try {
@@ -52,6 +63,40 @@ class ImportController extends AbstractController
 
         $collection = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$collection) return $this->json(['error' => 'Collection not found'], 404);
+
+        // Find all collection fields for validation
+        $collectionFields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
+        $fieldMap = [];
+        foreach ($collectionFields as $f) {
+            $fieldMap[$f->slug] = $f;
+        }
+
+        // Support d'un fichier CSV uploadé en multipart/form-data via stream chunking
+        $uploadedFile = $request->files->get('file');
+        if ($uploadedFile !== null) {
+            if (!$uploadedFile->isValid()) {
+                return $this->json(['error' => 'Upload error: ' . $uploadedFile->getErrorMessage()], 422);
+            }
+            if ($uploadedFile->getSize() > self::MAX_PAYLOAD_BYTES) {
+                return $this->json(['error' => 'Uploaded file exceeds safety limit of 10MB.'], 413);
+            }
+
+            return $this->processCsvFileStream(
+                $uploadedFile->getPathname(),
+                $project,
+                $collection,
+                $fieldMap,
+                $request->request->all(),
+                $uuid,
+                $slug
+            );
+        }
+
+        // Import via payload JSON
+        $rawContent = $request->getContent();
+        if (strlen($rawContent) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => 'Payload too large (max 10MB).'], 413);
+        }
 
         try {
             $body = $request->toArray();
@@ -66,22 +111,45 @@ class ImportController extends AbstractController
             return $this->json(['error' => 'Champs requis manquants : data[], field_mapping{}'], 422);
         }
 
-        if (count($csvData) > 1000) {
-            return $this->json(['error' => 'Le nombre de lignes dépasse la limite autorisée (max 1000 lignes par import).'], 422);
+        if (count($csvData) > self::MAX_ROWS) {
+            return $this->json(['error' => sprintf('Le nombre de lignes dépasse la limite autorisée (max %d lignes par import).', self::MAX_ROWS)], 422);
         }
 
-        // Find all collection fields for validation
-        $collectionFields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
-        $fieldMap = [];
-        foreach ($collectionFields as $f) {
-            $fieldMap[$f->slug] = $f;
+        if (count($fieldMapping) > self::MAX_COLUMNS) {
+            return $this->json(['error' => sprintf('Le mapping de colonnes dépasse la limite autorisée (max %d colonnes).', self::MAX_COLUMNS)], 422);
+        }
+
+        // Validation stricte des colonnes mappées
+        foreach ($fieldMapping as $csvCol => $fieldSlug) {
+            if (!is_string($csvCol) || !is_string($fieldSlug) || trim($csvCol) === '' || trim($fieldSlug) === '' || strlen($csvCol) > 128 || strlen($fieldSlug) > 128) {
+                return $this->json(['error' => 'Structure de field_mapping invalide.'], 422);
+            }
+            if (!isset($fieldMap[$fieldSlug])) {
+                return $this->json(['error' => sprintf('La colonne cible "%s" n\'existe pas dans la collection "%s".', $fieldSlug, $slug)], 422);
+            }
         }
 
         $created = 0;
         $errors = [];
 
         foreach ($csvData as $idx => $row) {
+            if (!is_array($row)) {
+                $errors[] = ['row' => $idx, 'error' => 'Format de ligne invalide (tableau attendu).'];
+                continue;
+            }
+            if (count($row) > self::MAX_COLUMNS + 50) {
+                $errors[] = ['row' => $idx, 'error' => 'Nombre de colonnes excessif dans la ligne.'];
+                continue;
+            }
+
             try {
+                // Contrôle de longueur des cellules
+                foreach ($row as $cellKey => $cellValue) {
+                    if (is_string($cellValue) && strlen($cellValue) > self::MAX_CELL_LENGTH) {
+                        throw new \InvalidArgumentException(sprintf('Taille de cellule trop volumineuse pour la colonne "%s" (max 64KB).', (string) $cellKey));
+                    }
+                }
+
                 $entry = new ContentEntry();
                 $entry->project = $project;
                 $entry->collection = $collection;
@@ -132,6 +200,16 @@ class ImportController extends AbstractController
                 $this->em->persist($entry);
                 $this->em->flush();
                 $created++;
+
+                // Protection mémoire (stream chunking / detach)
+                $this->em->detach($entry);
+                foreach ($entry->fieldValues as $fv) {
+                    $this->em->detach($fv);
+                }
+
+                if ($idx > 0 && $idx % 50 === 0) {
+                    gc_collect_cycles();
+                }
             } catch (\Throwable $e) {
                 $errors[] = ['row' => $idx, 'error' => $e->getMessage()];
                 if ($this->doctrine !== null && !$this->em->isOpen()) {
@@ -152,6 +230,171 @@ class ImportController extends AbstractController
                 'created' => $created,
                 'errors'  => $errors,
                 'total'   => count($csvData),
+            ]
+        ], empty($errors) ? 201 : 200);
+    }
+
+    /**
+     * Traite un fichier CSV streamé par blocs avec protection mémoire stricte.
+     */
+    private function processCsvFileStream(
+        string $filePath,
+        \App\Entity\Project $project,
+        \App\Entity\Collection $collection,
+        array $fieldMap,
+        array $body,
+        string $uuid,
+        string $slug
+    ): JsonResponse {
+        $handle = @fopen($filePath, 'r');
+        if (!$handle) {
+            return $this->json(['error' => 'Impossible de lire le fichier CSV importé.'], 422);
+        }
+
+        $header = fgetcsv($handle);
+        if (!$header || empty($header)) {
+            fclose($handle);
+            return $this->json(['error' => 'En-têtes CSV manquants ou invalides.'], 422);
+        }
+
+        if (count($header) > self::MAX_COLUMNS) {
+            fclose($handle);
+            return $this->json(['error' => sprintf('Le CSV contient trop de colonnes (max %d).', self::MAX_COLUMNS)], 422);
+        }
+
+        // Mapping par défaut si non spécifié : slugs identiques aux colonnes
+        $rawMapping = $body['field_mapping'] ?? [];
+        if (is_string($rawMapping)) {
+            $rawMapping = json_decode($rawMapping, true) ?: [];
+        }
+
+        $fieldMapping = [];
+        if (!empty($rawMapping) && is_array($rawMapping)) {
+            foreach ($rawMapping as $csvCol => $targetSlug) {
+                if (!is_string($csvCol) || !is_string($targetSlug) || !isset($fieldMap[$targetSlug])) {
+                    fclose($handle);
+                    return $this->json(['error' => sprintf('Mapping invalide pour la colonne "%s".', (string) $targetSlug)], 422);
+                }
+                $fieldMapping[$csvCol] = $targetSlug;
+            }
+        } else {
+            foreach ($header as $col) {
+                $trimmed = trim((string) $col);
+                if (isset($fieldMap[$trimmed])) {
+                    $fieldMapping[$trimmed] = $trimmed;
+                }
+            }
+        }
+
+        if (empty($fieldMapping)) {
+            fclose($handle);
+            return $this->json(['error' => 'Aucune correspondance de colonne valide trouvée entre le CSV et la collection.'], 422);
+        }
+
+        $locale = $body['locale'] ?? $project->defaultLocale;
+        $created = 0;
+        $errors = [];
+        $rowCount = 0;
+
+        while (($rowValues = fgetcsv($handle)) !== false) {
+            $rowCount++;
+            if ($rowCount > self::MAX_ROWS) {
+                $errors[] = ['row' => $rowCount, 'error' => sprintf('Limite maximale de %d lignes atteinte.', self::MAX_ROWS)];
+                break;
+            }
+
+            if (count($rowValues) > count($header) + 50) {
+                $errors[] = ['row' => $rowCount, 'error' => 'Nombre de cellules incohérent avec l\'en-tête.'];
+                continue;
+            }
+
+            $row = [];
+            foreach ($header as $i => $h) {
+                $val = $rowValues[$i] ?? '';
+                if (is_string($val) && strlen($val) > self::MAX_CELL_LENGTH) {
+                    $val = substr($val, 0, self::MAX_CELL_LENGTH);
+                }
+                $row[$h] = $val;
+            }
+
+            try {
+                $entry = new ContentEntry();
+                $entry->project = $project;
+                $entry->collection = $collection;
+                $entry->locale = $locale;
+                $entry->status = $body['status'] ?? 'draft';
+
+                $slugSource = '';
+                foreach ($fieldMapping as $csvCol => $fieldSlug) {
+                    if (isset($row[$csvCol]) && $row[$csvCol] !== '' && $slugSource === '') {
+                        $slugSource = $row[$csvCol];
+                    }
+                }
+                $slugStr = $slugSource ?: "imported-$rowCount-" . bin2hex(random_bytes(3));
+                $entry->slug = $this->ensureUniqueSlug($collection, $slugStr, $locale);
+
+                foreach ($fieldMapping as $csvCol => $fieldSlug) {
+                    if (!isset($fieldMap[$fieldSlug]) || !isset($row[$csvCol])) continue;
+                    $field = $fieldMap[$fieldSlug];
+                    $value = $row[$csvCol];
+                    $fv = new ContentFieldValue();
+                    $fv->contentEntry = $entry;
+                    $fv->field = $field;
+                    $fv->fieldType = $field->type;
+                    if ($this->fieldHelper !== null) {
+                        $this->fieldHelper->setFieldValue($fv, $field->type, $value);
+                    } else {
+                        switch ($field->type) {
+                            case 'number':
+                            case 'decimal':
+                                $fv->numberValue = is_numeric($value) ? (string) $value : null;
+                                break;
+                            case 'boolean':
+                                $fv->booleanValue = in_array(strtolower((string) $value), ['1', 'true', 'yes', 'oui', 'on'], true);
+                                break;
+                            default:
+                                $fv->textValue = (string) $value;
+                        }
+                    }
+                    $this->em->persist($fv);
+                    $entry->fieldValues->add($fv);
+                }
+
+                $this->em->persist($entry);
+                $this->em->flush();
+                $created++;
+
+                // Détachement immédiat pour maintien constant de l'empreinte mémoire
+                $this->em->detach($entry);
+                foreach ($entry->fieldValues as $fv) {
+                    $this->em->detach($fv);
+                }
+
+                if ($rowCount % 50 === 0) {
+                    gc_collect_cycles();
+                }
+            } catch (\Throwable $e) {
+                $errors[] = ['row' => $rowCount, 'error' => $e->getMessage()];
+                if ($this->doctrine !== null && !$this->em->isOpen()) {
+                    $this->em = $this->doctrine->resetManager();
+                    $project = $this->projects->findOneBy(['uuid' => $uuid]);
+                    $collection = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
+                    $collectionFields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
+                    $fieldMap = [];
+                    foreach ($collectionFields as $f) {
+                        $fieldMap[$f->slug] = $f;
+                    }
+                }
+            }
+        }
+
+        fclose($handle);
+
+        return $this->json([
+            'data' => [
+                'created' => $created,
+                'errors'  => $errors,
+                'total'   => $rowCount,
             ]
         ], empty($errors) ? 201 : 200);
     }

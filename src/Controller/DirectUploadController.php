@@ -62,6 +62,11 @@ class DirectUploadController extends AbstractController
         }
 
         try {
+            // Nettoyage opportuniste des intentions orphelines expirées pour ce projet
+            try {
+                $this->directUploadService->cleanupExpiredIntents($project, 10);
+            } catch (\Throwable) {}
+
             $intent = $this->directUploadService->createIntent($project, $payload);
             $response = ['data' => $intent->toArray()];
 
@@ -205,5 +210,40 @@ class DirectUploadController extends AbstractController
 
         $this->directUploadService->abortUpload($intent);
         return new JsonResponse(['status' => 'aborted']);
+    }
+
+    #[Route('/cleanup-orphans', name: 'cleanup_orphans', methods: ['POST'])]
+    public function cleanupOrphans(string $projectUuid, Request $request): JsonResponse
+    {
+        if ($this->directUploadLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many direct upload requests. Please retry later.'], 429);
+            }
+        }
+
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Project not found'], 404);
+        }
+        if (!$project) {
+            return new JsonResponse(['error' => 'Project not found'], 404);
+        }
+
+        if (!$this->getUser() && !$request->attributes->get('_project')) {
+            return new JsonResponse(['error' => 'Authentication required'], 401);
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.create', $project);
+        }
+
+        $count = $this->directUploadService->cleanupExpiredIntents($project, 50);
+
+        return new JsonResponse([
+            'status'        => 'success',
+            'cleaned_count' => $count,
+        ]);
     }
 }

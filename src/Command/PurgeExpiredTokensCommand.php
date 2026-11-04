@@ -3,12 +3,14 @@
 namespace App\Command;
 
 use App\Repository\ApiTokenRepository;
+use App\Repository\AssetUploadIntentRepository;
 use App\Repository\PasswordResetTokenRepository;
 use App\Repository\PersonalAccessTokenRepository;
 use App\Repository\ProjectAuthAuthorizationCodeRepository;
 use App\Repository\ProjectAuthRefreshTokenRepository;
 use App\Repository\ProjectAuthSessionRepository;
 use App\Repository\ShareRepository;
+use App\Service\DirectUploadService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -27,6 +29,8 @@ class PurgeExpiredTokensCommand extends Command
         private readonly ProjectAuthAuthorizationCodeRepository $authCodeRepository,
         private readonly ProjectAuthSessionRepository $sessionRepository,
         private readonly ?ShareRepository $shareRepository = null,
+        private readonly ?AssetUploadIntentRepository $intentRepository = null,
+        private readonly ?DirectUploadService $directUploadService = null,
     ) {
         parent::__construct();
     }
@@ -75,6 +79,10 @@ class PurgeExpiredTokensCommand extends Command
             if ($this->shareRepository !== null) {
                 $tableRows[] = ['Public shares (expired or revoked)', $this->shareRepository->countExpired()];
             }
+            if ($this->intentRepository !== null) {
+                $tableRows[] = ['Expired upload intents', $this->intentRepository->countExpiredPending()];
+                $tableRows[] = ["Old upload intents (> {$sessionDays}d)", $this->intentRepository->countOldIntents($threshold)];
+            }
 
             $io->note('DRY-RUN MODE — Simulation only, no records were deleted.');
             $io->table(['Record Category', 'Eligible Records'], $tableRows);
@@ -89,6 +97,8 @@ class PurgeExpiredTokensCommand extends Command
         $purgedCodes = $this->authCodeRepository->deleteExpired();
         $purgedSessions = $this->sessionRepository->deleteInactive($threshold);
         $purgedShares = $this->shareRepository !== null ? $this->shareRepository->purgeExpired() : 0;
+        $cleanedIntents = $this->directUploadService !== null ? $this->directUploadService->cleanupExpiredIntents(null, 200) : 0;
+        $deletedOldIntents = $this->intentRepository !== null ? $this->intentRepository->deleteOldIntents($threshold) : 0;
 
         $messages = [
             'Token and session retention cleanup completed:',
@@ -101,6 +111,12 @@ class PurgeExpiredTokensCommand extends Command
         ];
         if ($this->shareRepository !== null) {
             $messages[] = "- Public shares purged: {$purgedShares}";
+        }
+        if ($this->directUploadService !== null) {
+            $messages[] = "- Expired upload intents cleaned up: {$cleanedIntents}";
+        }
+        if ($this->intentRepository !== null) {
+            $messages[] = "- Old upload intents purged (> {$sessionDays}d): {$deletedOldIntents}";
         }
 
         $io->success($messages);

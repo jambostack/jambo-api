@@ -2,7 +2,10 @@
 
 namespace App\Controller;
 
+use App\Entity\Project;
 use App\Repository\NotificationRepository;
+use App\Repository\ProjectMemberRepository;
+use App\Repository\ProjectRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -17,6 +20,8 @@ class NotificationController extends AbstractController
         private NotificationRepository $notificationRepository,
         #[Autowire(service: 'limiter.notification_limiter')]
         private ?RateLimiterFactory $notificationLimiter = null,
+        private ?ProjectRepository $projectRepository = null,
+        private ?ProjectMemberRepository $memberRepository = null,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -31,12 +36,23 @@ class NotificationController extends AbstractController
             return $user;
         }
 
-        $page = max(1, $request->query->getInt('page', 1));
+        $page = min(max(1, $request->query->getInt('page', 1)), 1000);
         $perPage = min(50, max(1, $request->query->getInt('per_page', 20)));
         $unreadOnly = $request->query->getBoolean('unread_only');
 
-        $notifications = $this->notificationRepository->findByRecipientPaginated($user, $page, $perPage, $unreadOnly);
-        $unreadCount = $this->notificationRepository->countUnreadByUser($user);
+        $projectFilter = $this->resolveProjectFilter($request, $user);
+        if ($projectFilter instanceof JsonResponse) {
+            return $projectFilter;
+        }
+
+        if ($projectFilter !== null) {
+            $notifications = $this->notificationRepository->findByRecipientAndProjectPaginated($user, $projectFilter, $page, $perPage, $unreadOnly);
+            $unreadCount = $this->notificationRepository->countUnreadByUserAndProject($user, $projectFilter);
+        } else {
+            $notifications = $this->notificationRepository->findByRecipientPaginated($user, $page, $perPage, $unreadOnly);
+            $unreadCount = $this->notificationRepository->countUnreadByUser($user);
+        }
+
         return $this->json([
             'data' => array_map(fn ($n) => $this->serializeNotification($n), $notifications),
             'meta' => ['unread_count' => $unreadCount],
@@ -102,7 +118,17 @@ class NotificationController extends AbstractController
             return $user;
         }
 
-        $this->notificationRepository->markAllAsRead($user);
+        $projectFilter = $this->resolveProjectFilter($request, $user);
+        if ($projectFilter instanceof JsonResponse) {
+            return $projectFilter;
+        }
+
+        if ($projectFilter !== null) {
+            $this->notificationRepository->markAllAsReadForProject($user, $projectFilter);
+        } else {
+            $this->notificationRepository->markAllAsRead($user);
+        }
+
         return $this->json(['unread_count' => 0]);
     }
 
@@ -118,7 +144,46 @@ class NotificationController extends AbstractController
             return $user;
         }
 
-        return $this->json(['count' => $this->notificationRepository->countUnreadByUser($user)]);
+        $projectFilter = $this->resolveProjectFilter($request, $user);
+        if ($projectFilter instanceof JsonResponse) {
+            return $projectFilter;
+        }
+
+        $count = $projectFilter !== null
+            ? $this->notificationRepository->countUnreadByUserAndProject($user, $projectFilter)
+            : $this->notificationRepository->countUnreadByUser($user);
+
+        return $this->json(['count' => $count]);
+    }
+
+    private function resolveProjectFilter(Request $request, \App\Entity\User $user): Project|JsonResponse|null
+    {
+        $projectParam = $request->query->get('project') ?? $request->query->get('project_uuid');
+        if (empty($projectParam) || !is_string($projectParam)) {
+            return null;
+        }
+
+        if ($this->projectRepository === null) {
+            return null;
+        }
+
+        $project = $this->projectRepository->findOneBy(['uuid' => trim($projectParam)]);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found.'], 404);
+        }
+
+        if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+            return $project;
+        }
+
+        if ($this->memberRepository !== null) {
+            $member = $this->memberRepository->findActiveByUserAndProject($user, $project);
+            if ($member === null) {
+                return $this->json(['error' => 'Forbidden: You do not have access to this project.'], 403);
+            }
+        }
+
+        return $project;
     }
 
     private function checkRateLimit(Request $request): ?JsonResponse

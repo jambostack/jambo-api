@@ -7,6 +7,7 @@ use App\Entity\Media;
 use App\Entity\Project;
 use App\Entity\ProjectStorageProfile;
 use App\Entity\User;
+use App\Repository\AssetUploadIntentRepository;
 use App\Repository\ProjectStorageProfileRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Uid\Uuid;
@@ -20,6 +21,7 @@ class DirectUploadService
         private readonly StorageDriverFactory $storageDriverFactory,
         private readonly ProjectStorageProfileRepository $storageProfileRepository,
         ?UploadSecurityValidator $uploadValidator = null,
+        private readonly ?AssetUploadIntentRepository $intentRepository = null,
     ) {
         $this->uploadValidator = $uploadValidator;
     }
@@ -255,6 +257,48 @@ class DirectUploadService
 
         $intent->status = AssetUploadIntent::STATUS_ABORTED;
         $this->em->flush();
+    }
+
+    /**
+     * Expire et nettoie les intentions d'upload orphelines.
+     * Pour les uploads multipart, déclenche l'annulation S3 pour libérer les fragments orphelins.
+     */
+    public function cleanupExpiredIntents(?Project $project = null, int $limit = 50): int
+    {
+        $repo = $this->intentRepository ?? $this->em->getRepository(AssetUploadIntent::class);
+        $expiredIntents = $repo instanceof AssetUploadIntentRepository
+            ? $repo->findExpiredPending($project, $limit)
+            : [];
+
+        if (empty($expiredIntents)) {
+            return 0;
+        }
+
+        $count = 0;
+        foreach ($expiredIntents as $intent) {
+            if ($intent->mode === AssetUploadIntent::MODE_MULTIPART && $intent->s3MultipartUploadId) {
+                $profile = $intent->storageProfile;
+                if ($profile !== null && $profile->driver === 's3') {
+                    try {
+                        $s3Client = $this->storageDriverFactory->getS3Client($profile);
+                        $s3Client->abortMultipartUpload([
+                            'Bucket'   => $profile->s3Bucket,
+                            'Key'      => $intent->storageKey,
+                            'UploadId' => $intent->s3MultipartUploadId,
+                        ]);
+                    } catch (\Throwable) {
+                        // Tolérance sur les fragments déjà nettoyés ou introuvables côté S3
+                    }
+                }
+            }
+
+            $intent->status = AssetUploadIntent::STATUS_EXPIRED;
+            $count++;
+        }
+
+        $this->em->flush();
+
+        return $count;
     }
 
     private function resolveS3Profile(Project $project): ?ProjectStorageProfile
