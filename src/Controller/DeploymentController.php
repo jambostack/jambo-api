@@ -63,6 +63,10 @@ class DeploymentController extends AbstractController
             return $this->json(['error' => 'Authentication required'], 401);
         }
 
+        if (!$this->isGranted('ROLE_SUPER_ADMIN') && !$this->isGranted('ROLE_ADMIN')) {
+            return $this->json(['error' => 'Access denied'], 403);
+        }
+
         $limit = min(100, max(1, $request->query->getInt('limit', 25)));
         $deployments = $this->deployments->findRecent($limit);
 

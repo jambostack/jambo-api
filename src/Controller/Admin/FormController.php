@@ -69,7 +69,7 @@ class FormController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
-        $this->denyAccessUnlessGranted('project.view', $project);
+        $this->denyAccessUnlessGranted('project.manage', $project);
 
         try {
             $data = $request->toArray();
@@ -139,7 +139,7 @@ class FormController extends AbstractController
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Form not found.'], 404);
         }
-        $this->denyAccessUnlessGranted('project.view', $form->project);
+        $this->denyAccessUnlessGranted('project.manage', $form->project);
 
         try {
             $data = $request->toArray();
@@ -193,7 +193,7 @@ class FormController extends AbstractController
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Form not found.'], 404);
         }
-        $this->denyAccessUnlessGranted('project.view', $form->project);
+        $this->denyAccessUnlessGranted('project.manage', $form->project);
 
         // Supprimer d'abord les soumissions en une requête directe (évite OOM)
         $this->submissionRepo->deleteByForm($form);
@@ -345,7 +345,7 @@ class FormController extends AbstractController
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Form not found.'], 404);
         }
-        $this->denyAccessUnlessGranted('project.view', $form->project);
+        $this->denyAccessUnlessGranted('project.manage', $form->project);
 
         $submission = $this->submissionRepo->find($submissionId);
         if (!$submission || $submission->form?->id !== $form->id) {
@@ -367,7 +367,7 @@ class FormController extends AbstractController
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Form not found.'], 404);
         }
-        $this->denyAccessUnlessGranted('project.view', $form->project);
+        $this->denyAccessUnlessGranted('project.manage', $form->project);
 
         $submission = $this->submissionRepo->find($submissionId);
         if (!$submission || $submission->form?->id !== $form->id) {

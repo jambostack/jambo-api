@@ -72,6 +72,7 @@ class FieldController extends AbstractController
         if ($err) {
             return $err;
         }
+        $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $c->project);
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
@@ -93,6 +94,7 @@ class FieldController extends AbstractController
         if ($err) {
             return $err;
         }
+        $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $c->project);
         $f = $this->fields->findOneBy(['collection' => $c, 'slug' => $fieldSlug]);
         if (!$f) {
             return $this->json(['error' => 'Field not found'], 404);
@@ -118,6 +120,7 @@ class FieldController extends AbstractController
         if ($err) {
             return $err;
         }
+        $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $c->project);
         $f = $this->fields->findOneBy(['collection' => $c, 'slug' => $fieldSlug]);
         if (!$f) {
             return $this->json(['error' => 'Field not found'], 404);

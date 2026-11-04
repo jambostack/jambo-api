@@ -37,6 +37,10 @@ class FieldController extends AbstractController
             return $collection;
         }
 
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $collection->project);
+        }
+
         $fields = $this->fieldRepository->findByCollection($collection);
 
         return $this->json([
@@ -50,6 +54,10 @@ class FieldController extends AbstractController
         $collection = $this->findCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('collection.update', $collection->project);
         }
 
         try {
@@ -77,6 +85,10 @@ class FieldController extends AbstractController
             return $field;
         }
 
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $field->collection->project);
+        }
+
         return $this->json(['data' => $this->serialize($field)]);
     }
 
@@ -86,6 +98,10 @@ class FieldController extends AbstractController
         $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug);
         if ($field instanceof JsonResponse) {
             return $field;
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('collection.update', $field->collection->project);
         }
 
         try {
@@ -111,6 +127,10 @@ class FieldController extends AbstractController
             return $collection;
         }
 
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('collection.update', $collection->project);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -134,6 +154,10 @@ class FieldController extends AbstractController
         $field = $this->findField($projectUuid, $collectionSlug, $fieldSlug);
         if ($field instanceof JsonResponse) {
             return $field;
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('collection.update', $field->collection->project);
         }
 
         $field->deletedAt = new \DateTimeImmutable();

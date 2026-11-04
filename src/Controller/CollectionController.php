@@ -36,6 +36,10 @@ class CollectionController extends AbstractController
             return $this->json(['error' => 'Project not found'], 404);
         }
 
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $project);
+        }
+
         $collections = $this->collectionRepository->findByProject($project);
 
         return $this->json([
@@ -53,6 +57,10 @@ class CollectionController extends AbstractController
         }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('collection.create', $project);
         }
 
         try {
@@ -81,6 +89,10 @@ class CollectionController extends AbstractController
         }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('collection.update', $project);
         }
 
         try {
@@ -112,6 +124,10 @@ class CollectionController extends AbstractController
             return $collection;
         }
 
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $collection->project);
+        }
+
         return $this->json(['data' => $this->serialize($collection)]);
     }
 
@@ -121,6 +137,10 @@ class CollectionController extends AbstractController
         $collection = $this->findCollection($projectUuid, $slug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('collection.update', $collection->project);
         }
 
         try {
@@ -156,6 +176,10 @@ class CollectionController extends AbstractController
         $collection = $this->findCollection($projectUuid, $slug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('collection.delete', $collection->project);
         }
 
         $this->em->remove($collection);

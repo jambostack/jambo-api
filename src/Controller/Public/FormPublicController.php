@@ -12,6 +12,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Validator\Exception\ValidationFailedException;
 
@@ -22,6 +23,7 @@ class FormPublicController extends AbstractController
         private readonly FormRepository $formRepo,
         private readonly FormBuilder $formBuilder,
         private readonly SubmitHandler $submitHandler,
+        private readonly ?RateLimiterFactory $formSubmitLimiter = null,
     ) {}
 
     #[Route('/{projectUuid}/forms/{slug}', name: 'public_form_show', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
@@ -60,6 +62,17 @@ class FormPublicController extends AbstractController
     #[Route('/api/projects/{projectUuid}/forms/{slug}/submit', name: 'api_public_form_submit', methods: ['POST'])]
     public function submit(string $projectUuid, string $slug, Request $request): JsonResponse
     {
+        if ($this->formSubmitLimiter !== null) {
+            $limiter = $this->formSubmitLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return new JsonResponse(['error' => 'Too many form submissions. Try again later.'], 429);
+            }
+        }
+
+        if (strlen($request->getContent()) > 1048576) {
+            return new JsonResponse(['error' => 'Payload too large (max 1MB).'], 413);
+        }
+
         try {
             $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {

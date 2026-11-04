@@ -91,7 +91,7 @@ class RedirectController extends AbstractController
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
-        $this->denyAccessUnlessGranted('project.view', $project);
+        $this->denyAccessUnlessGranted('project.manage', $project);
 
         try {
             $data = $request->toArray();
@@ -104,6 +104,22 @@ class RedirectController extends AbstractController
 
         if ($fromPath === '' || $toPath === '') {
             return $this->json(['error' => 'Both fromPath and toPath are required.'], 422);
+        }
+
+        $lowerTo = strtolower($toPath);
+        if (str_starts_with($lowerTo, 'javascript:') || str_starts_with($lowerTo, 'data:') || str_starts_with($lowerTo, 'vbscript:')) {
+            return $this->json(['error' => 'Dangerous URI schemes (javascript:, data:, vbscript:) are not allowed.'], 422);
+        }
+        if (str_starts_with($toPath, '//')) {
+            return $this->json(['error' => 'Protocol-relative URLs starting with // are not allowed.'], 422);
+        }
+
+        $isPattern = (bool) ($data['isPattern'] ?? false);
+        if ($isPattern) {
+            $testRegex = '#' . str_replace('#', '\#', $fromPath) . '#';
+            if (@preg_match($testRegex, '') === false) {
+                return $this->json(['error' => 'Invalid regular expression syntax for fromPath pattern.'], 422);
+            }
         }
 
         // Normaliser les chemins relatifs avec un slash initial
@@ -128,7 +144,7 @@ class RedirectController extends AbstractController
         $redirect->fromPath = $fromPath;
         $redirect->toPath = $toPath;
         $redirect->httpCode = $httpCode;
-        $redirect->isPattern = (bool) ($data['isPattern'] ?? false);
+        $redirect->isPattern = $isPattern;
         $redirect->isEnabled = (bool) ($data['isEnabled'] ?? true);
         $redirect->createdBy = $this->getUser();
 
@@ -167,7 +183,7 @@ class RedirectController extends AbstractController
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Redirect not found.'], 404);
         }
-        $this->denyAccessUnlessGranted('project.view', $redirect->project);
+        $this->denyAccessUnlessGranted('project.manage', $redirect->project);
 
         try {
             $data = $request->toArray();
@@ -180,6 +196,22 @@ class RedirectController extends AbstractController
 
         if ($fromPath === '' || $toPath === '') {
             return $this->json(['error' => 'Both fromPath and toPath must not be empty.'], 422);
+        }
+
+        $lowerTo = strtolower($toPath);
+        if (str_starts_with($lowerTo, 'javascript:') || str_starts_with($lowerTo, 'data:') || str_starts_with($lowerTo, 'vbscript:')) {
+            return $this->json(['error' => 'Dangerous URI schemes (javascript:, data:, vbscript:) are not allowed.'], 422);
+        }
+        if (str_starts_with($toPath, '//')) {
+            return $this->json(['error' => 'Protocol-relative URLs starting with // are not allowed.'], 422);
+        }
+
+        $isPattern = array_key_exists('isPattern', $data) ? (bool) $data['isPattern'] : $redirect->isPattern;
+        if ($isPattern) {
+            $testRegex = '#' . str_replace('#', '\#', $fromPath) . '#';
+            if (@preg_match($testRegex, '') === false) {
+                return $this->json(['error' => 'Invalid regular expression syntax for fromPath pattern.'], 422);
+            }
         }
 
         if (!str_starts_with($fromPath, 'http://') && !str_starts_with($fromPath, 'https://')) {
@@ -203,10 +235,8 @@ class RedirectController extends AbstractController
 
         $redirect->fromPath = $fromPath;
         $redirect->toPath = $toPath;
+        $redirect->isPattern = $isPattern;
 
-        if (array_key_exists('isPattern', $data)) {
-            $redirect->isPattern = (bool) $data['isPattern'];
-        }
         if (array_key_exists('isEnabled', $data)) {
             $redirect->isEnabled = (bool) $data['isEnabled'];
         }
@@ -236,7 +266,7 @@ class RedirectController extends AbstractController
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Redirect not found.'], 404);
         }
-        $this->denyAccessUnlessGranted('project.view', $redirect->project);
+        $this->denyAccessUnlessGranted('project.manage', $redirect->project);
 
         $this->em->remove($redirect);
         $this->em->flush();
@@ -253,7 +283,7 @@ class RedirectController extends AbstractController
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->json(['error' => 'Redirect not found.'], 404);
         }
-        $this->denyAccessUnlessGranted('project.view', $redirect->project);
+        $this->denyAccessUnlessGranted('project.manage', $redirect->project);
 
         $redirect->isEnabled = !$redirect->isEnabled;
         $redirect->updatedBy = $this->getUser();

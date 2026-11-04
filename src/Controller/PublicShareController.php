@@ -8,6 +8,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 class PublicShareController extends AbstractController
@@ -15,6 +16,7 @@ class PublicShareController extends AbstractController
     public function __construct(
         private readonly ShareService $shares,
         private readonly EavDataFormatterService $formatter,
+        private readonly ?RateLimiterFactory $shareLimiter = null,
     ) {}
 
     #[Route('/share/{token}', name: 'public_share_show', requirements: ['token' => '[A-Za-z0-9_]+'], defaults: ['_format' => 'html'], methods: ['GET'])]
@@ -23,6 +25,13 @@ class PublicShareController extends AbstractController
     {
         $wantsJson = $_format === 'json'
             || str_contains((string) $request->headers->get('Accept'), 'application/json');
+
+        if ($this->shareLimiter !== null) {
+            $limiter = $this->shareLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return $this->renderError(429, 'too_many_requests', $wantsJson);
+            }
+        }
 
         $share = $this->shares->resolve($token);
 

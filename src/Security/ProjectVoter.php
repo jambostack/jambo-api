@@ -49,6 +49,11 @@ class ProjectVoter extends Voter
             return true;
         }
 
+        // Un gestionnaire de projet dispose de tous les droits sur son projet
+        if ($member->role?->hasPermission(self::MANAGE) === true) {
+            return true;
+        }
+
         return $member->role?->hasPermission($attribute) === true;
     }
 }

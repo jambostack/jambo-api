@@ -48,13 +48,21 @@ class SearchController extends AbstractController
         $locale = $request->query->get('locale');
         $filters = [];
         if (!empty($collection)) {
-            $options['collection'] = (string) $collection;
-            $cleanColl = addslashes((string) $collection);
+            $colStr = (string) $collection;
+            if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $colStr)) {
+                return $this->json(['error' => 'Invalid collection format'], 400);
+            }
+            $options['collection'] = $colStr;
+            $cleanColl = addslashes($colStr);
             $filters[] = "_collection = \"{$cleanColl}\"";
         }
         if (!empty($locale)) {
-            $options['locale'] = (string) $locale;
-            $cleanLoc = addslashes((string) $locale);
+            $locStr = (string) $locale;
+            if (!preg_match('/^[a-zA-Z]{2,4}([-_][a-zA-Z0-9]{2,8})?$/', $locStr)) {
+                return $this->json(['error' => 'Invalid locale format'], 400);
+            }
+            $options['locale'] = $locStr;
+            $cleanLoc = addslashes($locStr);
             $filters[] = "locale = \"{$cleanLoc}\"";
         }
         if (!empty($filters)) {

@@ -36,7 +36,7 @@ class DirectUploadController extends AbstractController
             return new JsonResponse(['error' => 'Project not found'], 404);
         }
 
-        if ($request->attributes->get('_project') !== $project) {
+        if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.create', $project);
         }
 
@@ -82,7 +82,7 @@ class DirectUploadController extends AbstractController
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
         }
 
-        if ($request->attributes->get('_project') !== $intent->project) {
+        if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.create', $intent->project);
         }
 
@@ -118,7 +118,7 @@ class DirectUploadController extends AbstractController
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
         }
 
-        if ($request->attributes->get('_project') !== $intent->project) {
+        if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.create', $intent->project);
         }
 
@@ -151,7 +151,7 @@ class DirectUploadController extends AbstractController
             return new JsonResponse(['error' => 'Valid pending upload intent not found'], 404);
         }
 
-        if ($request->attributes->get('_project') !== $intent->project) {
+        if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.create', $intent->project);
         }
 

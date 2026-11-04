@@ -47,32 +47,44 @@ class AntiSpamService
 
     private function verifyTurnstile(string $token, string $secret): bool
     {
-        if (!$this->httpClient) return false; // pas de client HTTP => verification impossible
-        $response = $this->httpClient->request('POST', 'https://challenges.cloudflare.com/turnstile/v0/siteverify', [
-            'body' => ['secret' => $secret, 'response' => $token],
-        ]);
-        $data = $response->toArray();
-        return $data['success'] ?? false;
+        if (!$this->httpClient) return false;
+        try {
+            $response = $this->httpClient->request('POST', 'https://challenges.cloudflare.com/turnstile/v0/siteverify', [
+                'body' => ['secret' => $secret, 'response' => $token],
+            ]);
+            $data = $response->toArray();
+            return $data['success'] ?? false;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     private function verifyRecaptcha(string $token, string $secret): bool
     {
         if (!$this->httpClient) return false;
-        $response = $this->httpClient->request('POST', 'https://www.google.com/recaptcha/api/siteverify', [
-            'body' => ['secret' => $secret, 'response' => $token],
-        ]);
-        $data = $response->toArray();
-        return $data['success'] ?? false;
+        try {
+            $response = $this->httpClient->request('POST', 'https://www.google.com/recaptcha/api/siteverify', [
+                'body' => ['secret' => $secret, 'response' => $token],
+            ]);
+            $data = $response->toArray();
+            return $data['success'] ?? false;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     private function verifyHcaptcha(string $token, string $secret): bool
     {
         if (!$this->httpClient) return false;
-        $response = $this->httpClient->request('POST', 'https://hcaptcha.com/siteverify', [
-            'body' => ['secret' => $secret, 'response' => $token],
-        ]);
-        $data = $response->toArray();
-        return $data['success'] ?? false;
+        try {
+            $response = $this->httpClient->request('POST', 'https://hcaptcha.com/siteverify', [
+                'body' => ['secret' => $secret, 'response' => $token],
+            ]);
+            $data = $response->toArray();
+            return $data['success'] ?? false;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public function checkBlocklistedDomain(string $email): bool

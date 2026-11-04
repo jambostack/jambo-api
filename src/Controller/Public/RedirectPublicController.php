@@ -44,8 +44,19 @@ class RedirectPublicController extends AbstractController
         $acceptHeader = (string) $request->headers->get('Accept', '');
         $wantsJson = str_contains($acceptHeader, 'application/json') || $request->query->getBoolean('json');
         if (!$wantsJson && str_contains($acceptHeader, 'text/html')) {
+            $dest = $redirect->toPath;
+            $lowerDest = strtolower($dest);
+            if (
+                str_starts_with($lowerDest, 'javascript:') ||
+                str_starts_with($lowerDest, 'data:') ||
+                str_starts_with($lowerDest, 'vbscript:') ||
+                str_starts_with($dest, '//')
+            ) {
+                return new JsonResponse(['error' => 'Unsafe redirect destination.'], 400);
+            }
+
             return new RedirectResponse(
-                $redirect->toPath,
+                $dest,
                 $redirect->httpCode,
             );
         }
