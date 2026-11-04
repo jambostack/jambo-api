@@ -374,10 +374,14 @@ class ProjectStorageController extends AbstractController
         }
 
         if (isset($body['profile_uuid'])) {
-            $profile = $this->profileRepo->findOneBy([
-                'uuid'    => $body['profile_uuid'],
-                'project' => $project,
-            ]);
+            try {
+                $profile = $this->profileRepo->findOneBy([
+                    'uuid'    => $body['profile_uuid'],
+                    'project' => $project,
+                ]);
+            } catch (\Throwable) {
+                $profile = null;
+            }
             if ($profile === null) {
                 return new JsonResponse(['error' => 'Storage profile not found for this project.'], 422);
             }

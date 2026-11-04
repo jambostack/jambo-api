@@ -43,7 +43,11 @@ class ProjectOpenApiController extends AbstractController
             return $this->corsResponse(new Response('', 204));
         }
 
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        } catch (\Throwable) {
+            return $this->corsResponse($this->json(['error' => 'Project not found'], 404));
+        }
         if (!$project) {
             return $this->corsResponse($this->json(['error' => 'Project not found'], 404));
         }

@@ -26,7 +26,7 @@ class ShareController extends AbstractController
     #[Route('', name: 'store', methods: ['POST'])]
     public function store(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -39,7 +39,11 @@ class ShareController extends AbstractController
         } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON body'], 400);
         }
-        $entry = $this->entryRepository->findOneBy(['uuid' => $data['entryUuid'] ?? '', 'project' => $project]);
+        try {
+            $entry = $this->entryRepository->findOneBy(['uuid' => $data['entryUuid'] ?? '', 'project' => $project]);
+        } catch (\Throwable) {
+            $entry = null;
+        }
         if (!$entry || $entry->isDeleted()) {
             return $this->json(['error' => 'Entry not found'], 404);
         }
@@ -65,7 +69,7 @@ class ShareController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -73,7 +77,11 @@ class ShareController extends AbstractController
             $this->denyAccessUnlessGranted('content.update', $project);
         }
 
-        $entry = $this->entryRepository->findOneBy(['uuid' => $request->query->get('entryUuid', ''), 'project' => $project]);
+        try {
+            $entry = $this->entryRepository->findOneBy(['uuid' => $request->query->get('entryUuid', ''), 'project' => $project]);
+        } catch (\Throwable) {
+            $entry = null;
+        }
         if (!$entry) {
             return $this->json(['error' => 'Entry not found'], 404);
         }
@@ -94,7 +102,7 @@ class ShareController extends AbstractController
     #[Route('/{id}', name: 'destroy', methods: ['DELETE'], requirements: ['id' => '\d+'])]
     public function destroy(string $projectUuid, int $id, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -110,5 +118,14 @@ class ShareController extends AbstractController
         $this->shareService->revoke($share);
 
         return $this->json(null, 204);
+    }
+
+    private function resolveProject(string $projectUuid): ?\App\Entity\Project
+    {
+        try {
+            return $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

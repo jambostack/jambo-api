@@ -182,6 +182,10 @@ class AiController extends AbstractController
 
     private function findProject(string $uuid): ?Project
     {
-        return $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        try {
+            return $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

@@ -23,7 +23,11 @@ class ApiDocsController extends AbstractController
         requirements: ['projectId' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
     public function swagger(string $projectId): Response
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }

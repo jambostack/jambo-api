@@ -34,7 +34,7 @@ class MediaController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -151,7 +151,7 @@ class MediaController extends AbstractController
     #[Route('', name: 'upload', methods: ['POST'])]
     public function upload(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -190,7 +190,7 @@ class MediaController extends AbstractController
     #[Route('/bulk-destroy', name: 'bulk_destroy', methods: ['DELETE'], priority: 10)]
     public function bulkDestroy(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -283,7 +283,10 @@ class MediaController extends AbstractController
         if ($folderId === null || $folderId === 'null' || $folderId === '') {
             $media->folder = null;
         } else {
-            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+            $project = $this->resolveProject($projectUuid);
+            if (!$project) {
+                return $this->json(['error' => 'Project not found'], 404);
+            }
             $folder = $this->folderRepository->findOneBy(['id' => (int) $folderId, 'project' => $project]);
             if (!$folder) {
                 return $this->json(['error' => 'Folder not found'], 404);
@@ -334,13 +337,18 @@ class MediaController extends AbstractController
         return $this->json(null, 204);
     }
 
-    private function findMedia(string $projectUuid, string $uuid): Media|JsonResponse
+    private function resolveProject(string $projectUuid): ?Project
     {
         try {
-            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+            return $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return null;
         }
+    }
+
+    private function findMedia(string $projectUuid, string $uuid): Media|JsonResponse
+    {
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }

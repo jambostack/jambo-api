@@ -31,7 +31,11 @@ class GraphQLController extends AbstractController
     #[Route('/api/projects/{uuid}/graphql', name: 'graphql_endpoint', methods: ['POST', 'GET'])]
     public function handle(string $uuid, Request $request): Response
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['errors' => [['message' => 'Projet introuvable']]], 404);
+        }
         if (!$project) {
             return new JsonResponse(['errors' => [['message' => 'Projet introuvable']]], 404);
         }
@@ -45,6 +49,9 @@ class GraphQLController extends AbstractController
             $variables = $request->query->all('variables') ?? null;
         } else {
             $body = json_decode($request->getContent(), true);
+            if (!is_array($body)) {
+                return new JsonResponse(['errors' => [['message' => 'Invalid JSON body']]], 400);
+            }
             $query = $body['query'] ?? null;
             $variables = $body['variables'] ?? null;
         }

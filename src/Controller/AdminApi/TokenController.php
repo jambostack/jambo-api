@@ -48,7 +48,14 @@ class TokenController extends AbstractController
         $t = new PersonalAccessToken();
         $t->name = $data['name'] ?? 'token';
         $t->user = $this->getUser();
-        $t->scopes = $data['scopes'] ?? ['schema:write'];
+        if (isset($data['scopes'])) {
+            if (!is_array($data['scopes'])) {
+                return $this->json(['error' => 'Scopes must be an array.'], 422);
+            }
+            $t->scopes = $data['scopes'];
+        } else {
+            $t->scopes = ['schema:write'];
+        }
         $t->tokenHash = ApiToken::hashToken($plain, $this->appSecret);
         $t->tokenVersion = 2;
         if (!empty($data['expires_at'])) {
@@ -89,6 +96,9 @@ class TokenController extends AbstractController
             $t->name = $data['name'];
         }
         if (isset($data['scopes'])) {
+            if (!is_array($data['scopes'])) {
+                return $this->json(['error' => 'Scopes must be an array.'], 422);
+            }
             $t->scopes = $data['scopes'];
         }
         $this->em->flush();

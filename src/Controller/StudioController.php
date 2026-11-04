@@ -284,7 +284,7 @@ EUSER;
     #[Route('/api/projects/{uuid}/studio/collections', name: 'studio_collections_list', methods: ['GET'])]
     public function listCollections(string $uuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
 
@@ -317,7 +317,7 @@ EUSER;
     #[Route('/api/projects/{uuid}/studio/ai-schema', name: 'studio_ai_schema', methods: ['POST'])]
     public function aiSchema(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
@@ -411,7 +411,7 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/ai-chat', name: 'studio_ai_chat', methods: ['POST'])]
     public function aiChat(string $uuid, Request $request): Response
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
@@ -452,7 +452,8 @@ PROMPT;
 
         // Fallback sans IA : réponse immédiate enveloppée en SSE pour cohérence
         if ($provider === null) {
-            $fallbackData = json_decode($this->commandFallback($command, $prompt)->getContent(), true);
+            $decoded = json_decode($this->commandFallback($command, $prompt)->getContent(), true);
+            $fallbackData = is_array($decoded) ? $decoded : ['error' => 'Fallback error'];
             return new StreamedResponse(function () use ($fallbackData) {
                 while (ob_get_level() > 0) { ob_end_flush(); }
                 ob_implicit_flush(true);
@@ -724,7 +725,7 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/apply-entries', name: 'studio_apply_entries', methods: ['POST'])]
     public function applyEntries(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
@@ -837,7 +838,7 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/chat-messages', name: 'studio_chat_messages_list', methods: ['GET'])]
     public function listChatMessages(string $uuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
 
@@ -861,7 +862,7 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/chat-messages', name: 'studio_chat_messages_clear', methods: ['DELETE'])]
     public function clearChatMessages(string $uuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
@@ -1169,7 +1170,7 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/schema', name: 'studio_schema_apply', methods: ['POST'])]
     public function applySchema(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) {
             return $this->json(['error' => 'Projet introuvable'], 404);
         }
@@ -1315,7 +1316,7 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/ai-capabilities', name: 'studio_ai_capabilities', methods: ['GET'])]
     public function aiCapabilities(string $uuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
 
@@ -1328,7 +1329,7 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/ai-execute', name: 'studio_ai_execute', methods: ['POST'])]
     public function aiExecute(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
@@ -1385,7 +1386,7 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/ai-generate-image', name: 'studio_ai_generate_image', methods: ['POST'])]
     public function aiGenerateImage(string $uuid, Request $request): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
@@ -1962,7 +1963,7 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/generate-types', name: 'studio_generate_types', methods: ['GET'])]
     public function generateTypes(string $uuid): JsonResponse
     {
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        $project = $this->findProject($uuid);
         if (!$project) {
             return $this->json(['error' => 'Projet introuvable'], 404);
         }
@@ -2006,5 +2007,14 @@ PROMPT;
             'media', 'relation' => 'string | string[]',
             default => 'string',
         };
+    }
+
+    private function findProject(string $uuid): ?Project
+    {
+        try {
+            return $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

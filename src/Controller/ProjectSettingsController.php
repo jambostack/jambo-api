@@ -331,7 +331,11 @@ class ProjectSettingsController extends AbstractController
     /** Resolve project via session user OR ApiToken (both accepted). */
     private function resolveWithTokenFallback(string $projectUuid, Request $request): \App\Entity\Project|JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if ($project === null) {
             return $this->json(['error' => 'Project not found'], 404);
         }

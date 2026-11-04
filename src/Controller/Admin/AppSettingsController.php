@@ -80,7 +80,10 @@ class AppSettingsController extends AbstractController
             if ($raw === null) {
                 return $this->json(['error' => 'Could not reach Ollama at ' . $baseUrl], 502);
             }
-            $data   = json_decode($raw, true);
+            $data = json_decode($raw, true);
+            if (!is_array($data)) {
+                return $this->json(['error' => 'Unexpected response from Ollama'], 502);
+            }
             $models = array_column($data['models'] ?? [], 'name');
             return $this->json(['models' => $models]);
         }

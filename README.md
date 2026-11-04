@@ -8,7 +8,7 @@
 
 **Open-source headless CMS — Symfony 8 · PHP 8.4 · React 19**
 
-[![Version](https://img.shields.io/badge/version-1.26.47-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.26.48-blue.svg)](CHANGELOG.md)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-2fcf8f.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![PHP](https://img.shields.io/badge/PHP-8.4%20%7C%208.5-777BB4?logo=php&logoColor=white)](https://php.net)
 [![Symfony](https://img.shields.io/badge/Symfony-8.0-000000?logo=symfony&logoColor=white)](https://symfony.com)

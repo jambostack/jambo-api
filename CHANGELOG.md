@@ -7,6 +7,34 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.48] — 2026-11-04
+
+### Fixed & Hardened
+- **End-User Authentication & Token Tenant Isolation (`EndUserAuthController`)**:
+  - Scoped user lookup in `verifyTwoFactor` and `refresh` strictly to the target project (`'project' => $project`), blocking cross-tenant token or 2FA challenge exploitation.
+  - Aligned the route parameter `string $projectId` in `refresh()` with the controller prefix, preventing parameter mapping issues.
+  - Wrapped project lookups across all auth endpoints (`register`, `login`, `verify-2fa`, `refresh`, `forgot-password`, `reset-password`, `social`) in safe `findProject()` with `try / catch (\Throwable)` returning 404 on malformed UUIDs.
+- **Studio Controller UUID & Fallback Robustness (`StudioController`)**:
+  - Protected all 11 studio routes (`listCollections`, `aiSchema`, `aiChat`, `applyEntries`, `listChatMessages`, `clearChatMessages`, `schemaApply`, `aiCapabilities`, `aiExecute`, `aiGenerateImage`, `generateTypes`) with safe `findProject()` lookups catching invalid UUID strings.
+  - Secured `aiChat` SSE non-AI command fallback to guarantee array structures when decoding fallback content.
+- **GraphQL & AI Endpoints Payload & UUID Safety (`GraphQLController`, `AiController`)**:
+  - Added malformed UUID exception handling on the GraphQL endpoint returning clean 404 instead of 500 DBAL crashes.
+  - Enforced strict array verification on POST bodies in `GraphQLController::handle`, rejecting non-array JSON scalars with HTTP 400 Bad Request.
+  - Protected `AiController::findProject` with `try / catch (\Throwable)`.
+- **Media & Asset Management Hardening (`MediaController`)**:
+  - Protected `index`, `upload`, `bulkDestroy`, folder reassignment, and `findMedia` with centralized `resolveProject()` catching malformed UUID exceptions.
+- **Project Governance & Settings Hardening (`ProjectController`, `ProjectSettingsController`)**:
+  - Guarded `resolveProject` in `ProjectController` with `try / catch (\Throwable)` for all project membership and CRUD routes.
+  - Added exception safety to `resolveWithTokenFallback` in `ProjectSettingsController`.
+- **Shares, SEO & OpenApi Parameter Safety (`ShareController`, `SeoController`, `ProjectOpenApiController`, `ProjectEmailController`, `ApiDocsController`)**:
+  - Wrapped project and entry lookups in `try / catch (\Throwable)` across shares, admin SEO scores/audit/bulk-update, OpenAPI spec generation, contact email, and Swagger UI.
+- **Personal Access Token Scopes Validation (`TokenController`)**:
+  - Enforced array validation on token `scopes` in both `create` and `update` endpoints returning 422 Unprocessable Content.
+- **Ops & Deployment Automation (`deploy.py`)**:
+  - Updated production deployment configuration to match active o2switch infrastructure (`gupi7723@folina.o2switch.net`).
+
+---
+
 ## [1.26.47] — 2026-11-04
 
 ### Fixed & Hardened

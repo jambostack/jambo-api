@@ -69,7 +69,7 @@ class EndUserAuthController extends AbstractController
     #[Route('/register', name: 'register', methods: ['POST'])]
     public function register(Request $request, string $projectId): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -139,7 +139,7 @@ class EndUserAuthController extends AbstractController
     #[Route('/login', name: 'login', methods: ['POST'])]
     public function login(Request $request, string $projectId): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -223,7 +223,7 @@ class EndUserAuthController extends AbstractController
     #[Route('/verify-2fa', name: 'verify_2fa', methods: ['POST'])]
     public function verifyTwoFactor(Request $request, string $projectId): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -245,7 +245,11 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Invalid or expired 2FA token. Please login again.'], 401);
         }
 
-        $endUser = $this->endUserRepository->findOneBy(['uuid' => $claims['euid']]);
+        try {
+            $endUser = $this->endUserRepository->findOneBy(['uuid' => $claims['euid'], 'project' => $project]);
+        } catch (\Throwable) {
+            $endUser = null;
+        }
         if (!$endUser || !$endUser->isActive()) {
             return $this->json(['error' => 'User not found or inactive'], 401);
         }
@@ -302,8 +306,13 @@ class EndUserAuthController extends AbstractController
         ]
     )]
     #[Route('/refresh', name: 'refresh', methods: ['POST'])]
-    public function refresh(Request $request, string $_projectId): JsonResponse
+    public function refresh(Request $request, string $projectId): JsonResponse
     {
+        $project = $this->findProject($projectId);
+        if (!$project) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
+
         $data = $this->getJsonPayload($request);
         if ($data instanceof JsonResponse) {
             return $data;
@@ -319,7 +328,15 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => 'Invalid or expired refresh token'], 401);
         }
 
-        $endUser = $this->endUserRepository->findOneBy(['uuid' => $claims['euid']]);
+        if (isset($claims['pid']) && (int) $claims['pid'] !== $project->id) {
+            return $this->json(['error' => 'Invalid or expired refresh token'], 401);
+        }
+
+        try {
+            $endUser = $this->endUserRepository->findOneBy(['uuid' => $claims['euid'], 'project' => $project]);
+        } catch (\Throwable) {
+            $endUser = null;
+        }
         if (!$endUser || !$endUser->isActive()) {
             return $this->json(['error' => 'User not found or inactive'], 401);
         }
@@ -451,7 +468,7 @@ class EndUserAuthController extends AbstractController
     #[Route('/forgot-password', name: 'forgot_password', methods: ['POST'])]
     public function forgotPassword(Request $request, string $projectId): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -539,7 +556,7 @@ class EndUserAuthController extends AbstractController
     #[Route('/reset-password', name: 'reset_password', methods: ['POST'])]
     public function resetPassword(Request $request, string $projectId): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -605,7 +622,7 @@ class EndUserAuthController extends AbstractController
     #[Route('/social/{provider}', name: 'social_login', methods: ['POST'])]
     public function socialLogin(Request $request, string $projectId, string $provider): JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => 'Project not found'], 404);
         }
@@ -683,6 +700,15 @@ class EndUserAuthController extends AbstractController
             return $request->toArray();
         } catch (\Throwable) {
             return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+    }
+
+    private function findProject(string $projectId): ?Project
+    {
+        try {
+            return $this->projectRepository->findOneBy(['uuid' => $projectId]);
+        } catch (\Throwable) {
+            return null;
         }
     }
 }

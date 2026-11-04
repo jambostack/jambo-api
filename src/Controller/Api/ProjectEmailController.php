@@ -45,7 +45,11 @@ class ProjectEmailController extends AbstractController
     public function send(string $projectUuid, Request $request): JsonResponse
     {
         // Resoudre le projet
-        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        try {
+            $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Projet introuvable'], 404);
+        }
         if (!$project) {
             return new JsonResponse(['error' => 'Projet introuvable'], 404);
         }

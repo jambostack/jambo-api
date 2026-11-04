@@ -29,7 +29,7 @@ class SeoController extends AbstractController
     #[Route('/admin-api/{projectUuid}/seo/scores', name: 'admin_seo_scores', methods: ['GET'])]
     public function scores(string $projectUuid, Request $request): JsonResponse
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
@@ -94,11 +94,7 @@ class SeoController extends AbstractController
     #[Route('/admin-api/{projectUuid}/seo/bulk', name: 'admin_seo_bulk', methods: ['PUT'])]
     public function bulkUpdate(string $projectUuid, Request $request): JsonResponse
     {
-        try {
-            $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
-        } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found.'], 404);
-        }
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
@@ -113,8 +109,12 @@ class SeoController extends AbstractController
         $updated = 0;
 
         foreach ($entries as $entryData) {
-            $entry = $this->entryRepo->findOneBy(['uuid' => $entryData['uuid'] ?? '']);
-            if (!$entry || $entry->project?->uuid?->toRfc4122() !== $projectUuid) {
+            try {
+                $entry = $this->entryRepo->findOneBy(['uuid' => $entryData['uuid'] ?? '', 'project' => $project]);
+            } catch (\Throwable) {
+                $entry = null;
+            }
+            if (!$entry) {
                 continue;
             }
 
@@ -141,14 +141,18 @@ class SeoController extends AbstractController
     #[Route('/admin-api/{projectUuid}/seo/audit/{entryUuid}', name: 'admin_seo_audit', methods: ['GET'])]
     public function audit(string $projectUuid, string $entryUuid): JsonResponse
     {
-        $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->json(['error' => 'Project not found.'], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $project);
 
-        $entry = $this->entryRepo->findOneBy(['uuid' => $entryUuid]);
-        if (!$entry || $entry->project?->uuid?->toRfc4122() !== $projectUuid) {
+        try {
+            $entry = $this->entryRepo->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
+        } catch (\Throwable) {
+            $entry = null;
+        }
+        if (!$entry) {
             return $this->json(['error' => 'Entry not found.'], 404);
         }
 
@@ -159,5 +163,14 @@ class SeoController extends AbstractController
             'brokenLinks' => $report->brokenLinks,
             'warnings' => $report->warnings,
         ]);
+    }
+
+    private function resolveProject(string $projectUuid): ?\App\Entity\Project
+    {
+        try {
+            return $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

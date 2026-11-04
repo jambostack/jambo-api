@@ -1818,6 +1818,7 @@ class CoreApiHardeningTest extends WebTestCase
         $user = new User();
         $user->email = 'confirmpass_' . bin2hex(random_bytes(4)) . '@test.com';
         $user->name = 'Confirm Pass User';
+        $user->roles = ['ROLE_SUPER_ADMIN'];
         $user->password = '$2y$13$dummyhash';
         $em->persist($user);
         $em->flush();
@@ -1842,6 +1843,34 @@ class CoreApiHardeningTest extends WebTestCase
 
         // Malformed UUID on TUS upload when authenticated -> 404 (not 500)
         $client->request('POST', '/api/projects/not-a-uuid/files/tus', [], [], ['HTTP_Tus_Resumable' => '1.0.0', 'HTTP_Upload_Length' => '100']);
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on assets -> 404 (not 500)
+        $client->request('GET', '/api/projects/not-a-uuid/assets');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on studio collections -> 404 (not 500)
+        $client->request('GET', '/api/projects/not-a-uuid/studio/collections');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on AI models -> 404 (not 500)
+        $client->request('GET', '/api/projects/not-a-uuid/ai/models');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on GraphQL -> 404 (not 500)
+        $client->request('POST', '/api/projects/not-a-uuid/graphql', [], [], ['CONTENT_TYPE' => 'application/json'], '{"query":"{ test }"}');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Non-array JSON body on GraphQL -> 400
+        $client->request('POST', '/api/projects/' . $this->projectUuid . '/graphql', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $this->tokenSecret, 'CONTENT_TYPE' => 'application/json'], '"scalar-string"');
+        $this->assertSame(400, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on shares -> 404 (not 500)
+        $client->request('GET', '/api/projects/not-a-uuid/shares');
+        $this->assertSame(404, $client->getResponse()->getStatusCode());
+
+        // Malformed UUID on End-User Auth login -> 404 (not 500)
+        $client->request('POST', '/api/not-a-uuid/auth/login', [], [], ['CONTENT_TYPE' => 'application/json'], '{"email":"test@example.com","password":"pwd"}');
         $this->assertSame(404, $client->getResponse()->getStatusCode());
     }
 }

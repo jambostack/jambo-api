@@ -500,7 +500,11 @@ class ProjectController extends AbstractController
 
     private function resolveProject(string $uuid, ?Request $request = null): Project|JsonResponse
     {
-        $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return $this->json(['error' => 'Project not found'], 404);
+        }
         if ($project === null) {
             return $this->json(['error' => 'Project not found'], 404);
         }

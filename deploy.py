@@ -14,11 +14,11 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='repla
 
 from paramiko import SSHClient, AutoAddPolicy
 
-HOST = os.getenv('JAMBO_HOST', 'api.jambostack.site')
-USER = os.getenv('JAMBO_USER', 'jprud67')
+HOST = os.getenv('JAMBO_HOST', 'folina.o2switch.net')
+USER = os.getenv('JAMBO_USER', 'gupi7723')
 PASS = os.getenv('JAMBO_PASS')
 KEY_FILE = os.getenv('JAMBO_SSH_KEY')
-REMOTE = os.getenv('JAMBO_REMOTE_DIR', '/home/jprud67/web/api.jambostack.site/public_html')
+REMOTE = os.getenv('JAMBO_REMOTE_DIR', '/home/gupi7723/api.jambostack.site')
 
 def run_command(ssh, cmd, timeout=300):
     print(f"\n>> Executing: {cmd}")
