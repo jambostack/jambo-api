@@ -87,12 +87,16 @@ class AuditService
 
     private function sanitizeInput(?array $input): ?array
     {
-        if ($input === null) return null;
+        if ($input === null) {
+            return null;
+        }
 
-        // Masquer les champs sensibles
-        $sensitive = ['password', 'token', 'secret', 'api_key', 'authorization'];
+        $pattern = '/(password|passwd|secret|token|api_?key|auth|bearer|credential|private_?key|pin|cvv)/i';
+
         foreach ($input as $key => $value) {
-            if (in_array(strtolower((string) $key), $sensitive, true)) {
+            if (is_array($value)) {
+                $input[$key] = $this->sanitizeInput($value);
+            } elseif (preg_match($pattern, (string) $key)) {
                 $input[$key] = '[REDACTED]';
             }
         }

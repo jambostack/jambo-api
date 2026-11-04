@@ -28,11 +28,11 @@ class AutomationRepository extends ServiceEntityRepository
     /** Trouve une automatisation par son UUID. */
     public function findOneByUuid(string $uuid): ?Automation
     {
-        return $this->createQueryBuilder('a')
-            ->where('a.uuid = :uuid')
-            ->setParameter('uuid', $uuid)
-            ->getQuery()
-            ->getOneOrNullResult();
+        try {
+            return $this->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

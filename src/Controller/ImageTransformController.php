@@ -111,19 +111,24 @@ class ImageTransformController extends AbstractController
 
     private function resolveLocalOrRemoteFilePath(Media $media): ?string
     {
+        $fileName = basename((string) $media->fileName);
+        if ($fileName === '' || $fileName === '.' || $fileName === '..') {
+            return null;
+        }
+
         $project = $media->project;
         $mediaRoot = $this->getParameter('kernel.project_dir') . '/public/uploads/media/';
 
         // 1. Emplacement local standard avec UUID du projet
         if ($project?->uuid !== null) {
-            $filePath = $mediaRoot . (string) $project->uuid . '/' . $media->fileName;
+            $filePath = $mediaRoot . (string) $project->uuid . '/' . $fileName;
             if (file_exists($filePath)) {
                 return $filePath;
             }
         }
 
         // 2. Emplacement local plat (anciens uploads)
-        $flatPath = $mediaRoot . $media->fileName;
+        $flatPath = $mediaRoot . $fileName;
         if (file_exists($flatPath)) {
             return $flatPath;
         }
@@ -131,8 +136,8 @@ class ImageTransformController extends AbstractController
         // 3. Rapatriement depuis stockage distant Flysystem (S3 / R2 / MinIO)
         if ($this->storageDriverFactory !== null) {
             $tempCacheDir = $this->getParameter('kernel.project_dir') . '/var/media_cache/' . ($project?->uuid ?? 'global');
-            @mkdir($tempCacheDir, 0755, true);
-            $localCached = $tempCacheDir . '/' . $media->fileName;
+            @mkdir($tempCacheDir, 0700, true);
+            $localCached = $tempCacheDir . '/' . $fileName;
 
             // Si déjà en cache local temporaire
             if (file_exists($localCached) && filesize($localCached) > 0) {

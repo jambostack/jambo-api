@@ -46,9 +46,13 @@ class McpServer
     public function handleRequest(string $jsonBody, array $context = []): JsonResponse
     {
         try {
-            $request = json_decode($jsonBody, true, 512, JSON_THROW_ON_ERROR);
+            $request = json_decode($jsonBody, true, 64, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
             return $this->error(null, -32700, 'Parse error: ' . $e->getMessage());
+        }
+
+        if (!is_array($request)) {
+            return $this->error(null, -32600, 'Invalid Request: root must be a JSON object');
         }
 
         $id = $request['id'] ?? null;

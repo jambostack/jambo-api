@@ -78,6 +78,10 @@ class ProjectOpenApiController extends AbstractController
 
     private function isAuthorized(Request $request, Project $project): bool
     {
+        if ($project->publicApi) {
+            return true;
+        }
+
         $user = $this->security->getUser();
         if ($user instanceof User) {
             if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {

@@ -44,6 +44,14 @@ framework:
             policy: sliding_window
             limit: 5
             interval: '60 seconds'
+        webhook_inbound_limiter:
+            policy: sliding_window
+            limit: 120
+            interval: '60 seconds'
+        preview_limiter:
+            policy: sliding_window
+            limit: 60
+            interval: '60 seconds'
 
 when@test:
     framework:
@@ -57,6 +65,14 @@ when@test:
                 limit: 10000
                 interval: '60 seconds'
             import_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            webhook_inbound_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            preview_limiter:
                 policy: sliding_window
                 limit: 10000
                 interval: '60 seconds'

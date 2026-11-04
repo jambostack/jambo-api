@@ -11,6 +11,7 @@ use App\Service\PreviewTokenService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -27,6 +28,7 @@ class PreviewController extends AbstractController
         private readonly ContentEntryRepository $entryRepository,
         private readonly PreviewTokenService $tokenService,
         private readonly EavDataFormatterService $formatter,
+        private readonly ?RateLimiterFactory $previewLimiter = null,
     ) {}
 
     /**
@@ -36,6 +38,13 @@ class PreviewController extends AbstractController
     #[Route('/token/{entryUuid}', name: 'token', methods: ['GET'])]
     public function token(string $projectUuid, string $entryUuid, Request $request): JsonResponse
     {
+        if ($this->previewLimiter !== null) {
+            $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return $this->json(['error' => 'Too many preview requests. Try again later.'], 429);
+            }
+        }
+
         if (!$this->getUser()) {
             return $this->json(['error' => 'Authentication required'], 401);
         }
@@ -77,6 +86,13 @@ class PreviewController extends AbstractController
     #[Route('/content/{collection}/{entryUuid}', name: 'content', methods: ['GET'])]
     public function content(string $projectUuid, string $collection, string $entryUuid, Request $request): JsonResponse
     {
+        if ($this->previewLimiter !== null) {
+            $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return $this->json(['error' => 'Too many preview requests. Try again later.'], 429);
+            }
+        }
+
         // Extraire le token du header Authorization ou des query params (?token= ou ?preview_token=)
         $token = null;
         $authHeader = $request->headers->get('Authorization');

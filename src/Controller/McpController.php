@@ -35,6 +35,9 @@ class McpController extends AbstractController
         }
 
         $body = $request->getContent();
+        if (strlen($body) > 2 * 1024 * 1024) {
+            return new JsonResponse(['error' => 'Payload trop volumineux (max 2MB)'], 413);
+        }
         $token = $this->extractBearerToken($request);
 
         // Construire le contexte utilisateur/projet
@@ -95,6 +98,9 @@ class McpController extends AbstractController
         $context['_project'] = $project;
 
         $body = $request->getContent();
+        if (strlen($body) > 2 * 1024 * 1024) {
+            return new JsonResponse(['error' => 'Payload trop volumineux (max 2MB)'], 413);
+        }
         return $this->mcpServer->handleRequest($body, $context);
     }
 

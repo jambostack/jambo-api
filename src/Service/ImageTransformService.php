@@ -100,6 +100,81 @@ class ImageTransformService
         return $this->cacheDir;
     }
 
+    /**
+     * Nettoie les fichiers de cache des transformations d'images.
+     *
+     * @param int $maxAgeDays Âge maximal des fichiers en jours
+     * @param int|null $maxSizeBytes Taille maximale totale autorisée pour le dossier de cache
+     * @return array{deletedFiles: int, freedBytes: int, remainingFiles: int, remainingBytes: int}
+     */
+    public function pruneCache(int $maxAgeDays = 30, ?int $maxSizeBytes = null): array
+    {
+        $deletedCount = 0;
+        $freedBytes = 0;
+
+        if (!is_dir($this->cacheDir)) {
+            return [
+                'deletedFiles' => 0,
+                'freedBytes' => 0,
+                'remainingFiles' => 0,
+                'remainingBytes' => 0,
+            ];
+        }
+
+        $now = time();
+        $cutoffTime = $now - ($maxAgeDays * 86400);
+
+        /** @var \SplFileInfo[] $files */
+        $files = [];
+        $totalBytes = 0;
+
+        $it = new \DirectoryIterator($this->cacheDir);
+        foreach ($it as $fileInfo) {
+            if ($fileInfo->isDot() || !$fileInfo->isFile()) {
+                continue;
+            }
+            $mtime = $fileInfo->getMTime();
+            $size = $fileInfo->getSize();
+
+            if ($mtime < $cutoffTime) {
+                if (@unlink($fileInfo->getPathname())) {
+                    $deletedCount++;
+                    $freedBytes += $size;
+                    continue;
+                }
+            }
+
+            $files[] = clone $fileInfo;
+            $totalBytes += $size;
+        }
+
+        // Si une taille maximale est spécifiée et dépassée, supprimer les plus anciens
+        if ($maxSizeBytes !== null && $totalBytes > $maxSizeBytes) {
+            usort($files, fn(\SplFileInfo $a, \SplFileInfo $b) => $a->getMTime() <=> $b->getMTime());
+            foreach ($files as $idx => $file) {
+                if ($totalBytes <= $maxSizeBytes) {
+                    break;
+                }
+                $size = $file->getSize();
+                if (@unlink($file->getPathname())) {
+                    $deletedCount++;
+                    $freedBytes += $size;
+                    $totalBytes -= $size;
+                    unset($files[$idx]);
+                }
+            }
+        }
+
+        $this->checkedPaths = [];
+
+        return [
+            'deletedFiles' => $deletedCount,
+            'freedBytes' => $freedBytes,
+            'remainingFiles' => count($files),
+            'remainingBytes' => $totalBytes,
+        ];
+    }
+
     private function normalizeParams(array $params): array
     {
         $w = isset($params['w']) ? min(4000, max(1, (int) $params['w'])) : null;
