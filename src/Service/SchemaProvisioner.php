@@ -82,6 +82,10 @@ class SchemaProvisioner
 
     public function deleteProject(Project $project): void
     {
+        $members = $this->em->getRepository(\App\Entity\ProjectMember::class)->findBy(['project' => $project]);
+        foreach ($members as $m) {
+            $this->em->remove($m);
+        }
         $this->em->remove($project);
         $this->em->flush();
     }

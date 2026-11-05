@@ -272,6 +272,16 @@ class AdminApiHardeningTest extends WebTestCase
             'admin_api.import.no_matching_columns',
             'admin_api.import.max_rows_reached',
             'admin_api.import.cell_count_mismatch',
+            'admin_api.no_token',
+            'admin_api.missing_scope',
+            'admin_api.rate_limit_exceeded',
+            'admin_api.project.payload_too_large',
+            'admin_api.project.name_control_chars',
+            'admin_api.project.max_projects_exceeded',
+            'admin_api.collection.name_control_chars',
+            'admin_api.collection.max_collections_exceeded',
+            'admin_api.field.name_control_chars',
+            'admin_api.field.max_fields_exceeded',
         ];
 
         foreach ($keys as $k) {

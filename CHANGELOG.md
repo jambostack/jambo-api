@@ -7,6 +7,37 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.107] — 2026-11-05
+
+### AdminApi Security Hardening, Quotas, Rate Limiting & Strict I18N
+- **AdminApi Rate Limiting**:
+  - Integrated `admin_api_limiter` rate limiter (60 req/min sliding window) across `ProjectController`, `CollectionController`, and `FieldController` endpoints.
+  - Standardized 429 response `RATE_LIMIT_EXCEEDED` with strict translations across all locales.
+- **ProjectController Hardening**:
+  - Enforced strict payload size boundary `MAX_PAYLOAD_BYTES = 524288` (512 KB) returning 413 `PAYLOAD_TOO_LARGE`.
+  - Added project count quota ceiling `MAX_PROJECTS_PER_USER = 100` (`MAX_PROJECTS_EXCEEDED`) preventing resource exhaustion.
+  - Added ASCII control character rejection on project names (`NAME_CONTROL_CHARS`).
+  - Integrated structured audit logging (`admin_api_project_create`, `admin_api_project_update`, `admin_api_project_delete`) via `AuditService`.
+  - Enforced security headers (`Cache-Control: no-store, no-cache, must-revalidate`, `X-Content-Type-Options: nosniff`).
+- **CollectionController Hardening**:
+  - Added collection quota ceiling `MAX_COLLECTIONS_COUNT = 100` (`MAX_COLLECTIONS_EXCEEDED`).
+  - Added ASCII control character rejection on collection names (`NAME_CONTROL_CHARS`).
+  - Integrated structured audit logging (`admin_api_collection_create`, `admin_api_collection_update`, `admin_api_collection_delete`) via `AuditService`.
+  - Enforced security headers across JSON responses and CSV export streaming (`no-store`, `nosniff`).
+- **FieldController Hardening**:
+  - Added field quota ceiling `MAX_FIELDS_COUNT = 100` (`MAX_FIELDS_EXCEEDED`).
+  - Added ASCII control character rejection on field names (`NAME_CONTROL_CHARS`).
+  - Integrated structured audit logging (`admin_api_field_create`, `admin_api_field_update`, `admin_api_field_delete`) via `AuditService`.
+  - Enforced security headers across all field endpoints (`no-store`, `nosniff`).
+- **AdminApiControllerTrait Strict I18N**:
+  - Replaced hardcoded strings in `pat()` and `requireScope()` with strict translation keys `admin_api.no_token` and `admin_api.missing_scope`.
+- **SchemaProvisioner Safe Cascade Deletion**:
+  - Fixed project deletion to remove associated `ProjectMember` entities from identity map before flushing, avoiding UnitOfWork detached entity conflict during audit logging.
+- **Strict I18N Parity**:
+  - Added 10 new translation keys across `translations/messages.{en,fr,es,ar}.php` (2751 keys each, 100% parity).
+- **Testing**:
+  - Added `Cycle48SecurityHardeningTest` with 11 tests and 117 assertions validating rate limits, payload ceilings, control chars, quotas, security headers, audit logs, and i18n parity.
+
 ## [1.26.106] — 2026-11-05
 
 ### Insights, Flow, Versioning & ProjectTemplate Security Hardening, Quotas, Rate Limiting & Strict I18N

@@ -12,7 +12,12 @@ trait AdminApiControllerTrait
     {
         $pat = $request->attributes->get('_pat');
         if (!$pat instanceof PersonalAccessToken) {
-            throw new AccessDeniedHttpException('No personal access token.');
+            $msg = method_exists($this, 'trans')
+                ? $this->trans('admin_api.no_token', [], 'No personal access token.')
+                : (property_exists($this, 'translator') && $this->translator
+                    ? $this->translator->trans('admin_api.no_token', [], 'messages')
+                    : 'No personal access token.');
+            throw new AccessDeniedHttpException($msg);
         }
         return $pat;
     }
@@ -20,7 +25,12 @@ trait AdminApiControllerTrait
     private function requireScope(Request $request, string $scope): void
     {
         if (!$this->pat($request)->can($scope)) {
-            throw new AccessDeniedHttpException("Missing scope: $scope");
+            $msg = method_exists($this, 'trans')
+                ? $this->trans('admin_api.missing_scope', ['%scope%' => $scope], sprintf('Missing scope: %s', $scope))
+                : (property_exists($this, 'translator') && $this->translator
+                    ? $this->translator->trans('admin_api.missing_scope', ['%scope%' => $scope], 'messages')
+                    : sprintf('Missing scope: %s', $scope));
+            throw new AccessDeniedHttpException($msg);
         }
     }
 }

@@ -11,16 +11,18 @@ use App\Repository\ContentEntryRepository;
 use App\Repository\FieldRepository;
 use App\Repository\ProjectRepository;
 use App\Security\ProjectVoter;
+use App\Service\AuditService;
 use App\Service\SchemaProvisioner;
 use App\Service\Security\CsvSanitizer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
-
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/admin-api/projects/{uuid}/collections', name: 'admin_api_collection_')]
@@ -30,6 +32,12 @@ class CollectionController extends AbstractController
 
     public const MAX_PAYLOAD_BYTES = 524288; // 512KB
     public const MAX_EXPORT_ROWS = 50000;
+    public const MAX_COLLECTIONS_COUNT = 100;
+
+    private const SECURITY_HEADERS = [
+        'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        'X-Content-Type-Options' => 'nosniff',
+    ];
 
     public function __construct(
         private ProjectRepository $projects,
@@ -40,165 +48,267 @@ class CollectionController extends AbstractController
         private ?CsvSanitizer $csvSanitizer = null,
         private ?EntityManagerInterface $em = null,
         private ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.admin_api_limiter')]
+        private ?RateLimiterFactory $adminApiLimiter = null,
+        private ?AuditService $auditService = null,
     ) {}
 
-    private function trans(string $id, array $parameters = []): string
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
-        return $this->translator?->trans($id, $parameters) ?? $id;
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default ?? $id;
+    }
+
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->adminApiLimiter === null) {
+            return null;
+        }
+        $identifier = $request->getClientIp() ?: '127.0.0.1';
+        try {
+            $user = $this->getUser();
+            if ($user !== null) {
+                $identifier = $user->getUserIdentifier();
+            }
+        } catch (\Throwable) {}
+
+        if (!$this->adminApiLimiter->create($identifier)->consume(1)->isAccepted()) {
+            return new JsonResponse([
+                'error' => $this->trans('admin_api.rate_limit_exceeded', [], 'Too many API requests. Please retry later.'),
+                'code' => 'RATE_LIMIT_EXCEEDED',
+            ], 429, self::SECURITY_HEADERS);
+        }
+        return null;
+    }
+
+    private function secureJson(mixed $data, int $status = 200): JsonResponse
+    {
+        return new JsonResponse($data, $status, self::SECURITY_HEADERS);
     }
 
     #[Route('', name: 'index', methods: ['GET'])]
-    public function index(string $uuid): JsonResponse
+    public function index(string $uuid, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
-        return $this->json(['data' => array_map(
+        return $this->secureJson(['data' => array_map(
             fn (Collection $c) => $this->serialize($c),
             $this->collections->findByProject($project),
         )]);
     }
 
     #[Route('/{slug}', name: 'show', methods: ['GET'])]
-    public function show(string $uuid, string $slug): JsonResponse
+    public function show(string $uuid, string $slug, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
         $c = $this->collections->findOneByProjectAndSlug($project, $slug);
         if (!$c) {
-            return $this->json(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
-        return $this->json(['data' => $this->serialize($c, withFields: true)]);
+        return $this->secureJson(['data' => $this->serialize($c, withFields: true)]);
     }
 
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(string $uuid, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $this->requireScope($request, 'schema:write');
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->trans('admin_api.collection.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('admin_api.collection.invalid_json'), 'code' => 'INVALID_JSON'], 400);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         $name = trim((string) ($body['name'] ?? ''));
         if ($name === '') {
-            return $this->json(['error' => $this->trans('admin_api.collection.name_required'), 'code' => 'NAME_REQUIRED'], 422);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.name_required'), 'code' => 'NAME_REQUIRED'], 422);
         }
         if (mb_strlen($name) > 255) {
-            return $this->json(['error' => $this->trans('admin_api.collection.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
+        }
+        if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
+            return $this->secureJson([
+                'error' => $this->trans('admin_api.collection.name_control_chars', [], 'Collection name contains invalid control characters.'),
+                'code' => 'NAME_CONTROL_CHARS',
+            ], 422);
         }
 
         if (isset($body['slug'])) {
             $slug = trim((string) $body['slug']);
             if (mb_strlen($slug) > 255) {
-                return $this->json(['error' => $this->trans('admin_api.collection.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
+                return $this->secureJson(['error' => $this->trans('admin_api.collection.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($slug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
-                return $this->json(['error' => $this->trans('admin_api.collection.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
+                return $this->secureJson(['error' => $this->trans('admin_api.collection.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
+        }
+
+        $currentCount = count($this->collections->findByProject($project));
+        if ($currentCount >= self::MAX_COLLECTIONS_COUNT) {
+            return $this->secureJson([
+                'error' => $this->trans('admin_api.collection.max_collections_exceeded', ['%max%' => self::MAX_COLLECTIONS_COUNT], sprintf('Collection limit exceeded for this project (maximum %d collections).', self::MAX_COLLECTIONS_COUNT)),
+                'code' => 'MAX_COLLECTIONS_EXCEEDED',
+            ], 422);
         }
 
         try {
             $c = $this->provisioner->createCollection($project, $body);
+            $this->auditService?->log(
+                toolName: 'admin_api_collection_create',
+                project: $project,
+                input: ['name' => $c->name, 'slug' => $c->slug],
+                output: null,
+                status: 'success',
+                source: 'admin_api',
+            );
         } catch (SchemaException $e) {
-            return $this->json(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
+            return $this->secureJson(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
-        return $this->json(['data' => ['name' => $c->name, 'slug' => $c->slug, 'isSingleton' => $c->isSingleton]], 201);
+        return $this->secureJson(['data' => ['name' => $c->name, 'slug' => $c->slug, 'isSingleton' => $c->isSingleton]], 201);
     }
 
     #[Route('/{slug}', name: 'update', methods: ['PATCH', 'PUT'])]
     public function update(string $uuid, string $slug, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $this->requireScope($request, 'schema:write');
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         $c = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$c) {
-            return $this->json(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->trans('admin_api.collection.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('admin_api.collection.invalid_json'), 'code' => 'INVALID_JSON'], 400);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         if (isset($body['name'])) {
             $name = trim((string) $body['name']);
             if ($name === '') {
-                return $this->json(['error' => $this->trans('admin_api.collection.name_required'), 'code' => 'NAME_REQUIRED'], 422);
+                return $this->secureJson(['error' => $this->trans('admin_api.collection.name_required'), 'code' => 'NAME_REQUIRED'], 422);
             }
             if (mb_strlen($name) > 255) {
-                return $this->json(['error' => $this->trans('admin_api.collection.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
+                return $this->secureJson(['error' => $this->trans('admin_api.collection.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
+            }
+            if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
+                return $this->secureJson([
+                    'error' => $this->trans('admin_api.collection.name_control_chars', [], 'Collection name contains invalid control characters.'),
+                    'code' => 'NAME_CONTROL_CHARS',
+                ], 422);
             }
         }
 
         if (isset($body['slug'])) {
             $newSlug = trim((string) $body['slug']);
             if (mb_strlen($newSlug) > 255) {
-                return $this->json(['error' => $this->trans('admin_api.collection.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
+                return $this->secureJson(['error' => $this->trans('admin_api.collection.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($newSlug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $newSlug)) {
-                return $this->json(['error' => $this->trans('admin_api.collection.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
+                return $this->secureJson(['error' => $this->trans('admin_api.collection.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
         }
 
         $this->provisioner->updateCollection($c, $body);
-        return $this->json(['data' => ['name' => $c->name, 'slug' => $c->slug]]);
+        $this->auditService?->log(
+            toolName: 'admin_api_collection_update',
+            project: $project,
+            input: ['slug' => $slug, 'new_name' => $c->name],
+            output: null,
+            status: 'success',
+            source: 'admin_api',
+        );
+        return $this->secureJson(['data' => ['name' => $c->name, 'slug' => $c->slug]]);
     }
 
     #[Route('/{slug}', name: 'delete', methods: ['DELETE'])]
     public function delete(string $uuid, string $slug, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $this->requireScope($request, 'schema:write');
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         $c = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$c) {
-            return $this->json(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
         $this->provisioner->deleteCollection($c);
-        return new JsonResponse(null, 204);
+
+        $this->auditService?->log(
+            toolName: 'admin_api_collection_delete',
+            project: $project,
+            input: ['uuid' => $uuid, 'slug' => $slug, 'name' => $c->name],
+            output: null,
+            status: 'success',
+            source: 'admin_api',
+        );
+        return new JsonResponse(null, 204, self::SECURITY_HEADERS);
     }
 
     #[Route('/{slug}/export-csv', name: 'export_csv', methods: ['GET'])]
-    public function exportCsv(string $uuid, string $slug): Response
+    public function exportCsv(string $uuid, string $slug, Request $request): Response
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
 
         $collection = $this->collections->findOneByProjectAndSlug($project, $slug);
         if (!$collection) {
-            return $this->json(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
 
         $fields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
@@ -274,6 +384,7 @@ class CollectionController extends AbstractController
         $response->headers->set('Content-Disposition', 'attachment; filename="' . $filename . '"');
         $response->headers->set('X-Accel-Buffering', 'no');
         $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
 
         return $response;
     }
