@@ -3,12 +3,24 @@
 namespace App\Service;
 
 use App\Entity\ContentFieldValue;
+use App\Service\Security\HtmlContentSanitizer;
 
 class FieldValueHydrator
 {
+    public function __construct(
+        private ?HtmlContentSanitizer $htmlSanitizer = null,
+    ) {
+        $this->htmlSanitizer ??= new HtmlContentSanitizer();
+    }
+
     public function hydrate(ContentFieldValue $cfv, mixed $value, string $fieldType): void
     {
         switch ($fieldType) {
+            case 'richtext':
+            case 'wysiwyg':
+                $raw = ($value !== null && is_scalar($value)) ? (string) $value : (is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null);
+                $cfv->textValue = $raw !== null ? $this->htmlSanitizer->sanitize($raw) : null;
+                break;
             case 'number':
             case 'decimal':
             case 'rating':

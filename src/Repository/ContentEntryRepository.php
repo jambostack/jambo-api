@@ -59,8 +59,9 @@ class ContentEntryRepository extends ServiceEntityRepository
 
         // Recherche full-text dans les champs de type text
         if ($search !== null && $search !== '') {
+            $escaped = addcslashes($search, '%_\\');
             $qb->andWhere('fv.textValue LIKE :search')
-               ->setParameter('search', '%' . $search . '%');
+               ->setParameter('search', '%' . $escaped . '%');
         }
 
         // Filtre par date de création
@@ -127,8 +128,9 @@ class ContentEntryRepository extends ServiceEntityRepository
 
         // Recherche full-text
         if ($search !== null && $search !== '') {
+            $escaped = addcslashes($search, '%_\\');
             $qb->andWhere('fv.textValue LIKE :search')
-               ->setParameter('search', '%' . $search . '%');
+               ->setParameter('search', '%' . $escaped . '%');
         }
 
         // Filtre par date de création
@@ -189,7 +191,8 @@ class ContentEntryRepository extends ServiceEntityRepository
             $qb->andWhere('e.locale = :locale')->setParameter('locale', $locale);
         }
 
-        return $qb->getQuery()->getResult();
+        $paginator = new Paginator($qb->getQuery(), fetchJoinCollection: true);
+        return iterator_to_array($paginator);
     }
 
     /**

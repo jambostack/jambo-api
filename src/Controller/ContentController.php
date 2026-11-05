@@ -47,7 +47,10 @@ class ContentController extends AbstractController
         private EavFieldHelperService $fieldValidator,
         private ?TranslatorInterface $translator = null,
         private ?AuditService $auditService = null,
-    ) {}
+        private ?\App\Service\Security\HtmlContentSanitizer $htmlSanitizer = null,
+    ) {
+        $this->htmlSanitizer ??= new \App\Service\Security\HtmlContentSanitizer();
+    }
 
     private function trans(string $id, array $parameters = []): string
     {
@@ -67,6 +70,10 @@ class ContentController extends AbstractController
             return $collection;
         }
 
+        if (!$this->getUser() && $request->attributes->get('_project') !== $collection->project) {
+            return $this->secureJson(['error' => $this->trans('content.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+        }
+
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $collection->project);
         }
@@ -76,7 +83,7 @@ class ContentController extends AbstractController
             return $this->secureJson(['error' => $this->trans('content.admin.search_query_too_long'), 'code' => 'SEARCH_QUERY_TOO_LONG'], 422);
         }
 
-        $page    = max(1, $request->query->getInt('page', 1));
+        $page    = min(10000, max(1, $request->query->getInt('page', 1)));
         $perPage = min(100, max(1, $request->query->getInt('per_page', 15)));
 
         // Locale filter is optional: only applied when the caller explicitly passes ?locale=xx
@@ -116,6 +123,10 @@ class ContentController extends AbstractController
             }
         } else {
             $dateTo = null;
+        }
+
+        if ($dateFrom !== null && $dateTo !== null && strtotime($dateFrom) > strtotime($dateTo)) {
+            return $this->secureJson(['error' => $this->trans('content.admin.invalid_date_range'), 'code' => 'INVALID_DATE_RANGE'], 422);
         }
 
         $assignedToId = $request->query->has('assigned_to_id') ? $request->query->getInt('assigned_to_id') : null;
@@ -167,12 +178,16 @@ class ContentController extends AbstractController
             return $collection;
         }
 
+        if (!$this->getUser() && $request->attributes->get('_project') !== $collection->project) {
+            return $this->secureJson(['error' => $this->trans('content.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+        }
+
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $collection->project);
         }
 
         $locale = $request->query->getString('locale');
-        $page = max(1, $request->query->getInt('page', 1));
+        $page = min(10000, max(1, $request->query->getInt('page', 1)));
         $perPage = min(100, max(1, $request->query->getInt('per_page', 15)));
 
         $entries = $this->entryRepository->findTrashedPaginated($collection, $page, $perPage, $locale ?: null);
@@ -190,6 +205,10 @@ class ContentController extends AbstractController
         $collection = $this->resolveCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $collection->project) {
+            return $this->secureJson(['error' => $this->trans('content.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -222,6 +241,19 @@ class ContentController extends AbstractController
             return $this->secureJson(['error' => $msg, 'errors' => ['status' => $msg], 'code' => 'INVALID_STATUS'], 422);
         }
 
+        if ($status === 'scheduled') {
+            if (!isset($data['scheduledAt']) || empty($data['scheduledAt'])) {
+                $msg = $this->trans('content.admin.scheduled_at_required');
+                return $this->secureJson(['error' => $msg, 'errors' => ['scheduledAt' => $msg], 'code' => 'SCHEDULED_AT_REQUIRED'], 422);
+            }
+            try {
+                $scheduledAtDate = new \DateTimeImmutable((string) $data['scheduledAt']);
+            } catch (\Throwable) {
+                $msg = $this->trans('content.admin.invalid_scheduled_at');
+                return $this->secureJson(['error' => $msg, 'errors' => ['scheduledAt' => $msg], 'code' => 'INVALID_SCHEDULED_AT'], 422);
+            }
+        }
+
         $locale = $data['locale'] ?? $project->defaultLocale;
         $validLocales = array_unique(array_merge($project->locales ?? [], [$project->defaultLocale]));
         if (!in_array($locale, $validLocales, true)) {
@@ -237,21 +269,24 @@ class ContentController extends AbstractController
         $entry->project    = $project;
         $entry->locale     = $locale;
         $entry->status     = $data['status'] ?? $collection->getDefaultStatus();
-        if ($entry->status === 'scheduled' && isset($data['scheduledAt'])) {
-            $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
+        if ($entry->status === 'scheduled' && isset($scheduledAtDate)) {
+            $entry->scheduledAt = $scheduledAtDate;
         }
         $entry->createdBy  = $user;
         $entry->updatedBy  = $user;
 
         // Handle assignment
-        if (isset($data['assigned_to_id'])) {
+        if (array_key_exists('assigned_to_id', $data) && $data['assigned_to_id'] !== null) {
             $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
-            if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $collection->project) !== null) {
-                $entry->assignedTo = $assignee;
-            } elseif ($assignee !== null) {
+            if ($assignee === null) {
+                $msg = $this->trans('content.admin.assignee_not_found');
+                return $this->secureJson(['error' => $msg, 'errors' => ['assigned_to_id' => $msg], 'code' => 'ASSIGNEE_NOT_FOUND'], 422);
+            }
+            if ($this->memberRepo->findActiveByUserAndProject($assignee, $collection->project) === null) {
                 $msg = $this->trans('content.admin.assignee_not_member');
                 return $this->secureJson(['error' => $msg, 'errors' => ['assigned_to_id' => $msg], 'code' => 'ASSIGNEE_NOT_MEMBER'], 422);
             }
+            $entry->assignedTo = $assignee;
         }
 
         $this->em->persist($entry);
@@ -284,11 +319,15 @@ class ContentController extends AbstractController
     }
 
     #[Route('/{uuid}', name: 'show', methods: ['GET'])]
-    public function show(string $projectUuid, string $collectionSlug, string $uuid): JsonResponse
+    public function show(string $projectUuid, string $collectionSlug, string $uuid, ?Request $request = null): JsonResponse
     {
         $entry = $this->resolveEntry($projectUuid, $collectionSlug, $uuid);
         if ($entry instanceof JsonResponse) {
             return $entry;
+        }
+
+        if (!$this->getUser() && $request?->attributes->get('_project') !== $entry->project) {
+            return $this->secureJson(['error' => $this->trans('content.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -304,6 +343,10 @@ class ContentController extends AbstractController
         $entry = $this->resolveEntry($projectUuid, $collectionSlug, $uuid);
         if ($entry instanceof JsonResponse) {
             return $entry;
+        }
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
+            return $this->secureJson(['error' => $this->trans('content.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -334,6 +377,20 @@ class ContentController extends AbstractController
             return $this->secureJson(['error' => $msg, 'errors' => ['status' => $msg], 'code' => 'INVALID_STATUS'], 422);
         }
 
+        if ($status === 'scheduled') {
+            $schedRaw = $data['scheduledAt'] ?? $entry->scheduledAt?->format(\DateTimeInterface::ATOM);
+            if (!$schedRaw) {
+                $msg = $this->trans('content.admin.scheduled_at_required');
+                return $this->secureJson(['error' => $msg, 'errors' => ['scheduledAt' => $msg], 'code' => 'SCHEDULED_AT_REQUIRED'], 422);
+            }
+            try {
+                $entry->scheduledAt = new \DateTimeImmutable((string) $schedRaw);
+            } catch (\Throwable) {
+                $msg = $this->trans('content.admin.invalid_scheduled_at');
+                return $this->secureJson(['error' => $msg, 'errors' => ['scheduledAt' => $msg], 'code' => 'INVALID_SCHEDULED_AT'], 422);
+            }
+        }
+
         if (isset($data['locale'])) {
             $validLocales = array_unique(array_merge($entry->project->locales ?? [], [$entry->project->defaultLocale]));
             if (!in_array($data['locale'], $validLocales, true)) {
@@ -345,21 +402,21 @@ class ContentController extends AbstractController
         if (isset($data['status'])) {
             $entry->status = $data['status'];
         }
-        if ($entry->status === 'scheduled' && isset($data['scheduledAt'])) {
-            $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
-        }
         $entry->updatedBy = $this->getUser();
 
         // Handle assignment
         if (array_key_exists('assigned_to_id', $data)) {
             if ($data['assigned_to_id'] !== null) {
                 $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
-                if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $entry->collection->project) !== null) {
-                    $entry->assignedTo = $assignee;
-                } elseif ($assignee !== null) {
+                if ($assignee === null) {
+                    $msg = $this->trans('content.admin.assignee_not_found');
+                    return $this->secureJson(['error' => $msg, 'errors' => ['assigned_to_id' => $msg], 'code' => 'ASSIGNEE_NOT_FOUND'], 422);
+                }
+                if ($this->memberRepo->findActiveByUserAndProject($assignee, $entry->collection->project) === null) {
                     $msg = $this->trans('content.admin.assignee_not_member');
                     return $this->secureJson(['error' => $msg, 'errors' => ['assigned_to_id' => $msg], 'code' => 'ASSIGNEE_NOT_MEMBER'], 422);
                 }
+                $entry->assignedTo = $assignee;
             } else {
                 $entry->assignedTo = null;
             }
@@ -415,11 +472,15 @@ class ContentController extends AbstractController
     }
 
     #[Route('/{uuid}/duplicate', name: 'duplicate', methods: ['POST'])]
-    public function duplicate(string $projectUuid, string $collectionSlug, string $uuid): JsonResponse
+    public function duplicate(string $projectUuid, string $collectionSlug, string $uuid, ?Request $request = null): JsonResponse
     {
         $source = $this->resolveEntry($projectUuid, $collectionSlug, $uuid);
         if ($source instanceof JsonResponse) {
             return $source;
+        }
+
+        if (!$this->getUser() && $request?->attributes->get('_project') !== $source->project) {
+            return $this->secureJson(['error' => $this->trans('content.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -489,15 +550,21 @@ class ContentController extends AbstractController
     }
 
     #[Route('/{uuid}', name: 'delete', methods: ['DELETE'])]
-    public function delete(string $projectUuid, string $collectionSlug, string $uuid): JsonResponse
+    public function delete(string $projectUuid, string $collectionSlug, string $uuid, ?Request $request = null): JsonResponse
     {
         $entry = $this->resolveEntry($projectUuid, $collectionSlug, $uuid);
         if ($entry instanceof JsonResponse) {
             return $entry;
         }
 
+        if (!$this->getUser() && $request?->attributes->get('_project') !== $entry->project) {
+            return $this->secureJson(['error' => $this->trans('content.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+        }
+
         if ($this->getUser()) {
-            $this->denyAccessUnlessGranted('content.delete', $entry->project);
+            if (!$this->isGranted('content.delete', $entry->project) && !$this->isGranted('content.trash', $entry->project)) {
+                throw $this->createAccessDeniedException();
+            }
         }
 
         // Soft delete
@@ -521,11 +588,15 @@ class ContentController extends AbstractController
     }
 
     #[Route('/{uuid}/restore', name: 'restore', methods: ['PATCH'])]
-    public function restore(string $projectUuid, string $collectionSlug, string $uuid): JsonResponse
+    public function restore(string $projectUuid, string $collectionSlug, string $uuid, ?Request $request = null): JsonResponse
     {
         $collection = $this->resolveCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if (!$this->getUser() && $request?->attributes->get('_project') !== $collection->project) {
+            return $this->secureJson(['error' => $this->trans('content.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -561,11 +632,15 @@ class ContentController extends AbstractController
     }
 
     #[Route('/{uuid}/force-delete', name: 'force_delete', methods: ['DELETE'])]
-    public function forceDelete(string $projectUuid, string $collectionSlug, string $uuid): JsonResponse
+    public function forceDelete(string $projectUuid, string $collectionSlug, string $uuid, ?Request $request = null): JsonResponse
     {
         $collection = $this->resolveCollection($projectUuid, $collectionSlug);
         if ($collection instanceof JsonResponse) {
             return $collection;
+        }
+
+        if (!$this->getUser() && $request?->attributes->get('_project') !== $collection->project) {
+            return $this->secureJson(['error' => $this->trans('content.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -624,6 +699,12 @@ class ContentController extends AbstractController
                     $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_rich_text_too_long', ['%field%' => $field->name]);
                     continue;
                 }
+                if (in_array($field->type, ['richtext', 'wysiwyg'], true) && $fieldValue !== '') {
+                    if (!$this->htmlSanitizer->isValidJsonLd($fieldValue)) {
+                        $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_invalid_json_ld', ['%field%' => $field->name]);
+                        continue;
+                    }
+                }
                 if ($field->type === 'url' && $fieldValue !== '') {
                     if (!filter_var($fieldValue, FILTER_VALIDATE_URL) || !preg_match('#^https?://#i', $fieldValue)) {
                         $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_url_invalid', ['%field%' => $field->name]);
@@ -637,6 +718,10 @@ class ContentController extends AbstractController
                     }
                 }
             } elseif (is_array($fieldValue)) {
+                if (count($fieldValue) > 200) {
+                    $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_json_too_large', ['%field%' => $field->name]);
+                    continue;
+                }
                 $json = json_encode($fieldValue);
                 if ($json !== false && strlen($json) > 65536) {
                     $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_json_too_large', ['%field%' => $field->name]);
@@ -652,6 +737,82 @@ class ContentController extends AbstractController
                 if (!is_numeric($fieldValue)) {
                     $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_numeric_invalid', ['%field%' => $field->name]);
                     continue;
+                }
+            }
+
+            // Validation multi-tenant pour champs relation
+            if ($field->type === 'relation' && $fieldValue !== null && $fieldValue !== '' && $fieldValue !== []) {
+                $options = $field->options ?? [];
+                $targetColId = $options['relation']['collection'] ?? null;
+                $targetIsEndUsers = ($options['targetCollection'] ?? null) === 'end_users';
+
+                if ($targetIsEndUsers) {
+                    $targetIds = is_array($fieldValue) ? $fieldValue : [$fieldValue];
+                    foreach ($targetIds as $tid) {
+                        $rawId = is_array($tid) ? ($tid['id'] ?? null) : $tid;
+                        if ($rawId !== null && is_numeric($rawId)) {
+                            $endUser = $this->em->getRepository(\App\Entity\EndUser::class)->findOneBy([
+                                'id' => (int) $rawId,
+                                'project' => $collection->project,
+                            ]);
+                            if ($endUser === null) {
+                                $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.invalid_relation_reference', ['%field%' => $field->name]);
+                                break;
+                            }
+                        }
+                    }
+                } elseif ($targetColId !== null && is_numeric($targetColId)) {
+                    $targetCol = $this->collectionRepository->findOneBy([
+                        'id' => (int) $targetColId,
+                        'project' => $collection->project,
+                        'deletedAt' => null,
+                    ]);
+                    if ($targetCol === null) {
+                        $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.invalid_relation_collection', ['%field%' => $field->name]);
+                    } else {
+                        $targetIds = is_array($fieldValue) ? $fieldValue : [$fieldValue];
+                        foreach ($targetIds as $tid) {
+                            $rawId = is_array($tid) ? ($tid['id'] ?? null) : $tid;
+                            if ($rawId !== null && is_numeric($rawId)) {
+                                $targetEntry = $this->entryRepository->findOneBy([
+                                    'id' => (int) $rawId,
+                                    'collection' => $targetCol,
+                                    'deletedAt' => null,
+                                ]);
+                                if ($targetEntry === null) {
+                                    $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.invalid_relation_reference', ['%field%' => $field->name]);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Validation multi-tenant pour champs media
+            if ($field->type === 'media' && $fieldValue !== null && $fieldValue !== '' && $fieldValue !== []) {
+                $mediaItems = is_array($fieldValue) ? $fieldValue : [$fieldValue];
+                foreach ($mediaItems as $mItem) {
+                    $mediaUuidOrId = is_array($mItem) ? ($mItem['uuid'] ?? $mItem['id'] ?? null) : $mItem;
+                    if ($mediaUuidOrId !== null && is_string($mediaUuidOrId) && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $mediaUuidOrId)) {
+                        $mediaEntity = $this->em->getRepository(\App\Entity\Media::class)->findOneBy([
+                            'uuid' => Uuid::fromString($mediaUuidOrId),
+                            'project' => $collection->project,
+                        ]);
+                        if ($mediaEntity === null) {
+                            $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.invalid_media_reference', ['%field%' => $field->name]);
+                            break;
+                        }
+                    } elseif ($mediaUuidOrId !== null && is_numeric($mediaUuidOrId)) {
+                        $mediaEntity = $this->em->getRepository(\App\Entity\Media::class)->findOneBy([
+                            'id' => (int) $mediaUuidOrId,
+                            'project' => $collection->project,
+                        ]);
+                        if ($mediaEntity === null) {
+                            $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.invalid_media_reference', ['%field%' => $field->name]);
+                            break;
+                        }
+                    }
                 }
             }
 

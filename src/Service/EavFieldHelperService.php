@@ -5,13 +5,17 @@ namespace App\Service;
 use App\Entity\Collection;
 use App\Entity\ContentFieldValue;
 use App\Entity\Field;
+use App\Service\Security\HtmlContentSanitizer;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 class EavFieldHelperService
 {
     public function __construct(
         private ?TranslatorInterface $translator = null,
-    ) {}
+        private ?HtmlContentSanitizer $htmlSanitizer = null,
+    ) {
+        $this->htmlSanitizer ??= new HtmlContentSanitizer();
+    }
 
     private function trans(string $id, array $parameters = [], string $default = ''): string
     {
@@ -33,6 +37,9 @@ class EavFieldHelperService
             'boolean', 'checkbox' => $cfv->booleanValue = $value !== null ? (is_bool($value) ? $value : (bool) filter_var($value, FILTER_VALIDATE_BOOLEAN)) : null,
             'date' => $cfv->dateValue = $this->parseDateTime($value),
             'datetime' => $cfv->datetimeValue = $this->parseDateTime($value),
+            'richtext', 'wysiwyg' => $cfv->textValue = ($value !== null && is_scalar($value))
+                ? $this->htmlSanitizer->sanitize((string) $value)
+                : (is_array($value) ? $this->htmlSanitizer->sanitize(json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) : null),
             'json', 'array', 'repeater', 'enumeration', 'media', 'relation', 'tags'
                 => $cfv->jsonValue = $this->parseJsonValue($value),
             default => $cfv->textValue = ($value !== null && is_scalar($value)) ? (string) $value : (is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null),

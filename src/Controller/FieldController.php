@@ -154,6 +154,29 @@ class FieldController extends AbstractController
             }
         }
 
+        if (isset($data['validationRules'])) {
+            if (!is_array($data['validationRules'])) {
+                $msg = $this->trans('field.admin.validation_rules_invalid');
+                return $this->secureJson(['error' => $msg, 'errors' => ['validationRules' => $msg], 'code' => 'INVALID_VALIDATION_RULES'], 422);
+            }
+            $rulesJson = json_encode($data['validationRules']);
+            if ($rulesJson !== false && strlen($rulesJson) > 65536) {
+                $msg = $this->trans('field.admin.validation_rules_too_large');
+                return $this->secureJson(['error' => $msg, 'errors' => ['validationRules' => $msg], 'code' => 'VALIDATION_RULES_TOO_LARGE'], 422);
+            }
+            if ($this->getArrayDepth($data['validationRules']) > 5) {
+                $msg = $this->trans('field.admin.validation_rules_too_deep');
+                return $this->secureJson(['error' => $msg, 'errors' => ['validationRules' => $msg], 'code' => 'VALIDATION_RULES_TOO_DEEP'], 422);
+            }
+            if (!empty($data['validationRules']['regex'])) {
+                $regex = (string) $data['validationRules']['regex'];
+                if (mb_strlen($regex) > 255) {
+                    $msg = $this->trans('field.admin.validation_regex_too_long');
+                    return $this->secureJson(['error' => $msg, 'errors' => ['validationRules.regex' => $msg], 'code' => 'REGEX_TOO_LONG'], 422);
+                }
+            }
+        }
+
         try {
             $field = $this->provisioner->addField($collection, $data);
         } catch (SchemaException $e) {
@@ -251,7 +274,11 @@ class FieldController extends AbstractController
             }
         }
 
-        if (isset($data['options']) && is_array($data['options'])) {
+        if (isset($data['options'])) {
+            if (!is_array($data['options'])) {
+                $msg = $this->trans('field.admin.options_invalid');
+                return $this->secureJson(['error' => $msg, 'errors' => ['options' => $msg], 'code' => 'INVALID_OPTIONS'], 422);
+            }
             $json = json_encode($data['options']);
             if ($json !== false && strlen($json) > 65536) {
                 $msg = $this->trans('field.admin.options_too_large');
@@ -260,6 +287,29 @@ class FieldController extends AbstractController
             if ($this->getArrayDepth($data['options']) > 6) {
                 $msg = $this->trans('field.admin.options_too_deep');
                 return $this->secureJson(['error' => $msg, 'errors' => ['options' => $msg], 'code' => 'OPTIONS_TOO_DEEP'], 422);
+            }
+        }
+
+        if (isset($data['validationRules'])) {
+            if (!is_array($data['validationRules'])) {
+                $msg = $this->trans('field.admin.validation_rules_invalid');
+                return $this->secureJson(['error' => $msg, 'errors' => ['validationRules' => $msg], 'code' => 'INVALID_VALIDATION_RULES'], 422);
+            }
+            $rulesJson = json_encode($data['validationRules']);
+            if ($rulesJson !== false && strlen($rulesJson) > 65536) {
+                $msg = $this->trans('field.admin.validation_rules_too_large');
+                return $this->secureJson(['error' => $msg, 'errors' => ['validationRules' => $msg], 'code' => 'VALIDATION_RULES_TOO_LARGE'], 422);
+            }
+            if ($this->getArrayDepth($data['validationRules']) > 5) {
+                $msg = $this->trans('field.admin.validation_rules_too_deep');
+                return $this->secureJson(['error' => $msg, 'errors' => ['validationRules' => $msg], 'code' => 'VALIDATION_RULES_TOO_DEEP'], 422);
+            }
+            if (!empty($data['validationRules']['regex'])) {
+                $regex = (string) $data['validationRules']['regex'];
+                if (mb_strlen($regex) > 255) {
+                    $msg = $this->trans('field.admin.validation_regex_too_long');
+                    return $this->secureJson(['error' => $msg, 'errors' => ['validationRules.regex' => $msg], 'code' => 'REGEX_TOO_LONG'], 422);
+                }
             }
         }
 
@@ -314,15 +364,17 @@ class FieldController extends AbstractController
         }
 
         $updatedCount = 0;
+        $seenIds = [];
         foreach ($data['fields'] as $item) {
             if (!is_array($item) || !isset($item['id'], $item['order'])) {
                 continue;
             }
             $id = (int) $item['id'];
             $order = (int) $item['order'];
-            if ($id <= 0 || $order < 0 || $order > 10000) {
+            if ($id <= 0 || $order < 0 || $order > 10000 || isset($seenIds[$id])) {
                 continue;
             }
+            $seenIds[$id] = true;
 
             $field = $this->fieldRepository->findOneBy(['id' => $id, 'collection' => $collection]);
             if ($field) {

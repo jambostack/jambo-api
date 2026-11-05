@@ -199,15 +199,17 @@ class CollectionController extends AbstractController
         }
 
         $updatedCount = 0;
+        $seenIds = [];
         foreach ($data['collections'] as $item) {
             if (!is_array($item) || !isset($item['id'], $item['order'])) {
                 continue;
             }
             $id = (int) $item['id'];
             $order = (int) $item['order'];
-            if ($id <= 0 || $order < 0 || $order > 10000) {
+            if ($id <= 0 || $order < 0 || $order > 10000 || isset($seenIds[$id])) {
                 continue;
             }
+            $seenIds[$id] = true;
 
             $collection = $this->collectionRepository->findOneBy([
                 'id'      => $id,

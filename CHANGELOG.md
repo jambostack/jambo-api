@@ -7,6 +7,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.133] — 2026-11-05
+
+### Security Hardening on Content, Field & Collection Controllers (Phase 85 — Cycle #70)
+- **ContentController**:
+  - Enforced authentication verification on all endpoints (`index`, `trash`, `create`, `show`, `update`, `duplicate`, `delete`, `restore`, `forceDelete`) rejecting unauthenticated requests with 401 `AUTH_REQUIRED` (`content.admin.auth_required`).
+  - Implemented granular RBAC permission checks: `project.view` on index/trash/show, `content.create` on create/duplicate, `content.update` on update, `content.delete`/`content.trash` on soft-delete, `content.restore` on restore, and `content.delete` on permanent forceDelete.
+  - Multi-tenant nested relation validation: strictly verified that target collection belongs to current project, and referenced entry IDs exist, belong to target collection, and are not soft-deleted.
+  - Multi-tenant media reference validation: verified referenced media UUIDs/IDs belong to the current project.
+  - Mitigated pagination DoS: capped `$page` to 10,000 and `$perPage` to 100 on both `index()` and `trash()`.
+  - Date range validation: rejected inverted date ranges (`date_from > date_to`) with 422 `INVALID_DATE_RANGE`.
+  - Workflow status enforcement: strictly required valid ISO-8601 `scheduledAt` when status is `scheduled` (`SCHEDULED_AT_REQUIRED`, `INVALID_SCHEDULED_AT`).
+  - Assignment validation: verified assignee user existence (`ASSIGNEE_NOT_FOUND`) and active project membership (`ASSIGNEE_NOT_MEMBER`).
+- **HtmlContentSanitizer Service & WYSIWYG / Richtext Sanitization**:
+  - Created `App\Service\Security\HtmlContentSanitizer` defending against XSS in WYSIWYG and Richtext content.
+  - Stripped high-risk tags (`<script>`, `<iframe>`, `<object>`, `<embed>`, `<form>`, etc.), stripped inline event handlers (`on*`), and neutralized dangerous URI schemes (`javascript:`, `vbscript:`, `data:text/html`).
+  - Added strict JSON-LD parser and re-encoder with anti-breakout safeguards (`JSON_HEX_TAG`, `JSON_HEX_AMP`, `JSON_HEX_APOS`, `JSON_HEX_QUOT`).
+  - Integrated into `FieldValueHydrator` and `EavFieldHelperService`.
+- **FieldController & CollectionController Hardening**:
+  - Validated field `options` across both `create()` and `update()` endpoints (rejecting non-array payloads with 422 `INVALID_OPTIONS`).
+  - Validated field `validationRules` with bounds on size, nesting depth (<= 5), and regex length (<= 255 chars).
+  - Enforced duplicate ID deduplication in `reorder()` across both `FieldController` and `CollectionController`.
+- **Repository Hardening (`ContentEntryRepository`)**:
+  - Escaped SQL LIKE wildcards (`%_\\`) in full-text search queries.
+  - Employed Doctrine `Paginator` with `fetchJoinCollection: true` on `findTrashedPaginated` to eliminate pagination and join hydration anomalies.
+- **Strict I18N Parity**:
+  - Maintained complete 4-language parity (`en`, `fr`, `es`, `ar`) in `translations/messages.*.php` for all content, field, and collection error/status messages.
+
 ## [1.26.132] — 2026-11-05
 
 ### Security Hardening on Backup, Audit, Notifications, Search & Multi-Tenant Enforcement (Cycle #69)
