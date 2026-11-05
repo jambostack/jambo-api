@@ -8,6 +8,7 @@ use App\Repository\CollectionRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\WebhookLogRepository;
 use App\Repository\WebhookRepository;
+use App\Service\AuditService;
 use App\Service\Security\SsrfProtectionService;
 use App\Service\WebhookSecretService;
 use App\Service\WebhookService;
@@ -22,6 +23,11 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/projects/{projectUuid}/webhooks', name: 'api_webhook_')]
 class WebhookController extends AbstractController
 {
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+    private const MAX_PAYLOAD_BYTES = 524288; // 512 KB
+    private const MAX_EVENTS_COUNT = 50;
+    private const MAX_COLLECTIONS_COUNT = 50;
+
     private SsrfProtectionService $ssrfProtection;
     private WebhookService $webhookService;
 
@@ -36,6 +42,7 @@ class WebhookController extends AbstractController
         ?SsrfProtectionService $ssrfProtection = null,
         ?WebhookService $webhookService = null,
         private ?TranslatorInterface $translator = null,
+        private ?AuditService $auditService = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
         $this->webhookService = $webhookService ?? new WebhookService(
@@ -79,47 +86,121 @@ class WebhookController extends AbstractController
             return $project;
         }
 
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json([
+                'error' => $this->trans('webhook.payload_too_large', [], 'Webhook payload too large (max 512KB).'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('webhook.invalid_json', [], 'Invalid JSON body')], 400);
+            return $this->json([
+                'error' => $this->trans('webhook.invalid_json', [], 'Invalid JSON body'),
+                'code' => 'INVALID_JSON',
+            ], 400);
         }
 
         if (empty($data['name']) || empty($data['url'])) {
-            return $this->json(['error' => $this->trans('webhook.name_url_required', [], 'name and url are required')], 422);
+            return $this->json([
+                'error' => $this->trans('webhook.name_url_required', [], 'name and url are required'),
+                'code' => 'NAME_URL_REQUIRED',
+            ], 422);
         }
 
         $name = trim((string) $data['name']);
         if (strlen($name) > 100) {
-            return $this->json(['error' => $this->trans('webhook.name_too_long', [], 'Webhook name cannot exceed 100 characters')], 422);
+            return $this->json([
+                'error' => $this->trans('webhook.name_too_long', [], 'Webhook name cannot exceed 100 characters'),
+                'code' => 'NAME_TOO_LONG',
+            ], 422);
         }
 
         $url = trim((string) $data['url']);
         if ($err = $this->validateWebhookUrl($url)) {
-            return $this->json(['error' => $err], 422);
+            return $this->json([
+                'error' => $err,
+                'code' => 'INVALID_URL',
+            ], 422);
         }
 
         $plainSecret = null;
         if (!empty($data['secret'])) {
             $customSecret = (string) $data['secret'];
             if (strlen($customSecret) < 16 || strlen($customSecret) > 256) {
-                return $this->json(['error' => $this->trans('webhook.secret_length_invalid', [], 'Webhook secret must be between 16 and 256 characters long')], 422);
+                return $this->json([
+                    'error' => $this->trans('webhook.secret_length_invalid', [], 'Webhook secret must be between 16 and 256 characters long'),
+                    'code' => 'SECRET_LENGTH_INVALID',
+                ], 422);
             }
             $plainSecret = $customSecret;
         } elseif (!array_key_exists('secret', $data) || !empty($data['auto_generate_secret'])) {
             $plainSecret = 'whsec_' . bin2hex(random_bytes(24));
         }
 
+        $events = ['content.created', 'content.updated', 'content.deleted'];
+        if (array_key_exists('events', $data)) {
+            if (!is_array($data['events'])) {
+                return $this->json([
+                    'error' => $this->trans('webhook.invalid_event_format', [], 'Events must be an array.'),
+                    'code' => 'INVALID_EVENT_FORMAT',
+                ], 422);
+            }
+            if (count($data['events']) > self::MAX_EVENTS_COUNT) {
+                return $this->json([
+                    'error' => $this->trans('webhook.too_many_events', [], 'Too many events specified (max 50).'),
+                    'code' => 'TOO_MANY_EVENTS',
+                ], 422);
+            }
+            $cleanEvents = [];
+            foreach ($data['events'] as $evt) {
+                if (!is_string($evt)) {
+                    return $this->json([
+                        'error' => $this->trans('webhook.invalid_event_format', [], 'Invalid event format.'),
+                        'code' => 'INVALID_EVENT_FORMAT',
+                    ], 422);
+                }
+                $evtTrim = trim($evt);
+                if ($evtTrim === '' || strlen($evtTrim) > 64 || !preg_match('/^[a-z0-9_.-]+$/i', $evtTrim)) {
+                    return $this->json([
+                        'error' => $this->trans('webhook.invalid_event_format', [], 'Invalid event format.'),
+                        'code' => 'INVALID_EVENT_FORMAT',
+                    ], 422);
+                }
+                $cleanEvents[] = $evtTrim;
+            }
+            $events = array_values(array_unique($cleanEvents));
+        }
+
         $webhook = new Webhook();
         $webhook->project  = $project;
         $webhook->name     = $name;
         $webhook->url      = $url;
-        $webhook->events   = is_array($data['events'] ?? null) ? $data['events'] : ['content.created', 'content.updated', 'content.deleted'];
+        $webhook->events   = $events;
         $webhook->secret   = $plainSecret !== null ? $this->secretService->encrypt($plainSecret) : null;
         $webhook->isActive = (bool) ($data['is_active'] ?? true);
 
         if (!empty($data['collection_slugs'])) {
+            if (!is_array($data['collection_slugs'])) {
+                return $this->json([
+                    'error' => $this->trans('webhook.invalid_collection_slug', [], 'Collection slugs must be an array.'),
+                    'code' => 'INVALID_COLLECTION_SLUG',
+                ], 422);
+            }
+            if (count($data['collection_slugs']) > self::MAX_COLLECTIONS_COUNT) {
+                return $this->json([
+                    'error' => $this->trans('webhook.too_many_collections', [], 'Too many collections specified (max 50).'),
+                    'code' => 'TOO_MANY_COLLECTIONS',
+                ], 422);
+            }
             foreach ($data['collection_slugs'] as $slug) {
+                if (!is_string($slug) || strlen($slug) > 100 || !preg_match('/^[a-z0-9_-]+$/i', $slug)) {
+                    return $this->json([
+                        'error' => $this->trans('webhook.invalid_collection_slug', [], 'Invalid collection slug format.'),
+                        'code' => 'INVALID_COLLECTION_SLUG',
+                    ], 422);
+                }
                 $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $slug);
                 if ($collection !== null) {
                     $webhook->collections->add($collection);
@@ -129,6 +210,17 @@ class WebhookController extends AbstractController
 
         $this->em->persist($webhook);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'webhook_create',
+            project: $project,
+            input: ['name' => $webhook->name, 'url' => $webhook->url, 'events' => $webhook->events],
+            output: ['success' => true, 'uuid' => $webhook->uuid?->toRfc4122()],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'webhook_management'
+        );
+        $this->auditService?->flush();
 
         $response = ['data' => $this->serialize($webhook)];
         if ($plainSecret !== null) {
@@ -157,28 +249,73 @@ class WebhookController extends AbstractController
             return $webhook;
         }
 
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json([
+                'error' => $this->trans('webhook.payload_too_large', [], 'Webhook payload too large (max 512KB).'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('webhook.invalid_json', [], 'Invalid JSON body')], 400);
+            return $this->json([
+                'error' => $this->trans('webhook.invalid_json', [], 'Invalid JSON body'),
+                'code' => 'INVALID_JSON',
+            ], 400);
         }
 
         if (isset($data['name'])) {
             $name = trim((string) $data['name']);
             if (strlen($name) > 100) {
-                return $this->json(['error' => $this->trans('webhook.name_too_long', [], 'Webhook name cannot exceed 100 characters')], 422);
+                return $this->json([
+                    'error' => $this->trans('webhook.name_too_long', [], 'Webhook name cannot exceed 100 characters'),
+                    'code' => 'NAME_TOO_LONG',
+                ], 422);
             }
             $webhook->name = $name;
         }
         if (isset($data['url'])) {
             $url = trim((string) $data['url']);
             if ($err = $this->validateWebhookUrl($url)) {
-                return $this->json(['error' => $err], 422);
+                return $this->json([
+                    'error' => $err,
+                    'code' => 'INVALID_URL',
+                ], 422);
             }
             $webhook->url = $url;
         }
         if (isset($data['events'])) {
-            $webhook->events = is_array($data['events']) ? $data['events'] : [];
+            if (!is_array($data['events'])) {
+                return $this->json([
+                    'error' => $this->trans('webhook.invalid_event_format', [], 'Events must be an array.'),
+                    'code' => 'INVALID_EVENT_FORMAT',
+                ], 422);
+            }
+            if (count($data['events']) > self::MAX_EVENTS_COUNT) {
+                return $this->json([
+                    'error' => $this->trans('webhook.too_many_events', [], 'Too many events specified (max 50).'),
+                    'code' => 'TOO_MANY_EVENTS',
+                ], 422);
+            }
+            $cleanEvents = [];
+            foreach ($data['events'] as $evt) {
+                if (!is_string($evt)) {
+                    return $this->json([
+                        'error' => $this->trans('webhook.invalid_event_format', [], 'Invalid event format.'),
+                        'code' => 'INVALID_EVENT_FORMAT',
+                    ], 422);
+                }
+                $evtTrim = trim($evt);
+                if ($evtTrim === '' || strlen($evtTrim) > 64 || !preg_match('/^[a-z0-9_.-]+$/i', $evtTrim)) {
+                    return $this->json([
+                        'error' => $this->trans('webhook.invalid_event_format', [], 'Invalid event format.'),
+                        'code' => 'INVALID_EVENT_FORMAT',
+                    ], 422);
+                }
+                $cleanEvents[] = $evtTrim;
+            }
+            $webhook->events = array_values(array_unique($cleanEvents));
         }
         if (array_key_exists('secret', $data)) {
             if ($data['secret'] === null || $data['secret'] === '') {
@@ -186,7 +323,10 @@ class WebhookController extends AbstractController
             } else {
                 $customSecret = (string) $data['secret'];
                 if (strlen($customSecret) < 16 || strlen($customSecret) > 256) {
-                    return $this->json(['error' => $this->trans('webhook.secret_length_invalid', [], 'Webhook secret must be between 16 and 256 characters long')], 422);
+                    return $this->json([
+                        'error' => $this->trans('webhook.secret_length_invalid', [], 'Webhook secret must be between 16 and 256 characters long'),
+                        'code' => 'SECRET_LENGTH_INVALID',
+                    ], 422);
                 }
                 $webhook->secret = $this->secretService->encrypt($customSecret);
             }
@@ -196,8 +336,26 @@ class WebhookController extends AbstractController
         }
 
         if (array_key_exists('collection_slugs', $data)) {
+            if (!is_array($data['collection_slugs'])) {
+                return $this->json([
+                    'error' => $this->trans('webhook.invalid_collection_slug', [], 'Collection slugs must be an array.'),
+                    'code' => 'INVALID_COLLECTION_SLUG',
+                ], 422);
+            }
+            if (count($data['collection_slugs']) > self::MAX_COLLECTIONS_COUNT) {
+                return $this->json([
+                    'error' => $this->trans('webhook.too_many_collections', [], 'Too many collections specified (max 50).'),
+                    'code' => 'TOO_MANY_COLLECTIONS',
+                ], 422);
+            }
             $webhook->collections->clear();
             foreach ((array) $data['collection_slugs'] as $slug) {
+                if (!is_string($slug) || strlen($slug) > 100 || !preg_match('/^[a-z0-9_-]+$/i', $slug)) {
+                    return $this->json([
+                        'error' => $this->trans('webhook.invalid_collection_slug', [], 'Invalid collection slug format.'),
+                        'code' => 'INVALID_COLLECTION_SLUG',
+                    ], 422);
+                }
                 $collection = $this->collectionRepository->findOneByProjectAndSlug($webhook->project, $slug);
                 if ($collection !== null) {
                     $webhook->collections->add($collection);
@@ -206,6 +364,17 @@ class WebhookController extends AbstractController
         }
 
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'webhook_update',
+            project: $webhook->project,
+            input: ['uuid' => $webhook->uuid?->toRfc4122(), 'name' => $webhook->name],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'webhook_management'
+        );
+        $this->auditService?->flush();
 
         return $this->json(['data' => $this->serialize($webhook)]);
     }
@@ -218,6 +387,13 @@ class WebhookController extends AbstractController
             return $webhook;
         }
 
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json([
+                'error' => $this->trans('webhook.payload_too_large', [], 'Webhook payload too large (max 512KB).'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
         $data = [];
         try {
             $data = $request->toArray();
@@ -227,7 +403,10 @@ class WebhookController extends AbstractController
         if (!empty($data['secret'])) {
             $customSecret = (string) $data['secret'];
             if (strlen($customSecret) < 16 || strlen($customSecret) > 256) {
-                return $this->json(['error' => $this->trans('webhook.secret_length_invalid', [], 'Webhook secret must be between 16 and 256 characters long')], 422);
+                return $this->json([
+                    'error' => $this->trans('webhook.secret_length_invalid', [], 'Webhook secret must be between 16 and 256 characters long'),
+                    'code' => 'SECRET_LENGTH_INVALID',
+                ], 422);
             }
             $plainSecret = $customSecret;
         } else {
@@ -236,6 +415,17 @@ class WebhookController extends AbstractController
 
         $webhook->secret = $this->secretService->encrypt($plainSecret);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'webhook_rotate_secret',
+            project: $webhook->project,
+            input: ['uuid' => $webhook->uuid?->toRfc4122()],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'webhook_management'
+        );
+        $this->auditService?->flush();
 
         return $this->json([
             'success'      => true,
@@ -253,8 +443,21 @@ class WebhookController extends AbstractController
             return $webhook;
         }
 
+        $project = $webhook->project;
+        $webhookUuid = $webhook->uuid?->toRfc4122();
         $this->em->remove($webhook);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'webhook_delete',
+            project: $project,
+            input: ['uuid' => $webhookUuid],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'webhook_management'
+        );
+        $this->auditService?->flush();
 
         return $this->json(null, 204);
     }
@@ -267,7 +470,7 @@ class WebhookController extends AbstractController
             return $webhook;
         }
 
-        $page    = max(1, $request->query->getInt('page', 1));
+        $page    = min(1000, max(1, $request->query->getInt('page', 1)));
         $perPage = min(100, max(1, $request->query->getInt('per_page', 20)));
 
         $logs  = $this->logRepository->findRecentByWebhook($webhook, $page, $perPage);
@@ -321,6 +524,7 @@ class WebhookController extends AbstractController
         return $this->json([
             'success' => false,
             'message' => $this->trans('webhook.bus_not_configured', [], 'Message bus is not configured'),
+            'code' => 'BUS_NOT_CONFIGURED',
             'payload' => $payload,
         ], 503);
     }
@@ -346,20 +550,36 @@ class WebhookController extends AbstractController
 
     private function resolveProject(string $projectUuid, string $requiredPermission = 'project.view'): \App\Entity\Project|JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+            return $this->json([
+                'error' => $this->trans('webhook.project_not_found', [], 'Project not found'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('webhook.project_not_found', [], 'Project not found')], 404);
+            return $this->json([
+                'error' => $this->trans('webhook.project_not_found', [], 'Project not found'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
         }
         if ($project === null) {
-            return $this->json(['error' => $this->trans('webhook.project_not_found', [], 'Project not found')], 404);
+            return $this->json([
+                'error' => $this->trans('webhook.project_not_found', [], 'Project not found'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
         }
 
         $user = $this->getUser();
         if ($user instanceof \App\Entity\User) {
             if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
                 if (!$project->hasMember($user)) {
-                    return $this->json(['error' => $this->trans('webhook.access_denied', [], 'Access denied to this project.')], 403);
+                    return $this->json([
+                        'error' => $this->trans('webhook.access_denied', [], 'Access denied to this project.'),
+                        'code' => 'ACCESS_DENIED',
+                    ], 403);
                 }
                 $this->denyAccessUnlessGranted($requiredPermission, $project);
             }
@@ -371,6 +591,13 @@ class WebhookController extends AbstractController
 
     private function resolveWebhook(string $projectUuid, string $uuid, string $requiredPermission = 'project.view'): Webhook|JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return $this->json([
+                'error' => $this->trans('webhook.not_found', [], 'Webhook not found'),
+                'code' => 'WEBHOOK_NOT_FOUND',
+            ], 404);
+        }
+
         $project = $this->resolveProject($projectUuid, $requiredPermission);
         if ($project instanceof JsonResponse) {
             return $project;
@@ -378,10 +605,16 @@ class WebhookController extends AbstractController
         try {
             $webhook = $this->webhookRepository->findOneBy(['uuid' => $uuid, 'project' => $project]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('webhook.not_found', [], 'Webhook not found')], 404);
+            return $this->json([
+                'error' => $this->trans('webhook.not_found', [], 'Webhook not found'),
+                'code' => 'WEBHOOK_NOT_FOUND',
+            ], 404);
         }
         if ($webhook === null) {
-            return $this->json(['error' => $this->trans('webhook.not_found', [], 'Webhook not found')], 404);
+            return $this->json([
+                'error' => $this->trans('webhook.not_found', [], 'Webhook not found'),
+                'code' => 'WEBHOOK_NOT_FOUND',
+            ], 404);
         }
         return $webhook;
     }

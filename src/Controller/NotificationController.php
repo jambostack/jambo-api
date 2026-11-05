@@ -12,17 +12,26 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/notifications', name: 'api_notifications_')]
 class NotificationController extends AbstractController
 {
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+
     public function __construct(
         private NotificationRepository $notificationRepository,
         #[Autowire(service: 'limiter.notification_limiter')]
         private ?RateLimiterFactory $notificationLimiter = null,
         private ?ProjectRepository $projectRepository = null,
         private ?ProjectMemberRepository $memberRepository = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
 
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(Request $request): JsonResponse
@@ -73,7 +82,10 @@ class NotificationController extends AbstractController
 
         $notification = $this->notificationRepository->find($id);
         if (!$notification || $notification->recipient?->id !== $user->id) {
-            return $this->json(['error' => 'Not found.'], 404);
+            return $this->json([
+                'error' => $this->trans('notification.not_found', [], 'Notification not found.'),
+                'code' => 'NOTIFICATION_NOT_FOUND',
+            ], 404);
         }
         if ($notification->readAt === null) {
             $notification->readAt = new \DateTimeImmutable();
@@ -96,7 +108,10 @@ class NotificationController extends AbstractController
 
         $notification = $this->notificationRepository->find($id);
         if (!$notification || $notification->recipient?->id !== $user->id) {
-            return $this->json(['error' => 'Not found.'], 404);
+            return $this->json([
+                'error' => $this->trans('notification.not_found', [], 'Notification not found.'),
+                'code' => 'NOTIFICATION_NOT_FOUND',
+            ], 404);
         }
 
         $em = $this->notificationRepository->getEntityManager();
@@ -163,13 +178,24 @@ class NotificationController extends AbstractController
             return null;
         }
 
+        $trimmedParam = trim($projectParam);
+        if (!preg_match(self::UUID_REGEX, $trimmedParam)) {
+            return $this->json([
+                'error' => $this->trans('notification.project_not_found', [], 'Project not found.'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
+        }
+
         if ($this->projectRepository === null) {
             return null;
         }
 
-        $project = $this->projectRepository->findOneBy(['uuid' => trim($projectParam)]);
+        $project = $this->projectRepository->findOneBy(['uuid' => $trimmedParam]);
         if (!$project) {
-            return $this->json(['error' => 'Project not found.'], 404);
+            return $this->json([
+                'error' => $this->trans('notification.project_not_found', [], 'Project not found.'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
         }
 
         if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
@@ -179,7 +205,10 @@ class NotificationController extends AbstractController
         if ($this->memberRepository !== null) {
             $member = $this->memberRepository->findActiveByUserAndProject($user, $project);
             if ($member === null) {
-                return $this->json(['error' => 'Forbidden: You do not have access to this project.'], 403);
+                return $this->json([
+                    'error' => $this->trans('notification.access_denied', [], 'Forbidden: You do not have access to this project.'),
+                    'code' => 'ACCESS_DENIED',
+                ], 403);
             }
         }
 
@@ -198,7 +227,10 @@ class NotificationController extends AbstractController
             } catch (\Throwable) {}
 
             if (!$this->notificationLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->json(['error' => 'Too many notification requests. Please retry later.'], 429);
+                return $this->json([
+                    'error' => $this->trans('notification.rate_limit_exceeded', [], 'Too many notification requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
             }
         }
         return null;
@@ -208,7 +240,10 @@ class NotificationController extends AbstractController
     {
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
-            return $this->json(['error' => 'Authentication required'], 401);
+            return $this->json([
+                'error' => $this->trans('notification.auth_required', [], 'Authentication required.'),
+                'code' => 'AUTH_REQUIRED',
+            ], 401);
         }
         return $user;
     }

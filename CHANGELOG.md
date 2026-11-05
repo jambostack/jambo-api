@@ -7,6 +7,39 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.98] — 2026-11-05
+
+### Webhook, Comment, Notification, ColumnSetting & DirectUpload Hardening & Strict I18N
+- **WebhookController & WebhookInboundController Hardening**:
+  - Enforced strict UUID format validation (`^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`) on project and webhook UUIDs.
+  - Added structured machine-readable error codes across all responses (`PROJECT_NOT_FOUND`, `WEBHOOK_NOT_FOUND`, `AUTH_REQUIRED`, `ACCESS_DENIED`, `INVALID_JSON`, `PAYLOAD_TOO_LARGE`, `NAME_URL_REQUIRED`, `NAME_TOO_LONG`, `INVALID_URL`, `SECRET_LENGTH_INVALID`, `TOO_MANY_EVENTS`, `INVALID_EVENT_FORMAT`, `TOO_MANY_COLLECTIONS`, `INVALID_COLLECTION_SLUG`, `BUS_NOT_CONFIGURED`, `ENDPOINT_NOT_FOUND`, `AUTOMATION_INACTIVE`, `NO_FLOW_GRAPH`, `NOT_WEBHOOK_TRIGGER`, `SIGNATURE_INVALID`, `SECRET_DECRYPT_ERROR`).
+  - Enforced strict payload size bounding (512KB for admin endpoints, 2MB for inbound webhooks) returning HTTP 413.
+  - Validated events array: capped to max 50 events with strict character regex (`^[a-z0-9_.-]+$`).
+  - Validated collection slugs array: capped to max 50 slugs with strict slug regex (`^[a-z0-9_-]+$`).
+  - Integrated `AuditService` audit trail logging for webhook creation, modification, rotation, and deletion (`webhook_management`).
+- **CommentController Hardening**:
+  - Enforced strict UUID regex validation on `$projectUuid` and slug regex validation on `$collectionSlug`.
+  - Validated positive numeric entry and comment identifiers (`$entryId > 0`, `$id > 0`).
+  - Enforced strict payload size bounding (512KB) returning HTTP 413.
+  - Added structured machine-readable error codes (`ENTRY_NOT_FOUND`, `COMMENT_NOT_FOUND`, `AUTH_REQUIRED`, `ACCESS_DENIED`, `RATE_LIMIT_EXCEEDED`, `INVALID_JSON`, `PAYLOAD_TOO_LARGE`, `BODY_EMPTY`, `BODY_TOO_LONG`, `INVALID_STATUS`).
+  - Integrated `AuditService` audit logging for comment creation, updates, resolution, and deletion (`comment_management`).
+- **NotificationController Hardening**:
+  - Injected Symfony `TranslatorInterface` and removed all remaining hardcoded English text strings.
+  - Enforced strict UUID regex validation on project query filters.
+  - Added structured machine-readable error codes (`NOTIFICATION_NOT_FOUND`, `PROJECT_NOT_FOUND`, `ACCESS_DENIED`, `AUTH_REQUIRED`, `RATE_LIMIT_EXCEEDED`).
+- **ColumnSettingController Hardening**:
+  - Added strict UUID and slug regex validation on project and collection parameters.
+  - Enforced strict payload bounding (256KB) returning HTTP 413.
+  - Added structured machine-readable error codes (`AUTH_REQUIRED`, `PROJECT_NOT_FOUND`, `COLLECTION_NOT_FOUND`, `INVALID_JSON`, `PAYLOAD_TOO_LARGE`, `COLUMNS_MUST_BE_ARRAY`).
+- **DirectUploadController & DeploymentController Hardening**:
+  - Fixed undefined variable `$e` exception bug in `DirectUploadController::complete`.
+  - Added UUID regex validation and payload size bounding (512KB) across direct upload endpoints.
+  - Injected `SsrfProtectionService` in `DeploymentController`, eliminating custom incomplete IP checking and strengthening anti-SSRF protections with DNS pinning and evasive IP blocking.
+- **I18N Parity**:
+  - Added 19 new translation keys, bringing total keys to 2,535 with strict 100% parity across English (`en`), French (`fr`), Spanish (`es`), and Arabic (`ar`).
+- **Test Suite**:
+  - Added `Cycle43HardeningTest` (12 tests, 57 assertions), 100% passing.
+
 ## [1.26.97] — 2026-11-05
 
 ### CollectionController, FieldController & ContentController Hardening, Dynamic Schema Protection & Strict I18N
