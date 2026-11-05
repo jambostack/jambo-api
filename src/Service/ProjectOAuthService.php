@@ -110,6 +110,8 @@ class ProjectOAuthService
         $refreshToken->endUser = $code->endUser;
         $refreshToken->scopes = $code->scopes;
         $refreshToken->familyId = bin2hex(random_bytes(16));
+        $refreshTtl = EndUserJwtService::resolveTtl($code->endUser->project?->jwtRefreshTtl, EndUserJwtService::DEFAULT_REFRESH_TTL);
+        $refreshToken->expiresAt = (new \DateTimeImmutable())->modify("+{$refreshTtl} seconds");
 
         $this->em->persist($refreshToken);
         $this->em->flush();
@@ -160,6 +162,8 @@ class ProjectOAuthService
         $newToken->scopes = $token->scopes;
         $newToken->familyId = $token->familyId ?? bin2hex(random_bytes(16));
         $newToken->parentTokenHash = $token->tokenHash;
+        $refreshTtl = EndUserJwtService::resolveTtl($token->endUser->project?->jwtRefreshTtl, EndUserJwtService::DEFAULT_REFRESH_TTL);
+        $newToken->expiresAt = (new \DateTimeImmutable())->modify("+{$refreshTtl} seconds");
 
         $this->em->persist($newToken);
         $this->em->flush();

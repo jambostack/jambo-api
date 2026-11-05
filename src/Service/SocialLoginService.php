@@ -239,6 +239,11 @@ class SocialLoginService
     {
         $data = $owner->toArray();
 
+        // Sécurité OAuth : refuser les comptes dont l'adresse email n'a pas été validée chez le fournisseur
+        if (isset($data['email_verified']) && $data['email_verified'] === false) {
+            throw new \RuntimeException("The email address from $provider is not verified.");
+        }
+
         return match ($provider) {
             'google' => new SocialUser(
                 providerId: (string) ($data['sub'] ?? ''),

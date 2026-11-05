@@ -3,7 +3,11 @@ framework:
     secret: '%env(APP_SECRET)%'
 
     # Note that the session will be started ONLY if you read or write from it.
-    session: true
+    session:
+        name: JAMBOSESSID
+        cookie_secure: auto
+        cookie_httponly: true
+        cookie_samesite: lax
 
     # Trusted proxies: allow SYMFONY_TRUSTED_PROXIES env variable to override X-Forwarded-* headers.
     # On o2switch (shared), leave empty; behind a load-balancer set to the proxy CIDR.

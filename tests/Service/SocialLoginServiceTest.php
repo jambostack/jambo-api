@@ -237,4 +237,24 @@ class SocialLoginServiceTest extends TestCase
             'invalid/verifier/chars'
         );
     }
+
+    public function testMapToSocialUserRejectsUnverifiedEmail(): void
+    {
+        $service = $this->createServiceWithGoogleConfig();
+        $owner = $this->createMock(\League\OAuth2\Client\Provider\ResourceOwnerInterface::class);
+        $owner->method('toArray')->willReturn([
+            'sub' => '12345',
+            'email' => 'unverified@example.com',
+            'email_verified' => false,
+            'name' => 'Unverified User',
+        ]);
+
+        $reflection = new \ReflectionClass($service);
+        $method = $reflection->getMethod('mapToSocialUser');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('The email address from google is not verified.');
+
+        $method->invoke($service, 'google', $owner);
+    }
 }

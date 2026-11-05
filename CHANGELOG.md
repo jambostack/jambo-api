@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.103] — 2026-11-05
+
+### OAuth / Social Auth Hardening, PKCE Protection, CSP Directives & Admin Session Isolation
+- **OAuth & Social Auth Hardening**:
+  - `SocialLoginAuthenticator`: Enforced mandatory active session and strict CSRF state validation with single-use consumption, eliminating OAuth CSRF and pre-account takeover vulnerabilities.
+  - `SocialLoginController`: Implemented cryptographic PKCE (RFC 7636) code verifier and S256 code challenge generation stored in session and verified upon provider callback.
+  - `SocialLoginService`: Added mandatory email verification check rejecting unverified email claims (`email_verified === false`), preventing illegitimate account linking.
+  - `ProjectOAuthService`: Integrated tenant project `jwtRefreshTtl` policy into authorization code token exchange and refresh token rotation, ensuring refresh token lifetimes adhere strictly to project configuration.
+  - `ProjectOAuthController`: Full internationalization with `TranslatorInterface` replacing all hardcoded error descriptions and UI strings across authorization, token, and revocation endpoints.
+- **Content Security Policy (CSP) & Session Cookie Isolation**:
+  - `SecurityHeadersSubscriber`: Deployed hardened Content Security Policy across all HTML responses (`default-src 'self'`, `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net`, `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`, `font-src 'self' https://fonts.gstatic.com data:`, `connect-src 'self' https: wss:`, `frame-ancestors`, `object-src 'none'`).
+  - Dynamic frame-ancestors enforcement: `*` on embeddable widgets, `'none'` on token settings routes, and `'self'` across standard backoffice views.
+  - Admin session cookie isolation (`config/packages/framework.yaml`): Standardized `name: JAMBOSESSID`, `cookie_httponly: true`, `cookie_secure: auto`, and `cookie_samesite: lax`, with automatic elevation to `SameSite=Strict` on sensitive admin routes.
+- **I18N & Non-Regression Suite**:
+  - 30 new translation keys in `translations/messages.{en,fr,es,ar}.php` (2,631 total symmetrical keys per locale).
+  - 12 new comprehensive unit tests in `Cycle45OAuthSecurityHardeningTest` (1,326 total passing tests).
+
 ## [1.26.102] — 2026-11-05
 
 ### Realtime SSE/Mercure Multi-Tenant Isolation, Plugin Manifest RBAC & Backup Manager Hardening

@@ -89,4 +89,77 @@ class SocialLoginAuthenticatorTest extends TestCase
         // Verify state was consumed from session (one-time protection against replay)
         $this->assertNull($session->get('oauth2state_google'));
     }
+
+    public function testAuthenticateRejectsWhenSessionMissing(): void
+    {
+        $request = new Request(
+            query: ['code' => 'google-code-abc', 'state' => 'some-state'],
+            attributes: ['_route' => 'connect_check', 'provider' => 'google']
+        );
+
+        $this->expectException(CustomUserMessageAuthenticationException::class);
+        $this->expectExceptionMessage('OAuth authentication requires an active session.');
+
+        $this->authenticator->authenticate($request);
+    }
+
+    public function testAuthenticateRejectsWhenSessionStateMissing(): void
+    {
+        $session = new Session(new MockArraySessionStorage());
+        // No oauth2state_google in session
+        $request = new Request(
+            query: ['code' => 'google-code-abc', 'state' => 'some-state'],
+            attributes: ['_route' => 'connect_check', 'provider' => 'google']
+        );
+        $request->setSession($session);
+
+        $this->expectException(CustomUserMessageAuthenticationException::class);
+        $this->expectExceptionMessage('Invalid or expired OAuth CSRF state parameter.');
+
+        $this->authenticator->authenticate($request);
+    }
+
+    public function testAuthenticateConsumesPkceVerifierAndPassesToService(): void
+    {
+        $session = new Session(new MockArraySessionStorage());
+        $session->set('oauth2state_google', 'secure-state-token');
+        $session->set('oauth2verifier_google', 'pkce-verifier-12345678901234567890123456789012');
+
+        $request = new Request(
+            query: ['code' => 'google-code-abc', 'state' => 'secure-state-token'],
+            attributes: ['_route' => 'connect_check', 'provider' => 'google']
+        );
+        $request->setSession($session);
+
+        $this->urlGenerator->method('generate')->willReturn('https://test.site/connect/google/check');
+
+        $socialUser = new SocialUser(
+            providerId: 'google-sub-pkce',
+            email: 'admin-pkce@test.site',
+            username: 'PKCE Admin',
+            avatarUrl: null
+        );
+
+        $this->socialLogin->expects($this->once())
+            ->method('getUserFromProvider')
+            ->with(
+                'google',
+                'google-code-abc',
+                'https://test.site/connect/google/check',
+                null,
+                'pkce-verifier-12345678901234567890123456789012'
+            )
+            ->willReturn($socialUser);
+
+        $user = new User();
+        $user->email = 'admin-pkce@test.site';
+        $user->googleId = 'google-sub-pkce';
+        $this->socialLogin->method('findOrCreateAdminUser')->willReturn($user);
+
+        $passport = $this->authenticator->authenticate($request);
+
+        $this->assertNotNull($passport);
+        $this->assertNull($session->get('oauth2state_google'));
+        $this->assertNull($session->get('oauth2verifier_google'));
+    }
 }

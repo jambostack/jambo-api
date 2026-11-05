@@ -53,9 +53,20 @@ class SocialLoginController extends AbstractController
             UrlGeneratorInterface::ABSOLUTE_URL,
         );
 
-        $authData = $this->socialLogin->getAuthorizationUrlAndState($provider, $redirectUri);
+        $codeVerifier = bin2hex(random_bytes(32));
+        $codeChallenge = rtrim(strtr(base64_encode(hash('sha256', $codeVerifier, true)), '+/', '-_'), '=');
+
+        $authData = $this->socialLogin->getAuthorizationUrlAndState(
+            $provider,
+            $redirectUri,
+            null,
+            $codeChallenge,
+            'S256',
+        );
         if ($request->hasSession()) {
-            $request->getSession()->set('oauth2state_' . $provider, $authData['state']);
+            $session = $request->getSession();
+            $session->set('oauth2state_' . $provider, $authData['state']);
+            $session->set('oauth2verifier_' . $provider, $codeVerifier);
         }
 
         return $this->redirect($authData['url']);

@@ -221,4 +221,55 @@ class SecurityHeadersSubscriberTest extends TestCase
 
         $this->assertNotNull($response->headers->get('Strict-Transport-Security'));
     }
+
+    public function testHtmlResponseReceivesHardenedCsp(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber('prod');
+        $request = Request::create('/login');
+        $response = new Response('<!DOCTYPE html><html><body>Login</body></html>', 200, ['Content-Type' => 'text/html; charset=UTF-8']);
+
+        $subscriber->onKernelResponse($this->makeEvent($request, $response));
+
+        $csp = $response->headers->get('Content-Security-Policy');
+        $this->assertNotNull($csp);
+        $this->assertStringContainsString("default-src 'self'", $csp);
+        $this->assertStringContainsString("script-src 'self'", $csp);
+        $this->assertStringContainsString("style-src 'self'", $csp);
+        $this->assertStringContainsString("frame-ancestors 'self'", $csp);
+        $this->assertStringContainsString("object-src 'none'", $csp);
+    }
+
+    public function testHtmlEmbedResponseAllowsFrameAncestorsWildcard(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber('prod');
+        $request = Request::create('/embed/form-123');
+        $response = new Response('<html><body>Form</body></html>', 200, ['Content-Type' => 'text/html']);
+
+        $subscriber->onKernelResponse($this->makeEvent($request, $response));
+
+        $csp = $response->headers->get('Content-Security-Policy');
+        $this->assertNotNull($csp);
+        $this->assertStringContainsString("frame-ancestors *", $csp);
+    }
+
+    public function testAdminSessionCookieIsHardened(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber('prod');
+        $request = Request::create('https://example.com/admin/dashboard');
+        $request->server->set('HTTPS', 'on');
+        $response = new Response('', 200);
+
+        $initialCookie = \Symfony\Component\HttpFoundation\Cookie::create('JAMBOSESSID', 'session-secret-val');
+        $response->headers->setCookie($initialCookie);
+
+        $subscriber->onKernelResponse($this->makeEvent($request, $response));
+
+        $cookies = $response->headers->getCookies();
+        $this->assertCount(1, $cookies);
+        $hardened = $cookies[0];
+        $this->assertSame('JAMBOSESSID', $hardened->getName());
+        $this->assertTrue($hardened->isHttpOnly());
+        $this->assertTrue($hardened->isSecure());
+        $this->assertSame('strict', strtolower((string) $hardened->getSameSite()));
+    }
 }

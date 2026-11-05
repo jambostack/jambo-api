@@ -217,4 +217,37 @@ class ProjectOAuthServiceTest extends TestCase
 
         $this->assertSame($initialTokenVersion + 1, $user->tokenVersion);
     }
+
+    public function testRefreshAccessTokenAppliesProjectJwtRefreshTtl(): void
+    {
+        $project = new Project();
+        $project->jwtRefreshTtl = 86400; // 1 day
+
+        $client = new ProjectAuthClient();
+        $client->id = 5;
+        $client->project = $project;
+
+        $user = new EndUser($project, 'ttl@example.com');
+
+        $existingToken = new ProjectAuthRefreshToken();
+        $existingToken->client = $client;
+        $existingToken->endUser = $user;
+        $existingToken->scopes = ['openid'];
+
+        $this->refreshTokenRepository->method('findValidToken')->willReturn($existingToken);
+        $this->jwtService->method('createAccessToken')->willReturn('new.access.token');
+
+        $persistedToken = null;
+        $this->em->method('persist')->willReturnCallback(function ($entity) use (&$persistedToken) {
+            if ($entity instanceof ProjectAuthRefreshToken) {
+                $persistedToken = $entity;
+            }
+        });
+
+        $tokens = $this->service->refreshAccessToken($client, 'valid_plain_token');
+
+        $this->assertNotNull($persistedToken);
+        $this->assertTrue($persistedToken->expiresAt > (new \DateTimeImmutable())->modify('+86300 seconds'));
+        $this->assertTrue($persistedToken->expiresAt < (new \DateTimeImmutable())->modify('+86500 seconds'));
+    }
 }

@@ -15,6 +15,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/v1/projects/{projectUuid}/oauth', name: 'api_project_oauth_')]
 class ProjectOAuthController extends AbstractController
@@ -26,7 +27,16 @@ class ProjectOAuthController extends AbstractController
         private readonly EndUserJwtService $jwtService,
         private readonly ProjectAuthLockoutService $lockoutService,
         private readonly UserPasswordHasherInterface $passwordHasher,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default !== null ? strtr($default, $parameters) : $id;
+    }
 
     #[Route('/authorize', name: 'authorize', methods: ['GET', 'POST'])]
     public function authorize(string $projectUuid, Request $request): Response
@@ -34,10 +44,10 @@ class ProjectOAuthController extends AbstractController
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
         }
 
         $clientId = $this->getRequestParam($request, 'client_id');
@@ -49,7 +59,7 @@ class ProjectOAuthController extends AbstractController
         $codeChallengeMethod = (string) $this->getRequestParam($request, 'code_challenge_method', 'S256');
 
         if (!$clientId) {
-            return new JsonResponse(['error' => 'invalid_request', 'error_description' => 'Missing client_id.'], 400);
+            return new JsonResponse(['error' => 'invalid_request', 'error_description' => $this->trans('project_oauth.error.missing_client_id', [], 'Missing client_id.')], 400);
         }
 
         try {
@@ -59,18 +69,18 @@ class ProjectOAuthController extends AbstractController
         }
 
         if ($client->project->id !== $project->id) {
-            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Client does not belong to project.'], 400);
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.client_not_in_project', [], 'Client does not belong to project.')], 400);
         }
 
         if (!$client->isRedirectUriAllowed($redirectUri)) {
-            return new JsonResponse(['error' => 'invalid_request', 'error_description' => 'Redirect URI is not allowed for this client.'], 400);
+            return new JsonResponse(['error' => 'invalid_request', 'error_description' => $this->trans('project_oauth.error.redirect_uri_not_allowed', [], 'Redirect URI is not allowed for this client.')], 400);
         }
 
         if ($codeChallenge !== null && $codeChallenge !== '') {
             if (!in_array($codeChallengeMethod, ['S256', 'plain'], true)) {
                 return new JsonResponse([
                     'error' => 'invalid_request',
-                    'error_description' => "Transform algorithm '{$codeChallengeMethod}' not supported. Use 'S256'.",
+                    'error_description' => $this->trans('project_oauth.error.unsupported_transform_algorithm', ['%algorithm%' => $codeChallengeMethod], "Transform algorithm '{$codeChallengeMethod}' not supported. Use 'S256'."),
                 ], 400);
             }
         }
@@ -79,7 +89,7 @@ class ProjectOAuthController extends AbstractController
             $sep = str_contains($redirectUri, '?') ? '&' : '?';
             $errUrl = $redirectUri . $sep . http_build_query(array_filter([
                 'error' => 'unsupported_response_type',
-                'error_description' => "Response type '{$responseType}' is not supported. Use 'code'.",
+                'error_description' => $this->trans('project_oauth.error.unsupported_response_type', ['%type%' => (string) $responseType], "Response type '{$responseType}' is not supported. Use 'code'."),
                 'state' => $state,
             ]));
             return new RedirectResponse($errUrl);
@@ -110,7 +120,7 @@ class ProjectOAuthController extends AbstractController
                 $sep = str_contains($redirectUri, '?') ? '&' : '?';
                 $denyUrl = $redirectUri . $sep . http_build_query(array_filter([
                     'error' => 'access_denied',
-                    'error_description' => 'The user denied the authorization request.',
+                    'error_description' => $this->trans('project_oauth.error.access_denied', [], 'The user denied the authorization request.'),
                     'state' => $state,
                 ]));
                 return new RedirectResponse($denyUrl);
@@ -126,13 +136,13 @@ class ProjectOAuthController extends AbstractController
                         if ($candidate->isActive()) {
                             $endUser = $candidate;
                         } else {
-                            $loginError = 'Account is ' . $candidate->status . '.';
+                            $loginError = $this->trans('project_oauth.error.account_status', ['%status%' => (string) $candidate->status], 'Account is ' . $candidate->status . '.');
                         }
                     } else {
-                        $loginError = 'Invalid credentials.';
+                        $loginError = $this->trans('project_oauth.error.invalid_credentials', [], 'Invalid credentials.');
                     }
                 } else {
-                    $loginError = 'Email and password are required.';
+                    $loginError = $this->trans('project_oauth.error.credentials_required', [], 'Email and password are required.');
                 }
             }
         }
@@ -175,7 +185,7 @@ class ProjectOAuthController extends AbstractController
         if ($request->getContentTypeFormat() === 'json' || $request->query->get('format') === 'json') {
             return new JsonResponse([
                 'error' => 'login_required',
-                'error_description' => $loginError ?? 'End-user authentication is required.',
+                'error_description' => $loginError ?? $this->trans('project_oauth.error.login_required', [], 'End-user authentication is required.'),
                 'client_name' => $client->name,
                 'scopes' => $client->allowedScopes,
             ], 401);
@@ -200,10 +210,10 @@ class ProjectOAuthController extends AbstractController
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
         }
 
         $clientId = $this->getRequestParam($request, 'client_id');
@@ -216,7 +226,7 @@ class ProjectOAuthController extends AbstractController
             $remaining = $this->lockoutService->getRemainingLockoutSeconds($clientIp);
             return new JsonResponse([
                 'error' => 'slow_down',
-                'error_description' => "Too many failed attempts. Locked out for {$remaining} seconds.",
+                'error_description' => $this->trans('project_oauth.error.rate_limited', ['%seconds%' => (string) $remaining], "Too many failed attempts. Locked out for {$remaining} seconds."),
             ], 429);
         }
 
@@ -242,7 +252,7 @@ class ProjectOAuthController extends AbstractController
 
             return new JsonResponse([
                 'error' => 'unsupported_grant_type',
-                'error_description' => "Grant type '{$grantType}' is not supported.",
+                'error_description' => $this->trans('project_oauth.error.unsupported_grant_type', ['%type%' => (string) $grantType], "Grant type '{$grantType}' is not supported."),
             ], 400);
 
         } catch (\Throwable $e) {
@@ -260,21 +270,21 @@ class ProjectOAuthController extends AbstractController
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
         }
 
         $authHeader = $request->headers->get('Authorization', '');
         if (!str_starts_with($authHeader, 'Bearer ')) {
-            return new JsonResponse(['error' => 'invalid_token', 'error_description' => 'Bearer token required.'], 401);
+            return new JsonResponse(['error' => 'invalid_token', 'error_description' => $this->trans('project_oauth.error.bearer_required', [], 'Bearer token required.')], 401);
         }
 
         $token = substr($authHeader, 7);
         $claims = $this->jwtService->validateToken($token);
         if ($claims === null || !empty($claims['ref']) || !empty($claims['tfa'])) {
-            return new JsonResponse(['error' => 'invalid_token', 'error_description' => 'Invalid or expired token.'], 401);
+            return new JsonResponse(['error' => 'invalid_token', 'error_description' => $this->trans('project_oauth.error.invalid_or_expired_token', [], 'Invalid or expired token.')], 401);
         }
 
         $userId = $claims['sub'] ?? $claims['euid'] ?? null;
@@ -285,11 +295,11 @@ class ProjectOAuthController extends AbstractController
                 : $this->endUserRepository->findOneBy(['uuid' => $userId, 'project' => $project]);
         }
         if (!$endUser) {
-            return new JsonResponse(['error' => 'user_not_found', 'error_description' => 'User no longer exists.'], 404);
+            return new JsonResponse(['error' => 'user_not_found', 'error_description' => $this->trans('project_oauth.error.user_not_found', [], 'User no longer exists.')], 404);
         }
 
         if ($endUser->project->id !== $project->id) {
-            return new JsonResponse(['error' => 'invalid_token', 'error_description' => 'Token does not belong to this project.'], 403);
+            return new JsonResponse(['error' => 'invalid_token', 'error_description' => $this->trans('project_oauth.error.token_mismatch_project', [], 'Token does not belong to this project.')], 403);
         }
 
         return new JsonResponse([
@@ -308,10 +318,10 @@ class ProjectOAuthController extends AbstractController
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => 'invalid_client', 'error_description' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
         }
 
         $clientId = (string) $this->getRequestParam($request, 'client_id', '');

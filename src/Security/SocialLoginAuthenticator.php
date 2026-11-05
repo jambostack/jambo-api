@@ -41,19 +41,27 @@ class SocialLoginAuthenticator extends AbstractAuthenticator
             throw new AuthenticationException("Unknown provider: $provider");
         }
 
-        // Protection anti-CSRF OAuth : vérification du state si une session est active
-        if ($request->hasSession()) {
-            $sessionKey = 'oauth2state_' . $provider;
-            $savedState = $request->getSession()->get($sessionKey);
-            if ($savedState !== null) {
-                if (empty($state) || !hash_equals((string) $savedState, (string) $state)) {
-                    throw new \Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException(
-                        'Invalid or expired OAuth CSRF state parameter.'
-                    );
-                }
-                // Consommer immédiatement le state pour prévenir toute attaque par rejeu
-                $request->getSession()->remove($sessionKey);
-            }
+        // Protection anti-CSRF OAuth : vérification stricte du state avec session active obligatoire
+        if (!$request->hasSession()) {
+            throw new \Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException(
+                'OAuth authentication requires an active session.'
+            );
+        }
+
+        $sessionKey = 'oauth2state_' . $provider;
+        $savedState = $request->getSession()->get($sessionKey);
+        if (empty($savedState) || empty($state) || !hash_equals((string) $savedState, (string) $state)) {
+            throw new \Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException(
+                'Invalid or expired OAuth CSRF state parameter.'
+            );
+        }
+        // Consommer immédiatement le state pour prévenir toute attaque par rejeu
+        $request->getSession()->remove($sessionKey);
+
+        $verifierKey = 'oauth2verifier_' . $provider;
+        $codeVerifier = $request->getSession()->get($verifierKey);
+        if ($codeVerifier !== null) {
+            $request->getSession()->remove($verifierKey);
         }
 
         $redirectUri = $this->urlGenerator->generate(
@@ -63,7 +71,13 @@ class SocialLoginAuthenticator extends AbstractAuthenticator
         );
 
         try {
-            $socialUser = $this->socialLogin->getUserFromProvider($provider, (string) $code, $redirectUri);
+            $socialUser = $this->socialLogin->getUserFromProvider(
+                $provider,
+                (string) $code,
+                $redirectUri,
+                null,
+                is_string($codeVerifier) ? $codeVerifier : null,
+            );
             $user = $this->socialLogin->findOrCreateAdminUser($socialUser, $provider);
         } catch (\Throwable $e) {
             throw new \Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException(

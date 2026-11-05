@@ -101,10 +101,27 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
             $headers->set('X-Permitted-Cross-Domain-Policies', 'none');
         }
 
-        // 7. Défense en profondeur CSP pour SVG, Studio et flux sensibles
+        // 7. Défense en profondeur CSP pour HTML, SVG, Studio et flux sensibles
         $contentType = (string) $headers->get('Content-Type', '');
+        $isHtml = str_contains($contentType, 'text/html');
+
         if (str_contains($contentType, 'image/svg+xml') && !$headers->has('Content-Security-Policy')) {
             $headers->set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+        } elseif ($isHtml && !$headers->has('Content-Security-Policy')) {
+            $frameAncestors = $isEmbedRoute ? '*' : ($isStrictDenyRoute ? "'none'" : "'self'");
+            $cspDirectives = [
+                "default-src 'self'",
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net",
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+                "font-src 'self' https://fonts.gstatic.com data:",
+                "img-src 'self' data: blob: https:",
+                "connect-src 'self' https: wss:",
+                "frame-ancestors {$frameAncestors}",
+                "base-uri 'self'",
+                "form-action 'self'",
+                "object-src 'none'",
+            ];
+            $headers->set('Content-Security-Policy', implode('; ', $cspDirectives) . ';');
         } elseif ($isStrictDenyRoute) {
             $existingCsp = (string) $headers->get('Content-Security-Policy', '');
             if (!str_contains($existingCsp, 'frame-ancestors')) {
@@ -132,6 +149,34 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
                 || str_starts_with($path, '/forms/embed')
                 || str_starts_with($path, '/share/');
             $headers->set('Cross-Origin-Resource-Policy', $isPublicAssetOrApi ? 'cross-origin' : 'same-origin');
+        }
+
+        // 10. Isolation et durcissement des cookies de session admin
+        foreach ($response->headers->getCookies() as $cookie) {
+            $cookieName = $cookie->getName();
+            if ($cookieName === 'JAMBOSESSID' || $cookieName === 'PHPSESSID') {
+                $isAdminRoute = str_starts_with($path, '/admin')
+                    || str_starts_with($path, '/settings')
+                    || str_starts_with($path, '/user-management')
+                    || str_starts_with($path, '/backup')
+                    || str_starts_with($path, '/plugins');
+
+                $targetSameSite = $isAdminRoute ? 'Strict' : ($cookie->getSameSite() ?? 'Lax');
+                $targetSecure = $isSecure || $cookie->isSecure();
+
+                $hardenedCookie = \Symfony\Component\HttpFoundation\Cookie::create(
+                    $cookie->getName(),
+                    $cookie->getValue(),
+                    $cookie->getExpiresTime(),
+                    $cookie->getPath() ?: '/',
+                    $cookie->getDomain(),
+                    $targetSecure,
+                    true, // HttpOnly
+                    $cookie->isRaw(),
+                    $targetSameSite,
+                );
+                $response->headers->setCookie($hardenedCookie);
+            }
         }
     }
 }

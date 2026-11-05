@@ -265,4 +265,37 @@ class ProjectOAuthControllerTest extends TestCase
         $this->assertSame('invalid_request', $data['error']);
         $this->assertStringContainsString('Transform algorithm', $data['error_description']);
     }
+
+    public function testAuthorizeTranslatesErrorMessagesWhenTranslatorPresent(): void
+    {
+        $translator = $this->createMock(\Symfony\Contracts\Translation\TranslatorInterface::class);
+        $translator->method('trans')
+            ->willReturnCallback(function ($id, $params) {
+                if ($id === 'project_oauth.error.missing_client_id') {
+                    return 'Identifiant client manquant.';
+                }
+                return $id;
+            });
+
+        $controller = new ProjectOAuthController(
+            $this->projectRepo,
+            $this->endUserRepo,
+            $this->oauthService,
+            $this->jwtService,
+            $this->lockoutService,
+            $this->passwordHasher,
+            $translator
+        );
+
+        $project = new Project();
+        $this->projectRepo->method('findOneBy')->willReturn($project);
+
+        $request = new Request();
+        $response = $controller->authorize('proj-uuid', $request);
+
+        $this->assertInstanceOf(JsonResponse::class, $response);
+        $this->assertSame(400, $response->getStatusCode());
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame('Identifiant client manquant.', $data['error_description']);
+    }
 }
