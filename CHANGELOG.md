@@ -7,6 +7,36 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.122] — 2026-11-05
+
+### Security Hardening on Templates, Project Export/Import, ZIP Extraction & Architecture (Cycle #59)
+- **ProjectImporter ZIP Extraction & Decompression Bomb Fortification (`ProjectImporter`)**:
+  - Implemented anti-zip bomb ratio protection rejecting entries with compression ratios exceeding 200:1.
+  - Implemented fail-safe temporary directory cleanup on extraction failure preventing leaked directories.
+  - Blocked execution of dangerous and executable extensions (`.php`, `.phar`, `.sh`, `.exe`, `.cgi`, `.pl`, `.py`, `.env`, `.htaccess`, etc.) directly during ZIP archive extraction.
+  - Blocked hidden files and directory traversal segments (e.g., `.git/`, `.env`, `.htaccess`).
+  - Added strict payload size limits for `media.json` (10MB) and `settings.json` (5MB).
+- **ProjectExportImportController Hardening (`ProjectExportImportController`)**:
+  - Fixed archive validation logic ensuring `.zip` extension is strictly required alongside MIME checking.
+  - Added verification of ZIP archive magic bytes (`PK\x03\x04` / `PK\x05\x06`).
+  - Added input sanitization for new project names (stripping control chars `[\x00-\x1F\x7F]`) and default locale validation.
+  - Integrated `AuditService` logging across project export, import new, and import merge operations.
+  - Enforced strict security headers (`X-Content-Type-Options: nosniff`, `Cache-Control: no-store`) on all responses.
+- **MediaImportHandler Polyglot & Double Extension Protection (`MediaImportHandler`)**:
+  - Neutralized double extension bypasses (e.g. `shell.php.jpg`, `hack.phar.png`).
+  - Added anti-polyglot check ensuring image files do not contain PHP script headers (`<?php`, `<?=`).
+  - Prevented symlink traversal by verifying files are not symlinks and reside within the extracted media directory.
+  - Enforced a hard ceiling of 2,000 files in `media.json`.
+- **Structure & Content Import Handlers Fortification (`StructureImportHandler`, `ContentImportHandler`, `EndUserImportHandler`)**:
+  - Hardened `end_user_fields` import with slug validation, type checking, 100-field limit, and 32KB options cap.
+  - Hardened `end_users` import with a 5,000-user limit and sanitized usernames.
+  - Hardened `content.json` import with locale/status sanitization, safe date parsing (no 500 crash on malformed dates), and 64KB cell text caps.
+- **ProjectTemplateBuilder Integration (`ProjectTemplateBuilder`)**:
+  - Injected `EndUserSchemaSeeder` into `ProjectTemplateBuilder` to automatically seed system EndUser fields upon template application.
+  - Enforced sanitization of collection slugs, field slugs, and allowed field types during template export and application.
+- **Testing**:
+  - Added `Cycle59TemplateExportImportHardeningTest` with 8 comprehensive security tests (27 assertions).
+
 ## [1.26.121] — 2026-11-05
 
 ### Security Hardening on User Management, Bulk Operations Caps, ApiToken Fallback & Zero-Regression Test Suite (Cycle #58)

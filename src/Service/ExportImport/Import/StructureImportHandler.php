@@ -69,7 +69,7 @@ class StructureImportHandler implements ImportHandlerInterface
             if (!preg_match('/^[a-z0-9_-]+$/i', $colSlug) || strlen($colSlug) > 128) {
                 throw new \RuntimeException(sprintf('Invalid collection slug format: "%s".', $colSlug));
             }
-            $colName = (string) ($colData['name'] ?? $colSlug);
+            $colName = preg_replace('/[\x00-\x1F\x7F]/', '', (string) ($colData['name'] ?? $colSlug));
             if (strlen($colName) > 255) {
                 $colName = substr($colName, 0, 255);
             }
@@ -96,7 +96,7 @@ class StructureImportHandler implements ImportHandlerInterface
             }
 
             $collection->name = $colName;
-            $collection->description = isset($colData['description']) ? (string) $colData['description'] : null;
+            $collection->description = isset($colData['description']) ? mb_substr(preg_replace('/[\x00-\x1F\x7F]/', '', (string) $colData['description']), 0, 2000) : null;
             $collection->isSingleton = (bool) ($colData['is_singleton'] ?? false);
             $collection->order = (int) ($colData['order'] ?? 0);
 
@@ -113,19 +113,33 @@ class StructureImportHandler implements ImportHandlerInterface
                     throw new \RuntimeException(sprintf('Invalid field type "%s" for field "%s" in collection "%s".', $fieldType, $fieldSlug, $colSlug));
                 }
 
+                $fieldOptions = is_array($fieldData['options'] ?? null) ? $fieldData['options'] : null;
+                if ($fieldOptions !== null && strlen((string) json_encode($fieldOptions)) > 32768) {
+                    $fieldOptions = null;
+                }
+
+                $fieldName = preg_replace('/[\x00-\x1F\x7F]/', '', (string) ($fieldData['name'] ?? $fieldSlug));
+                if (strlen($fieldName) > 255) {
+                    $fieldName = substr($fieldName, 0, 255);
+                }
+
                 $field = new Field();
                 $field->collection = $collection;
-                $field->name = (string) ($fieldData['name'] ?? $fieldSlug);
+                $field->name = $fieldName;
                 $field->slug = $fieldSlug;
                 $field->type = $fieldType;
-                $field->options = is_array($fieldData['options'] ?? null) ? $fieldData['options'] : null;
+                $field->options = $fieldOptions;
                 $field->order = (int) ($fieldData['order'] ?? $i);
                 $field->isRequired = (bool) ($fieldData['is_required'] ?? false);
                 $collection->fields->add($field);
             }
         }
 
-        if (!empty($data['end_user_fields'])) {
+        if (!empty($data['end_user_fields']) && is_array($data['end_user_fields'])) {
+            if (count($data['end_user_fields']) > 100) {
+                throw new \RuntimeException('structure.json contains too many end_user_fields (max 100).');
+            }
+
             $existingFieldSlugs = [];
             foreach ($this->endUserFieldRepository->findByProject($project) as $f) {
                 if (!$f->isSystem) {
@@ -134,7 +148,15 @@ class StructureImportHandler implements ImportHandlerInterface
             }
 
             foreach ($data['end_user_fields'] as $i => $fieldData) {
-                $slugExists = isset($existingFieldSlugs[$fieldData['slug']]);
+                if (!is_array($fieldData) || empty($fieldData['slug']) || !is_string($fieldData['slug'])) {
+                    continue;
+                }
+                $fieldSlug = trim($fieldData['slug']);
+                if (!preg_match('/^[a-z0-9_-]+$/i', $fieldSlug) || strlen($fieldSlug) > 128) {
+                    continue;
+                }
+
+                $slugExists = isset($existingFieldSlugs[$fieldSlug]);
 
                 // EndUserFields are identified by slug (no UUID) — new_uuids behaves like skip
                 if ($slugExists && $options->strategy !== 'overwrite') {
@@ -142,20 +164,33 @@ class StructureImportHandler implements ImportHandlerInterface
                 }
 
                 if ($slugExists) {
-                    $field = $existingFieldSlugs[$fieldData['slug']];
+                    $field = $existingFieldSlugs[$fieldSlug];
                 } else {
                     $field = new EndUserField();
                     $field->project = $project;
-                    $field->slug = $fieldData['slug'];
+                    $field->slug = $fieldSlug;
                     $field->isSystem = false;
                     $this->importedEndUserFields[] = $field;
                 }
 
-                $field->name = $fieldData['name'];
-                $field->type = $fieldData['type'];
-                $field->options = $fieldData['options'] ?? null;
-                $field->order = $fieldData['order'] ?? $i;
-                $field->isRequired = $fieldData['is_required'] ?? false;
+                $rawType = strtolower((string) ($fieldData['type'] ?? 'text'));
+                $fieldType = in_array($rawType, self::ALLOWED_FIELD_TYPES, true) ? $rawType : 'text';
+
+                $fieldOptions = is_array($fieldData['options'] ?? null) ? $fieldData['options'] : null;
+                if ($fieldOptions !== null && strlen((string) json_encode($fieldOptions)) > 32768) {
+                    $fieldOptions = null;
+                }
+
+                $fieldName = preg_replace('/[\x00-\x1F\x7F]/', '', (string) ($fieldData['name'] ?? $fieldSlug));
+                if (strlen($fieldName) > 255) {
+                    $fieldName = substr($fieldName, 0, 255);
+                }
+
+                $field->name = $fieldName;
+                $field->type = $fieldType;
+                $field->options = $fieldOptions;
+                $field->order = (int) ($fieldData['order'] ?? $i);
+                $field->isRequired = (bool) ($fieldData['is_required'] ?? false);
             }
         }
     }

@@ -27,6 +27,12 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/projects', name: 'api_project_export_import_')]
 class ProjectExportImportController extends AbstractController
 {
+    private const SECURITY_HEADERS = [
+        'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        'Pragma' => 'no-cache',
+        'X-Content-Type-Options' => 'nosniff',
+    ];
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private ProjectExporter $exporter,
@@ -36,6 +42,7 @@ class ProjectExportImportController extends AbstractController
         private ?RateLimiterFactory $exportLimiter = null,
         private ?RateLimiterFactory $importLimiter = null,
         private ?TranslatorInterface $translator = null,
+        private ?\App\Service\AuditService $auditService = null,
     ) {}
 
     public const MAX_ARCHIVE_BYTES = 52428800; // 50MB
@@ -54,19 +61,31 @@ class ProjectExportImportController extends AbstractController
     private function validateUploadedArchive(?\Symfony\Component\HttpFoundation\File\UploadedFile $uploadedFile): ?JsonResponse
     {
         if (!$uploadedFile) {
-            return $this->json(['error' => $this->trans('project.export_import.no_file', [], 'No file uploaded')], 422);
+            return $this->json(['error' => $this->trans('project.export_import.no_file', [], 'No file uploaded')], 422, self::SECURITY_HEADERS);
         }
         if (!$uploadedFile->isValid()) {
-            return $this->json(['error' => $this->trans('project.export_import.upload_error', ['%error%' => $uploadedFile->getErrorMessage()], 'File upload error: ' . $uploadedFile->getErrorMessage())], 422);
+            return $this->json(['error' => $this->trans('project.export_import.upload_error', ['%error%' => $uploadedFile->getErrorMessage()], 'File upload error: ' . $uploadedFile->getErrorMessage())], 422, self::SECURITY_HEADERS);
         }
         if ($uploadedFile->getSize() > self::MAX_ARCHIVE_BYTES) {
-            return $this->json(['error' => $this->trans('project.export_import.archive_too_large', [], 'Uploaded archive exceeds the maximum allowed size of 50MB.')], 422);
+            return $this->json(['error' => $this->trans('project.export_import.archive_too_large', [], 'Uploaded archive exceeds the maximum allowed size of 50MB.')], 422, self::SECURITY_HEADERS);
         }
         $ext = strtolower($uploadedFile->getClientOriginalExtension());
+        if ($ext !== 'zip') {
+            return $this->json(['error' => $this->trans('project.export_import.invalid_format', [], 'Invalid file format. Only ZIP archives are permitted.')], 422, self::SECURITY_HEADERS);
+        }
         $mime = $uploadedFile->getClientMimeType();
         $allowedMimes = ['application/zip', 'application/x-zip-compressed', 'multipart/x-zip', 'application/octet-stream'];
-        if ($ext !== 'zip' && !in_array($mime, $allowedMimes, true)) {
-            return $this->json(['error' => $this->trans('project.export_import.invalid_format', [], 'Invalid file format. Only ZIP archives are permitted.')], 422);
+        if (!in_array($mime, $allowedMimes, true)) {
+            return $this->json(['error' => $this->trans('project.export_import.invalid_format', [], 'Invalid file format. Only ZIP archives are permitted.')], 422, self::SECURITY_HEADERS);
+        }
+        // Verification of ZIP magic bytes (PK\x03\x04 or PK\x05\x06)
+        $handle = @fopen($uploadedFile->getPathname(), 'rb');
+        if ($handle) {
+            $magic = fread($handle, 4);
+            fclose($handle);
+            if ($magic !== "PK\x03\x04" && $magic !== "PK\x05\x06") {
+                return $this->json(['error' => $this->trans('project.export_import.invalid_format', [], 'Invalid file format. Only ZIP archives are permitted.')], 422, self::SECURITY_HEADERS);
+            }
         }
         return null;
     }
@@ -132,7 +151,19 @@ class ProjectExportImportController extends AbstractController
             (new \DateTimeImmutable())->format('Y-m-d-His'),
         );
 
+        $this->auditService?->log(
+            toolName: 'project_export',
+            project: $project,
+            input: ['uuid' => $uuid, 'options' => $options->getEnabledOptions()],
+            output: ['filename' => $filename],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier() ?? 'system',
+            source: 'export_api',
+        );
+        $this->auditService?->flush();
+
         $response = new BinaryFileResponse($zipPath);
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, $filename);
         $response->deleteFileAfterSend();
 
@@ -227,12 +258,12 @@ class ProjectExportImportController extends AbstractController
         $options = ImportOptions::fromRequest($data);
         $options->createNewProject = true;
 
-        $projectName = trim((string) ($options->newProjectName ?? ''));
+        $projectName = preg_replace('/[\x00-\x1F\x7F]/', '', trim((string) ($options->newProjectName ?? '')));
         if ($projectName === '') {
-            return $this->json(['error' => $this->trans('project.export_import.new_project_name_required', [], 'new_project_name is required')], 422);
+            return $this->json(['error' => $this->trans('project.export_import.new_project_name_required', [], 'new_project_name is required')], 422, self::SECURITY_HEADERS);
         }
         if (strlen($projectName) > 150) {
-            return $this->json(['error' => $this->trans('project.export_import.name_too_long', [], 'Project name is too long (max 150 characters).')], 422);
+            return $this->json(['error' => $this->trans('project.export_import.name_too_long', [], 'Project name is too long (max 150 characters).')], 422, self::SECURITY_HEADERS);
         }
         $options->newProjectName = $projectName;
 
@@ -241,10 +272,15 @@ class ProjectExportImportController extends AbstractController
             $extractedDir = $this->importer->extractZip($uploadedFile->getPathname());
             $manifest = $this->importer->validateManifest($extractedDir);
 
+            $defaultLocale = (string) ($manifest['project']['default_locale'] ?? 'en');
+            if (!preg_match('/^[a-z]{2,3}(-[A-Za-z0-9]+)?$/i', $defaultLocale) || strlen($defaultLocale) > 10) {
+                $defaultLocale = 'en';
+            }
+
             $project = new Project();
             $project->name = $options->newProjectName;
-            $project->defaultLocale = $manifest['project']['default_locale'] ?? 'en';
-            $project->locales = [$project->defaultLocale];
+            $project->defaultLocale = $defaultLocale;
+            $project->locales = [$defaultLocale];
 
             $this->em->persist($project);
 
@@ -310,15 +346,26 @@ class ProjectExportImportController extends AbstractController
                 throw $e;
             }
 
+            $this->auditService?->log(
+                toolName: 'project_import_new',
+                project: $project,
+                input: ['project_name' => $project->name, 'filename' => $uploadedFile->getClientOriginalName()],
+                output: ['id' => $project->id, 'uuid' => $project->uuid?->toString()],
+                status: 'success',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'system',
+                source: 'export_api',
+            );
+            $this->auditService?->flush();
+
             return $this->json([
                 'data' => [
                     'id'   => $project->id,
                     'uuid' => $project->uuid?->toString(),
                     'name' => $project->name,
                 ],
-            ], 201);
+            ], 201, self::SECURITY_HEADERS);
         } catch (\Throwable $e) {
-            return $this->json(['error' => $this->trans('project.export_import.failed', ['%error%' => $e->getMessage()], 'Import failed: ' . $e->getMessage())], 500);
+            return $this->json(['error' => $this->trans('project.export_import.failed', ['%error%' => $e->getMessage()], 'Import failed: ' . $e->getMessage())], 500, self::SECURITY_HEADERS);
         } finally {
             if ($extractedDir) {
                 $this->importer->cleanup($extractedDir);
@@ -360,9 +407,9 @@ class ProjectExportImportController extends AbstractController
                     'manifest'  => $manifest,
                     'conflicts' => array_map(fn ($c) => $c->toArray(), $conflicts),
                 ],
-            ]);
+            ], 200, self::SECURITY_HEADERS);
         } catch (\Throwable $e) {
-            return $this->json(['error' => $this->trans('project.export_import.preview_failed', ['%error%' => $e->getMessage()], 'Preview failed: ' . $e->getMessage())], 500);
+            return $this->json(['error' => $this->trans('project.export_import.preview_failed', ['%error%' => $e->getMessage()], 'Preview failed: ' . $e->getMessage())], 500, self::SECURITY_HEADERS);
         } finally {
             if ($extractedDir) {
                 $this->importer->cleanup($extractedDir);
@@ -472,9 +519,20 @@ class ProjectExportImportController extends AbstractController
                 throw $e;
             }
 
-            return $this->json(['data' => ['id' => $project->id, 'uuid' => $project->uuid?->toString()]]);
+            $this->auditService?->log(
+                toolName: 'project_import_merge',
+                project: $project,
+                input: ['uuid' => $uuid, 'filename' => $uploadedFile->getClientOriginalName()],
+                output: ['id' => $project->id, 'uuid' => $project->uuid?->toString()],
+                status: 'success',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'system',
+                source: 'export_api',
+            );
+            $this->auditService?->flush();
+
+            return $this->json(['data' => ['id' => $project->id, 'uuid' => $project->uuid?->toString()]], 200, self::SECURITY_HEADERS);
         } catch (\Throwable $e) {
-            return $this->json(['error' => $this->trans('project.export_import.failed', ['%error%' => $e->getMessage()], 'Import failed: ' . $e->getMessage())], 500);
+            return $this->json(['error' => $this->trans('project.export_import.failed', ['%error%' => $e->getMessage()], 'Import failed: ' . $e->getMessage())], 500, self::SECURITY_HEADERS);
         } finally {
             if ($extractedDir) {
                 $this->importer->cleanup($extractedDir);

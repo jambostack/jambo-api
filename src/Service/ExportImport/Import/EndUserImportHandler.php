@@ -40,8 +40,12 @@ class EndUserImportHandler implements ImportHandlerInterface
         }
 
         $data = json_decode(file_get_contents($path), true);
-        if (!isset($data['end_users'])) {
+        if (!isset($data['end_users']) || !is_array($data['end_users'])) {
             return;
+        }
+
+        if (count($data['end_users']) > 5000) {
+            throw new \RuntimeException('end_users.json contains too many users (max 5000).');
         }
 
         foreach ($data['end_users'] as $userData) {
@@ -83,7 +87,8 @@ class EndUserImportHandler implements ImportHandlerInterface
             }
 
             $user->password = $password;
-            $user->username = isset($userData['username']) ? substr(trim((string) $userData['username']), 0, 191) : null;
+            $rawUsername = isset($userData['username']) ? trim((string) $userData['username']) : null;
+            $user->username = $rawUsername !== null ? preg_replace('/[\x00-\x1F\x7F]/', '', substr($rawUsername, 0, 191)) : null;
             $user->status = in_array($userData['status'] ?? 'active', ['active', 'inactive', 'pending', 'suspended'], true) ? $userData['status'] : 'active';
             $user->tokenVersion = max(1, (int) ($userData['token_version'] ?? 1));
 

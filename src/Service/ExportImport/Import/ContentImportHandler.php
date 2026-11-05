@@ -105,22 +105,34 @@ class ContentImportHandler implements ImportHandlerInterface
                 $uuidMap[$oldUuid] = $newUuid;
             }
 
-            $entry->locale = $entryData['locale'] ?? 'en';
-            $entry->status = $entryData['status'] ?? 'draft';
+            $rawLocale = trim((string) ($entryData['locale'] ?? 'en'));
+            $entry->locale = (preg_match('/^[a-z]{2,3}(-[A-Za-z0-9]+)?$/i', $rawLocale) && strlen($rawLocale) <= 10) ? $rawLocale : 'en';
 
-            foreach ($entryData['field_values'] as $fvData) {
+            $rawStatus = (string) ($entryData['status'] ?? 'draft');
+            $entry->status = in_array($rawStatus, ['draft', 'published', 'archived'], true) ? $rawStatus : 'draft';
+
+            $fieldValues = $entryData['field_values'] ?? [];
+            if (!is_array($fieldValues)) {
+                $fieldValues = [];
+            }
+
+            foreach ($fieldValues as $fvData) {
+                if (!is_array($fvData) || empty($fvData['field_slug']) || !is_string($fvData['field_slug'])) {
+                    continue;
+                }
                 $fieldSlug = $fvData['field_slug'];
                 $field = $fieldsBySlug[$collectionSlug][$fieldSlug] ?? null;
                 if (!$field) {
                     continue;
                 }
 
+                $fieldType = is_string($fvData['field_type'] ?? null) ? $fvData['field_type'] : $field->type;
                 $cfv = new ContentFieldValue();
                 $cfv->field = $field;
-                $cfv->fieldType = $fvData['field_type'];
+                $cfv->fieldType = $fieldType;
                 $cfv->contentEntry = $entry;
 
-                $this->setValueOnField($cfv, $fvData['field_type'], $fvData['value']);
+                $this->setValueOnField($cfv, $fieldType, $fvData['value'] ?? null);
                 $entry->fieldValues->add($cfv);
             }
         }
@@ -128,17 +140,29 @@ class ContentImportHandler implements ImportHandlerInterface
 
     private function setValueOnField(ContentFieldValue $cfv, string $type, mixed $value): void
     {
+        $parseDate = static function (mixed $v): ?\DateTime {
+            if (!$v || !is_string($v)) {
+                return null;
+            }
+            try {
+                return new \DateTime($v);
+            } catch (\Throwable) {
+                return null;
+            }
+        };
+
         match ($type) {
-            'text', 'longtext', 'richtext', 'email', 'slug', 'color', 'password',
-            'url', 'markdown', 'code', 'icon', 'uuid'        => $cfv->textValue = $value,
+            'text', 'richtext', 'email', 'slug', 'color', 'password',
+            'url', 'code', 'icon', 'uuid'                    => $cfv->textValue = is_string($value) ? (strlen($value) > 65536 ? substr($value, 0, 65536) : $value) : (is_scalar($value) ? (string) $value : null),
+            'longtext', 'markdown'                           => $cfv->textValue = is_string($value) ? $value : (is_scalar($value) ? (string) $value : null),
             'number', 'rating'                               => $cfv->numberValue = $value !== null ? (string) $value : null,
             'boolean'                                        => $cfv->booleanValue = (bool) $value,
-            'date'                                           => $cfv->dateValue = $value ? new \DateTime($value) : null,
-            'datetime'                                       => $cfv->datetimeValue = $value ? new \DateTime($value) : null,
+            'date'                                           => $cfv->dateValue = $parseDate($value),
+            'datetime'                                       => $cfv->datetimeValue = $parseDate($value),
             'json', 'enumeration', 'repeater', 'tags'        => $cfv->jsonValue = $value,
             'media' => null,
             'relation' => null,
-            default => $cfv->textValue = is_string($value) ? $value : json_encode($value),
+            default => $cfv->textValue = is_string($value) ? (strlen($value) > 65536 ? substr($value, 0, 65536) : $value) : json_encode($value),
         };
     }
 

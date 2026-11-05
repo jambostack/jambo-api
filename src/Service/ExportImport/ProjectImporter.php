@@ -40,60 +40,96 @@ class ProjectImporter
         $tempDir = $this->getTempDir() . '/jambo-import-' . uniqid();
         mkdir($tempDir, 0777, true);
 
-        $zip = new \ZipArchive();
-        if ($zip->open($zipPath) !== true) {
-            throw new \RuntimeException('Cannot open ZIP file: ' . $zipPath);
-        }
+        try {
+            $zip = new \ZipArchive();
+            if ($zip->open($zipPath) !== true) {
+                throw new \RuntimeException('Cannot open ZIP file: ' . $zipPath);
+            }
 
-        $maxFiles = 5000;
-        $maxTotalSize = 250 * 1024 * 1024; // 250 MB
-        $totalSize = 0;
+            $maxFiles = 5000;
+            $maxTotalSize = 250 * 1024 * 1024; // 250 MB
+            $maxRatio = 200; // Ratio maximal de décompression anti zip-bomb
+            $totalSize = 0;
 
-        if ($zip->numFiles > $maxFiles) {
+            $blockedExtensions = [
+                'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'phps',
+                'sh', 'bash', 'exe', 'bat', 'cmd', 'com', 'cgi', 'pl', 'py',
+                'htaccess', 'htpasswd', 'ini', 'conf', 'env', 'jsp', 'asp', 'aspx',
+            ];
+
+            if ($zip->numFiles > $maxFiles) {
+                $zip->close();
+                throw new \RuntimeException('ZIP file contains too many files (max ' . $maxFiles . ')');
+            }
+
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $stat = $zip->statIndex($i);
+                if (!$stat) {
+                    continue;
+                }
+                $entryName = $stat['name'];
+
+                // Reject symbolic links in ZIP archives
+                $extAttr = $stat['external_attributes'] ?? 0;
+                $mode = ($extAttr >> 16) & 0170000;
+                if ($mode === 0120000) {
+                    $zip->close();
+                    throw new \RuntimeException('Symbolic links are strictly forbidden in ZIP archives: ' . $entryName);
+                }
+
+                // Prevent Zip Slip / path traversal, null bytes and Windows drive paths
+                if (
+                    str_contains($entryName, "\0") ||
+                    str_contains($entryName, '../') ||
+                    str_contains($entryName, '..\\') ||
+                    str_contains($entryName, '..') ||
+                    str_starts_with($entryName, '/') ||
+                    str_starts_with($entryName, '\\') ||
+                    preg_match('/^[a-zA-Z]:/', $entryName)
+                ) {
+                    $zip->close();
+                    throw new \RuntimeException('Invalid file path in ZIP archive (directory traversal detected): ' . $entryName);
+                }
+
+                // Reject dangerous and executable file extensions
+                $entryExt = strtolower(pathinfo($entryName, PATHINFO_EXTENSION));
+                if (in_array($entryExt, $blockedExtensions, true)) {
+                    $zip->close();
+                    throw new \RuntimeException('Executable or dangerous file extension forbidden in ZIP archive: ' . $entryName);
+                }
+
+                // Reject hidden files and directories (.env, .git, .htaccess)
+                $normalizedParts = explode('/', str_replace('\\', '/', $entryName));
+                foreach ($normalizedParts as $part) {
+                    if (str_starts_with($part, '.') && $part !== '.' && $part !== '..') {
+                        $zip->close();
+                        throw new \RuntimeException('Hidden files or directories forbidden in ZIP archive: ' . $entryName);
+                    }
+                }
+
+                // Anti zip-bomb: check compression ratio if compressed size is reported
+                $compSize = $stat['comp_size'] ?? 0;
+                $uncompSize = $stat['size'] ?? 0;
+                if ($compSize > 0 && ($uncompSize / $compSize) > $maxRatio && $uncompSize > 1048576) {
+                    $zip->close();
+                    throw new \RuntimeException('Excessive compression ratio detected (potential decompression bomb): ' . $entryName);
+                }
+
+                $totalSize += $uncompSize;
+                if ($totalSize > $maxTotalSize) {
+                    $zip->close();
+                    throw new \RuntimeException('Uncompressed ZIP size exceeds safety limit of 250MB');
+                }
+            }
+
+            $zip->extractTo($tempDir);
             $zip->close();
-            throw new \RuntimeException('ZIP file contains too many files (max ' . $maxFiles . ')');
+
+            return $tempDir;
+        } catch (\Throwable $e) {
+            $this->removeDir($tempDir);
+            throw $e;
         }
-
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $stat = $zip->statIndex($i);
-            if (!$stat) {
-                continue;
-            }
-            $entryName = $stat['name'];
-
-            // Reject symbolic links in ZIP archives
-            $extAttr = $stat['external_attributes'] ?? 0;
-            $mode = ($extAttr >> 16) & 0170000;
-            if ($mode === 0120000) {
-                $zip->close();
-                throw new \RuntimeException('Symbolic links are strictly forbidden in ZIP archives: ' . $entryName);
-            }
-
-            // Prevent Zip Slip / path traversal, null bytes and Windows drive paths
-            if (
-                str_contains($entryName, "\0") ||
-                str_contains($entryName, '../') ||
-                str_contains($entryName, '..\\') ||
-                str_contains($entryName, '..') ||
-                str_starts_with($entryName, '/') ||
-                str_starts_with($entryName, '\\') ||
-                preg_match('/^[a-zA-Z]:/', $entryName)
-            ) {
-                $zip->close();
-                throw new \RuntimeException('Invalid file path in ZIP archive (directory traversal detected): ' . $entryName);
-            }
-
-            $totalSize += $stat['size'];
-            if ($totalSize > $maxTotalSize) {
-                $zip->close();
-                throw new \RuntimeException('Uncompressed ZIP size exceeds safety limit of 250MB');
-            }
-        }
-
-        $zip->extractTo($tempDir);
-        $zip->close();
-
-        return $tempDir;
     }
 
     public function validateManifest(string $extractedDir): array
@@ -113,7 +149,7 @@ class ProjectImporter
         }
 
         // Contrôle de taille des fichiers de données
-        foreach (['structure.json' => 10 * 1024 * 1024, 'content.json' => 50 * 1024 * 1024, 'end_users.json' => 20 * 1024 * 1024] as $file => $maxSize) {
+        foreach (['structure.json' => 10 * 1024 * 1024, 'content.json' => 50 * 1024 * 1024, 'end_users.json' => 20 * 1024 * 1024, 'media.json' => 10 * 1024 * 1024, 'settings.json' => 5 * 1024 * 1024] as $file => $maxSize) {
             $path = $extractedDir . '/' . $file;
             if (file_exists($path) && filesize($path) > $maxSize) {
                 throw new \RuntimeException(sprintf('Import payload "%s" exceeds size limit (%d MB).', $file, (int) ($maxSize / 1048576)));

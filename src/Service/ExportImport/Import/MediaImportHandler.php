@@ -36,8 +36,12 @@ class MediaImportHandler implements ImportHandlerInterface
         }
 
         $data = json_decode(file_get_contents($path), true);
-        if (!isset($data['media'])) {
+        if (!isset($data['media']) || !is_array($data['media'])) {
             return;
+        }
+
+        if (count($data['media']) > 2000) {
+            throw new \RuntimeException('media.json contains too many files (max 2000).');
         }
 
         $targetMediaDir = $this->projectDir . '/public/uploads/media/' . $project->uuid?->toString();
@@ -79,8 +83,16 @@ class MediaImportHandler implements ImportHandlerInterface
             $blockedExtensions = [
                 'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'phps',
                 'sh', 'bash', 'exe', 'bat', 'cmd', 'com', 'cgi', 'pl', 'py',
-                'htaccess', 'htpasswd', 'ini', 'conf', 'env',
+                'htaccess', 'htpasswd', 'ini', 'conf', 'env', 'jsp', 'asp', 'aspx',
             ];
+
+            $hasBlockedExtension = false;
+            foreach (explode('.', $fileName) as $part) {
+                if (in_array(strtolower($part), $blockedExtensions, true)) {
+                    $hasBlockedExtension = true;
+                    break;
+                }
+            }
 
             $isSafeFilename = $fileName !== ''
                 && $fileName !== '.'
@@ -88,14 +100,24 @@ class MediaImportHandler implements ImportHandlerInterface
                 && !str_starts_with($fileName, '.')
                 && !str_contains($fileName, "\0")
                 && !in_array($ext, $blockedExtensions, true)
+                && !$hasBlockedExtension
                 && preg_match('/^[a-zA-Z0-9_\-\.]+$/', $fileName);
 
             if ($isSafeFilename) {
                 $sourceFile = $extractedDir . '/media/' . $fileName;
                 $targetFile = $targetMediaDir . '/' . $fileName;
 
-                if (file_exists($sourceFile) && is_file($sourceFile)) {
-                    copy($sourceFile, $targetFile);
+                if (file_exists($sourceFile) && is_file($sourceFile) && !is_link($sourceFile)) {
+                    $realSource = realpath($sourceFile);
+                    $mediaBase = realpath($extractedDir . '/media');
+                    // Verify path is within media directory and size is reasonable (max 50MB)
+                    if ($realSource && $mediaBase && str_starts_with($realSource, $mediaBase) && filesize($sourceFile) <= 52428800) {
+                        // Anti-polyglot check: reject files containing PHP opening tags
+                        $head = @file_get_contents($sourceFile, false, null, 0, 1024);
+                        if ($head === false || (!str_contains($head, '<?php') && !str_contains($head, '<?='))) {
+                            copy($sourceFile, $targetFile);
+                        }
+                    }
                 }
             }
 
