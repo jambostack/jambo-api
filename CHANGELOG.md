@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.123] — 2026-11-05
+
+### Security Hardening on GraphQL Engine, Quotas & Resolvers (Cycle #60)
+- **GraphQL Mutation Security & Method Enforcement (`GraphQLController`)**:
+  - Strictly blocked execution of GraphQL mutations over HTTP GET requests (rejection with 405 Method Not Allowed and translated error), adhering to OWASP GraphQL security recommendations and HTTP standards.
+  - Implemented token ability verification for mutations: API tokens restricted to `read` are strictly prevented from executing mutations (`create`, `update`, `delete`).
+  - Added session user permission checks for mutations against `project.manage`, `content.create`, and `content.update`.
+- **AST Metrics & Anti-Amplification Protections (`GraphQLController`)**:
+  - Enforced single operation restriction (`MAX_OPERATIONS = 1`) on the parsed AST document, preventing multi-operation batching bypasses.
+  - Enforced fragment count ceilings (`MAX_FRAGMENTS = 10`) preventing memory exhaustion through fragment spamming.
+  - Implemented deep AST metric traversal inspecting `OperationDefinitionNode`, `FragmentDefinitionNode`, `InlineFragmentNode`, and `FragmentSpreadNode` to prevent alias amplification through fragments.
+  - Added directive injection limit (`MAX_DIRECTIVES = 15`) and total AST field selection ceiling (`MAX_SELECTIONS = 150`).
+- **Resolver Hardening & Pagination Security (`SchemaGenerator`)**:
+  - Added UUID regex validation in resolvers (`resolveEntry`, `resolveUpdate`, `resolveDelete`) preventing malformed database queries.
+  - Clamped pagination limits (`limit` max 100, `offset` max 10,000) with safe page computation and regex validation on `locale` and `status` filter arguments.
+  - Sanitized mutation inputs: capped input fields to 200 items maximum, validated `locale` format, and strictly validated `status` against collection workflow allowed statuses.
+  - Prevented field name collisions with reserved entity attributes (`uuid`, `locale`, `status`, `createdAt`, `updatedAt`).
+- **I18N Strict Compliance & Comprehensive Tests**:
+  - Added 8 new translation keys (`graphql.too_many_operations`, `graphql.too_many_fragments`, `graphql.too_many_directives`, `graphql.too_many_selections`, `graphql.mutations_not_allowed_via_get`, `graphql.mutation_permission_denied`, `graphql.parse_error`, `graphql.invalid_uuid`) across all 4 supported languages (`fr`, `en`, `es`, `ar`).
+  - Added 9 new test cases in `GraphQLSecurityTest` (total 18 tests, 50 assertions, zero regressions).
+
 ## [1.26.122] — 2026-11-05
 
 ### Security Hardening on Templates, Project Export/Import, ZIP Extraction & Architecture (Cycle #59)

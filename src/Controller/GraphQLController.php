@@ -4,11 +4,16 @@ namespace App\Controller;
 
 use App\Entity\Project;
 use App\GraphQL\SchemaGenerator;
-use Doctrine\ORM\EntityManagerInterface;
+use App\Service\ApiTokenChecker;
 use DateTimeImmutable;
+use Doctrine\ORM\EntityManagerInterface;
 use GraphQL\Error\DebugFlag;
 use GraphQL\GraphQL as GraphQLExecutor;
+use GraphQL\Language\AST\DocumentNode;
 use GraphQL\Language\AST\FieldNode;
+use GraphQL\Language\AST\FragmentDefinitionNode;
+use GraphQL\Language\AST\FragmentSpreadNode;
+use GraphQL\Language\AST\InlineFragmentNode;
 use GraphQL\Language\AST\OperationDefinitionNode;
 use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Language\Parser;
@@ -30,7 +35,10 @@ class GraphQLController extends AbstractController
 {
     public const MAX_QUERY_LENGTH   = 65536; // 64 KB
     public const MAX_ALIASES        = 30;    // Limit alias amplification attacks
-    public const MAX_OPERATIONS     = 1;     // No batched queries via POST body array
+    public const MAX_OPERATIONS     = 1;     // Single operation per request (no batched operations)
+    public const MAX_FRAGMENTS      = 10;    // Limit fragment definition spam
+    public const MAX_DIRECTIVES     = 15;    // Limit directive injection/amplification
+    public const MAX_SELECTIONS     = 150;   // Limit total field selections in AST
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -43,6 +51,7 @@ class GraphQLController extends AbstractController
         private SchemaGenerator $schemaGenerator,
         private ?\Symfony\Component\RateLimiter\RateLimiterFactory $graphqlLimiter = null,
         private ?TranslatorInterface $translator = null,
+        private ?ApiTokenChecker $tokenChecker = null,
     ) {}
 
     private function trans(string $key, string $default, array $parameters = []): string
@@ -65,12 +74,21 @@ class GraphQLController extends AbstractController
     public function handle(string $uuid, Request $request): Response
     {
         $identifier = $request->getClientIp() ?? 'anonymous';
+        $user = null;
         try {
             $user = $this->getUser();
             if ($user !== null) {
-                $identifier = $user->getUserIdentifier();
+                $identifier = 'user_' . $user->getUserIdentifier();
             }
         } catch (\Throwable) {}
+
+        $apiToken = null;
+        if ($user === null && $this->tokenChecker !== null) {
+            $apiToken = $this->tokenChecker->resolve($request);
+            if ($apiToken !== null) {
+                $identifier = 'token_' . $apiToken->id;
+            }
+        }
 
         if ($this->graphqlLimiter !== null && false === $this->graphqlLimiter->create($identifier)->consume(1)->isAccepted()) {
             return $this->secureJson(['errors' => [['message' => $this->trans('graphql.too_many_requests', 'Trop de requêtes GraphQL. Veuillez réessayer plus tard.')]]], 429);
@@ -79,10 +97,10 @@ class GraphQLController extends AbstractController
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable')]]], 404);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable.')]]], 404);
         }
         if (!$project) {
-            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable')]]], 404);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable.')]]], 404);
         }
 
         if ($request->attributes->get('_project') !== $project) {
@@ -91,19 +109,23 @@ class GraphQLController extends AbstractController
 
         if ($request->isMethod('GET')) {
             $query = $request->query->get('query');
-            $variables = $request->query->all('variables') ?? null;
+            $rawVariables = $request->query->get('variables');
+            if (is_string($rawVariables)) {
+                $decoded = json_decode($rawVariables, true);
+                $variables = is_array($decoded) ? $decoded : null;
+            } else {
+                $variables = $request->query->all('variables') ?: null;
+            }
         } else {
             $rawContent = $request->getContent();
             if (strlen($rawContent) > self::MAX_QUERY_LENGTH) {
-                return $this->secureJson(['errors' => [['message' => $this->trans('graphql.payload_too_large', 'Taille de payload GraphQL dépassée (max 64 Ko)')]]], 413);
+                return $this->secureJson(['errors' => [['message' => $this->trans('graphql.payload_too_large', 'Taille de payload GraphQL dépassée (max 64 Ko).')]]], 413);
             }
             $body = json_decode($rawContent, true);
             if (!is_array($body)) {
-                return $this->secureJson(['errors' => [['message' => $this->trans('graphql.invalid_json', 'Invalid JSON body')]]], 400);
+                return $this->secureJson(['errors' => [['message' => $this->trans('graphql.invalid_json', 'Corps JSON invalide.')]]], 400);
             }
             // ── Blocage des requêtes GraphQL en batch (array de queries) ─────────
-            // Un tableau JSON au niveau racine indique un batch de plusieurs opérations.
-            // Cela contourne les limites de complexité/profondeur par requête → rejeté.
             if (isset($body[0])) {
                 return $this->secureJson(['errors' => [['message' => $this->trans('graphql.batch_not_allowed', 'Les requêtes GraphQL en batch ne sont pas autorisées. Envoyez une seule opération par requête.')]]], 400);
             }
@@ -112,30 +134,64 @@ class GraphQLController extends AbstractController
         }
 
         if (!$query || !is_string($query)) {
-            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.query_required', 'Query GraphQL requise')]]], 400);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.query_required', 'Query GraphQL requise.')]]], 400);
         }
 
         if (strlen($query) > self::MAX_QUERY_LENGTH) {
-            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.query_too_large', 'Query GraphQL dépasse la taille maximale autorisée (64 Ko)')]]], 413);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.query_too_large', 'Query GraphQL dépasse la taille maximale autorisée (64 Ko).')]]], 413);
         }
 
         if ($variables !== null && !is_array($variables)) {
-            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.invalid_variables', 'Les variables GraphQL doivent être un objet ou tableau')]]], 400);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.invalid_variables', 'Les variables GraphQL doivent être un objet ou tableau.')]]], 400);
         }
 
-        // ── Détection subscription ───────────────────────────────────
-        $document = null;
+        // ── Validation syntaxique & limitation de tokens ─────────────
         try {
             $document = Parser::parse($query, ['maxTokens' => 5000]);
-        } catch (\Throwable) {
-            // Parse error — laisser l'exécuteur GraphQL standard gérer l'erreur
+        } catch (\GraphQL\Error\SyntaxError $e) {
+            return $this->secureJson([
+                'errors' => [[
+                    'message' => $e->getMessage(),
+                    'locations' => $e->getLocations(),
+                ]],
+            ], 400);
+        } catch (\Throwable $e) {
+            return $this->secureJson([
+                'errors' => [['message' => $this->trans('graphql.parse_error', 'Erreur de syntaxe dans la requête GraphQL.')]],
+            ], 400);
         }
-        $isSubscription = $document !== null && $this->isSubscriptionDocument($document);
 
-        // ── Anti-amplification par alias ─────────────────────────────
-        // Limite le nombre total de champs (alias inclus) dans le document parsé
-        // pour éviter l'explosion mémoire via des centaines d'alias identiques.
-        if ($document !== null && $this->countAliasedFields($document) > self::MAX_ALIASES) {
+        // ── Validation du nombre d'opérations et fragments ───────────
+        $operations = [];
+        $fragments = [];
+        foreach ($document->definitions as $def) {
+            if ($def instanceof OperationDefinitionNode) {
+                $operations[] = $def;
+            } elseif ($def instanceof FragmentDefinitionNode) {
+                $fragments[] = $def;
+            }
+        }
+
+        if (count($operations) > self::MAX_OPERATIONS) {
+            return $this->secureJson([
+                'errors' => [['message' => $this->trans('graphql.too_many_operations', 'Une seule opération GraphQL est autorisée par requête.')]],
+            ], 400);
+        }
+
+        if (count($fragments) > self::MAX_FRAGMENTS) {
+            return $this->secureJson([
+                'errors' => [['message' => $this->trans(
+                    'graphql.too_many_fragments',
+                    sprintf('Trop de fragments GraphQL (max %d).', self::MAX_FRAGMENTS),
+                    ['%max%' => self::MAX_FRAGMENTS]
+                )]],
+            ], 400);
+        }
+
+        // ── Contrôle approfondi de l'AST : alias, directives, sélections ──
+        $metrics = $this->inspectAstMetrics($document);
+
+        if ($metrics['aliases'] > self::MAX_ALIASES) {
             return $this->secureJson([
                 'errors' => [['message' => $this->trans(
                     'graphql.too_many_aliases',
@@ -145,20 +201,65 @@ class GraphQLController extends AbstractController
             ], 400);
         }
 
-        if ($isSubscription) {
+        if ($metrics['directives'] > self::MAX_DIRECTIVES) {
+            return $this->secureJson([
+                'errors' => [['message' => $this->trans(
+                    'graphql.too_many_directives',
+                    sprintf('Trop de directives GraphQL (max %d).', self::MAX_DIRECTIVES),
+                    ['%max%' => self::MAX_DIRECTIVES]
+                )]],
+            ], 400);
+        }
+
+        if ($metrics['selections'] > self::MAX_SELECTIONS) {
+            return $this->secureJson([
+                'errors' => [['message' => $this->trans(
+                    'graphql.too_many_selections',
+                    sprintf('Trop de sélections de champs GraphQL (max %d).', self::MAX_SELECTIONS),
+                    ['%max%' => self::MAX_SELECTIONS]
+                )]],
+            ], 400);
+        }
+
+        // ── Détection subscription ───────────────────────────────────
+        if ($this->isSubscriptionDocument($document)) {
             $projectUuid = $project->uuid->toRfc4122();
             return $this->handleSubscription($projectUuid, $document);
+        }
+
+        // ── Protection contre les mutations non autorisées ───────────
+        if ($this->isMutationDocument($document)) {
+            // Rejet absolu des mutations en GET (OWASP GraphQL / HTTP RFC)
+            if ($request->isMethod('GET')) {
+                return $this->secureJson([
+                    'errors' => [['message' => $this->trans('graphql.mutations_not_allowed_via_get', 'Les mutations GraphQL ne sont pas autorisées via les requêtes GET.')]],
+                ], 405);
+            }
+
+            // Vérification des droits sur ApiToken
+            if ($apiToken !== null && !$apiToken->can('write') && !$apiToken->can('create') && !$apiToken->can('*')) {
+                return $this->secureJson([
+                    'errors' => [['message' => $this->trans('graphql.mutation_permission_denied', 'Permissions insuffisantes pour exécuter des mutations GraphQL.')]],
+                ], 403);
+            }
+
+            // Vérification des droits sur Utilisateur session
+            if ($user !== null && !$this->isGranted('ROLE_SUPER_ADMIN') && !$this->isGranted('project.manage', $project) && !$this->isGranted('content.create', $project) && !$this->isGranted('content.update', $project)) {
+                return $this->secureJson([
+                    'errors' => [['message' => $this->trans('graphql.mutation_permission_denied', 'Permissions insuffisantes pour exécuter des mutations GraphQL.')]],
+                ], 403);
+            }
         }
 
         // ── Query / Mutation standard ────────────────────────────────
         $schema = $this->schemaGenerator->buildSchema($project);
 
-        $maxDepth = (int) ($_ENV['GRAPHQL_MAX_DEPTH'] ?? 10);
+        $maxDepth = (int) ($_ENV['GRAPHQL_MAX_DEPTH'] ?? $_SERVER['GRAPHQL_MAX_DEPTH'] ?? 10);
         if ($maxDepth <= 0 || $maxDepth > 15) {
             $maxDepth = 10;
         }
 
-        $maxComplexity = (int) ($_ENV['GRAPHQL_MAX_COMPLEXITY'] ?? 500);
+        $maxComplexity = (int) ($_ENV['GRAPHQL_MAX_COMPLEXITY'] ?? $_SERVER['GRAPHQL_MAX_COMPLEXITY'] ?? 500);
         if ($maxComplexity <= 0 || $maxComplexity > 1000) {
             $maxComplexity = 500;
         }
@@ -174,7 +275,7 @@ class GraphQLController extends AbstractController
         // En production, désactiver l'introspection GraphQL (__schema, __type)
         // pour empêcher l'énumération non autorisée du schéma et des modèles
         $env = (string) $this->getParameter('kernel.environment');
-        $introspectionConfig = $_ENV['GRAPHQL_INTROSPECTION_ENABLED'] ?? null;
+        $introspectionConfig = $_ENV['GRAPHQL_INTROSPECTION_ENABLED'] ?? $_SERVER['GRAPHQL_INTROSPECTION_ENABLED'] ?? null;
         $introspectionDisabled = $introspectionConfig !== null
             ? !filter_var($introspectionConfig, FILTER_VALIDATE_BOOL)
             : ($env === 'prod');
@@ -185,7 +286,7 @@ class GraphQLController extends AbstractController
 
         $result = GraphQLExecutor::executeQuery(
             schema: $schema,
-            source: $query,
+            source: $document,
             variableValues: $variables,
             validationRules: $validationRules,
         );
@@ -199,36 +300,69 @@ class GraphQLController extends AbstractController
         ]));
     }
 
-    // ─── Subscription ───────────────────────────────────────────────────
+    // ─── Sécurité de l'AST ───────────────────────────────────────────────
 
     /**
-     * Counts all field selections (including aliases) recursively across all
-     * operations in the document. Used to detect alias-amplification attacks.
+     * Inspects the AST document to count aliases, total selections, and directives across
+     * all operations and fragments, preventing amplification and resource exhaustion attacks.
+     *
+     * @return array{aliases: int, selections: int, directives: int}
      */
-    private function countAliasedFields($document): int
+    private function inspectAstMetrics(DocumentNode $document): array
     {
-        $count = 0;
+        $metrics = ['aliases' => 0, 'selections' => 0, 'directives' => 0];
+
         foreach ($document->definitions as $def) {
-            if ($def instanceof OperationDefinitionNode && $def->selectionSet !== null) {
-                $count += $this->countSelectionsRecursive($def->selectionSet);
+            if ($def instanceof OperationDefinitionNode) {
+                $metrics['directives'] += count($def->directives ?? []);
+                if ($def->selectionSet !== null) {
+                    $this->traverseSelectionSet($def->selectionSet, $metrics);
+                }
+            } elseif ($def instanceof FragmentDefinitionNode) {
+                $metrics['directives'] += count($def->directives ?? []);
+                if ($def->selectionSet !== null) {
+                    $this->traverseSelectionSet($def->selectionSet, $metrics);
+                }
             }
         }
-        return $count;
+
+        return $metrics;
     }
 
-    private function countSelectionsRecursive(SelectionSetNode $set): int
+    private function traverseSelectionSet(SelectionSetNode $set, array &$metrics): void
     {
-        $count = 0;
         foreach ($set->selections as $sel) {
-            $count++;
-            if ($sel instanceof FieldNode && $sel->selectionSet !== null) {
-                $count += $this->countSelectionsRecursive($sel->selectionSet);
+            $metrics['selections']++;
+            if ($sel instanceof FieldNode) {
+                if ($sel->alias !== null) {
+                    $metrics['aliases']++;
+                }
+                $metrics['directives'] += count($sel->directives ?? []);
+                if ($sel->selectionSet !== null) {
+                    $this->traverseSelectionSet($sel->selectionSet, $metrics);
+                }
+            } elseif ($sel instanceof InlineFragmentNode) {
+                $metrics['directives'] += count($sel->directives ?? []);
+                if ($sel->selectionSet !== null) {
+                    $this->traverseSelectionSet($sel->selectionSet, $metrics);
+                }
+            } elseif ($sel instanceof FragmentSpreadNode) {
+                $metrics['directives'] += count($sel->directives ?? []);
             }
         }
-        return $count;
     }
 
-    private function isSubscriptionDocument($document): bool
+    private function isMutationDocument(DocumentNode $document): bool
+    {
+        foreach ($document->definitions as $def) {
+            if ($def instanceof OperationDefinitionNode && $def->operation === 'mutation') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function isSubscriptionDocument(DocumentNode $document): bool
     {
         foreach ($document->definitions as $def) {
             if ($def instanceof OperationDefinitionNode && $def->operation === 'subscription') {
@@ -238,9 +372,11 @@ class GraphQLController extends AbstractController
         return false;
     }
 
-    private function handleSubscription(string $projectUuid, $document): JsonResponse
+    // ─── Subscription Mercure ───────────────────────────────────────────
+
+    private function handleSubscription(string $projectUuid, DocumentNode $document): JsonResponse
     {
-        $mercureSecret = $this->getParameter('mercure_jwt_secret') ?? '';
+        $mercureSecret = $this->hasParameter('mercure_jwt_secret') ? (string) $this->getParameter('mercure_jwt_secret') : '';
         if ($mercureSecret === '' || strlen($mercureSecret) < 32) {
             return $this->secureJson([
                 'errors' => [['message' => $this->trans('graphql.mercure_not_configured', 'Mercure hub not configured. Install and start the Mercure Docker service.')]],
@@ -267,8 +403,9 @@ class GraphQLController extends AbstractController
             ->getToken($jwtConfig->signer(), $jwtConfig->signingKey())
             ->toString();
 
-        $hubUrl = $this->getParameter('mercure_public_url')
-            ?? '/.well-known/mercure';
+        $hubUrl = $this->hasParameter('mercure_public_url')
+            ? (string) $this->getParameter('mercure_public_url')
+            : '/.well-known/mercure';
 
         return $this->secureJson([
             'data' => [
@@ -286,7 +423,7 @@ class GraphQLController extends AbstractController
     /**
      * Extrait les topics Mercure à partir de l'AST GraphQL déjà parsé.
      */
-    private function extractTopicsFromDocument(string $projectUuid, $document): array
+    private function extractTopicsFromDocument(string $projectUuid, DocumentNode $document): array
     {
         $topics = [];
 
@@ -294,14 +431,16 @@ class GraphQLController extends AbstractController
             if (!$def instanceof OperationDefinitionNode) continue;
             if ($def->operation !== 'subscription') continue;
 
-            foreach ($def->selectionSet->selections as $selection) {
-                if (!($selection instanceof FieldNode)) continue;
-                $fieldName = $selection->name->value;
+            if ($def->selectionSet !== null) {
+                foreach ($def->selectionSet->selections as $selection) {
+                    if (!($selection instanceof FieldNode)) continue;
+                    $fieldName = $selection->name->value;
 
-                if ($fieldName === 'projectEvents') {
-                    $topics[] = "projects/{$projectUuid}";
-                } else {
-                    $topics[] = "projects/{$projectUuid}/content";
+                    if ($fieldName === 'projectEvents') {
+                        $topics[] = "projects/{$projectUuid}";
+                    } else {
+                        $topics[] = "projects/{$projectUuid}/content";
+                    }
                 }
             }
         }

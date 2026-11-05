@@ -99,8 +99,10 @@ class SchemaGenerator
             ->toArray();
         usort($entityFields, fn(Field $a, Field $b) => $a->order <=> $b->order);
 
+        $reserved = ['uuid' => true, 'locale' => true, 'status' => true, 'createdAt' => true, 'updatedAt' => true];
         foreach ($entityFields as $field) {
-            $fields[$field->slug] = [
+            $fieldKey = isset($reserved[$field->slug]) ? 'field_' . $field->slug : $field->slug;
+            $fields[$fieldKey] = [
                 'type' => $this->mapFieldType($field),
                 'description' => $field->name,
             ];
@@ -127,8 +129,10 @@ class SchemaGenerator
             ->filter(fn(Field $f) => !$f->isDeleted())
             ->toArray();
 
+        $reserved = ['locale' => true, 'status' => true];
         foreach ($entityFields as $field) {
-            $fields[$field->slug] = [
+            $fieldKey = isset($reserved[$field->slug]) ? 'field_' . $field->slug : $field->slug;
+            $fields[$fieldKey] = [
                 'type' => $this->mapInputFieldType($field),
                 'description' => $field->name,
             ];
@@ -265,8 +269,17 @@ class SchemaGenerator
         };
     }
 
+    private function isValidUuid(string $uuid): bool
+    {
+        return (bool) preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $uuid);
+    }
+
     private function resolveEntry(Collection $collection, string $uuid): ?array
     {
+        if (!$this->isValidUuid($uuid)) {
+            return null;
+        }
+
         $entry = $this->em->getRepository(\App\Entity\ContentEntry::class)
             ->findOneBy(['collection' => $collection, 'uuid' => $uuid]);
 
@@ -281,9 +294,16 @@ class SchemaGenerator
     {
         $limit = min(100, max(1, (int) ($args['limit'] ?? 50)));
         $offset = max(0, min(10000, (int) ($args['offset'] ?? 0)));
+        $locale = isset($args['locale']) && is_string($args['locale']) && preg_match('/^[a-zA-Z]{2,5}(-[a-zA-Z0-9]{2,5})?$/', $args['locale'])
+            ? $args['locale']
+            : null;
+        $status = isset($args['status']) && is_string($args['status']) && preg_match('/^[a-z0-9_-]{1,50}$/i', $args['status'])
+            ? $args['status']
+            : null;
+
         $page = (int) floor($offset / $limit) + 1;
         $entries = $this->entryRepo->findByCollectionPaginated(
-            $collection, $page, $limit, $args['locale'] ?? null, $args['status'] ?? null
+            $collection, $page, $limit, $locale, $status
         );
 
         return array_map(fn($entry) => $this->formatter->formatEntry($entry), $entries);
@@ -291,19 +311,41 @@ class SchemaGenerator
 
     private function resolveCreate(Collection $collection, array $input): array
     {
-        // Delegate to the existing ContentController logic via a service or direct entity creation
         $entry = new \App\Entity\ContentEntry();
         $entry->collection = $collection;
         $entry->project = $collection->project;
-        $entry->locale = $input['locale'] ?? $collection->project->defaultLocale ?? 'en';
-        $entry->status = $input['status'] ?? 'draft';
+
+        $locale = $input['locale'] ?? $collection->project->defaultLocale ?? 'en';
+        if (!is_string($locale) || !preg_match('/^[a-zA-Z]{2,5}(-[a-zA-Z0-9]{2,5})?$/', $locale)) {
+            $locale = $collection->project->defaultLocale ?? 'en';
+        }
+        $entry->locale = $locale;
+
+        $status = $input['status'] ?? 'draft';
+        if (!is_string($status) || !preg_match('/^[a-z0-9_-]{1,50}$/i', $status)) {
+            $status = 'draft';
+        }
+        $workflowStatuses = $collection->getWorkflowStatuses();
+        if (!empty($workflowStatuses)) {
+            $validSlugs = array_merge(array_column($workflowStatuses, 'slug'), ['draft', 'scheduled', 'published', 'archived']);
+            if (!in_array($status, $validSlugs, true)) {
+                $status = 'draft';
+            }
+        }
+        $entry->status = $status;
+
         $entry->createdAt = new \DateTimeImmutable();
         $entry->updatedAt = new \DateTimeImmutable();
 
         unset($input['locale'], $input['status']);
 
+        // Cap inputs to 200 fields maximum
+        if (count($input) > 200) {
+            $input = array_slice($input, 0, 200, true);
+        }
+
         foreach ($input as $fieldSlug => $value) {
-            $field = $this->fieldHelper->findField($collection, $fieldSlug);
+            $field = $this->fieldHelper->findField($collection, (string) $fieldSlug);
             if (!$field) continue;
 
             $errors = $this->fieldHelper->validateValue($field->type, $value);
@@ -325,6 +367,10 @@ class SchemaGenerator
 
     private function resolveUpdate(Collection $collection, string $uuid, array $input): ?array
     {
+        if (!$this->isValidUuid($uuid)) {
+            return null;
+        }
+
         $entry = $this->em->getRepository(\App\Entity\ContentEntry::class)
             ->findOneBy(['collection' => $collection, 'uuid' => $uuid]);
 
@@ -332,12 +378,30 @@ class SchemaGenerator
             return null;
         }
 
-        if (isset($input['locale'])) { $entry->locale = $input['locale']; }
-        if (isset($input['status'])) { $entry->status = $input['status']; }
+        if (isset($input['locale'])) {
+            $locale = $input['locale'];
+            if (is_string($locale) && preg_match('/^[a-zA-Z]{2,5}(-[a-zA-Z0-9]{2,5})?$/', $locale)) {
+                $entry->locale = $locale;
+            }
+        }
+
+        if (isset($input['status'])) {
+            $status = $input['status'];
+            if (is_string($status) && preg_match('/^[a-z0-9_-]{1,50}$/i', $status)) {
+                $workflowStatuses = $collection->getWorkflowStatuses();
+                if (empty($workflowStatuses) || in_array($status, array_merge(array_column($workflowStatuses, 'slug'), ['draft', 'scheduled', 'published', 'archived']), true)) {
+                    $entry->status = $status;
+                }
+            }
+        }
         unset($input['locale'], $input['status']);
 
+        if (count($input) > 200) {
+            $input = array_slice($input, 0, 200, true);
+        }
+
         foreach ($input as $fieldSlug => $value) {
-            $field = $this->fieldHelper->findField($collection, $fieldSlug);
+            $field = $this->fieldHelper->findField($collection, (string) $fieldSlug);
             if (!$field) continue;
 
             $errors = $this->fieldHelper->validateValue($field->type, $value);
@@ -366,6 +430,10 @@ class SchemaGenerator
 
     private function resolveDelete(Collection $collection, string $uuid): bool
     {
+        if (!$this->isValidUuid($uuid)) {
+            return false;
+        }
+
         $entry = $this->em->getRepository(\App\Entity\ContentEntry::class)
             ->findOneBy(['collection' => $collection, 'uuid' => $uuid]);
 
