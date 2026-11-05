@@ -3663,4 +3663,10 @@ return [
     'export.insufficient_disk_space' => 'Espace disque insuffisant sur le serveur pour générer l\'archive d\'export.',
     'import.media.cumulative_size_exceeded' => 'La taille cumulée des médias importés dépasse la limite de %max% Mo.',
     'project.export_import.max_projects_exceeded' => 'Limite de projets dépassée (maximum %max% projets).',
+
+    // ─── Cycle 87: AI, PAT & Webhook Quotas and Multi-Tenant Resiliency ───
+    'ai.payload_too_large' => 'Payload IA trop volumineux (max 1 Mo).',
+    'token.max_tokens_reached' => 'Nombre maximal de jetons d\'accès personnels atteint (%max%).',
+    'webhook.limit_exceeded' => 'Limite de webhooks du projet atteinte (max %max% webhooks).',
+    'insights.token_project_mismatch' => 'Interdit : le jeton appartient à un autre projet.',
 ];

@@ -3647,4 +3647,10 @@ return [
     'export.insufficient_disk_space' => 'مساحة القرص غير كافية على الخادم لإنشاء أرشيف التصدير.',
     'import.media.cumulative_size_exceeded' => 'يتجاوز الحجم الإجمالي للوسائط المستوردة الحد الأقصى البالغ %max% ميغابايت.',
     'project.export_import.max_projects_exceeded' => 'تم تجاوز الحد الأقصى للمشاريع (الحد الأقصى %max% مشاريع).',
+
+    // ─── Cycle 87: AI, PAT & Webhook Quotas and Multi-Tenant Resiliency ───
+    'ai.payload_too_large' => 'حمولة الذكاء الاصطناعي كبيرة جداً (الحد الأقصى 1 ميغابايت).',
+    'token.max_tokens_reached' => 'تم الوصول إلى الحد الأقصى لرموز الوصول الشخصية (%max%).',
+    'webhook.limit_exceeded' => 'تم الوصول إلى الحد الأقصى لخطافات الويب للمشروع (الحد الأقصى %max% خطافات).',
+    'insights.token_project_mismatch' => 'محظور: الرمز ينتمي إلى مشروع آخر.',
 ];

@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.154] — 2026-11-05
+
+### AI Payload Protection, Personal Access Token & Webhook Quotas, Multi-Tenant Resiliency (Cycle #87)
+- **AI Controller DoS Defense, Catch Syntax Resiliency & Audit Logging (`AiController`)**:
+  - Enforced strict payload limits (`MAX_PAYLOAD_BYTES = 1MB`) across AI endpoints (`/generate`, `/translate`, `/summarize`, `/seo`) before `json_decode`, preventing memory exhaustion attacks.
+  - Fixed unassigned `catch (\Throwable $e)` syntax in `seo()` eliminating undefined variable exceptions.
+  - Integrated `AuditService` logging across AI operations (`ai_generate`, `ai_translate`, `ai_summarize`, `ai_seo`, `ai_suggest_schema`) with token and user attribution.
+- **Personal Access Token Quota & Lifecycle Audit Hardening (`TokenController` & `PersonalAccessTokenRepository`)**:
+  - Implemented user token quota limit (`MAX_TOKENS_PER_USER = 50`) via `countByUser()` in `PersonalAccessTokenRepository`, preventing table exhaustion and token flooding attacks.
+  - Integrated `AuditService` logging for personal access token lifecycle events (`personal_access_token_create`, `personal_access_token_update`, `personal_access_token_delete`).
+- **Project Webhook Quotas & Early SSRF Rejection (`WebhookController`)**:
+  - Enforced project webhook limit (`MAX_WEBHOOKS_PER_PROJECT = 50`) immediately upon project resolution, preventing webhook storming and eliminating unnecessary DNS/SSRF checks.
+  - Returns localized HTTP 422 with `webhook.limit_exceeded` error code.
+- **Insights Multi-Tenant API Resiliency (`InsightsController`)**:
+  - Replaced thrown `createNotFoundException` with structured JSON 404 responses with anti-cache security headers (`no-store`) and translated error messages.
+  - Enforced multi-tenant token isolation check against request attribute `_project` (`insights.token_project_mismatch`) returning structured 403 responses.
+- **Strict 100% I18n Compliance**:
+  - Added 4 new keys across all 4 locales (`en`, `fr`, `es`, `ar`): `ai.payload_too_large`, `token.max_tokens_reached`, `webhook.limit_exceeded`, `insights.token_project_mismatch`. Exactly 3,347 keys per locale.
+- **Test Suite Verification**:
+  - Added dedicated test suite `Cycle87SecurityAndQuotaHardeningTest` covering AI payload guards, SEO exception recovery, AI audit logging, PAT quota enforcement & lifecycle logs, webhook limits, Insights multi-tenant 404/403 responses, and 4-locale dictionary parity (10 tests, 69 assertions, 100% pass).
+
 ## [1.26.153] — 2026-11-05
 
 ### Export/Import Hardening, Tenant Quotas Enforcement & Backup Volume Controls (Cycle #86)

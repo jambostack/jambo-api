@@ -5,6 +5,7 @@ namespace App\Controller\AdminApi;
 use App\Entity\ApiToken;
 use App\Entity\PersonalAccessToken;
 use App\Repository\PersonalAccessTokenRepository;
+use App\Service\AuditService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -28,6 +29,8 @@ class TokenController extends AbstractController
         '*',
     ];
 
+    public const MAX_TOKENS_PER_USER = 50;
+
     public function __construct(
         private PersonalAccessTokenRepository $repo,
         private EntityManagerInterface $em,
@@ -35,6 +38,7 @@ class TokenController extends AbstractController
         #[Autowire(service: 'limiter.token_management_limiter')]
         private ?RateLimiterFactory $tokenLimiter = null,
         private ?TranslatorInterface $translator = null,
+        private ?AuditService $auditService = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -122,6 +126,11 @@ class TokenController extends AbstractController
         if ($user === null && $authorizingPat instanceof PersonalAccessToken) {
             $user = $authorizingPat->user;
         }
+
+        if ($user !== null && $this->repo->countByUser($user) >= self::MAX_TOKENS_PER_USER) {
+            return new JsonResponse(['error' => $this->trans('token.max_tokens_reached', ['%max%' => self::MAX_TOKENS_PER_USER], sprintf('Maximum number of personal access tokens reached (%d).', self::MAX_TOKENS_PER_USER))], 422);
+        }
+
         $t->user = $user;
         $t->scopes = $scopes;
         $t->tokenHash = ApiToken::hashToken($plain, $this->appSecret);
@@ -140,6 +149,17 @@ class TokenController extends AbstractController
         }
         $this->em->persist($t);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'personal_access_token_create',
+            project: null,
+            input: ['name' => $t->name, 'scopes' => $t->scopes, 'expires_at' => $t->expiresAt?->format(DATE_ATOM)],
+            output: ['id' => $t->id],
+            status: 'success',
+            createdBy: $user?->getUserIdentifier(),
+            source: 'admin_api_token',
+        );
+        $this->auditService?->flush();
 
         return new JsonResponse(['data' => [
             'id' => $t->id,
@@ -220,6 +240,18 @@ class TokenController extends AbstractController
         }
 
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'personal_access_token_update',
+            project: null,
+            input: ['id' => $t->id, 'name' => $t->name, 'scopes' => $t->scopes],
+            output: ['id' => $t->id],
+            status: 'success',
+            createdBy: $currentUser?->getUserIdentifier(),
+            source: 'admin_api_token',
+        );
+        $this->auditService?->flush();
+
         return new JsonResponse(['data' => ['id' => $t->id, 'name' => $t->name, 'scopes' => $t->scopes]]);
     }
 
@@ -243,8 +275,23 @@ class TokenController extends AbstractController
             return new JsonResponse(['error' => $this->trans('token.lacks_manage_delete', [], 'Personal access token lacks "tokens:manage" to delete other tokens.')], 403);
         }
 
+        $tokenName = $t->name;
+        $tokenId = $t->id;
+
         $this->em->remove($t);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'personal_access_token_delete',
+            project: null,
+            input: ['id' => $tokenId, 'name' => $tokenName],
+            output: ['deleted' => true],
+            status: 'success',
+            createdBy: $currentUser?->getUserIdentifier(),
+            source: 'admin_api_token',
+        );
+        $this->auditService?->flush();
+
         return new JsonResponse(null, 204);
     }
 

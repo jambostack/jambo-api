@@ -102,7 +102,10 @@ class InsightsController extends AbstractController
         $isUuid = (bool) preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $project);
 
         if (!$isNumeric && !$isUuid) {
-            throw $this->createNotFoundException($this->trans('insights.project_not_found', [], 'Project not found'));
+            return new JsonResponse([
+                'error' => $this->trans('insights.project_not_found', [], 'Project not found'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404, self::SECURITY_HEADERS);
         }
 
         try {
@@ -110,12 +113,28 @@ class InsightsController extends AbstractController
                 ? $this->projectRepository->find((int) $project)
                 : $this->projectRepository->findOneBy(['uuid' => $project]);
         } catch (\Throwable) {
-            throw $this->createNotFoundException($this->trans('insights.project_not_found', [], 'Project not found'));
+            return new JsonResponse([
+                'error' => $this->trans('insights.project_not_found', [], 'Project not found'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404, self::SECURITY_HEADERS);
         }
 
         if (!$entity) {
-            throw $this->createNotFoundException($this->trans('insights.project_not_found', [], 'Project not found'));
+            return new JsonResponse([
+                'error' => $this->trans('insights.project_not_found', [], 'Project not found'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404, self::SECURITY_HEADERS);
         }
+
+        // Cloisonnement strict multi-tenant
+        $attrProject = $request->attributes->get('_project');
+        if ($attrProject instanceof \App\Entity\Project && $attrProject->uuid?->toRfc4122() !== $entity->uuid?->toRfc4122()) {
+            return new JsonResponse([
+                'error' => $this->trans('insights.token_project_mismatch', [], 'Forbidden: token belongs to another project.'),
+                'code' => 'TOKEN_PROJECT_MISMATCH',
+            ], 403, self::SECURITY_HEADERS);
+        }
+
         if ($request->attributes->get('_project') !== $entity) {
             $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $entity);
         }

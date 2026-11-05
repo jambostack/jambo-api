@@ -3645,4 +3645,10 @@ return [
     'export.insufficient_disk_space' => 'Insufficient server disk space to generate export archive.',
     'import.media.cumulative_size_exceeded' => 'Cumulative imported media size exceeds %max%MB limit.',
     'project.export_import.max_projects_exceeded' => 'Project limit exceeded (maximum %max% projects).',
+
+    // ─── Cycle 87: AI, PAT & Webhook Quotas and Multi-Tenant Resiliency ───
+    'ai.payload_too_large' => 'AI payload too large (max 1MB).',
+    'token.max_tokens_reached' => 'Maximum number of personal access tokens reached (%max%).',
+    'webhook.limit_exceeded' => 'Project webhook limit reached (max %max% webhooks).',
+    'insights.token_project_mismatch' => 'Forbidden: token belongs to another project.',
 ];

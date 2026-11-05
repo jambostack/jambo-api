@@ -3645,4 +3645,10 @@ return [
     'export.insufficient_disk_space' => 'Espacio en disco insuficiente en el servidor para generar el archivo de exportación.',
     'import.media.cumulative_size_exceeded' => 'El tamaño acumulado de los medios importados supera el límite de %max% MB.',
     'project.export_import.max_projects_exceeded' => 'Límite de proyectos superado (máximo %max% proyectos).',
+
+    // ─── Cycle 87: AI, PAT & Webhook Quotas and Multi-Tenant Resiliency ───
+    'ai.payload_too_large' => 'Carga útil de IA demasiado grande (máx. 1 MB).',
+    'token.max_tokens_reached' => 'Número máximo de tokens de acceso personal alcanzado (%max%).',
+    'webhook.limit_exceeded' => 'Límite de webhooks del proyecto alcanzado (máx. %max% webhooks).',
+    'insights.token_project_mismatch' => 'Prohibido: el token pertenece a otro proyecto.',
 ];

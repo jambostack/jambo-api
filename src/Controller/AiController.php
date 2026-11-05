@@ -6,6 +6,7 @@ use App\Entity\Collection;
 use App\Entity\Project;
 use App\Service\AiContentService;
 use App\Service\ApiTokenChecker;
+use App\Service\AuditService;
 use App\Service\EavDataFormatterService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -20,6 +21,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class AiController extends AbstractController
 {
+    public const MAX_PAYLOAD_BYTES = 1048576; // 1 MB
     public const MIN_BRIEF_LENGTH = 3;
     public const MAX_BRIEF_LENGTH = 10000;
     public const MIN_TEXT_LENGTH = 3;
@@ -43,6 +45,7 @@ class AiController extends AbstractController
         private readonly ?RateLimiterFactory $aiLimiter = null,
         private readonly ?ApiTokenChecker $tokenChecker = null,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?AuditService $auditService = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -71,6 +74,11 @@ class AiController extends AbstractController
         [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'content.create');
         if ($errorResponse !== null) {
             return $errorResponse;
+        }
+
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('ai.payload_too_large', [], 'AI payload too large (max 1MB).')], 413);
         }
 
         $body = json_decode($request->getContent(), true);
@@ -120,6 +128,16 @@ class AiController extends AbstractController
 
         try {
             $result = $this->ai->generateContent($brief, $collection, $locale);
+            $this->auditService?->log(
+                toolName: 'ai_generate',
+                project: $project,
+                input: ['collection' => $collectionSlug, 'locale' => $locale],
+                output: ['success' => true],
+                status: 'success',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                source: 'ai_controller',
+            );
+            $this->auditService?->flush();
             return $this->secureJson($result);
         } catch (\Throwable $e) {
             return $this->handleAiException($e);
@@ -136,6 +154,11 @@ class AiController extends AbstractController
         [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'content.update');
         if ($errorResponse !== null) {
             return $errorResponse;
+        }
+
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('ai.payload_too_large', [], 'AI payload too large (max 1MB).')], 413);
         }
 
         $body = json_decode($request->getContent(), true);
@@ -165,6 +188,16 @@ class AiController extends AbstractController
 
         try {
             $translated = $this->ai->translateContent($content, $targetLocale, $project);
+            $this->auditService?->log(
+                toolName: 'ai_translate',
+                project: $project,
+                input: ['locale' => $targetLocale],
+                output: ['success' => true],
+                status: 'success',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                source: 'ai_controller',
+            );
+            $this->auditService?->flush();
             return $this->secureJson(['original' => $content, 'translated' => $translated, 'locale' => $targetLocale]);
         } catch (\Throwable $e) {
             return $this->handleAiException($e);
@@ -181,6 +214,11 @@ class AiController extends AbstractController
         [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'project.view');
         if ($errorResponse !== null) {
             return $errorResponse;
+        }
+
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('ai.payload_too_large', [], 'AI payload too large (max 1MB).')], 413);
         }
 
         $body = json_decode($request->getContent(), true);
@@ -211,7 +249,18 @@ class AiController extends AbstractController
         $maxWords = min(self::MAX_WORDS, max(self::MIN_WORDS, (int) ($body['maxWords'] ?? 80)));
 
         try {
-            return $this->secureJson(['summary' => $this->ai->summarize($text, $maxWords, $project)]);
+            $summary = $this->ai->summarize($text, $maxWords, $project);
+            $this->auditService?->log(
+                toolName: 'ai_summarize',
+                project: $project,
+                input: ['maxWords' => $maxWords],
+                output: ['success' => true],
+                status: 'success',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                source: 'ai_controller',
+            );
+            $this->auditService?->flush();
+            return $this->secureJson(['summary' => $summary]);
         } catch (\Throwable $e) {
             return $this->handleAiException($e);
         }
@@ -227,6 +276,11 @@ class AiController extends AbstractController
         [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'project.view');
         if ($errorResponse !== null) {
             return $errorResponse;
+        }
+
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('ai.payload_too_large', [], 'AI payload too large (max 1MB).')], 413);
         }
 
         $body = json_decode($request->getContent(), true);
@@ -250,8 +304,19 @@ class AiController extends AbstractController
         }
 
         try {
-            return $this->secureJson($this->ai->generateSeo($content, $project));
-        } catch (\Throwable) {
+            $seoResult = $this->ai->generateSeo($content, $project);
+            $this->auditService?->log(
+                toolName: 'ai_seo',
+                project: $project,
+                input: ['fields' => array_keys($content)],
+                output: ['success' => true],
+                status: 'success',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                source: 'ai_controller',
+            );
+            $this->auditService?->flush();
+            return $this->secureJson($seoResult);
+        } catch (\Throwable $e) {
             return $this->handleAiException($e, 'ai.error.seo_generation_failed');
         }
     }
@@ -287,7 +352,18 @@ class AiController extends AbstractController
         }
 
         try {
-            return $this->secureJson($this->ai->suggestSchema($collection));
+            $schema = $this->ai->suggestSchema($collection);
+            $this->auditService?->log(
+                toolName: 'ai_suggest_schema',
+                project: $project,
+                input: ['collection' => $collectionSlug],
+                output: ['success' => true],
+                status: 'success',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                source: 'ai_controller',
+            );
+            $this->auditService?->flush();
+            return $this->secureJson($schema);
         } catch (\Throwable $e) {
             return $this->handleAiException($e);
         }

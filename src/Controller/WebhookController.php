@@ -29,6 +29,7 @@ class WebhookController extends AbstractController
     private const MAX_PAYLOAD_BYTES = 524288; // 512 KB
     private const MAX_EVENTS_COUNT = 50;
     private const MAX_COLLECTIONS_COUNT = 50;
+    public const MAX_WEBHOOKS_PER_PROJECT = 50;
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -100,6 +101,14 @@ class WebhookController extends AbstractController
         $project = $this->resolveProject($projectUuid, 'project.manage');
         if ($project instanceof JsonResponse) {
             return $project;
+        }
+
+        $existingWebhooksCount = $this->webhookRepository->count(['project' => $project]);
+        if ($existingWebhooksCount >= self::MAX_WEBHOOKS_PER_PROJECT) {
+            return $this->secureJson([
+                'error' => $this->trans('webhook.limit_exceeded', ['%max%' => self::MAX_WEBHOOKS_PER_PROJECT], sprintf('Project webhook limit reached (max %d webhooks).', self::MAX_WEBHOOKS_PER_PROJECT)),
+                'code' => 'WEBHOOK_LIMIT_EXCEEDED',
+            ], 422);
         }
 
         $contentLength = $request->headers->get('Content-Length');
