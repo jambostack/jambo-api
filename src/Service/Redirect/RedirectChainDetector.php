@@ -9,6 +9,11 @@ use App\Entity\Redirect;
 class RedirectChainDetector
 {
     /**
+     * Maximum allowed redirect hops in a single chain (SEO & browser standard).
+     */
+    public const MAX_CHAIN_HOPS = 5;
+
+    /**
      * Detect redirect chains (A -> B -> C) and suggest shortcuts (A -> C).
      *
      * Reports each chain once, starting only from root redirects (those
@@ -103,33 +108,101 @@ class RedirectChainDetector
      */
     public function detectLoopWithContext(Redirect $newRedirect, array $existingRedirects): bool
     {
-        // Build index: fromPath -> Redirect
-        $index = [];
+        $analysis = $this->analyzeChain($newRedirect, $existingRedirects);
+        return $analysis['hasLoop'];
+    }
+
+    /**
+     * Analyze chain to detect loops and excessive hop depth.
+     *
+     * @param Redirect $newRedirect
+     * @param Redirect[] $existingRedirects
+     * @param int $maxHops
+     * @return array{hasLoop: bool, isTooLong: bool, hops: int}
+     */
+    public function analyzeChain(Redirect $newRedirect, array $existingRedirects, int $maxHops = self::MAX_CHAIN_HOPS): array
+    {
+        if ($newRedirect->fromPath === $newRedirect->toPath) {
+            return ['hasLoop' => true, 'isTooLong' => false, 'hops' => 1];
+        }
+
+        $forward = [];
+        $backward = [];
+
         foreach ($existingRedirects as $r) {
-            $index[$r->fromPath] = $r;
+            if ($newRedirect->id !== null && $r->id === $newRedirect->id) {
+                continue;
+            }
+            $forward[$r->fromPath] = $r;
+            $backward[$r->toPath][] = $r;
         }
 
-        // Direct self-loop
-        if ($newRedirect->toPath === $newRedirect->fromPath) {
-            return true;
-        }
-
+        // Check forward hops
+        $current = $newRedirect->toPath;
+        $forwardHops = 0;
         $visited = [$newRedirect->fromPath];
-        $currentPath = $newRedirect->toPath;
 
-        for ($hop = 0; $hop < 10; ++$hop) {
-            if (\in_array($currentPath, $visited, true)) {
-                return true;
+        while (isset($forward[$current])) {
+            $next = $forward[$current];
+            if (\in_array($current, $visited, true) || $current === $newRedirect->fromPath) {
+                return ['hasLoop' => true, 'isTooLong' => false, 'hops' => $forwardHops + 1];
             }
-            $visited[] = $currentPath;
+            $visited[] = $current;
+            $forwardHops++;
+            $current = $next->toPath;
 
-            if (!isset($index[$currentPath])) {
-                break;
+            if ($forwardHops > 20) {
+                return ['hasLoop' => true, 'isTooLong' => true, 'hops' => $forwardHops];
             }
-
-            $currentPath = $index[$currentPath]->toPath;
         }
 
-        return false;
+        if ($current === $newRedirect->fromPath) {
+            return ['hasLoop' => true, 'isTooLong' => false, 'hops' => $forwardHops + 1];
+        }
+
+        // Check backward hops (deepest branch)
+        $visitedBackward = [$newRedirect->toPath];
+        $backwardHops = $this->calculateMaxBackwardHops($newRedirect->fromPath, $backward, $visitedBackward);
+        if ($backwardHops === -1) {
+            return ['hasLoop' => true, 'isTooLong' => false, 'hops' => 0];
+        }
+
+        $totalHops = $backwardHops + 1 + $forwardHops;
+
+        return [
+            'hasLoop' => false,
+            'isTooLong' => $totalHops > $maxHops,
+            'hops' => $totalHops,
+        ];
+    }
+
+    /**
+     * @param array<string, Redirect[]> $backward
+     * @param string[] $visited
+     */
+    private function calculateMaxBackwardHops(string $path, array $backward, array &$visited, int $depth = 0): int
+    {
+        if ($depth > 20 || \in_array($path, $visited, true)) {
+            return -1; // loop detected
+        }
+
+        if (!isset($backward[$path]) || empty($backward[$path])) {
+            return 0;
+        }
+
+        $visited[] = $path;
+        $maxChild = 0;
+
+        foreach ($backward[$path] as $r) {
+            $childHops = $this->calculateMaxBackwardHops($r->fromPath, $backward, $visited, $depth + 1);
+            if ($childHops === -1) {
+                return -1;
+            }
+            if ($childHops + 1 > $maxChild) {
+                $maxChild = $childHops + 1;
+            }
+        }
+
+        return $maxChild;
     }
 }

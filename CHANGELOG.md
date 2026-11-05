@@ -7,6 +7,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.86] — 2026-11-05
+
+### Security Hardening, Anti-XSS, Anti-SSRF, Redirect Limitation & Strict I18N
+- **FormController Admin Hardening & Elimination of Hardcoded Error Messages**:
+  - Injected `TranslatorInterface` with fallback mechanism across all administrative form endpoints.
+  - Replaced over 30 hardcoded error and validation messages with localized translation keys under `form.admin.*`.
+  - Added multi-layered Anti-XSS security defenses:
+    - HTML and script injection detection across form names, field definitions (`label`, `placeholder`, `helpText`, options), steps, and settings.
+    - Stricter field identifier syntax validation (`^[a-zA-Z0-9_\-\.]{1,64}$`).
+  - Added Anti-SSRF and unsafe protocol defenses on form redirection settings (`settings.redirectUrl`), preventing redirect to private RFC 1918 addresses, loopbacks (`127.0.0.1`, `localhost`), cloud metadata (`169.254.169.254`), or dangerous URI schemes (`javascript:`, `data:`, `vbscript:`, protocol-relative `//`).
+  - Added new dedicated route `admin_forms_submission_show` (GET `/admin-api/{projectUuid}/forms/{id}/submissions/{submissionId}`) with strict integer routing parameter constraints.
+- **RedirectController Admin Hardening, SSRF Protection & Loop Limitation**:
+  - Injected `TranslatorInterface` and `SsrfProtectionService`, eliminating all hardcoded messages under `redirect.admin.*`.
+  - Enforced anti-SSRF filtering on all absolute redirection targets via `SsrfProtectionService`, blocking private/reserved subnets and cloud metadata endpoints.
+  - Enforced target URI security: prohibited dangerous schemes, protocol-relative prefixes (`//`, `/\\`, `\\`), user credentials in URLs, and restricted network ports.
+  - Prevented duplicate redirect rules on identical source paths (`fromPath`) within the same project.
+  - Enhanced `RedirectChainDetector`:
+    - Added `analyzeChain` method evaluating both forward and backward hops.
+    - Implemented loop detection and maximum chain depth limitation (`MAX_CHAIN_HOPS = 5`), rejecting excessive redirect chains in accordance with SEO and browser security guidelines.
+- **Strict 4-Language Translation Parity**:
+  - Added 42 new translation keys (21 Form Admin + 21 Redirect Admin) across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+  - Maintained 100% dictionary parity (2,151 keys per dictionary, 0 difference).
+- **Automated Test Suite**:
+  - Added `FormControllerAdminHardeningTest` (8 tests, 33 assertions) covering anti-XSS, anti-SSRF, field syntax validation, and submission lifecycles.
+  - Added `RedirectControllerAdminHardeningTest` (8 tests, 33 assertions) covering SSRF defense, scheme/userinfo/port restrictions, loop prevention, and chain depth bounds.
+  - Total test suite expanded to 1,095 tests (+16 tests, 4,459 assertions) passing at 100%.
+
 ## [1.26.85] — 2026-11-05
 
 ### Security, Admin Project Configuration Hardening & Strict I18N
