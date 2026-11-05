@@ -7,6 +7,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.156] — 2026-11-05
+
+### Plugin Quotas, Sandboxing Security & Table Column Settings Hardening (Cycle #89)
+- **Plugin Sandboxing & Manifest Security (`PluginManager` & `PluginController`)**:
+  - Enforced anti-execution sandboxing: blocked dangerous binaries and shell scripts (`.sh`, `.exe`, `.bin`, `.cgi`, `.bat`, `.cmd`, `.phar`, `.env`, `.htaccess`, etc.) and path traversal (`..`, `\0`, absolute paths, stream wrappers).
+  - Reserved plugin IDs protection: blocked registration of reserved system IDs (`system`, `core`, `admin`, `api`, `config`, `root`, `null`, `undefined`, `jambo`).
+  - Added strict recursive validation on manifest and plugin settings: enforced max depth (`MAX_SETTINGS_DEPTH = 5`), max keys (`MAX_SETTINGS_KEYS = 50`), anti-prototype pollution (`__proto__`, `constructor`, `prototype`), and stripped malicious script tags or dangerous protocols (`javascript:`, `vbscript:`, `data:text/html`).
+  - Bounded permissions (`MAX_PERMISSIONS_COUNT = 20`) and hooks (`MAX_HOOKS_COUNT = 30`) to whitelist sets.
+  - Implemented global plugin registration quota (`MAX_REGISTERED_PLUGINS = 100`) and global active plugins limit (`MAX_ACTIVE_PLUGINS_GLOBAL = 50`).
+- **Multi-Tenant Project Plugin Management & Tier Quotas (`ProjectPluginController` & `PluginManager`)**:
+  - Added `ProjectPluginController` with endpoints for listing project plugins, toggling activation, and managing project-specific plugin configurations.
+  - Enforced project/tenant tier plugin quotas: `free` (3), `starter` (10), `pro` (25), `enterprise` (100) or custom override (`max_plugins`).
+  - Blocked project activation of globally disabled plugins and prevented exceeding tier quotas with explicit 422 `QUOTA_EXCEEDED` response.
+  - Audit logging for all project plugin toggle and settings update operations.
+- **Table Column Settings Hardening (`ColumnSettingController`)**:
+  - Reduced payload size limit to 32 KB (`MAX_PAYLOAD_BYTES = 32768`).
+  - Enforced maximum JSON depth (`MAX_JSON_DEPTH = 4`) and anti-prototype pollution checks (`__proto__`, `constructor`, `prototype`).
+  - Capped maximum visible columns to 50 (`MAX_COLUMNS_COUNT = 50`), sanitizing tags and stripping control characters while preserving valid field slugs and structured column definitions (`id`, `visible`, `width`, `order`).
+  - Added `DELETE` route to reset column settings back to default with audit trail.
+- **Strict 100% I18n Compliance**:
+  - Added 19 new translation keys across all 4 locales (`en`, `fr`, `es`, `ar`), maintaining exact parity (3,378 keys per locale).
+- **Test Suite Verification**:
+  - Added `Cycle89PluginAndColumnSettingHardeningTest` covering all plugin sandboxing, quota enforcement, entrypoint security, settings sanitization, project tier limits, column settings depth, prototype pollution defense, column capping, and reset functionality (28 tests, 102 assertions, 100% pass).
+
 ## [1.26.155] — 2026-11-05
 
 ### Visual Blocks Quotas, Page Composition Depth & XSS/DOM Custom Script Security (Cycle #88)

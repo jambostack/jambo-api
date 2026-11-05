@@ -78,7 +78,14 @@ class PluginController extends AbstractController
         }
 
         $plugins = $this->pluginManager->listPlugins();
-        return $this->secureJson(['data' => $plugins]);
+        return $this->secureJson([
+            'data' => $plugins,
+            'quota' => [
+                'registered_count' => count($plugins),
+                'max_registered' => PluginManager::MAX_REGISTERED_PLUGINS,
+                'max_active' => PluginManager::MAX_ACTIVE_PLUGINS_GLOBAL,
+            ],
+        ]);
     }
 
     #[Route('/{pluginId}', name: 'show', methods: ['GET'], requirements: ['pluginId' => '[a-z0-9\-_]{2,64}'])]
@@ -155,6 +162,14 @@ class PluginController extends AbstractController
         }
 
         $manifest = $validation['manifest'];
+        $existing = $this->pluginManager->getPlugin($manifest['id']);
+        if ($existing === null && count($this->pluginManager->listPlugins()) >= PluginManager::MAX_REGISTERED_PLUGINS) {
+            return $this->secureJson([
+                'error' => $this->trans('plugin.quota.max_registered_exceeded', ['%max%' => (string) PluginManager::MAX_REGISTERED_PLUGINS], sprintf('Maximum number of registered plugins reached (max %d).', PluginManager::MAX_REGISTERED_PLUGINS)),
+                'code' => 'QUOTA_EXCEEDED',
+            ], 422);
+        }
+
         $success = $this->pluginManager->registerPlugin($manifest);
         if (!$success) {
             return $this->secureJson(['error' => $this->trans('plugin.save_failed', [], 'Failed to save plugin manifest.')], 500);
@@ -191,6 +206,17 @@ class PluginController extends AbstractController
 
         $body = json_decode($request->getContent(), true);
         $enabled = is_array($body) && isset($body['enabled']) ? (bool) $body['enabled'] : null;
+
+        $targetState = $enabled ?? !($plugin['enabled'] ?? true);
+        if ($targetState === true && !($plugin['enabled'] ?? false)) {
+            $activeCount = count(array_filter($this->pluginManager->listPlugins(), fn ($p) => ($p['enabled'] ?? true) === true));
+            if ($activeCount >= PluginManager::MAX_ACTIVE_PLUGINS_GLOBAL) {
+                return $this->secureJson([
+                    'error' => $this->trans('plugin.quota.global_active_exceeded', ['%max%' => (string) PluginManager::MAX_ACTIVE_PLUGINS_GLOBAL], sprintf('Maximum global active plugins limit reached (%d).', PluginManager::MAX_ACTIVE_PLUGINS_GLOBAL)),
+                    'code' => 'QUOTA_EXCEEDED',
+                ], 422);
+            }
+        }
 
         $updated = $this->pluginManager->togglePlugin($pluginId, $enabled);
         if ($updated === null) {
