@@ -19,6 +19,13 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/install', name: 'install_')]
 class InstallController extends AbstractController
 {
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+    private const MAX_PAYLOAD_SIZE = 16384;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly UserRepository $userRepository,
@@ -28,6 +35,16 @@ class InstallController extends AbstractController
         private readonly TranslatorInterface $translator,
     ) {}
 
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
+    private function secureHtml(string $html, int $status = 200, array $headers = []): Response
+    {
+        return new Response($html, $status, array_merge(self::SECURITY_HEADERS, ['Content-Type' => 'text/html; charset=UTF-8'], $headers));
+    }
+
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(): Response
     {
@@ -36,7 +53,7 @@ class InstallController extends AbstractController
             $title = htmlspecialchars($t->trans('install.already_installed_title'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $body  = htmlspecialchars($t->trans('install.already_installed_body'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $link  = htmlspecialchars($t->trans('install.already_installed_link'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            return new Response('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Jambo API</title></head><body style="background:#0d1117;color:#e6edf3;font-family:sans-serif;padding:40px;"><div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;max-width:600px;margin:0 auto;"><h1 style="color:#f85149;">' . $title . '</h1><p>' . $body . '</p><p><a href="/login" style="color:#58a6ff;">' . $link . '</a></p></div></body></html>', 403, ['Content-Type' => 'text/html']);
+            return $this->secureHtml('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Jambo API</title></head><body style="background:#0d1117;color:#e6edf3;font-family:sans-serif;padding:40px;"><div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;max-width:600px;margin:0 auto;"><h1 style="color:#f85149;">' . $title . '</h1><p>' . $body . '</p><p><a href="/login" style="color:#58a6ff;">' . $link . '</a></p></div></body></html>', 403);
         }
 
         $diagnostics = $this->runDiagnostics();
@@ -63,49 +80,58 @@ class InstallController extends AbstractController
         }
         $html .= '</div></body></html>';
 
-        return new Response($html, 200, ['Content-Type' => 'text/html']);
+        return $this->secureHtml($html, 200);
     }
 
     #[Route('/check', name: 'check', methods: ['GET'])]
     public function check(): JsonResponse
     {
         if ($this->userRepository->count([]) > 0) {
-            return new JsonResponse(['error' => $this->translator->trans('install.already_installed_error')], 403);
+            return $this->secureJson(['error' => $this->translator->trans('install.already_installed_error')], 403);
         }
 
-        return new JsonResponse($this->runDiagnostics());
+        return $this->secureJson($this->runDiagnostics());
     }
 
     #[Route('/setup-admin', name: 'setup_admin', methods: ['POST'])]
     public function setupAdmin(Request $request): JsonResponse
     {
         $t = $this->translator;
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_SIZE) {
+            return $this->secureJson(['error' => $t->trans('install.payload_too_large')], 413);
+        }
+
         // Rate limiting: prevent brute-force admin setup on fresh instances.
         $limiter = $this->installLimiter->create($request->getClientIp() ?: '127.0.0.1');
         if (false === $limiter->consume(1)->isAccepted()) {
-            return new JsonResponse(['error' => $t->trans('install.too_many_attempts')], 429);
+            return $this->secureJson(['error' => $t->trans('install.too_many_attempts')], 429);
         }
 
         if ($this->userRepository->count([]) > 0) {
-            return new JsonResponse(['error' => $t->trans('install.super_admin_exists')], 403);
+            return $this->secureJson(['error' => $t->trans('install.super_admin_exists')], 403);
         }
 
         try {
             $payload = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $t->trans('install.invalid_json')], 400);
+            return $this->secureJson(['error' => $t->trans('install.invalid_json')], 400);
         }
-        $email    = trim($payload['email'] ?? '');
+        $email    = trim((string) ($payload['email'] ?? ''));
         $password = (string) ($payload['password'] ?? '');
 
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return new JsonResponse(['error' => $t->trans('install.email_required')], 400);
+        if (strlen($email) > 255 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->secureJson(['error' => $t->trans('install.email_required')], 400);
         }
 
-        $pwdValidator = new PasswordPolicyValidator();
+        if (strlen($password) > PasswordPolicyValidator::MAX_LENGTH) {
+            return $this->secureJson(['error' => $t->trans('password.policy.max_length', ['%max%' => (string) PasswordPolicyValidator::MAX_LENGTH])], 400);
+        }
+
+        $pwdValidator = new PasswordPolicyValidator($this->translator);
         $valResult    = $pwdValidator->validateAdminPassword($password, $email);
         if (!$valResult['valid']) {
-            return new JsonResponse(['error' => $valResult['errors'][0]], 400);
+            return $this->secureJson(['error' => $valResult['errors'][0]], 400);
         }
 
         $user                    = new User();
@@ -117,7 +143,7 @@ class InstallController extends AbstractController
         $this->em->persist($user);
         $this->em->flush();
 
-        return new JsonResponse(['success' => true, 'message' => $t->trans('install.super_admin_created')], 201);
+        return $this->secureJson(['success' => true, 'message' => $t->trans('install.super_admin_created')], 201);
     }
 
     private function runDiagnostics(): array

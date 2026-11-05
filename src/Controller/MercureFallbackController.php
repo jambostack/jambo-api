@@ -14,6 +14,12 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class MercureFallbackController extends AbstractController
 {
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         #[Autowire(service: 'limiter.realtime_limiter')]
         private readonly ?RateLimiterFactory $realtimeLimiter = null,
@@ -49,7 +55,7 @@ class MercureFallbackController extends AbstractController
                 return new JsonResponse([
                     'error' => $this->trans('mercure.rate_limit_exceeded', [], 'Too many requests. Try again later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, self::SECURITY_HEADERS);
             }
         }
 
@@ -73,6 +79,6 @@ class MercureFallbackController extends AbstractController
         return new JsonResponse([
             'error' => $this->trans('mercure.hub_not_available', [], 'Mercure hub not available on this host.'),
             'code'  => 'MERCURE_NOT_AVAILABLE',
-        ], 503);
+        ], 503, self::SECURITY_HEADERS);
     }
 }

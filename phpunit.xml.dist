@@ -16,8 +16,26 @@
     </php>
 
     <testsuites>
-        <testsuite name="Project Test Suite">
-            <directory>tests</directory>
+        <testsuite name="unit">
+            <directory>tests/Entity</directory>
+            <directory>tests/Enum</directory>
+            <directory>tests/Twig</directory>
+            <directory>tests/Service</directory>
+        </testsuite>
+        <testsuite name="security">
+            <directory>tests/Security</directory>
+        </testsuite>
+        <testsuite name="controller">
+            <directory>tests/Controller</directory>
+        </testsuite>
+        <testsuite name="graphql">
+            <directory>tests/GraphQL</directory>
+        </testsuite>
+        <testsuite name="events">
+            <directory>tests/EventSubscriber</directory>
+        </testsuite>
+        <testsuite name="command">
+            <directory>tests/Command</directory>
         </testsuite>
     </testsuites>
 

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{ app.request.locale|default('en') }}">
 <head>
     <meta charset="UTF-8">
-    <title>Invitation invalide</title>
+    <title>{{ 'invitation.invalid_title'|trans }}</title>
     <style>
         body { font-family: sans-serif; max-width: 500px; margin: 80px auto; text-align: center; }
         .error { color: #dc2626; margin: 16px 0; }
@@ -10,11 +10,11 @@
     </style>
 </head>
 <body>
-    <h1>Invitation invalide</h1>
+    <h1>{{ 'invitation.invalid_heading'|trans }}</h1>
     <p class="error">{{ error }}</p>
     {% if project_name is defined and project_name %}
-        <p>Projet : <strong>{{ project_name }}</strong></p>
+        <p>{{ 'invitation.project_label'|trans }} : <strong>{{ project_name }}</strong></p>
     {% endif %}
-    <p><a href="/">Retour à l'accueil</a></p>
+    <p><a href="/">{{ 'invitation.back_home'|trans }}</a></p>
 </body>
 </html>

@@ -22,6 +22,8 @@ class InvitationController extends AbstractController
         'X-Frame-Options'        => 'DENY',
         'Cache-Control'          => 'no-store',
     ];
+    private const MAX_PAYLOAD_SIZE = 16384;
+
     public function __construct(
         private ProjectMemberRepository $memberRepo,
         private EntityManagerInterface $em,
@@ -35,12 +37,25 @@ class InvitationController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function secureRender(string $view, array $parameters = [], int $status = 200): Response
+    {
+        return $this->render($view, $parameters, new Response('', $status, self::SECURITY_HEADERS));
+    }
+
     #[Route('/invitation/accept/{token}', name: 'invitation_accept', methods: ['GET', 'POST'])]
     #[Route('/api/invitations/{token}/accept', name: 'api_invitation_accept', methods: ['POST', 'GET'])]
     public function accept(string $token, Request $request): Response
     {
         $wantsJson = str_contains((string) $request->headers->get('Accept'), 'application/json')
             || str_starts_with($request->getPathInfo(), '/api/');
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_SIZE) {
+            $msg = $this->translator->trans('invitation.payload_too_large');
+            if ($wantsJson) {
+                return $this->secureJson(['error' => $msg], 413);
+            }
+            return new Response($msg, 413, array_merge(self::SECURITY_HEADERS, ['Content-Type' => 'text/plain']));
+        }
 
         if ($this->invitationLimiter !== null) {
             $limiter = $this->invitationLimiter->create($request->getClientIp() ?: '127.0.0.1');
@@ -49,7 +64,7 @@ class InvitationController extends AbstractController
                 if ($wantsJson) {
                     return $this->secureJson(['error' => $msg], 429);
                 }
-                return new Response($msg, 429, ['Content-Type' => 'text/plain']);
+                return new Response($msg, 429, array_merge(self::SECURITY_HEADERS, ['Content-Type' => 'text/plain']));
             }
         }
 
@@ -58,9 +73,9 @@ class InvitationController extends AbstractController
             if ($wantsJson) {
                 return $this->secureJson(['error' => $msg], 404);
             }
-            return $this->render('invitation/invalid.html.twig', [
+            return $this->secureRender('invitation/invalid.html.twig', [
                 'error' => $msg,
-            ]);
+            ], 404);
         }
 
         $member = $this->memberRepo->findOneBy(['invitationToken' => $token]);
@@ -70,9 +85,9 @@ class InvitationController extends AbstractController
             if ($wantsJson) {
                 return $this->secureJson(['error' => $msg], 404);
             }
-            return $this->render('invitation/invalid.html.twig', [
+            return $this->secureRender('invitation/invalid.html.twig', [
                 'error' => $msg,
-            ]);
+            ], 404);
         }
 
         if ($member->isTokenExpired()) {
@@ -83,10 +98,10 @@ class InvitationController extends AbstractController
                     'project_name' => $member->project->name,
                 ], 410);
             }
-            return $this->render('invitation/invalid.html.twig', [
-                'error' => $msg,
+            return $this->secureRender('invitation/invalid.html.twig', [
+                'error'        => $msg,
                 'project_name' => $member->project->name,
-            ]);
+            ], 410);
         }
 
         $user = $this->getUser();
@@ -103,9 +118,9 @@ class InvitationController extends AbstractController
             if ($wantsJson) {
                 return $this->secureJson(['error' => $msg], 403);
             }
-            return $this->render('invitation/invalid.html.twig', [
+            return $this->secureRender('invitation/invalid.html.twig', [
                 'error' => $msg,
-            ]);
+            ], 403);
         }
 
         // Check if user is already an active member (added directly while invitation was pending)

@@ -33,9 +33,10 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class RealtimeController extends AbstractController
 {
     private const SECURITY_HEADERS = [
-        'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
-        'Pragma' => 'no-cache',
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate, private',
+        'Pragma'                 => 'no-cache',
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
     ];
 
     private readonly MercureTopicSecurityService $topicSecurity;

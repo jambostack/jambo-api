@@ -1801,6 +1801,11 @@ return [
     'invitation.expired_link' => 'Este enlace de invitación ha caducado.',
     'invitation.wrong_recipient' => 'Esta invitación está destinada a {email}.',
     'invitation.too_many_attempts' => 'Demasiados intentos de invitación. Por favor, inténtelo de nuevo más tarde.',
+    'invitation.invalid_title' => 'Invitación no válida',
+    'invitation.invalid_heading' => 'Invitación no válida',
+    'invitation.project_label' => 'Proyecto',
+    'invitation.back_home' => 'Volver al inicio',
+    'invitation.payload_too_large' => 'Carga útil demasiado grande. El tamaño máximo es de 16 KB.',
 
     'forms.new_form' => 'Nuevo formulario',
     'forms.total_forms' => 'Total formularios',
@@ -2027,6 +2032,7 @@ return [
     'install.php_version_check'          => 'Versión PHP >= 8.4 (actual: %s)',
     'install.extension_check'            => 'Extensión PHP: %s',
     'install.writable_dir_check'         => 'Directorio con permisos de escritura: %s',
+    'install.payload_too_large'          => 'Carga útil demasiado grande. El tamaño máximo es de 16 KB.',
 
     // ProjectController
     'project.invalid_json'                     => 'Cuerpo JSON inválido.',

@@ -1850,6 +1850,11 @@ return [
     'invitation.expired_link' => 'Ce lien d\'invitation a expiré.',
     'invitation.wrong_recipient' => 'Cette invitation est destinée à {email}.',
     'invitation.too_many_attempts' => 'Trop de tentatives d\'invitation. Veuillez réessayer plus tard.',
+    'invitation.invalid_title' => 'Invitation invalide',
+    'invitation.invalid_heading' => 'Invitation invalide',
+    'invitation.project_label' => 'Projet',
+    'invitation.back_home' => 'Retour à l\'accueil',
+    'invitation.payload_too_large' => 'Charge utile trop volumineuse. La taille maximale est de 16 Ko.',
 
     'forms.new_form' => 'Nouveau formulaire',
     'forms.total_forms' => 'Total formulaires',
@@ -2045,6 +2050,7 @@ return [
     'install.php_version_check'          => 'Version PHP >= 8.4 (actuelle : %s)',
     'install.extension_check'            => 'Extension PHP : %s',
     'install.writable_dir_check'         => 'Dossier accessible en écriture : %s',
+    'install.payload_too_large'          => 'Charge utile trop volumineuse. La taille maximale est de 16 Ko.',
 
     // ProjectController
     'project.invalid_json'                     => 'Corps JSON invalide.',

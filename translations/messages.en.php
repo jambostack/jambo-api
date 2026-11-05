@@ -1832,6 +1832,11 @@ return [
     'invitation.expired_link' => 'This invitation link has expired.',
     'invitation.wrong_recipient' => 'This invitation is intended for {email}.',
     'invitation.too_many_attempts' => 'Too many invitation attempts. Please retry later.',
+    'invitation.invalid_title' => 'Invalid Invitation',
+    'invitation.invalid_heading' => 'Invalid Invitation',
+    'invitation.project_label' => 'Project',
+    'invitation.back_home' => 'Back to home',
+    'invitation.payload_too_large' => 'Payload too large. Maximum size is 16 KB.',
 
     'forms.new_form' => 'New form',
     'forms.total_forms' => 'Total forms',
@@ -2027,6 +2032,7 @@ return [
     'install.php_version_check'          => 'PHP version >= 8.4 (current: %s)',
     'install.extension_check'            => 'PHP extension: %s',
     'install.writable_dir_check'         => 'Writable directory: %s',
+    'install.payload_too_large'          => 'Payload too large. Maximum size is 16 KB.',
 
     // ProjectController
     'project.invalid_json'                     => 'Invalid JSON body.',

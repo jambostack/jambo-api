@@ -95,7 +95,7 @@ class Cycle53SecurityHardeningTest extends WebTestCase
         self::assertResponseIsSuccessful();
         $data = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame(HealthController::VERSION, $data['version']);
-        self::assertGreaterThanOrEqual('1.26.112', $data['version']);
+        self::assertGreaterThanOrEqual('1.26.114', $data['version']);
     }
 
     public function testAiControllerSecurityHeadersAndValidation(): void

@@ -1801,6 +1801,11 @@ return [
     'invitation.expired_link' => 'انتهت صلاحية رابط الدعوة هذا.',
     'invitation.wrong_recipient' => 'هذه الدعوة مخصصة لـ {email}.',
     'invitation.too_many_attempts' => 'عدد كبير جداً من محاولات الدعوة. يرجى المحاولة مرة أخرى لاحقاً.',
+    'invitation.invalid_title' => 'دعوة غير صالحة',
+    'invitation.invalid_heading' => 'دعوة غير صالحة',
+    'invitation.project_label' => 'المشروع',
+    'invitation.back_home' => 'العودة إلى الصفحة الرئيسية',
+    'invitation.payload_too_large' => 'حمولة الطلب كبيرة جداً. الحد الأقصى للحجم هو 16 كيلوبايت.',
 
     'forms.new_form' => 'نموذج جديد',
     'forms.total_forms' => 'إجمالي النماذج',
@@ -2027,6 +2032,7 @@ return [
     'install.php_version_check'          => 'إصدار PHP >= 8.4 (الحالي: %s)',
     'install.extension_check'            => 'إضافة PHP: %s',
     'install.writable_dir_check'         => 'مجلد قابل للكتابة: %s',
+    'install.payload_too_large'          => 'حمولة الطلب كبيرة جداً. الحد الأقصى للحجم هو 16 كيلوبايت.',
 
     // ProjectController
     'project.invalid_json'                     => 'جسم JSON غير صالح.',
