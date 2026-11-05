@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Service\AuditService;
 use App\Service\Plugin\PluginManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
@@ -25,6 +26,7 @@ class PluginController extends AbstractController
     public function __construct(
         private readonly PluginManager $pluginManager,
         private readonly ?AuditService $auditService = null,
+        #[Autowire(service: 'limiter.admin_api_limiter')]
         private readonly ?RateLimiterFactory $tokenLimiter = null,
         private readonly ?TranslatorInterface $translator = null,
     ) {}
@@ -54,6 +56,17 @@ class PluginController extends AbstractController
             return $this->secureJson(['error' => $this->trans('plugin.access_denied', [], 'Access denied: administrator privileges required.')], 403);
         }
 
+        return null;
+    }
+
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->tokenLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?: ($request->getClientIp() ?: '127.0.0.1');
+            if (false === $this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson(['error' => $this->trans('plugin.rate_limit_exceeded', [], 'Too many plugin requests. Please retry later.')], 429);
+            }
+        }
         return null;
     }
 
@@ -90,6 +103,10 @@ class PluginController extends AbstractController
             return $error;
         }
 
+        if ($error = $this->checkRateLimit($request)) {
+            return $error;
+        }
+
         $content = $request->getContent();
         if (strlen($content) > PluginManager::MAX_MANIFEST_BYTES) {
             return $this->secureJson(['error' => $this->trans('plugin.manifest_too_large', [], 'Plugin manifest exceeds size limit (64KB).')], 413);
@@ -118,11 +135,8 @@ class PluginController extends AbstractController
             return $error;
         }
 
-        if ($this->tokenLimiter !== null) {
-            $identifier = $this->getUser()?->getUserIdentifier() ?: 'anonymous';
-            if (false === $this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->secureJson(['error' => $this->trans('plugin.rate_limit_exceeded', [], 'Too many plugin requests. Please retry later.')], 429);
-            }
+        if ($error = $this->checkRateLimit($request)) {
+            return $error;
         }
 
         $content = $request->getContent();
@@ -166,6 +180,10 @@ class PluginController extends AbstractController
             return $error;
         }
 
+        if ($error = $this->checkRateLimit($request)) {
+            return $error;
+        }
+
         $plugin = $this->pluginManager->getPlugin($pluginId);
         if ($plugin === null) {
             return $this->secureJson(['error' => $this->trans('plugin.not_found', [], 'Plugin not found.')], 404);
@@ -193,9 +211,13 @@ class PluginController extends AbstractController
     }
 
     #[Route('/{pluginId}', name: 'delete', methods: ['DELETE'], requirements: ['pluginId' => '[a-z0-9\-_]{2,64}'])]
-    public function delete(string $pluginId): JsonResponse
+    public function delete(string $pluginId, ?Request $request = null): JsonResponse
     {
         if ($error = $this->denyNonAdmin()) {
+            return $error;
+        }
+
+        if ($request !== null && ($error = $this->checkRateLimit($request))) {
             return $error;
         }
 

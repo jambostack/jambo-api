@@ -7,6 +7,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.135] — 2026-11-05
+
+### Security Hardening on Share, Preview, Column Settings, ApiDocs & Plugins (Phase 87 — Cycle #72)
+- **ShareController & ShareRepository Hardening**:
+  - Enforced an active shares quota cap (`MAX_ACTIVE_SHARES_PER_ENTRY = 50`) on `ShareController::store`, preventing resource exhaustion and database spam via 422 `MAX_ACTIVE_SHARES_EXCEEDED` (`share.max_shares_exceeded`).
+  - Added full pagination support to `ShareController::index` with `limit` (max 100, default 25), `page`, and `offset` (capped at `MAX_OFFSET = 10000`), returning structured metadata (`total`, `page`, `limit`).
+  - Extended `ShareRepository` with `findByEntry($entry, $limit, $offset)`, `countByEntry($entry)`, and `countActiveByEntry($entry)`.
+  - Added null-safe project tenant isolation check in `ShareController::destroy`: `$share->project?->id !== $project->id`.
+  - Integrated `AuditService` audit trail logging for both `share_create` and `share_revoke`.
+- **PreviewController Hardening**:
+  - Injected `AuditService` to log preview token generation (`preview_token_create`).
+  - Added security audit event logging (`preview_url_validation`) upon target preview URL validation failure (catching anti-SSRF violations and invalid URL probes).
+- **ColumnSettingController Hardening**:
+  - Injected rate limiting (`#[Autowire(service: 'limiter.project_limiter')]`, 30 req/min) across `show` and `update` endpoints with user/IP identification.
+  - Enforced `MAX_COLUMNS_COUNT = 50` constant and HTML stripping / control character sanitization on column identifiers.
+  - Added audit logging (`column_setting_update`) tracking modified collections and column counts.
+- **ApiDocsController Hardening**:
+  - Injected `#[Autowire(service: 'limiter.openapi_limiter')]` (60 req/min) on Swagger UI endpoint (`/api/docs/{projectId}`) with 429 early response (`api_docs.rate_limit_exceeded`).
+  - Enforced strict Content Security Policy (CSP) headers restricting script, style, img, and connect origins (`https://unpkg.com`, `https://validator.swagger.io`, `'self'`), plus clickjacking prevention (`frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`).
+- **PluginController Hardening**:
+  - Autowired `#[Autowire(service: 'limiter.admin_api_limiter')]` and extended rate limiting protection across all mutation and validation endpoints (`validate`, `register`, `toggle`, `delete`).
+- **Strict I18N Parity**:
+  - Added translations for `share.max_shares_exceeded`, `column_setting.rate_limit_exceeded`, and `api_docs.rate_limit_exceeded` across all 4 language dictionaries (`messages.en.php`, `messages.fr.php`, `messages.es.php`, `messages.ar.php`).
+
 ## [1.26.134] — 2026-11-05
 
 ### Security Hardening on Automations, Flows & Outbound Webhooks (Phase 86 — Cycle #71)

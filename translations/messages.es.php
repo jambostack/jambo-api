@@ -2019,6 +2019,7 @@ return [
     'column_setting.invalid_json' => 'Cuerpo JSON no válido.',
     'column_setting.columns_must_be_array' => 'Las columnas visibles deben ser una matriz.',
     'column_setting.columns_limit_exceeded' => 'Número máximo de columnas superado (máx. 50).',
+    'column_setting.rate_limit_exceeded' => 'Demasiadas solicitudes de configuración de columnas. Inténtelo más tarde.',
 
     // InstallController
     'install.already_installed_title'    => 'Aplicación Ya Instalada',
@@ -2786,6 +2787,7 @@ return [
     'share.entry_not_found'                           => 'Entrada no encontrada.',
     'share.invalid_duration'                          => 'Duración no válida.',
     'share.not_found'                                 => 'Compartición no encontrada.',
+    'share.max_shares_exceeded'                       => 'Límite máximo de enlaces compartidos activos alcanzado para esta entrada (%max%).',
     'insights.auth_required'                          => 'Autenticación requerida.',
     'insights.project_not_found'                      => 'Proyecto no encontrado.',
     'insights.invalid_range'                          => 'Intervalo de tiempo no válido.',
@@ -3127,6 +3129,7 @@ return [
     'studio.failed_persist_entries' => 'No se pudieron guardar las entradas. Inténtelo de nuevo.',
     'api_docs.project_not_found' => 'Proyecto no encontrado',
     'api_docs.auth_required' => 'Autenticación requerida',
+    'api_docs.rate_limit_exceeded' => 'Demasiadas solicitudes de documentación de API. Inténtelo más tarde.',
     'api_project.unauthorized' => 'No autorizado. Proporcione un token Bearer válido.',
     'api_project.insufficient_abilities' => 'Capacidades de token insuficientes.',
     'api_project_info.not_found' => 'Proyecto no encontrado.',

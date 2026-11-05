@@ -7,10 +7,12 @@ use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
-
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
@@ -21,11 +23,21 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api')]
 class ApiDocsController extends AbstractController
 {
+    private const SECURITY_HEADERS = [
+        'Content-Type' => 'text/html; charset=utf-8',
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options' => 'SAMEORIGIN',
+        'Referrer-Policy' => 'strict-origin-when-cross-origin',
+        'Content-Security-Policy' => "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https://unpkg.com https://validator.swagger.io; connect-src 'self'; frame-ancestors 'self';",
+    ];
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private ?ProjectMemberRepository $memberRepo = null,
         private ?ApiTokenChecker $tokenChecker = null,
         private ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.openapi_limiter')]
+        private ?RateLimiterFactory $openapiLimiter = null,
     ) {}
 
     private function trans(string $key, array $params = [], string $default = ''): string
@@ -35,8 +47,20 @@ class ApiDocsController extends AbstractController
 
     #[Route('/docs/{projectId}', name: 'api_docs_swagger', methods: ['GET'], priority: 30,
         requirements: ['projectId' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
-    public function swagger(string $projectId, Request $request): Response
+    public function swagger(string $projectId, ?Request $request = null): Response
     {
+        if ($this->openapiLimiter !== null && $request !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->openapiLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse([
+                    'error' => $this->trans('api_docs.rate_limit_exceeded', [], 'Too many API documentation requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, [
+                    'X-Content-Type-Options' => 'nosniff',
+                    'Cache-Control' => 'no-store',
+                ]);
+            }
+        }
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
         } catch (\Throwable) {
@@ -105,11 +129,6 @@ class ApiDocsController extends AbstractController
 </html>
 HTML;
 
-        return new Response($html, 200, [
-            'Content-Type' => 'text/html; charset=utf-8',
-            'X-Content-Type-Options' => 'nosniff',
-            'X-Frame-Options' => 'SAMEORIGIN',
-            'Referrer-Policy' => 'strict-origin-when-cross-origin',
-        ]);
+        return new Response($html, 200, self::SECURITY_HEADERS);
     }
 }

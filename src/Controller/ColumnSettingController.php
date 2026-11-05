@@ -6,10 +6,13 @@ use App\Entity\ColumnSetting;
 use App\Repository\CollectionRepository;
 use App\Repository\ColumnSettingRepository;
 use App\Repository\ProjectRepository;
+use App\Service\AuditService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -18,6 +21,7 @@ class ColumnSettingController extends AbstractController
 {
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
     private const MAX_PAYLOAD_BYTES = 262144; // 256 KB
+    public const MAX_COLUMNS_COUNT = 50;
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -31,6 +35,9 @@ class ColumnSettingController extends AbstractController
         private ColumnSettingRepository $columnSettingRepository,
         private EntityManagerInterface $em,
         private ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.project_limiter')]
+        private ?RateLimiterFactory $projectLimiter = null,
+        private ?AuditService $auditService = null,
     ) {}
 
     private function trans(string $key, array $params = [], string $default = ''): string
@@ -44,7 +51,7 @@ class ColumnSettingController extends AbstractController
     }
 
     #[Route('', name: 'show', methods: ['GET'])]
-    public function show(string $projectUuid, string $collectionSlug): JsonResponse
+    public function show(string $projectUuid, string $collectionSlug, ?Request $request = null): JsonResponse
     {
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
@@ -52,6 +59,16 @@ class ColumnSettingController extends AbstractController
                 'error' => $this->trans('column_setting.auth_required', [], 'Authentication required.'),
                 'code' => 'AUTH_REQUIRED',
             ], 401);
+        }
+
+        if ($this->projectLimiter !== null && $request !== null) {
+            $identifier = $user->id ? ('user_' . $user->id) : ($request->getClientIp() ?: '127.0.0.1');
+            if (false === $this->projectLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('column_setting.rate_limit_exceeded', [], 'Too many column settings requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
         }
 
         $resolved = $this->resolve($projectUuid, $collectionSlug);
@@ -70,7 +87,7 @@ class ColumnSettingController extends AbstractController
     }
 
     #[Route('', name: 'update', methods: ['PUT', 'PATCH'])]
-    public function update(string $projectUuid, string $collectionSlug, Request $request): JsonResponse
+    public function update(string $projectUuid, string $collectionSlug, ?Request $request = null): JsonResponse
     {
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
@@ -80,6 +97,16 @@ class ColumnSettingController extends AbstractController
             ], 401);
         }
 
+        if ($this->projectLimiter !== null && $request !== null) {
+            $identifier = $user->id ? ('user_' . $user->id) : ($request->getClientIp() ?: '127.0.0.1');
+            if (false === $this->projectLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('column_setting.rate_limit_exceeded', [], 'Too many column settings requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+
         $resolved = $this->resolve($projectUuid, $collectionSlug);
         if ($resolved instanceof JsonResponse) {
             return $resolved;
@@ -87,6 +114,10 @@ class ColumnSettingController extends AbstractController
         [$project, $collection] = $resolved;
 
         $this->denyAccessUnlessGranted('project.view', $project);
+
+        if ($request === null) {
+            return $this->secureJson(['visibleColumns' => []]);
+        }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson([
@@ -111,7 +142,7 @@ class ColumnSettingController extends AbstractController
             ], 422);
         }
         $columns = [];
-        foreach (array_slice($rawColumns, 0, 50) as $col) {
+        foreach (array_slice($rawColumns, 0, self::MAX_COLUMNS_COUNT) as $col) {
             if (is_scalar($col)) {
                 $trimmed = trim((string) $col);
                 if ($trimmed !== '' && mb_strlen($trimmed) <= 100 && !preg_match('/[\x00-\x1F\x7F]/', $trimmed)) {
@@ -131,6 +162,18 @@ class ColumnSettingController extends AbstractController
 
         $setting->visibleColumns = $columns;
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'column_setting_update',
+            project: $project,
+            input: [
+                'collection' => $collectionSlug,
+                'columns_count' => count($columns),
+            ],
+            output: null,
+            status: 'success',
+            source: 'column_setting_controller',
+        );
 
         return $this->secureJson(['visibleColumns' => $setting->visibleColumns]);
     }

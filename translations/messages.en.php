@@ -2019,6 +2019,7 @@ return [
     'column_setting.invalid_json' => 'Invalid JSON body.',
     'column_setting.columns_must_be_array' => 'Visible columns must be an array.',
     'column_setting.columns_limit_exceeded' => 'Maximum number of columns exceeded (max 50).',
+    'column_setting.rate_limit_exceeded' => 'Too many column settings requests. Please retry later.',
 
     // InstallController
     'install.already_installed_title'    => 'Application Already Installed',
@@ -2786,6 +2787,7 @@ return [
     'share.entry_not_found'                           => 'Entry not found.',
     'share.invalid_duration'                          => 'Invalid duration.',
     'share.not_found'                                 => 'Share not found.',
+    'share.max_shares_exceeded'                       => 'Maximum active share links limit reached for this entry (%max%).',
     'insights.auth_required'                          => 'Authentication required.',
     'insights.project_not_found'                      => 'Project not found.',
     'insights.invalid_range'                          => 'Invalid range.',
@@ -3127,6 +3129,7 @@ return [
     'studio.failed_persist_entries' => 'Failed to persist entries. Please try again.',
     'api_docs.project_not_found' => 'Project not found',
     'api_docs.auth_required' => 'Authentication required',
+    'api_docs.rate_limit_exceeded' => 'Too many API documentation requests. Please retry later.',
     'api_project.unauthorized' => 'Unauthorized. Provide a valid Bearer token.',
     'api_project.insufficient_abilities' => 'Insufficient token abilities.',
     'api_project_info.not_found' => 'Project not found.',

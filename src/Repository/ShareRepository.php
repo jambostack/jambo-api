@@ -22,12 +22,41 @@ class ShareRepository extends ServiceEntityRepository
     }
 
     /** @return Share[] */
-    public function findByEntry(\App\Entity\ContentEntry $entry): array
+    public function findByEntry(\App\Entity\ContentEntry $entry, ?int $limit = null, ?int $offset = null): array
     {
-        return $this->createQueryBuilder('s')
+        $qb = $this->createQueryBuilder('s')
             ->andWhere('s.entry = :entry')->setParameter('entry', $entry)
-            ->orderBy('s.createdAt', 'DESC')
-            ->getQuery()->getResult();
+            ->orderBy('s.createdAt', 'DESC');
+
+        if ($limit !== null) {
+            $qb->setMaxResults($limit);
+        }
+        if ($offset !== null) {
+            $qb->setFirstResult($offset);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
+
+    public function countByEntry(\App\Entity\ContentEntry $entry): int
+    {
+        return (int) $this->createQueryBuilder('s')
+            ->select('COUNT(s.id)')
+            ->andWhere('s.entry = :entry')->setParameter('entry', $entry)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    public function countActiveByEntry(\App\Entity\ContentEntry $entry): int
+    {
+        return (int) $this->createQueryBuilder('s')
+            ->select('COUNT(s.id)')
+            ->andWhere('s.entry = :entry')->setParameter('entry', $entry)
+            ->andWhere('s.revokedAt IS NULL')
+            ->andWhere('(s.expiresAt IS NULL OR s.expiresAt > :now)')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->getSingleScalarResult();
     }
 
     public function countExpired(): int

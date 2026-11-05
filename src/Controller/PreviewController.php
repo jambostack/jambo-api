@@ -6,6 +6,7 @@ use App\Entity\ContentEntry;
 use App\Entity\Project;
 use App\Repository\ContentEntryRepository;
 use App\Repository\ProjectRepository;
+use App\Service\AuditService;
 use App\Service\EavDataFormatterService;
 use App\Service\PreviewTokenService;
 use App\Service\Security\SsrfProtectionService;
@@ -41,6 +42,7 @@ class PreviewController extends AbstractController
         private readonly SsrfProtectionService $ssrfProtection,
         private readonly ?RateLimiterFactory $previewLimiter = null,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?AuditService $auditService = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -131,6 +133,18 @@ class PreviewController extends AbstractController
 
         $token = $this->tokenService->createToken($entry, $ttl);
 
+        $this->auditService?->log(
+            toolName: 'preview_token_create',
+            project: $project,
+            input: [
+                'entry_uuid' => $entryUuid,
+                'ttl' => $ttl,
+            ],
+            output: ['status' => 'generated'],
+            status: 'success',
+            source: 'preview_controller',
+        );
+
         return $this->jsonResponse([
             'token'      => $token,
             'expires_in' => $ttl,
@@ -173,6 +187,15 @@ class PreviewController extends AbstractController
 
         $error = $this->validatePreviewTargetUrl((string) $url);
         if ($error !== null) {
+            $this->auditService?->log(
+                toolName: 'preview_url_validation',
+                project: null,
+                input: ['url' => substr((string) $url, 0, 256)],
+                output: null,
+                status: 'failure',
+                errorMessage: $error,
+                source: 'preview_controller',
+            );
             return $this->jsonResponse(['valid' => false, 'error' => $error], 422);
         }
 

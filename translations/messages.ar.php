@@ -2019,6 +2019,7 @@ return [
     'column_setting.invalid_json' => 'محتوى JSON غير صالح.',
     'column_setting.columns_must_be_array' => 'يجب أن تكون الأعمدة المرئية مصفوفة.',
     'column_setting.columns_limit_exceeded' => 'تم تجاوز الحد الأقصى للأعمدة (الحد الأقصى 50).',
+    'column_setting.rate_limit_exceeded' => 'طلبات كثيرة جداً لإعدادات الأعمدة. يرجى إعادة المحاولة لاحقاً.',
 
     // InstallController
     'install.already_installed_title'    => 'التطبيق مثبَّت بالفعل',
@@ -2788,6 +2789,7 @@ return [
     'share.entry_not_found'                           => 'السجل غير موجود.',
     'share.invalid_duration'                          => 'المدة المحددة غير صالحة.',
     'share.not_found'                                 => 'المشاركة غير موجودة.',
+    'share.max_shares_exceeded'                       => 'تم الوصول إلى الحد الأقصى لروابط المشاركة النشطة لهذا الإدخال (%max%).',
     'insights.auth_required'                          => 'المصادقة مطلوبة.',
     'insights.project_not_found'                      => 'المشروع غير موجود.',
     'insights.invalid_range'                          => 'النطاق الزمني غير صالح.',
@@ -3129,6 +3131,7 @@ return [
     'studio.failed_persist_entries' => 'فشل في حفظ المدخلات. يرجى المحاولة مرة أخرى.',
     'api_docs.project_not_found' => 'المشروع غير موجود',
     'api_docs.auth_required' => 'المصادقة مطلوبة',
+    'api_docs.rate_limit_exceeded' => 'طلبات كثيرة جداً لتوثيق واجهة برمجة التطبيقات. يرجى إعادة المحاولة لاحقاً.',
     'api_project.unauthorized' => 'غير مصرح به. يرجى تقديم رمز Bearer صالح.',
     'api_project.insufficient_abilities' => 'صلاحيات الرمز غير كافية.',
     'api_project_info.not_found' => 'المشروع غير موجود.',

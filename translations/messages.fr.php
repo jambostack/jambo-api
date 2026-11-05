@@ -2037,6 +2037,7 @@ return [
     'column_setting.invalid_json' => 'Corps JSON invalide.',
     'column_setting.columns_must_be_array' => 'Les colonnes visibles doivent être un tableau.',
     'column_setting.columns_limit_exceeded' => 'Nombre maximal de colonnes dépassé (max 50).',
+    'column_setting.rate_limit_exceeded' => 'Trop de requêtes de configuration des colonnes. Veuillez réessayer plus tard.',
 
     // InstallController
     'install.already_installed_title'    => 'Application Déjà Installée',
@@ -2804,6 +2805,7 @@ return [
     'share.entry_not_found'                           => 'Entrée introuvable.',
     'share.invalid_duration'                          => 'Durée invalide.',
     'share.not_found'                                 => 'Partage introuvable.',
+    'share.max_shares_exceeded'                       => 'Limite maximale de liens de partage actifs atteinte pour cette entrée (%max%).',
     'insights.auth_required'                          => 'Authentification requise.',
     'insights.project_not_found'                      => 'Projet introuvable.',
     'insights.invalid_range'                          => 'Plage temporelle invalide.',
@@ -3145,6 +3147,7 @@ return [
     'studio.failed_persist_entries' => 'Impossible d\'enregistrer les entrées. Veuillez réessayer.',
     'api_docs.project_not_found' => 'Projet introuvable',
     'api_docs.auth_required' => 'Authentification requise',
+    'api_docs.rate_limit_exceeded' => 'Trop de requêtes de documentation API. Veuillez réessayer plus tard.',
     'api_project.unauthorized' => 'Non autorisé. Fournissez un jeton Bearer valide.',
     'api_project.insufficient_abilities' => 'Capacités de jeton insuffisantes.',
     'api_project_info.not_found' => 'Projet introuvable.',
