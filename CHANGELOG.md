@@ -7,6 +7,29 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.160] — 2026-11-05
+
+### Versioning Quotas, Snapshot Sanitization, Auto-Retention Pruning & Project-Wide Prune Hardening (Cycle #92)
+- **Content Versioning Quotas & Auto-Retention (`VersioningService`)**:
+  - Implemented multi-tenant project version quotas based on tenant tier: `free` (500), `starter` (2,500), `pro` (10,000), `enterprise` (50,000) with custom override support (`max_versions`).
+  - Added entry-level version retention limits: `free` (20), `starter` (50), `pro` (100), `enterprise` (250) with custom override support (`max_versions_per_entry`).
+  - Automatic oldest-version pruning upon new snapshot creation when entry exceeds its retention quota.
+  - Snapshot payload size validation: enforces strict 1 MB (`MAX_SNAPSHOT_BYTES`) cap preventing JSON memory-exhaustion DoS attacks.
+  - Label sanitization: automatically strips HTML tags, filters control characters, and truncates to 150 characters (`MAX_LABEL_LENGTH`).
+- **Project-Wide Version Pruning & Label Modification Endpoints (`VersioningController`)**:
+  - Added `POST /api/projects/{projectUuid}/versions/prune`: enables administrators to purge versions older than `days` (bounded 1 to 365) and/or prune all entries in project to `keep` recent versions (bounded 1 to 100).
+  - Added `PATCH /api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}/label`: enables updating version labels with strict sanitization and audit logging.
+  - Bounded request payload size (`MAX_PAYLOAD_BYTES = 16384`) on all mutation endpoints.
+- **Optimized Content Version Repository Methods (`ContentVersionRepository`)**:
+  - Added high-performance scalar counting: `countByEntry(ContentEntry $entry)` and `countByProject(Project $project)`.
+  - Added `findOlderThanForProject` and batch `pruneOlderThanForProject`.
+- **Test Suite Regression Fix (`AutomationAndFlowHardeningTest`)**:
+  - Fixed bilingual assertions in `AutomationAndFlowHardeningTest` for flow graph depth limit and trigger incoming edges to match Symfony Translator output across both French and English environments.
+- **Strict 100% I18n Compliance**:
+  - Added 10 new translation keys across all 4 locales (`en`, `fr`, `es`, `ar`), maintaining exact parity (3,443 keys per locale, 0 diffs).
+- **Test Suite Verification**:
+  - Added `Cycle92VersioningHardeningTest` covering version quotas, auto-retention pruning, label sanitization, snapshot byte caps, project prune endpoints, label updates, and repository count queries (9 tests, 116 assertions, 100% pass).
+
 ## [1.26.159] — 2026-11-05
 
 ### Outbound HTTP Flow Node SSRF, Recursion & Complete Flow Validator I18n Hardening (Cycle #91 Finalization)

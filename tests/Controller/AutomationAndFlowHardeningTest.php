@@ -149,7 +149,8 @@ class AutomationAndFlowHardeningTest extends WebTestCase
         $this->assertSame(422, $this->client->getResponse()->getStatusCode());
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
         $this->assertFalse($data['valid']);
-        $this->assertStringContainsString('trigger ne peut pas recevoir d\'arêtes entrantes', implode(' ', $data['details']));
+        $details = implode(' ', $data['details']);
+        $this->assertTrue(str_contains($details, "trigger ne peut pas recevoir d'arêtes entrantes") || str_contains($details, 'a trigger cannot receive incoming edges'));
     }
 
     public function testStoreAutomationValidatesNameBounds(): void
@@ -329,7 +330,8 @@ class AutomationAndFlowHardeningTest extends WebTestCase
         $this->assertSame(422, $this->client->getResponse()->getStatusCode());
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
         $this->assertFalse($data['valid']);
-        $this->assertStringContainsString('profondeur', implode(' ', $data['details']));
+        $details = implode(' ', $data['details']);
+        $this->assertTrue(str_contains($details, 'profondeur') || str_contains($details, 'depth'));
     }
 
     public function testStoreAutomationRejectsOversizedPayload(): void

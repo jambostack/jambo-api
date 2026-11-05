@@ -19,6 +19,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class VersioningController extends AbstractController
 {
+    public const MAX_PAYLOAD_BYTES = 16384;
     public const MAX_PAGE_LIMIT = 100;
     public const DEFAULT_PAGE_LIMIT = 50;
 
@@ -371,6 +372,173 @@ class VersioningController extends AbstractController
 
         $msg = $this->trans('versioning.version_deleted_successfully', ['%version%' => $versionNumber], "Version %version% was successfully deleted.");
         return new JsonResponse(['success' => true, 'message' => $msg], 200, self::SECURITY_HEADERS);
+    }
+
+    #[Route('/api/projects/{projectUuid}/versions/prune', name: 'project_versions_prune', methods: ['POST'])]
+    public function pruneProjectVersions(string $projectUuid, Request $request): JsonResponse
+    {
+        if ($this->versioningLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse([
+                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, self::SECURITY_HEADERS);
+            }
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return new JsonResponse(['error' => $this->trans('versioning.payload_too_large', [], 'Payload too large.')], 413, self::SECURITY_HEADERS);
+        }
+
+        if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $projectUuid)) {
+            return new JsonResponse(['error' => $this->trans('versioning.project_not_found', [], 'Project not found.')], 404, self::SECURITY_HEADERS);
+        }
+
+        $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            return new JsonResponse(['error' => $this->trans('versioning.project_not_found', [], 'Project not found.')], 404, self::SECURITY_HEADERS);
+        }
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
+            return new JsonResponse(['error' => $this->trans('versioning.auth_required', [], 'Authentication required.')], 401, self::SECURITY_HEADERS);
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.delete', $project);
+        }
+
+        $days = null;
+        $keep = null;
+
+        if ($request->query->has('days')) {
+            $days = $request->query->getInt('days');
+        }
+        if ($request->query->has('keep')) {
+            $keep = $request->query->getInt('keep');
+        }
+
+        if ($request->getContent()) {
+            try {
+                $payload = $request->toArray();
+                if (isset($payload['days'])) {
+                    $days = (int) $payload['days'];
+                }
+                if (isset($payload['keep'])) {
+                    $keep = (int) $payload['keep'];
+                }
+            } catch (\Throwable) {}
+        }
+
+        if ($days === null && $keep === null) {
+            return new JsonResponse(['error' => $this->trans('versioning.prune_params_required', [], 'Either days or keep parameter is required.')], 422, self::SECURITY_HEADERS);
+        }
+
+        $totalPruned = 0;
+        if ($days !== null) {
+            if ($days < 1 || $days > 365) {
+                return new JsonResponse(['error' => $this->trans('versioning.days_invalid', [], 'Invalid days parameter (must be between 1 and 365).')], 422, self::SECURITY_HEADERS);
+            }
+            $totalPruned += $this->versioning->pruneOlderThanForProject($project, $days);
+        }
+
+        if ($keep !== null) {
+            if ($keep < 1 || $keep > 100) {
+                return new JsonResponse(['error' => $this->trans('versioning.keep_invalid', [], 'Invalid keep count parameter (must be between 1 and 100).')], 422, self::SECURITY_HEADERS);
+            }
+            $totalPruned += $this->versioning->pruneProjectEntries($project, $keep);
+        }
+
+        $this->auditService?->log(
+            toolName: 'project_versions_prune',
+            project: $project,
+            input: ['days' => $days, 'keep' => $keep],
+            output: ['pruned_count' => $totalPruned],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier() ?? 'system',
+            source: 'versioning'
+        );
+        $this->auditService?->flush();
+
+        $msg = $this->trans('versioning.project_versions_pruned_successfully', ['%count%' => $totalPruned], "Project versions pruned successfully (%count% removed).");
+        return new JsonResponse(['success' => true, 'pruned' => $totalPruned, 'message' => $msg], 200, self::SECURITY_HEADERS);
+    }
+
+    #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}/label', name: 'versions_update_label', requirements: ['versionNumber' => '\d+'], methods: ['PATCH', 'PUT'])]
+    public function updateLabel(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
+    {
+        if ($this->versioningLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse([
+                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, self::SECURITY_HEADERS);
+            }
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return new JsonResponse(['error' => $this->trans('versioning.payload_too_large', [], 'Payload too large.')], 413, self::SECURITY_HEADERS);
+        }
+
+        if ($versionNumber < 1 || $versionNumber > 1000000) {
+            return new JsonResponse(['error' => $this->trans('versioning.invalid_version', [], 'Invalid version number.')], 422, self::SECURITY_HEADERS);
+        }
+
+        $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
+        if (!$entry) return new JsonResponse(['error' => $this->trans('versioning.entry_not_found', [], 'Entry not found.')], 404, self::SECURITY_HEADERS);
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
+            return new JsonResponse(['error' => $this->trans('versioning.auth_required', [], 'Authentication required.')], 401, self::SECURITY_HEADERS);
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.update', $entry->project);
+        }
+
+        try {
+            $payload = $request->toArray();
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => $this->trans('versioning.invalid_json', [], 'Invalid JSON payload.')], 400, self::SECURITY_HEADERS);
+        }
+
+        $label = $payload['label'] ?? null;
+        if ($label !== null && !is_string($label)) {
+            return new JsonResponse(['error' => $this->trans('versioning.label_invalid_type', [], 'Label must be a string.')], 422, self::SECURITY_HEADERS);
+        }
+
+        $updated = $this->versioning->updateVersionLabel($entry, $versionNumber, $label);
+        if (!$updated) {
+            return new JsonResponse(['error' => $this->trans('versioning.version_not_found', [], 'Version not found.')], 404, self::SECURITY_HEADERS);
+        }
+
+        $this->auditService?->log(
+            toolName: 'version_label_update',
+            project: $entry->project,
+            input: ['entry_uuid' => $uuid, 'version' => $versionNumber, 'label' => $updated->label],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier() ?? 'system',
+            source: 'versioning'
+        );
+        $this->auditService?->flush();
+
+        $msg = $this->trans('versioning.label_updated_successfully', [], 'Version label updated successfully.');
+        return new JsonResponse(['success' => true, 'label' => $updated->label, 'message' => $msg], 200, self::SECURITY_HEADERS);
     }
 
     private function trans(string $key, array|string $paramsOrDefault = [], array|string $defaultOrParams = []): string
