@@ -2821,6 +2821,17 @@ return [
     'search.query_too_long'                           => 'La consulta de búsqueda supera la longitud máxima (%max% caracteres).',
     'search.invalid_collection_format'                => 'Formato de colección no válido.',
     'search.invalid_locale_format'                    => 'Formato de idioma no válido.',
+    'search.invalid_query_format'                     => 'Formato de consulta de búsqueda inválido.',
+    'search.query_too_complex'                        => 'La consulta de búsqueda supera el número máximo de términos permitidos (%max% términos).',
+    'search.query_nesting_too_deep'                   => 'El anidamiento de paréntesis en la consulta supera la profundidad permitida (%max% niveles).' ,
+    'search.query_no_searchable_character'            => 'La consulta de búsqueda debe contener al menos una letra o número.',
+    'search.invalid_status_format'                    => 'Formato de filtro de estado inválido. Valores permitidos: published, draft, archived, scheduled.',
+    'search.invalid_sort_format'                      => 'Formato de parámetro de ordenación inválido o campo no permitido.',
+    'search.invalid_limit_format'                     => 'Parámetro de límite de búsqueda inválido.',
+    'search.invalid_offset_format'                    => 'Parámetro de desplazamiento de búsqueda inválido.',
+    'search.invalid_page_format'                      => 'Parámetro de página de búsqueda inválido.',
+    'search.offset_too_high'                          => 'El desplazamiento de búsqueda supera el límite máximo permitido (%max%).',
+    'search.quota.document_limit_exceeded'            => 'Cuota de documentos en el índice de búsqueda superada para este plan (%count%/%limit% documentos).',
     'search.reindex_success'                          => 'Índice de búsqueda reconstruido con éxito (%count% documentos indexados).',
 
     // Cycle 40 Hardening: ContentAiStream, Share, PublicShare, Insights & Versioning

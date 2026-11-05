@@ -2839,6 +2839,17 @@ return [
     'search.query_too_long'                           => 'La requête de recherche dépasse la longueur maximale (%max% caractères).',
     'search.invalid_collection_format'                => 'Format de collection invalide.',
     'search.invalid_locale_format'                    => 'Format de langue invalide.',
+    'search.invalid_query_format'                     => 'Format de requête de recherche invalide.',
+    'search.query_too_complex'                        => 'La requête de recherche dépasse le nombre maximal de termes autorisés (%max% termes).',
+    'search.query_nesting_too_deep'                   => 'L\'imbrication de parenthèses dans la requête dépasse la profondeur autorisée (%max% niveaux).',
+    'search.query_no_searchable_character'            => 'La requête de recherche doit contenir au moins une lettre ou un chiffre.',
+    'search.invalid_status_format'                    => 'Format de filtre de statut invalide. Valeurs autorisées : published, draft, archived, scheduled.',
+    'search.invalid_sort_format'                      => 'Format de paramètre de tri invalide ou champ de tri non autorisé.',
+    'search.invalid_limit_format'                     => 'Paramètre de limite de recherche invalide.',
+    'search.invalid_offset_format'                    => 'Paramètre de décalage de recherche invalide.',
+    'search.invalid_page_format'                      => 'Paramètre de page de recherche invalide.',
+    'search.offset_too_high'                          => 'Le décalage de recherche dépasse la limite maximale autorisée (%max%).',
+    'search.quota.document_limit_exceeded'            => 'Quota de documents d\'index de recherche dépassé pour ce forfait (%count%/%limit% documents).',
     'search.reindex_success'                          => 'Index de recherche reconstruit avec succès (%count% documents indexés).',
 
     // Cycle 40 Hardening: ContentAiStream, Share, PublicShare, Insights & Versioning

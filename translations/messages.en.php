@@ -2821,6 +2821,17 @@ return [
     'search.query_too_long'                           => 'Search query exceeds maximum allowed length (%max% characters).',
     'search.invalid_collection_format'                => 'Invalid collection format.',
     'search.invalid_locale_format'                    => 'Invalid locale format.',
+    'search.invalid_query_format'                     => 'Invalid search query format.',
+    'search.query_too_complex'                        => 'Search query exceeds maximum allowed term count (%max% terms).',
+    'search.query_nesting_too_deep'                   => 'Search query parenthesis nesting exceeds allowed depth (%max% levels).',
+    'search.query_no_searchable_character'            => 'Search query must contain at least one searchable letter or number.',
+    'search.invalid_status_format'                    => 'Invalid status filter format. Allowed values: published, draft, archived, scheduled.',
+    'search.invalid_sort_format'                      => 'Invalid sort parameter format or disallowed sort field.',
+    'search.invalid_limit_format'                     => 'Invalid search limit parameter.',
+    'search.invalid_offset_format'                    => 'Invalid search offset parameter.',
+    'search.invalid_page_format'                      => 'Invalid search page parameter.',
+    'search.offset_too_high'                          => 'Search offset exceeds maximum allowed limit (%max%).',
+    'search.quota.document_limit_exceeded'            => 'Search index document quota exceeded for this tier (%count%/%limit% documents).',
     'search.reindex_success'                          => 'Search index successfully rebuilt (%count% documents indexed).',
 
     // Cycle 40 Hardening: ContentAiStream, Share, PublicShare, Insights & Versioning

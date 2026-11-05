@@ -2823,6 +2823,17 @@ return [
     'search.query_too_long'                           => 'يتجاوز استعلام البحث الطول الأقصى المسموح به (%max% حرفاً).',
     'search.invalid_collection_format'                => 'تنسيق المجموعة غير صالح.',
     'search.invalid_locale_format'                    => 'تنسيق اللغة غير صالح.',
+    'search.invalid_query_format'                     => 'صيغة استعلام البحث غير صالحة.',
+    'search.query_too_complex'                        => 'يتجاوز استعلام البحث الحد الأقصى للمصطلحات المسموح بها (%max% مصطلح).',
+    'search.query_nesting_too_deep'                   => 'يتجاوز تداخل الأقواس في استعلام البحث العمق المسموح به (%max% مستويات).',
+    'search.query_no_searchable_character'            => 'يجب أن يحتوي استعلام البحث على حرف أو رقم واحد على الأقل قابل للبحث.',
+    'search.invalid_status_format'                    => 'صيغة تصفية الحالة غير صالحة. القيم المسموح بها: published, draft, archived, scheduled.',
+    'search.invalid_sort_format'                      => 'صيغة معلمة الترتيب غير صالحة أو حقل الترتيب غير مسموح به.',
+    'search.invalid_limit_format'                     => 'معلمة حد البحث غير صالحة.',
+    'search.invalid_offset_format'                    => 'معلمة إزاحة البحث غير صالحة.',
+    'search.invalid_page_format'                      => 'معلمة صفحة البحث غير صالحة.',
+    'search.offset_too_high'                          => 'تتجاوز إزاحة البحث الحد الأقصى المسموح به (%max%).',
+    'search.quota.document_limit_exceeded'            => 'تم تجاوز حصة مستندات فهرس البحث لهذه الخطة (%count%/%limit% مستند).',
     'search.reindex_success'                          => 'تمت إعادة بناء فهرس البحث بنجاح (تمت فهرسة %count% مستند).',
 
     // Cycle 40 Hardening: ContentAiStream, Share, PublicShare, Insights & Versioning

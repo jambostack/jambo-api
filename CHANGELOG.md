@@ -7,6 +7,31 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.161] — 2026-11-05
+
+### Search Security Hardening, Query Complexity Protection, Tier Quotas & Safe Pagination (Cycle #93)
+- **Search Query Complexity & DoS Protection (`SearchController`)**:
+  - Enforced query parameter validation (`q`): rejected non-string queries, empty or whitespace-only inputs.
+  - Implemented Unicode searchable character requirement (`[\p{L}\p{N}]/u`): prevents DoS/CPU spikes on queries composed solely of wildcards, operators, or punctuation (`???`, `***`, `%%%`, `((()))`).
+  - Added query token limitation: maximum 25 terms (`MAX_QUERY_TERMS`) to prevent token stream flooding.
+  - Added parenthesis nesting depth protection: capped to 3 levels (`MAX_NESTING_DEPTH`) to prevent syntax tree exhaustion.
+  - Collapsed excessive wildcard repetitions (`[%_*?~]{5,}`) to prevent ReDoS and SQL LIKE query degradation.
+- **Filter Injections & Safe Pagination (`SearchController`, `SearchService`)**:
+  - Filter sanitization: strict regex checks on `collection` (`/^[a-zA-Z0-9_\-]{1,64}$/`) and `locale` (`/^[a-zA-Z]{2,4}([-_][a-zA-Z0-9]{2,8})?$/`, max 16 chars).
+  - Added `status` filter validation: whitelisted against `['published', 'draft', 'archived', 'scheduled']`.
+  - Added `sort` parameter validation: whitelisted sort fields (`['created_at', 'updated_at', 'published_at', 'status', 'slug']`) and directions (`asc`, `desc`).
+  - Safe pagination: validated numeric limit (`MAX_PAGE_LIMIT = 100`) and offset (`MAX_OFFSET = 10000`), with transparent `page` to `offset` conversion and out-of-bounds rejection.
+- **Search Index Document Quotas by Tier (`SearchService`)**:
+  - Introduced index document quotas by tenant tier: `free` (1,000), `starter` (5,000), `pro` (25,000), `enterprise` (100,000), with custom override support (`project.settings['max_search_documents']`).
+  - Reindex quota enforcement: `/api/projects/{uuid}/search/reindex` returns HTTP 422 with `SEARCH_DOCUMENT_LIMIT_EXCEEDED` if project entries exceed the tier quota.
+  - Reindex truncation safeguard: automatically truncates indexed batches in Meilisearch to the tier limit.
+  - Real-time indexing protection: skips indexing new documents when the project document quota is reached while allowing in-place updates of already-indexed entries.
+  - Enhanced database fallback search with `status`, `metaTitle`, and consistent pagination metadata (`estimatedTotalHits`).
+- **Strict 100% I18n Compliance**:
+  - Added 11 new translation keys across all 4 locales (`en`, `fr`, `es`, `ar`), maintaining exact parity (3,454 keys per locale, 0 diffs).
+- **Test Suite Verification**:
+  - Added dedicated test suite `Cycle93SearchHardeningTest` (16 tests, 152 assertions, 100% pass).
+
 ## [1.26.160] — 2026-11-05
 
 ### Versioning Quotas, Snapshot Sanitization, Auto-Retention Pruning & Project-Wide Prune Hardening (Cycle #92)
