@@ -180,6 +180,14 @@ class UserController extends AbstractController
             return $this->json(['error' => $this->translator->trans('user.admin.required_fields')], 422);
         }
 
+        if (mb_strlen($name) > 255) {
+            return $this->json(['errors' => ['name' => $this->translator->trans('user.admin.name_too_long')]], 422);
+        }
+
+        if (mb_strlen($email) > 254) {
+            return $this->json(['errors' => ['email' => $this->translator->trans('user.admin.email_too_long')]], 422);
+        }
+
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return $this->json(['errors' => ['email' => $this->translator->trans('user.admin.invalid_email')]], 422);
         }
@@ -307,6 +315,9 @@ class UserController extends AbstractController
         }
         if (isset($data['email'])) {
             $newEmail = trim((string) $data['email']);
+            if (mb_strlen($newEmail) > 254) {
+                return $this->json(['errors' => ['email' => $this->translator->trans('user.admin.email_too_long')]], 422);
+            }
             if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
                 return $this->json(['errors' => ['email' => $this->translator->trans('user.admin.invalid_email')]], 422);
             }
@@ -423,14 +434,9 @@ class UserController extends AbstractController
 
     private function countSuperAdmins(): int
     {
-        $allUsers = $this->userRepository->findAll();
-        $superAdminCount = 0;
-        foreach ($allUsers as $u) {
-            if ($u->isSuperAdmin()) {
-                $superAdminCount++;
-            }
-        }
-        return $superAdminCount;
+        return (int) $this->em->createQuery(
+            "SELECT COUNT(u.id) FROM App\\Entity\\User u WHERE u.roles LIKE :role"
+        )->setParameter('role', '%ROLE_SUPER_ADMIN%')->getSingleScalarResult();
     }
 
     private function serialize(User $user): array

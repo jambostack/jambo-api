@@ -2461,6 +2461,10 @@ return [
     'role.admin.updated_success'                      => 'Rôle mis à jour avec succès.',
     'role.admin.single_deleted_success'               => 'Rôle supprimé avec succès.',
     'role.admin.deleted_success'                      => '%count% rôle(s) supprimé(s) avec succès.',
+    'role.admin.invalid_name_format'                  => 'Format du nom de rôle invalide. Utilisez uniquement des lettres, chiffres, underscores ou tirets (100 caractères max).',
+    'role.admin.name_too_long'                        => 'Le nom du rôle ne doit pas dépasser 100 caractères.',
+    'role.admin.label_too_long'                       => 'Le libellé du rôle ne doit pas dépasser 255 caractères.',
+    'role.admin.demo_mode_disabled'                   => 'La suppression de rôles est désactivée en mode démo.',
 
     // Permission Admin
     'permission.admin.not_found'                      => 'Permission non trouvée.',
@@ -2476,4 +2480,10 @@ return [
     'permission.admin.updated_success'                => 'Permission mise à jour avec succès.',
     'permission.admin.single_deleted_success'         => 'Permission supprimée avec succès.',
     'permission.admin.deleted_success'                => '%count% permission(s) supprimée(s) avec succès.',
+    'permission.admin.label_too_long'                 => 'Le libellé de permission ne doit pas dépasser 255 caractères.',
+    'permission.admin.group_too_long'                 => 'Le groupe de permission ne doit pas dépasser 100 caractères.',
+
+    // User Admin extra
+    'user.admin.name_too_long'                        => 'Le nom d\'utilisateur ne doit pas dépasser 255 caractères.',
+    'user.admin.email_too_long'                       => 'L\'adresse email ne doit pas dépasser 254 caractères.',
 ];

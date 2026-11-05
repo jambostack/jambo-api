@@ -2443,6 +2443,10 @@ return [
     'role.admin.updated_success'                      => 'Role updated successfully.',
     'role.admin.single_deleted_success'               => 'Role deleted successfully.',
     'role.admin.deleted_success'                      => '%count% role(s) deleted successfully.',
+    'role.admin.invalid_name_format'                  => 'Invalid role name format. Use letters, digits, underscores or hyphens only (max 100 characters).',
+    'role.admin.name_too_long'                        => 'Role name must not exceed 100 characters.',
+    'role.admin.label_too_long'                       => 'Role label must not exceed 255 characters.',
+    'role.admin.demo_mode_disabled'                   => 'Role deletion is disabled in demo mode.',
 
     // Permission Admin
     'permission.admin.not_found'                      => 'Permission not found.',
@@ -2458,4 +2462,10 @@ return [
     'permission.admin.updated_success'                => 'Permission updated successfully.',
     'permission.admin.single_deleted_success'         => 'Permission deleted successfully.',
     'permission.admin.deleted_success'                => '%count% permission(s) deleted successfully.',
+    'permission.admin.label_too_long'                 => 'Permission label must not exceed 255 characters.',
+    'permission.admin.group_too_long'                 => 'Permission group must not exceed 100 characters.',
+
+    // User Admin extra
+    'user.admin.name_too_long'                        => 'User name must not exceed 255 characters.',
+    'user.admin.email_too_long'                       => 'Email address must not exceed 254 characters.',
 ];

@@ -2445,6 +2445,10 @@ return [
     'role.admin.updated_success'                      => 'تم تحديث الدور بنجاح.',
     'role.admin.single_deleted_success'               => 'تم حذف الدور بنجاح.',
     'role.admin.deleted_success'                      => 'تم حذف %count% دور بنجاح.',
+    'role.admin.invalid_name_format'                  => 'صيغة اسم الدور غير صحيحة. استخدم فقط الأحرف والأرقام والشرطة السفلية أو العلوية (بحد أقصى 100 حرف).',
+    'role.admin.name_too_long'                        => 'يجب ألا يتجاوز اسم الدور 100 حرف.',
+    'role.admin.label_too_long'                       => 'يجب ألا يتجاوز عنوان الدور 255 حرفاً.',
+    'role.admin.demo_mode_disabled'                   => 'حذف الأدوار معطّل في وضع العرض التجريبي.',
 
     // Permission Admin
     'permission.admin.not_found'                      => 'الصلاحية غير موجودة.',
@@ -2460,4 +2464,10 @@ return [
     'permission.admin.updated_success'                => 'تم تحديث الصلاحية بنجاح.',
     'permission.admin.single_deleted_success'         => 'تم حذف الصلاحية بنجاح.',
     'permission.admin.deleted_success'                => 'تم حذف %count% صلاحية بنجاح.',
+    'permission.admin.label_too_long'                 => 'يجب ألا يتجاوز عنوان الصلاحية 255 حرفاً.',
+    'permission.admin.group_too_long'                 => 'يجب ألا تتجاوز مجموعة الصلاحية 100 حرف.',
+
+    // User Admin extra
+    'user.admin.name_too_long'                        => 'يجب ألا يتجاوز اسم المستخدم 255 حرفاً.',
+    'user.admin.email_too_long'                       => 'يجب ألا يتجاوز عنوان البريد الإلكتروني 254 حرفاً.',
 ];

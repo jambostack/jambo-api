@@ -188,8 +188,16 @@ class PermissionController extends AbstractController
 
         $permission = new Permission();
         $permission->name  = $name;
-        $permission->label = trim((string) ($data['label'] ?? $name)) ?: $name;
-        $permission->group = trim((string) ($data['group'] ?? 'custom')) ?: 'custom';
+        $label = trim((string) ($data['label'] ?? $name)) ?: $name;
+        if (mb_strlen($label) > 255) {
+            return $this->json(['errors' => ['label' => $this->translator->trans('permission.admin.label_too_long')]], 422);
+        }
+        $group = trim((string) ($data['group'] ?? 'custom')) ?: 'custom';
+        if (mb_strlen($group) > 100) {
+            return $this->json(['errors' => ['group' => $this->translator->trans('permission.admin.group_too_long')]], 422);
+        }
+        $permission->label = $label;
+        $permission->group = $group;
 
         $this->em->persist($permission);
         $this->em->flush();
@@ -247,10 +255,18 @@ class PermissionController extends AbstractController
         }
 
         if (isset($data['label'])) {
-            $permission->label = trim((string) $data['label']) ?: $permission->name;
+            $newLabel = trim((string) $data['label']) ?: $permission->name;
+            if (mb_strlen($newLabel) > 255) {
+                return $this->json(['errors' => ['label' => $this->translator->trans('permission.admin.label_too_long')]], 422);
+            }
+            $permission->label = $newLabel;
         }
         if (isset($data['group'])) {
-            $permission->group = trim((string) $data['group']) ?: 'custom';
+            $newGroup = trim((string) $data['group']) ?: 'custom';
+            if (mb_strlen($newGroup) > 100) {
+                return $this->json(['errors' => ['group' => $this->translator->trans('permission.admin.group_too_long')]], 422);
+            }
+            $permission->group = $newGroup;
         }
 
         $this->em->flush();

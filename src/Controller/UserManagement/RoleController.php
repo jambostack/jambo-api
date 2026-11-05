@@ -89,6 +89,10 @@ class RoleController extends AbstractController
     #[IsGranted('roles.manage')]
     public function bulkDelete(Request $request): JsonResponse
     {
+        if ($_ENV['DEMO_MODE'] ?? false) {
+            return $this->json(['error' => $this->translator->trans('role.admin.demo_mode_disabled')], 403);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -162,6 +166,19 @@ class RoleController extends AbstractController
             return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.name_required')]], 422);
         }
 
+        if (mb_strlen($name) > 100) {
+            return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.name_too_long')]], 422);
+        }
+
+        if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $name)) {
+            return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.invalid_name_format')]], 422);
+        }
+
+        $label = trim((string) ($data['label'] ?? $name));
+        if (mb_strlen($label) > 255) {
+            return $this->json(['errors' => ['label' => $this->translator->trans('role.admin.label_too_long')]], 422);
+        }
+
         /** @var User $currentUser */
         $currentUser = $this->getUser();
 
@@ -191,7 +208,7 @@ class RoleController extends AbstractController
 
         $role = new Role();
         $role->name  = $name;
-        $role->label = trim((string) ($data['label'] ?? $name)) ?: $name;
+        $role->label = $label ?: $name;
 
         if (is_array($permissions)) {
             $this->attachPermissions($role, $permissions);
@@ -244,6 +261,12 @@ class RoleController extends AbstractController
             if ($newName === '') {
                 return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.name_cannot_be_empty')]], 422);
             }
+            if (mb_strlen($newName) > 100) {
+                return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.name_too_long')]], 422);
+            }
+            if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $newName)) {
+                return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.invalid_name_format')]], 422);
+            }
             $existing = $this->roleRepository->findByName($newName);
             if ($existing !== null && $existing->id !== $role->id) {
                 return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.name_exists')]], 422);
@@ -251,7 +274,11 @@ class RoleController extends AbstractController
             $role->name = $newName;
         }
         if (isset($data['label'])) {
-            $role->label = trim((string) $data['label']);
+            $newLabel = trim((string) $data['label']);
+            if (mb_strlen($newLabel) > 255) {
+                return $this->json(['errors' => ['label' => $this->translator->trans('role.admin.label_too_long')]], 422);
+            }
+            $role->label = $newLabel;
         } elseif (isset($data['name'])) {
             $role->label = $role->name;
         }
