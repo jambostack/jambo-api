@@ -45,6 +45,98 @@ class JamboClientGeneratorTest extends TestCase
         $this->assertStringContainsString('proj-123', $output);
     }
 
+    public function testPreventsCommentBreakingAndCodeInjectionInProjectName(): void
+    {
+        $project = new Project();
+        $project->name = "Evil Project \n console.log('hacked'); //";
+        $project->collections = new ArrayCollection();
+
+        $output = $this->generator->generate($project, 'https://api.example.com', 'safe-uuid');
+
+        $this->assertStringNotContainsString("\n console.log", $output);
+        $this->assertStringContainsString("// Auto-generated Jambo API Client for project: Evil Project  console.log('hacked'); //", $output);
+    }
+
+    public function testSafelyEncodesApiUrlAndProjectUuid(): void
+    {
+        $project = new Project();
+        $project->name = 'Secure Project';
+        $project->collections = new ArrayCollection();
+
+        $maliciousUrl = "https://api.example.com'; alert(1); const foo = '";
+        $maliciousUuid = "uuid-123'; evil(); '";
+
+        $output = $this->generator->generate($project, $maliciousUrl, $maliciousUuid);
+
+        // JSON encoding safely encloses in double quotes so single quotes cannot break syntax
+        $this->assertStringContainsString('const API_URL = "https://api.example.com\'; alert(1); const foo = \'";', $output);
+        $this->assertStringContainsString('const PROJECT_UUID = "uuid-123\'; evil(); \'";', $output);
+    }
+
+    public function testHandlesHyphenatedSlugsAndQuotedProperties(): void
+    {
+        $project = new Project();
+        $project->name = 'Shop';
+
+        $col = new Collection();
+        $col->name = 'Blog Posts';
+        $col->slug = 'blog-posts';
+        $col->project = $project;
+        $col->fields = new ArrayCollection();
+
+        $f = new Field();
+        $f->name = 'First Name';
+        $f->slug = 'first-name';
+        $f->type = 'text';
+        $f->isRequired = true;
+        $col->fields->add($f);
+
+        $project->collections = new ArrayCollection([$col]);
+
+        $output = $this->generator->generate($project, 'https://api.example.com', 'uuid');
+
+        $this->assertStringContainsString('export interface BlogPost', $output);
+        $this->assertStringContainsString('"first-name": string;', $output);
+        $this->assertStringContainsString('export async function getBlogPosts(): Promise<BlogPost[]>', $output);
+        $this->assertStringContainsString('/collections/blog-posts', $output);
+    }
+
+    public function testHandlesReservedKeywordsInCollectionName(): void
+    {
+        $project = new Project();
+        $project->name = 'Keywords';
+
+        $col = new Collection();
+        $col->name = 'Interface';
+        $col->slug = 'interface';
+        $col->project = $project;
+        $col->fields = new ArrayCollection();
+
+        $project->collections = new ArrayCollection([$col]);
+
+        $output = $this->generator->generate($project, 'https://api.example.com', 'uuid');
+
+        $this->assertStringContainsString('export interface IInterface', $output);
+    }
+
+    public function testHandlesNumericCollectionNames(): void
+    {
+        $project = new Project();
+        $project->name = 'Numeric';
+
+        $col = new Collection();
+        $col->name = '123Items';
+        $col->slug = '123-items';
+        $col->project = $project;
+        $col->fields = new ArrayCollection();
+
+        $project->collections = new ArrayCollection([$col]);
+
+        $output = $this->generator->generate($project, 'https://api.example.com', 'uuid');
+
+        $this->assertStringContainsString('export interface Item123item', $output);
+    }
+
     private function makeProject(): Project
     {
         $project = new Project();

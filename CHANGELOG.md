@@ -7,6 +7,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.128] — 2026-11-05
+
+### Security Hardening on Image Transformation, Route Manifest & Client Generator (Cycle #65)
+- **Image Transformation Anti-DoS & Memory Bomb Defense (`ImageTransformService`)**:
+  - Implemented strict source file boundaries: rejection of null bytes, non-regular or unreadable files, source file size cap (25 MB / `MAX_SOURCE_BYTES`).
+  - Added image bomb & decompression bomb protection via `@getimagesize()` pre-validation: strictly capped source dimensions (`MAX_SOURCE_DIMENSION = 10000` px) and total megapixels (`MAX_SOURCE_PIXELS = 30_000_000` / 30 MP).
+  - Enforced strict raster-only source MIME type whitelist (`image/jpeg`, `image/png`, `image/gif`, `image/webp`, `image/avif`), preventing SVG XML/XXE/SSRF injection and polyglot parser confusion.
+  - Hardened Intervention Image execution: bounded output pixel budget (`MAX_OUTPUT_PIXELS = 12_000_000` / 12 MP), output dimensions bounded to 4000 px, quality bounded (1–100), and hex background color validation.
+  - Imagick resource quotas configured at runtime (`RESOURCETYPE_MEMORY`, `RESOURCETYPE_MAP`, `RESOURCETYPE_WIDTH`, `RESOURCETYPE_HEIGHT`, `RESOURCETYPE_DISK`).
+  - Cache key sanitization: prevented arbitrary extension leakage (e.g. `.php`) into cache storage; strictly constrained cache extension to allowed raster formats.
+  - Fully internationalized exception messages via `TranslatorInterface` adhering to i18n standards.
+- **Frontend Route Manifest & Host Header Injection Hardening (`FrontendRouteManifestService`)**:
+  - Protected Inertia / Ziggy shared route manifest against HTTP Host Header Injection & Poisoning (`resolveSafeBaseUrl`).
+  - Added RFC 1123 hostname and IPv4/IPv6 validation with strict character rejection (neutralizing CRLF, null bytes, HTML/XSS characters, backslashes, and slashes in Host headers).
+  - Implemented graceful fallback to configured `DEFAULT_URI` (`http://localhost` / production base URI) when invalid or malicious Host headers are detected or when `SuspiciousOperationException` is thrown.
+  - Sanitized route parameter token extraction: stripped inline regex requirements and defaults (e.g. `{id<\d+>}` -> `{id}`) ensuring reliable Ziggy frontend parameter bindings.
+- **TypeScript Client Generator Code Injection Hardening (`JamboClientGenerator`)**:
+  - Neutralized comment-breaking sequences, CRLF and control characters in project names (`cleanProjectName`), preventing JavaScript code breakout from header comments.
+  - Safely encoded `API_URL` and `PROJECT_UUID` literals using `json_encode` to prevent string breakout syntax injection.
+  - Sanitized interface identifiers (`toValidInterfaceName`): PascalCase normalization, alphanumeric sanitization, leading digit stripping/prefixing, and TypeScript reserved keyword escaping (e.g. `IInterface`).
+  - Safe property formatting (`formatProperty`): automatically JSON-quotes properties with hyphens or non-identifier characters (e.g. `"first-name": string;`), preventing syntax errors and injection.
+  - Safe function name generation (`toValidFunctionName`): camelCase sanitization ensuring valid JavaScript/TypeScript function identifiers.
+- **Unit Testing & Verification**:
+  - Added comprehensive test suites: `tests/Service/ImageTransformServiceTest.php` (9 tests) and `tests/Service/FrontendRouteManifestServiceTest.php` (7 tests).
+  - Expanded `tests/Service/JamboClientGeneratorTest.php` with 5 new security and injection test cases (8 tests).
+  - Full suite verification: 1,675+ tests executed with 100% pass rate.
+
 ## [1.26.127] — 2026-11-05
 
 ### Security Hardening on Static Site Publishing, Storage Manager & Twig Sandbox (Cycle #64)

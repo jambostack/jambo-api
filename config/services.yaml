@@ -112,6 +112,10 @@ services:
         arguments:
             $appSecret: '%kernel.secret%'
 
+    App\Service\FrontendRouteManifestService:
+        arguments:
+            $defaultUri: '%env(default::DEFAULT_URI)%'
+
     App\Service\ImageTransformService:
         arguments:
             $projectDir: '%kernel.project_dir%'

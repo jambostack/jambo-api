@@ -165,10 +165,14 @@ class FrontendRouteManifestService
         'projects.settings.webhooks.logs' => 'projects/{projectId}/settings/webhook-logs',
     ];
 
-    public function __construct(private readonly RouterInterface $router) {}
+    public function __construct(
+        private readonly RouterInterface $router,
+        private readonly ?string $defaultUri = null,
+    ) {}
 
     public function buildManifest(Request $request): array
     {
+        $resolvedBase = $this->resolveSafeBaseUrl($request);
         $symfonyRoutes = $this->router->getRouteCollection();
         $routes = [];
 
@@ -178,34 +182,123 @@ class FrontendRouteManifestService
                 continue;
             }
 
-            $uri = ltrim($symfonyRoute->getPath(), '/');
+            $rawUri = ltrim($symfonyRoute->getPath(), '/');
+            // Clean inline regex / default requirements: {id<[0-9]+>} -> {id}
+            $cleanUri = preg_replace('/\{([a-zA-Z0-9_]+)[<?][^}]*\}/', '{$1}', $rawUri);
             $methods = $symfonyRoute->getMethods() ?: ['GET'];
 
-            preg_match_all('/\{([^}]+)\}/', $uri, $matches);
+            preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $cleanUri, $matches);
 
             $routes[$frontendName] = [
-                'uri'        => $uri,
+                'uri'        => $cleanUri,
                 'methods'    => $methods,
-                'parameters' => $matches[1],
+                'parameters' => $matches[1] ?? [],
                 'bindings'   => (object) [],
             ];
         }
 
         foreach (self::CUSTOM_URIS as $frontendName => $uri) {
-            preg_match_all('/\{([^}]+)\}/', $uri, $matches);
+            $cleanUri = preg_replace('/\{([a-zA-Z0-9_]+)[<?][^}]*\}/', '{$1}', $uri);
+            preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $cleanUri, $matches);
+
             $routes[$frontendName] = [
-                'uri'        => $uri,
+                'uri'        => $cleanUri,
                 'methods'    => ['GET'],
-                'parameters' => $matches[1],
+                'parameters' => $matches[1] ?? [],
                 'bindings'   => (object) [],
             ];
         }
 
         return [
-            'url'      => $request->getSchemeAndHttpHost(),
-            'port'     => null,
+            'url'      => $resolvedBase['url'],
+            'port'     => $resolvedBase['port'],
             'defaults' => (object) [],
             'routes'   => $routes,
         ];
+    }
+
+    /**
+     * Resolves and hardens the application base URL against HTTP Host Header Injection / Poisoning.
+     *
+     * @return array{url: string, port: ?int}
+     */
+    public function resolveSafeBaseUrl(Request $request): array
+    {
+        try {
+            $rawHost = $request->getHttpHost();
+            $rawScheme = $request->getScheme();
+        } catch (\Throwable) {
+            return $this->getDefaultUrlParts();
+        }
+
+        // 1. Strict Scheme validation: only http or https allowed
+        $scheme = in_array(strtolower($rawScheme), ['http', 'https'], true) ? strtolower($rawScheme) : 'https';
+
+        // 2. Strict Host format validation (RFC 1123, IPv4, IPv6)
+        if (!$this->isValidHost($rawHost)) {
+            return $this->getDefaultUrlParts();
+        }
+
+        // 3. Reject forbidden injection characters
+        if (preg_match('/[\r\n\t\0<>"\';\\\\\/]/', $rawHost)) {
+            return $this->getDefaultUrlParts();
+        }
+
+        try {
+            $hostOnly = $request->getHost();
+            $port = $request->getPort();
+        } catch (\Throwable) {
+            return $this->getDefaultUrlParts();
+        }
+
+        $safePort = ($port !== null && $port !== 80 && $port !== 443 && $port > 0 && $port <= 65535) ? $port : null;
+
+        $url = $scheme . '://' . strtolower($hostOnly);
+        if ($safePort !== null) {
+            $url .= ':' . $safePort;
+        }
+
+        return [
+            'url'  => $url,
+            'port' => $safePort,
+        ];
+    }
+
+    /**
+     * Verifies that the host string conforms to RFC 1123 / standard hostname or IP address format.
+     */
+    public function isValidHost(string $host): bool
+    {
+        if ($host === '' || strlen($host) > 255) {
+            return false;
+        }
+
+        // Must only contain alphanumeric, dots, hyphens, colons (for port), or brackets (for IPv6)
+        if (preg_match('/[^\w\.\-\:\[\]]/', $host)) {
+            return false;
+        }
+
+        // IPv6 literal check: [::1] or [2001:db8::1]:8080
+        if (str_starts_with($host, '[')) {
+            return (bool) preg_match('/^\[[0-9a-fA-F:]+\](:[0-9]{1,5})?$/', $host);
+        }
+
+        // Hostname / IPv4 check with optional valid port
+        return (bool) preg_match('/^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(:[0-9]{1,5})?$/', $host);
+    }
+
+    private function getDefaultUrlParts(): array
+    {
+        if ($this->defaultUri !== null && filter_var($this->defaultUri, FILTER_VALIDATE_URL)) {
+            $scheme = parse_url($this->defaultUri, PHP_URL_SCHEME) ?: 'https';
+            $host = parse_url($this->defaultUri, PHP_URL_HOST) ?: 'localhost';
+            $port = parse_url($this->defaultUri, PHP_URL_PORT);
+            $portVal = ($port !== null && $port !== 80 && $port !== 443) ? (int) $port : null;
+            $url = $scheme . '://' . $host . ($portVal !== null ? ':' . $portVal : '');
+
+            return ['url' => $url, 'port' => $portVal];
+        }
+
+        return ['url' => 'http://localhost', 'port' => null];
     }
 }

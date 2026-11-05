@@ -53,7 +53,7 @@ class NativeTwigSecurityPolicyTest extends TestCase
         $twig->render('test.html.twig');
     }
 
-    public function testIncludeAllowed(): void
+    public function testIncludeIsBlocked(): void
     {
         $loader = new ArrayLoader([
             'main.html.twig'   => '{% include "partial.html.twig" %}',
@@ -61,7 +61,8 @@ class NativeTwigSecurityPolicyTest extends TestCase
         ]);
         $twig = new Environment($loader);
         $twig->addExtension(new SandboxExtension(new NativeTwigSecurityPolicy(), true));
-        $this->assertSame('Partial', $twig->render('main.html.twig'));
+        $this->expectException(\Twig\Sandbox\SecurityNotAllowedTagError::class);
+        $twig->render('main.html.twig');
     }
 
     public function testMethodCallOnObjectIsBlocked(): void
