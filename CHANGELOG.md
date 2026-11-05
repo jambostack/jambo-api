@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.90] — 2026-11-05
+
+### AdminApi REST Hardening, UUID Bounds Enforcement, CSV Stream Protection & Strict I18N
+- **AdminApi Hardening (`ProjectController`, `CollectionController`, `FieldController`, `ImportController`)**:
+  - Enforced RFC 4122 UUID validation on all project and collection routing parameters (`validateUuid()`), returning explicit HTTP 422 for malformed tokens.
+  - Implemented length boundaries and required checks for project names (max 255 chars), collection names and slugs (max 255 chars, regex `^[a-zA-Z0-9_\-]+$`), and field names (max 255 chars).
+  - Protected CSV and JSON batch import against unbounded streams, memory inflation, excessive row counts (max 1000 rows), and excessive column mappings (max 100 columns).
+  - Maintained safe nullable translator injection (`?TranslatorInterface $translator = null`) with seamless fallback across all endpoints.
+- **Strict I18N Elimination of Hardcoded Strings**:
+  - Replaced all hardcoded error/status responses across `AdminApi` controllers with 41 new translation keys under `admin_api.project.*`, `admin_api.collection.*`, `admin_api.field.*`, and `admin_api.import.*`.
+  - Maintained exact 4-language parity (EN, FR, ES, AR) across `translations/messages.*.php` (2315 keys each, 0 diffs).
+- **Tests & Quality Assurance**:
+  - Added dedicated test suite `tests/Controller/AdminApi/AdminApiHardeningTest.php` (11 tests, 362 assertions) validating UUID format enforcement, input bounds, French/Spanish/Arabic localization, and full dictionary parity.
+  - Verified 100% passing tests across the AdminApi suite.
+
 ## [1.26.89] — 2026-11-05
 
 ### Collection & Content Management Hardening, Anti-SSRF, Payload Constraints & Strict I18N

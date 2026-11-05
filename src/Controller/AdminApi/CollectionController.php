@@ -21,6 +21,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
+use Symfony\Contracts\Translation\TranslatorInterface;
+
 #[Route('/admin-api/projects/{uuid}/collections', name: 'admin_api_collection_')]
 class CollectionController extends AbstractController
 {
@@ -34,14 +36,20 @@ class CollectionController extends AbstractController
         private ?ContentEntryRepository $entries = null,
         private ?CsvSanitizer $csvSanitizer = null,
         private ?EntityManagerInterface $em = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = []): string
+    {
+        return $this->translator?->trans($id, $parameters) ?? $id;
+    }
 
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $uuid): JsonResponse
     {
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
         return $this->json(['data' => array_map(
@@ -55,12 +63,12 @@ class CollectionController extends AbstractController
     {
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
         $c = $this->collections->findOneByProjectAndSlug($project, $slug);
         if (!$c) {
-            return $this->json(['error' => 'Collection not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.not_found')], 404);
         }
         return $this->json(['data' => $this->serialize($c, withFields: true)]);
     }
@@ -71,14 +79,33 @@ class CollectionController extends AbstractController
         $this->requireScope($request, 'schema:write');
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON body'], 400);
+            return $this->json(['error' => $this->trans('admin_api.collection.invalid_json')], 400);
         }
+
+        $name = trim((string) ($body['name'] ?? ''));
+        if ($name === '') {
+            return $this->json(['error' => $this->trans('admin_api.collection.name_required')], 422);
+        }
+        if (mb_strlen($name) > 255) {
+            return $this->json(['error' => $this->trans('admin_api.collection.name_too_long')], 422);
+        }
+
+        if (isset($body['slug'])) {
+            $slug = trim((string) $body['slug']);
+            if (mb_strlen($slug) > 255) {
+                return $this->json(['error' => $this->trans('admin_api.collection.slug_too_long')], 422);
+            }
+            if ($slug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
+                return $this->json(['error' => $this->trans('admin_api.collection.invalid_slug_format')], 422);
+            }
+        }
+
         try {
             $c = $this->provisioner->createCollection($project, $body);
         } catch (SchemaException $e) {
@@ -93,18 +120,39 @@ class CollectionController extends AbstractController
         $this->requireScope($request, 'schema:write');
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         $c = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$c) {
-            return $this->json(['error' => 'Collection not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.not_found')], 404);
         }
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON body'], 400);
+            return $this->json(['error' => $this->trans('admin_api.collection.invalid_json')], 400);
         }
+
+        if (isset($body['name'])) {
+            $name = trim((string) $body['name']);
+            if ($name === '') {
+                return $this->json(['error' => $this->trans('admin_api.collection.name_required')], 422);
+            }
+            if (mb_strlen($name) > 255) {
+                return $this->json(['error' => $this->trans('admin_api.collection.name_too_long')], 422);
+            }
+        }
+
+        if (isset($body['slug'])) {
+            $newSlug = trim((string) $body['slug']);
+            if (mb_strlen($newSlug) > 255) {
+                return $this->json(['error' => $this->trans('admin_api.collection.slug_too_long')], 422);
+            }
+            if ($newSlug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $newSlug)) {
+                return $this->json(['error' => $this->trans('admin_api.collection.invalid_slug_format')], 422);
+            }
+        }
+
         $this->provisioner->updateCollection($c, $body);
         return $this->json(['data' => ['name' => $c->name, 'slug' => $c->slug]]);
     }
@@ -115,12 +163,12 @@ class CollectionController extends AbstractController
         $this->requireScope($request, 'schema:write');
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         $c = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$c) {
-            return $this->json(['error' => 'Collection not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.not_found')], 404);
         }
         $this->provisioner->deleteCollection($c);
         return new JsonResponse(null, 204);
@@ -131,13 +179,13 @@ class CollectionController extends AbstractController
     {
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
 
         $collection = $this->collections->findOneByProjectAndSlug($project, $slug);
         if (!$collection) {
-            return $this->json(['error' => 'Collection not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.not_found')], 404);
         }
 
         $fields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
@@ -216,6 +264,9 @@ class CollectionController extends AbstractController
 
     private function resolveProject(string $uuid): ?Project
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $uuid)) {
+            return null;
+        }
         try {
             return $this->projects->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {

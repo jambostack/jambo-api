@@ -16,6 +16,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\String\Slugger\SluggerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/admin-api/projects/{uuid}/collections/{slug}', name: 'admin_api_import_')]
 class ImportController extends AbstractController
@@ -31,7 +32,13 @@ class ImportController extends AbstractController
         private ?\App\Service\EavFieldHelperService $fieldHelper = null,
         private ?\Doctrine\Persistence\ManagerRegistry $doctrine = null,
         private ?RateLimiterFactory $importLimiter = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = []): string
+    {
+        return $this->translator?->trans($id, $parameters) ?? $id;
+    }
 
     public const MAX_PAYLOAD_BYTES = 10485760; // 10 MB
     public const MAX_ROWS = 1000;
@@ -43,26 +50,30 @@ class ImportController extends AbstractController
     {
         $this->requireScope($request, 'content:write');
 
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $uuid)) {
+            return $this->json(['error' => $this->trans('admin_api.import.invalid_uuid')], 422);
+        }
+
         $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?? 'anonymous';
         if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
-            return $this->json(['error' => 'Too many import requests. Please retry later.'], 429);
+            return $this->json(['error' => $this->trans('admin_api.import.too_many_requests')], 429);
         }
 
         // Contrôle de taille globale du payload
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => 'Payload too large (max 10MB).'], 413);
+            return $this->json(['error' => $this->trans('admin_api.import.payload_too_large')], 413);
         }
 
         try {
             $project = $this->projects->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.import.project_not_found')], 404);
         }
-        if (!$project) return $this->json(['error' => 'Project not found'], 404);
+        if (!$project) return $this->json(['error' => $this->trans('admin_api.import.project_not_found')], 404);
 
         $collection = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
-        if (!$collection) return $this->json(['error' => 'Collection not found'], 404);
+        if (!$collection) return $this->json(['error' => $this->trans('admin_api.import.collection_not_found')], 404);
 
         // Find all collection fields for validation
         $collectionFields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
@@ -75,10 +86,10 @@ class ImportController extends AbstractController
         $uploadedFile = $request->files->get('file');
         if ($uploadedFile !== null) {
             if (!$uploadedFile->isValid()) {
-                return $this->json(['error' => 'Upload error: ' . $uploadedFile->getErrorMessage()], 422);
+                return $this->json(['error' => $this->trans('admin_api.import.upload_error', ['%error%' => $uploadedFile->getErrorMessage()])], 422);
             }
             if ($uploadedFile->getSize() > self::MAX_PAYLOAD_BYTES) {
-                return $this->json(['error' => 'Uploaded file exceeds safety limit of 10MB.'], 413);
+                return $this->json(['error' => $this->trans('admin_api.import.file_too_large')], 413);
             }
 
             return $this->processCsvFileStream(
@@ -95,37 +106,37 @@ class ImportController extends AbstractController
         // Import via payload JSON
         $rawContent = $request->getContent();
         if (strlen($rawContent) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => 'Payload too large (max 10MB).'], 413);
+            return $this->json(['error' => $this->trans('admin_api.import.payload_too_large')], 413);
         }
 
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON body'], 400);
+            return $this->json(['error' => $this->trans('admin_api.import.invalid_json')], 400);
         }
         $csvData = $body['data'] ?? [];
         $fieldMapping = $body['field_mapping'] ?? [];
         $locale = $body['locale'] ?? $project->defaultLocale;
 
         if (!is_array($csvData) || !is_array($fieldMapping) || empty($csvData) || empty($fieldMapping)) {
-            return $this->json(['error' => 'Champs requis manquants : data[], field_mapping{}'], 422);
+            return $this->json(['error' => $this->trans('admin_api.import.missing_required_fields')], 422);
         }
 
         if (count($csvData) > self::MAX_ROWS) {
-            return $this->json(['error' => sprintf('Le nombre de lignes dépasse la limite autorisée (max %d lignes par import).', self::MAX_ROWS)], 422);
+            return $this->json(['error' => $this->trans('admin_api.import.rows_limit_exceeded', ['%max%' => self::MAX_ROWS])], 422);
         }
 
         if (count($fieldMapping) > self::MAX_COLUMNS) {
-            return $this->json(['error' => sprintf('Le mapping de colonnes dépasse la limite autorisée (max %d colonnes).', self::MAX_COLUMNS)], 422);
+            return $this->json(['error' => $this->trans('admin_api.import.columns_limit_exceeded', ['%max%' => self::MAX_COLUMNS])], 422);
         }
 
         // Validation stricte des colonnes mappées
         foreach ($fieldMapping as $csvCol => $fieldSlug) {
             if (!is_string($csvCol) || !is_string($fieldSlug) || trim($csvCol) === '' || trim($fieldSlug) === '' || strlen($csvCol) > 128 || strlen($fieldSlug) > 128) {
-                return $this->json(['error' => 'Structure de field_mapping invalide.'], 422);
+                return $this->json(['error' => $this->trans('admin_api.import.invalid_mapping_structure')], 422);
             }
             if (!isset($fieldMap[$fieldSlug])) {
-                return $this->json(['error' => sprintf('La colonne cible "%s" n\'existe pas dans la collection "%s".', $fieldSlug, $slug)], 422);
+                return $this->json(['error' => $this->trans('admin_api.import.target_column_not_found', ['%field%' => $fieldSlug, '%collection%' => $slug])], 422);
             }
         }
 
@@ -134,11 +145,11 @@ class ImportController extends AbstractController
 
         foreach ($csvData as $idx => $row) {
             if (!is_array($row)) {
-                $errors[] = ['row' => $idx, 'error' => 'Format de ligne invalide (tableau attendu).'];
+                $errors[] = ['row' => $idx, 'error' => $this->trans('admin_api.import.invalid_row_format')];
                 continue;
             }
             if (count($row) > self::MAX_COLUMNS + 50) {
-                $errors[] = ['row' => $idx, 'error' => 'Nombre de colonnes excessif dans la ligne.'];
+                $errors[] = ['row' => $idx, 'error' => $this->trans('admin_api.import.excessive_columns_in_row')];
                 continue;
             }
 
@@ -146,7 +157,7 @@ class ImportController extends AbstractController
                 // Contrôle de longueur des cellules
                 foreach ($row as $cellKey => $cellValue) {
                     if (is_string($cellValue) && strlen($cellValue) > self::MAX_CELL_LENGTH) {
-                        throw new \InvalidArgumentException(sprintf('Taille de cellule trop volumineuse pour la colonne "%s" (max 64KB).', (string) $cellKey));
+                        throw new \InvalidArgumentException($this->trans('admin_api.import.cell_too_large', ['%column%' => (string) $cellKey]));
                     }
                 }
 
@@ -248,18 +259,18 @@ class ImportController extends AbstractController
     ): JsonResponse {
         $handle = @fopen($filePath, 'r');
         if (!$handle) {
-            return $this->json(['error' => 'Impossible de lire le fichier CSV importé.'], 422);
+            return $this->json(['error' => $this->trans('admin_api.import.csv_read_error')], 422);
         }
 
         $header = fgetcsv($handle);
         if (!$header || empty($header)) {
             fclose($handle);
-            return $this->json(['error' => 'En-têtes CSV manquants ou invalides.'], 422);
+            return $this->json(['error' => $this->trans('admin_api.import.csv_headers_invalid')], 422);
         }
 
         if (count($header) > self::MAX_COLUMNS) {
             fclose($handle);
-            return $this->json(['error' => sprintf('Le CSV contient trop de colonnes (max %d).', self::MAX_COLUMNS)], 422);
+            return $this->json(['error' => $this->trans('admin_api.import.csv_too_many_columns', ['%max%' => self::MAX_COLUMNS])], 422);
         }
 
         // Mapping par défaut si non spécifié : slugs identiques aux colonnes
@@ -273,7 +284,7 @@ class ImportController extends AbstractController
             foreach ($rawMapping as $csvCol => $targetSlug) {
                 if (!is_string($csvCol) || !is_string($targetSlug) || !isset($fieldMap[$targetSlug])) {
                     fclose($handle);
-                    return $this->json(['error' => sprintf('Mapping invalide pour la colonne "%s".', (string) $targetSlug)], 422);
+                    return $this->json(['error' => $this->trans('admin_api.import.invalid_column_mapping', ['%column%' => (string) $targetSlug])], 422);
                 }
                 $fieldMapping[$csvCol] = $targetSlug;
             }
@@ -288,7 +299,7 @@ class ImportController extends AbstractController
 
         if (empty($fieldMapping)) {
             fclose($handle);
-            return $this->json(['error' => 'Aucune correspondance de colonne valide trouvée entre le CSV et la collection.'], 422);
+            return $this->json(['error' => $this->trans('admin_api.import.no_matching_columns')], 422);
         }
 
         $locale = $body['locale'] ?? $project->defaultLocale;
@@ -299,12 +310,12 @@ class ImportController extends AbstractController
         while (($rowValues = fgetcsv($handle)) !== false) {
             $rowCount++;
             if ($rowCount > self::MAX_ROWS) {
-                $errors[] = ['row' => $rowCount, 'error' => sprintf('Limite maximale de %d lignes atteinte.', self::MAX_ROWS)];
+                $errors[] = ['row' => $rowCount, 'error' => $this->trans('admin_api.import.max_rows_reached', ['%max%' => self::MAX_ROWS])];
                 break;
             }
 
             if (count($rowValues) > count($header) + 50) {
-                $errors[] = ['row' => $rowCount, 'error' => 'Nombre de cellules incohérent avec l\'en-tête.'];
+                $errors[] = ['row' => $rowCount, 'error' => $this->trans('admin_api.import.cell_count_mismatch')];
                 continue;
             }
 

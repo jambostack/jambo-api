@@ -13,6 +13,8 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
+use Symfony\Contracts\Translation\TranslatorInterface;
+
 #[Route('/admin-api/projects/{uuid}/collections/{slug}/fields', name: 'admin_api_field_')]
 class FieldController extends AbstractController
 {
@@ -23,23 +25,32 @@ class FieldController extends AbstractController
         private CollectionRepository $collections,
         private FieldRepository $fields,
         private SchemaProvisioner $provisioner,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = []): string
+    {
+        return $this->translator?->trans($id, $parameters) ?? $id;
+    }
 
     /** @return array{0: ?\App\Entity\Collection, 1: ?JsonResponse} */
     private function resolveCollection(string $uuid, string $slug): array
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $uuid)) {
+            return [null, $this->json(['error' => $this->trans('admin_api.field.project_not_found')], 404)];
+        }
         try {
             $project = $this->projects->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return [null, $this->json(['error' => 'Project not found'], 404)];
+            return [null, $this->json(['error' => $this->trans('admin_api.field.project_not_found')], 404)];
         }
         if (!$project) {
-            return [null, $this->json(['error' => 'Project not found'], 404)];
+            return [null, $this->json(['error' => $this->trans('admin_api.field.project_not_found')], 404)];
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
         $c = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$c) {
-            return [null, $this->json(['error' => 'Collection not found'], 404)];
+            return [null, $this->json(['error' => $this->trans('admin_api.field.collection_not_found')], 404)];
         }
         return [$c, null];
     }
@@ -76,8 +87,17 @@ class FieldController extends AbstractController
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON body'], 400);
+            return $this->json(['error' => $this->trans('admin_api.field.invalid_json')], 400);
         }
+
+        $name = trim((string) ($body['name'] ?? ''));
+        if ($name === '') {
+            return $this->json(['error' => $this->trans('admin_api.field.name_required')], 422);
+        }
+        if (mb_strlen($name) > 255) {
+            return $this->json(['error' => $this->trans('admin_api.field.name_too_long')], 422);
+        }
+
         try {
             $f = $this->provisioner->addField($c, $body);
         } catch (SchemaException $e) {
@@ -97,13 +117,24 @@ class FieldController extends AbstractController
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $c->project);
         $f = $this->fields->findOneBy(['collection' => $c, 'slug' => $fieldSlug]);
         if (!$f) {
-            return $this->json(['error' => 'Field not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.field.not_found')], 404);
         }
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON body'], 400);
+            return $this->json(['error' => $this->trans('admin_api.field.invalid_json')], 400);
         }
+
+        if (isset($body['name'])) {
+            $name = trim((string) $body['name']);
+            if ($name === '') {
+                return $this->json(['error' => $this->trans('admin_api.field.name_required')], 422);
+            }
+            if (mb_strlen($name) > 255) {
+                return $this->json(['error' => $this->trans('admin_api.field.name_too_long')], 422);
+            }
+        }
+
         try {
             $this->provisioner->updateField($f, $body);
         } catch (SchemaException $e) {
@@ -123,7 +154,7 @@ class FieldController extends AbstractController
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $c->project);
         $f = $this->fields->findOneBy(['collection' => $c, 'slug' => $fieldSlug]);
         if (!$f) {
-            return $this->json(['error' => 'Field not found'], 404);
+            return $this->json(['error' => $this->trans('admin_api.field.not_found')], 404);
         }
         $this->provisioner->deleteField($f);
         return new JsonResponse(null, 204);
