@@ -7,6 +7,35 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.95] — 2026-11-05
+
+### ContentAiStreamController, ShareController, PublicShareController & InsightsController Hardening & Strict I18N
+- **ContentAiStreamController Hardening**:
+  - Injected Symfony `TranslatorInterface` and removed all hardcoded error/status strings.
+  - Added prompt injection defense (`sanitizePromptInput` & `containsDangerousPromptBreakout`) filtering null bytes, bidirectional Trojan Source overrides, neutralizing special LLM delimiter tokens (`<|im_start|>`, `[INST]`, `<<SYS>>`), and rejecting jailbreak attempts with HTTP 400 SSE events (`ai_stream.prompt_injection_detected`).
+  - Added strict action validation against whitelist (`summarize`, `expand`, `rewrite`, `fix_grammar`, `translate`, `improve`).
+  - Added input validation for tone (alphanumeric, max 50 chars), target locale regex, provider, and model.
+  - Localized SSE error streams and rate limiting responses (`ai_stream.rate_limit_exceeded`, `ai_stream.project_not_found`, `ai_stream.input_empty`, `ai_stream.input_too_long`, `ai_stream.stream_error`).
+- **ShareController & PublicShareController Hardening**:
+  - Injected Symfony `TranslatorInterface` with fully localized JSON and HTML error responses.
+  - Added strict RFC 4122 UUID validation on `projectUuid` and `entryUuid` routes and bodies.
+  - Enforced strict payload size limit (max 16KB) on share generation requests (HTTP 413 `share.payload_too_large`).
+  - Added token format bounds on public share resolver (`[A-Za-z0-9_]{10,128}`).
+  - Hardened error responses to provide both machine-readable error codes (`invalid`, `expired`, `too_many_requests`) and localized messages (`public_share.error.*`).
+- **InsightsController Hardening**:
+  - Injected Symfony `TranslatorInterface` with full error localization.
+  - Added strict project identifier format validation (positive integer ID or RFC 4122 UUID), throwing clean 404 for malformed requests.
+  - Enforced cross-project access checks and localized range validation (`insights.invalid_range`).
+- **VersioningController & AssetController Defenses**:
+  - Enforced UUID and slug regex checks in `VersioningController::findEntry` and localized authentication errors.
+  - Restored UUID format validation on public asset routes (`AssetController::resolvePublicProject`).
+- **Strict I18N Parity**:
+  - Added 21 new translation keys across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+  - Strict 100% dictionary key parity maintained (2,454 keys across each of the 4 languages, 0 missing).
+- **Quality Assurance**:
+  - Added comprehensive test suite `tests/Controller/Cycle40HardeningTest.php` (12 tests, 140 assertions).
+  - Cycles 37, 38, 39, and 40 passing completely green (48 tests, 868 assertions).
+
 ## [1.26.94] — 2026-11-05
 
 ### AiController, AuditController & SearchController Hardening, Bounded Payloads, Prompt Injection Defense & Strict I18N

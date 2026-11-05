@@ -305,10 +305,10 @@ class Cycle39HardeningTest extends WebTestCase
         $es = require __DIR__ . '/../../translations/messages.es.php';
         $ar = require __DIR__ . '/../../translations/messages.ar.php';
 
-        $this->assertCount(2433, $en, 'messages.en.php must have exactly 2,433 keys');
-        $this->assertCount(2433, $fr, 'messages.fr.php must have exactly 2,433 keys');
-        $this->assertCount(2433, $es, 'messages.es.php must have exactly 2,433 keys');
-        $this->assertCount(2433, $ar, 'messages.ar.php must have exactly 2,433 keys');
+        $this->assertGreaterThanOrEqual(2433, count($en), 'messages.en.php must have at least 2,433 keys');
+        $this->assertCount(count($en), $fr, 'messages.fr.php must match EN key count');
+        $this->assertCount(count($en), $es, 'messages.es.php must match EN key count');
+        $this->assertCount(count($en), $ar, 'messages.ar.php must match EN key count');
 
         $this->assertSame([], array_diff_key($en, $fr), 'Missing keys between EN and FR');
         $this->assertSame([], array_diff_key($en, $es), 'Missing keys between EN and ES');

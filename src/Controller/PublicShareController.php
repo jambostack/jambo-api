@@ -10,14 +10,30 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class PublicShareController extends AbstractController
 {
+    public const MAX_TOKEN_LENGTH = 128;
+    public const MIN_TOKEN_LENGTH = 10;
+
     public function __construct(
         private readonly ShareService $shares,
         private readonly EavDataFormatterService $formatter,
         private readonly ?RateLimiterFactory $shareLimiter = null,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        if ($default !== null) {
+            return strtr($default, $parameters);
+        }
+        return $id;
+    }
 
     #[Route('/share/{token}', name: 'public_share_show', requirements: ['token' => '[A-Za-z0-9_]+'], defaults: ['_format' => 'html'], methods: ['GET'])]
     #[Route('/share/{token}.json', name: 'public_share_show_json', requirements: ['token' => '[A-Za-z0-9_]+'], defaults: ['_format' => 'json'], methods: ['GET'])]
@@ -31,6 +47,11 @@ class PublicShareController extends AbstractController
             if (false === $limiter->consume(1)->isAccepted()) {
                 return $this->renderError(429, 'too_many_requests', $wantsJson);
             }
+        }
+
+        $tokenLength = strlen($token);
+        if ($tokenLength < self::MIN_TOKEN_LENGTH || $tokenLength > self::MAX_TOKEN_LENGTH || !preg_match('/^[A-Za-z0-9_]+$/', $token)) {
+            return $this->renderError(404, 'invalid', $wantsJson);
         }
 
         $share = $this->shares->resolve($token);
@@ -69,9 +90,21 @@ class PublicShareController extends AbstractController
 
     private function renderError(int $status, string $reason, bool $wantsJson = false): Response
     {
+        $localizedMessage = $this->trans("public_share.error.{$reason}", [], match ($reason) {
+            'expired' => 'This shared link has expired.',
+            'too_many_requests' => 'Too many requests. Please try again later.',
+            default => 'Invalid or non-existent shared link.',
+        });
+
         if ($wantsJson) {
-            return new JsonResponse(['error' => $reason], $status);
+            return new JsonResponse([
+                'error'   => $reason,
+                'message' => $localizedMessage,
+            ], $status);
         }
-        return $this->render('share/error.html.twig', ['reason' => $reason], new Response('', $status));
+        return $this->render('share/error.html.twig', [
+            'reason'  => $reason,
+            'message' => $localizedMessage,
+        ], new Response('', $status));
     }
 }

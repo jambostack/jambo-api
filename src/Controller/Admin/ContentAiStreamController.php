@@ -12,10 +12,13 @@ use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class ContentAiStreamController extends AbstractController
 {
     public const MAX_INPUT_LENGTH = 30000;
+    public const MIN_INPUT_LENGTH = 3;
+    public const ALLOWED_ACTIONS = ['summarize', 'expand', 'rewrite', 'fix_grammar', 'translate', 'improve'];
 
     public function __construct(
         private readonly ProjectRepository $projectRepository,
@@ -23,7 +26,19 @@ class ContentAiStreamController extends AbstractController
         private readonly ?AuthorizationCheckerInterface $authChecker = null,
         #[Autowire(service: 'limiter.ai_stream_limiter')]
         private readonly ?RateLimiterFactory $aiStreamLimiter = null,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        if ($default !== null) {
+            return strtr($default, $parameters);
+        }
+        return $id;
+    }
 
     #[Route('/api/projects/{projectUuid}/ai/stream', name: 'api_project_ai_stream', methods: ['POST'])]
     #[Route('/admin/api/content-ai/stream', name: 'admin_content_ai_stream', methods: ['POST'])]
@@ -40,17 +55,21 @@ class ContentAiStreamController extends AbstractController
 
             if (!$this->aiStreamLimiter->create($identifier)->consume(1)->isAccepted()) {
                 return new StreamedResponse(function () {
-                    echo "data: " . json_encode(['error' => 'Too many AI stream requests. Please retry later.']) . "\n\n";
+                    echo "data: " . json_encode(['error' => $this->trans('ai_stream.rate_limit_exceeded', [], 'Too many AI stream requests. Please retry later.')]) . "\n\n";
                     flush();
                 }, 429, ['Content-Type' => 'text/event-stream']);
             }
         }
 
         if ($projectUuid !== null) {
-            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+            try {
+                $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+            } catch (\Throwable) {
+                $project = null;
+            }
             if ($project === null) {
                 return new StreamedResponse(function () {
-                    echo "data: " . json_encode(['error' => 'Project not found']) . "\n\n";
+                    echo "data: " . json_encode(['error' => $this->trans('ai_stream.project_not_found', [], 'Project not found')]) . "\n\n";
                     flush();
                 }, 404, ['Content-Type' => 'text/event-stream']);
             }
@@ -62,26 +81,46 @@ class ContentAiStreamController extends AbstractController
         }
 
         $payload = json_decode($request->getContent(), true) ?? [];
-        $action = (string) ($payload['action'] ?? 'rewrite');
-        $text = trim((string) ($payload['text'] ?? ''));
-        $tone = (string) ($payload['tone'] ?? 'professional');
-        $targetLocale = (string) ($payload['target_locale'] ?? 'fr');
-        $provider = isset($payload['provider']) ? (string) $payload['provider'] : null;
-        $model = (string) ($payload['model'] ?? 'gpt-4o-mini');
+        $rawAction = (string) ($payload['action'] ?? 'rewrite');
+        $action = in_array($rawAction, self::ALLOWED_ACTIONS, true) ? $rawAction : 'rewrite';
 
-        if ($text === '') {
+        $rawText = trim((string) ($payload['text'] ?? ''));
+        if ($rawText === '') {
             return new StreamedResponse(function () {
-                echo "data: " . json_encode(['error' => 'Input text is empty']) . "\n\n";
+                echo "data: " . json_encode(['error' => $this->trans('ai_stream.input_empty', [], 'Input text is empty')]) . "\n\n";
                 flush();
             }, 400, ['Content-Type' => 'text/event-stream']);
         }
+
+        $text = $this->sanitizePromptInput($rawText);
 
         if (mb_strlen($text) > self::MAX_INPUT_LENGTH) {
             return new StreamedResponse(function () {
-                echo "data: " . json_encode(['error' => 'Input text exceeds maximum allowed length of 30,000 characters.']) . "\n\n";
+                echo "data: " . json_encode(['error' => $this->trans('ai_stream.input_too_long', ['%max%' => '30,000'], 'Input text exceeds maximum allowed length of 30,000 characters.')]) . "\n\n";
                 flush();
             }, 400, ['Content-Type' => 'text/event-stream']);
         }
+
+        if ($this->containsDangerousPromptBreakout($text)) {
+            return new StreamedResponse(function () {
+                echo "data: " . json_encode(['error' => $this->trans('ai_stream.prompt_injection_detected', [], 'Prompt rejected: potentially harmful prompt injection detected.')]) . "\n\n";
+                flush();
+            }, 400, ['Content-Type' => 'text/event-stream']);
+        }
+
+        $rawTone = (string) ($payload['tone'] ?? 'professional');
+        $tone = (preg_match('/^[a-zA-Z0-9_\- ]{1,50}$/', $rawTone)) ? $rawTone : 'professional';
+
+        $rawLocale = (string) ($payload['target_locale'] ?? 'fr');
+        $targetLocale = (preg_match('/^[a-zA-Z]{2,4}([-_][a-zA-Z0-9]{2,8})?$/', $rawLocale)) ? $rawLocale : 'fr';
+
+        $provider = isset($payload['provider']) ? (string) $payload['provider'] : null;
+        if ($provider !== null && !preg_match('/^[a-zA-Z0-9_\-\.]{1,60}$/', $provider)) {
+            $provider = null;
+        }
+
+        $rawModel = (string) ($payload['model'] ?? 'gpt-4o-mini');
+        $model = (preg_match('/^[a-zA-Z0-9_\-\.\/]{1,80}$/', $rawModel)) ? $rawModel : 'gpt-4o-mini';
 
         $systemPrompt = match ($action) {
             'summarize'   => "Résume le texte suivant de manière claire, concise et percutante :",
@@ -121,7 +160,8 @@ class ContentAiStreamController extends AbstractController
                 );
             } catch (\Throwable $e) {
                 echo "event: error\n";
-                echo "data: " . json_encode(['error' => $e->getMessage()]) . "\n\n";
+                $errMessage = $this->trans('ai_stream.stream_error', ['%message%' => $e->getMessage()], $e->getMessage());
+                echo "data: " . json_encode(['error' => $errMessage]) . "\n\n";
                 flush();
             }
 
@@ -136,6 +176,38 @@ class ContentAiStreamController extends AbstractController
         $response->headers->set('X-Accel-Buffering', 'no');
 
         return $response;
+    }
+
+    private function sanitizePromptInput(string $input): string
+    {
+        // Supprime les octets nuls et caractères de contrôle non imprimables
+        $sanitized = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $input) ?? '';
+        // Supprime les caractères d'inversion bidirectionnelle (attaques Trojan Source)
+        $sanitized = preg_replace('/[\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $sanitized) ?? '';
+        // Neutralise les marqueurs de délimitation de contexte LLM
+        $sanitized = str_ireplace(
+            ['<|im_start|>', '<|im_end|>', '[INST]', '[/INST]', '<<SYS>>', '<</SYS>>', '[SYSTEM]', '[/SYSTEM]'],
+            ['[marker:im_start]', '[marker:im_end]', '[marker:inst]', '[marker:inst_end]', '[marker:sys]', '[marker:sys_end]', '[marker:system]', '[marker:system_end]'],
+            $sanitized
+        );
+        return trim($sanitized);
+    }
+
+    private function containsDangerousPromptBreakout(string $input): bool
+    {
+        $patterns = [
+            '/\bignore\s+(?:all\s+)?previous\s+instructions\b/i',
+            '/\bdisregard\s+(?:all\s+)?prior\s+(?:instructions|guidelines|rules)\b/i',
+            '/\byou\s+are\s+now\s+(?:in\s+)?(?:developer|dan|jailbreak)\s+mode\b/i',
+            '/\b(?:reveal|output|display|show)\s+(?:your\s+)?system\s+prompt\b/i',
+            '/\bforget\s+(?:all\s+)?(?:safety|system)\s+(?:rules|instructions)\b/i',
+        ];
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $input)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private function checkAccess(mixed $attribute, mixed $subject = null): void

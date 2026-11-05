@@ -27,10 +27,10 @@ class VersioningController extends AbstractController
     public function list(string $projectUuid, string $collectionSlug, string $uuid, Request $request): JsonResponse
     {
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
-        if (!$entry) return $this->json(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
+        if (!$entry) return new JsonResponse(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
 
         if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
-            return $this->json(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('versioning.auth_required', 'Authentication required')], 401);
         }
 
         if ($this->getUser()) {
@@ -45,21 +45,21 @@ class VersioningController extends AbstractController
             'createdBy' => $v->createdBy ? ($v->createdBy->name ?: $v->createdBy->email) : null,
         ], $this->versionRepo->findByEntry($entry));
 
-        return $this->json($versions);
+        return new JsonResponse($versions);
     }
 
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}/restore', name: 'versions_restore', methods: ['POST'])]
     public function restore(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
     {
         if ($versionNumber < 1 || $versionNumber > 1000000) {
-            return $this->json(['error' => $this->trans('versioning.invalid_version', 'Numéro de version invalide.')], 422);
+            return new JsonResponse(['error' => $this->trans('versioning.invalid_version', 'Numéro de version invalide.')], 422);
         }
 
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
-        if (!$entry) return $this->json(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
+        if (!$entry) return new JsonResponse(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
 
         if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
-            return $this->json(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('versioning.auth_required', 'Authentication required')], 401);
         }
 
         if ($this->getUser()) {
@@ -68,21 +68,21 @@ class VersioningController extends AbstractController
 
         $ok = $this->versioning->restoreVersion($entry, $versionNumber);
         if (!$ok) {
-            return $this->json(['error' => $this->trans('versioning.version_not_found', 'Version introuvable')], 404);
+            return new JsonResponse(['error' => $this->trans('versioning.version_not_found', 'Version introuvable')], 404);
         }
 
         $msg = $this->trans('versioning.restored_successfully', "Restauration à la version %version% effectuée", ['%version%' => $versionNumber]);
-        return $this->json(['success' => true, 'message' => $msg]);
+        return new JsonResponse(['success' => true, 'message' => $msg]);
     }
 
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/diff', name: 'versions_diff', methods: ['GET'])]
     public function diff(string $projectUuid, string $collectionSlug, string $uuid, Request $request): JsonResponse
     {
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
-        if (!$entry) return $this->json(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
+        if (!$entry) return new JsonResponse(['error' => $this->trans('versioning.entry_not_found', 'Entrée introuvable')], 404);
 
         if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
-            return $this->json(['error' => 'Authentication required'], 401);
+            return new JsonResponse(['error' => $this->trans('versioning.auth_required', 'Authentication required')], 401);
         }
 
         if ($this->getUser()) {
@@ -93,15 +93,15 @@ class VersioningController extends AbstractController
         $v2 = (int) $request->query->get('v2', $this->versionRepo->getNextVersionNumber($entry) - 1);
 
         if ($v1 < 1 || $v2 < 1 || $v1 > 1000000 || $v2 > 1000000) {
-            return $this->json(['error' => $this->trans('versioning.invalid_version', 'Numéro de version invalide.')], 422);
+            return new JsonResponse(['error' => $this->trans('versioning.invalid_version', 'Numéro de version invalide.')], 422);
         }
 
         $diff = $this->versioning->diff($entry, $v1, $v2);
         if (isset($diff['error'])) {
-            return $this->json(['error' => $this->trans('versioning.version_not_found', 'Version introuvable')], 404);
+            return new JsonResponse(['error' => $this->trans('versioning.version_not_found', 'Version introuvable')], 404);
         }
 
-        return $this->json($diff);
+        return new JsonResponse($diff);
     }
 
     private function trans(string $key, string $default, array $parameters = []): string
@@ -117,6 +117,16 @@ class VersioningController extends AbstractController
 
     private function findEntry(string $projectUuid, string $collectionSlug, string $uuid): ?ContentEntry
     {
+        if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $projectUuid)) {
+            return null;
+        }
+        if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $uuid)) {
+            return null;
+        }
+        if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $collectionSlug)) {
+            return null;
+        }
+
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
             if (!$project) return null;

@@ -290,6 +290,9 @@ class AssetController extends AbstractController
 
     private function resolvePublicProject(string $projectId): Project|JsonResponse
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectId)) {
+            return new JsonResponse(['error' => $this->trans('asset.invalid_project_uuid', [], 'Invalid project UUID format')], 400);
+        }
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
         } catch (\Throwable) {
