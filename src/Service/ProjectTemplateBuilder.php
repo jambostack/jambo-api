@@ -96,23 +96,23 @@ class ProjectTemplateBuilder
 
         foreach ($structure['collections'] ?? [] as $collData) {
             $collection = new Collection();
-            $collection->name        = $collData['name'];
-            $collection->slug        = $collData['slug'];
-            $collection->description = $collData['description'] ?? null;
-            $collection->isSingleton = $collData['isSingleton'] ?? false;
-            $collection->order       = $collData['order'] ?? 0;
+            $collection->name        = (string) ($collData['name'] ?? 'Collection');
+            $collection->slug        = (string) ($collData['slug'] ?? 'collection_' . bin2hex(random_bytes(2)));
+            $collection->description = isset($collData['description']) && is_scalar($collData['description']) ? (string) $collData['description'] : null;
+            $collection->isSingleton = (bool) ($collData['isSingleton'] ?? false);
+            $collection->order       = (int) ($collData['order'] ?? 0);
             $collection->project     = $project;
 
             $this->em->persist($collection);
 
             foreach ($collData['fields'] ?? [] as $fieldData) {
                 $field = new Field();
-                $field->name       = $fieldData['name'];
-                $field->slug       = $fieldData['slug'];
-                $field->type       = $fieldData['type'] ?? 'text';
-                $field->options    = $fieldData['options'] ?? null;
-                $field->order      = $fieldData['order'] ?? 0;
-                $field->isRequired = $fieldData['isRequired'] ?? false;
+                $field->name       = (string) ($fieldData['name'] ?? 'Field');
+                $field->slug       = (string) ($fieldData['slug'] ?? 'field_' . bin2hex(random_bytes(2)));
+                $field->type       = (string) ($fieldData['type'] ?? 'text');
+                $field->options    = is_array($fieldData['options'] ?? null) ? $fieldData['options'] : null;
+                $field->order      = (int) ($fieldData['order'] ?? 0);
+                $field->isRequired = (bool) ($fieldData['isRequired'] ?? false);
                 $field->collection = $collection;
 
                 $this->em->persist($field);

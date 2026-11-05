@@ -7,6 +7,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.93] — 2026-11-05
+
+### TusController, CollectionTemplateController & ProjectTemplateController Hardening, Bounded Payloads & Strict I18N
+- **TusController Hardening**:
+  - Injected Symfony `TranslatorInterface` and eliminated all hardcoded error/status strings.
+  - Enforced RFC 4122 UUID validation on `projectUuid` parameters before any database queries.
+  - Added strict payload and header limits: `Upload-Length` capped at 100MB (`Tus-Max-Size`), returning HTTP 413 when exceeded.
+  - Hardened `Upload-Metadata` header parser with max length (4KB), strict alphanumeric keys validation, and safe base64 decoding.
+  - Sanitized target storage destination paths using canonical RFC 4122 project UUIDs to prevent any directory traversal.
+  - Enhanced role permission checks with granular member role permissions (`content.create` and `project.view`).
+  - Added standard `Tus-Resumable: 1.0.0` headers to all responses and error payloads per TUS 1.0.0 protocol specification.
+- **CollectionTemplateController & ProjectTemplateController Hardening**:
+  - Injected Symfony `TranslatorInterface` with fully localized error responses.
+  - Enforced strict integer route requirements (`id => '\d+'`) and positive ID checks (`$id > 0`), returning HTTP 404 cleanly.
+  - Added strict length limits: template name capped at 255 characters, description capped at 2,000 characters.
+  - Enforced field limits: maximum 100 fields per template (HTTP 422).
+  - Sanitized field names, slugs (alphanumeric/hyphens/underscores), and types (max 50 chars).
+  - Fixed in-memory bidirectional ArrayCollection synchronization for template fields.
+  - Hardened access control: allow both `ROLE_ADMIN` and `ROLE_SUPER_ADMIN` on template creation.
+  - Hardened `ProjectTemplateBuilder` defensive field extraction against missing or malformed keys.
+- **Strict I18N Parity**:
+  - Added 29 new translation keys (`tus.*`, `template.*`) across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+  - Strict 100% dictionary key parity maintained (2,388 keys across each of the 4 languages, 0 missing).
+- **Quality Assurance**:
+  - Added comprehensive test suite `tests/Controller/Cycle38HardeningTest.php` (7 tests, 281 assertions).
+  - Full test suites passing green (100+ tests, 740+ assertions).
+
 ## [1.26.92] — 2026-11-05
 
 ### MediaController & AssetController Hardening, Payload Bounds & Strict I18N
