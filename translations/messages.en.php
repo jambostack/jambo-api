@@ -2135,9 +2135,13 @@ return [
 
     // ProjectEmailController
     'email.rate_limit_exceeded'                => 'Too many email requests. Please retry later.',
+    'email.payload_too_large'                  => 'Email payload too large (max 128KB).',
     'email.invalid_json'                       => 'Invalid JSON body.',
     'email.subject_and_body_required'          => 'subject and body are required.',
     'email.to_subject_body_required'           => 'to, subject and body are required.',
+    'email.subject_too_long'                   => 'Subject exceeds maximum length (%max% characters).',
+    'email.body_too_long'                      => 'Body exceeds maximum length (%max% characters).',
+    'email.too_many_recipients'                => 'Too many recipients in %field% (max %max%).',
     'email.captcha_required'                   => 'Captcha is required.',
     'email.captcha_expired'                    => 'Captcha expired or invalid.',
     'email.captcha_incorrect'                  => 'Incorrect captcha answer.',
@@ -2145,9 +2149,12 @@ return [
     'email.invalid_to'                         => 'Invalid recipient email address.',
     'email.invalid_reply_to'                   => 'Invalid replyTo email address.',
     'email.invalid_recipient'                  => 'Invalid %field% address: %email%',
+    'email.too_many_attachments'               => 'Too many attachments (max %max%).',
     'email.attachment_missing_fields'          => 'Attachment content and filename are required.',
     'email.attachment_too_large'               => 'Attachment is too large (maximum 10MB).',
+    'email.attachment_filename_too_long'       => 'Attachment filename is too long.',
     'email.attachment_forbidden_extension'     => 'Attachment extension .%ext% is strictly forbidden.',
+    'email.invalid_attachment_content'         => 'Invalid base64 attachment content.',
     'email.send_failed'                        => 'An error occurred while sending the email.',
 
     // PreviewController
@@ -2365,6 +2372,7 @@ return [
     'project.export_import.preview_failed'            => 'Preview failed: %error%',
 
     // ─── Project Mailer, JWT & Storage Hardening ───
+    'project.mailer.payload_too_large'                => 'Mailer settings payload exceeds limit (max 128KB).',
     'project.mailer.invalid_host_control_chars'       => 'Invalid host: host must not contain control characters or newlines.',
     'project.mailer.invalid_host_length'              => 'Invalid host: host must be between 1 and 255 characters.',
     'project.mailer.invalid_host_ssrf'                => 'Invalid host: %reason%.',
@@ -3166,8 +3174,10 @@ return [
     'api_docs.rate_limit_exceeded' => 'Too many API documentation requests. Please retry later.',
     'api_project.unauthorized' => 'Unauthorized. Provide a valid Bearer token.',
     'api_project.insufficient_abilities' => 'Insufficient token abilities.',
+    'api_project.rate_limit_exceeded' => 'Too many project requests. Please retry later.',
     'api_project_info.not_found' => 'Project not found.',
     'api_project_info.public_disabled' => 'Public API access is disabled for this project.',
+    'api_project_info.rate_limit_exceeded' => 'Too many requests. Please retry later.',
     'api_collection.unauthorized' => 'Unauthorized.',
     'api_collection.insufficient_abilities' => 'Insufficient token abilities.',
     'api_collection.not_found' => 'Collection not found.',

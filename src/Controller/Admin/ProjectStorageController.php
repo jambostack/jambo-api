@@ -7,6 +7,7 @@ use App\Entity\ProjectStorageProfile;
 use App\Entity\StorageRule;
 use App\Repository\ProjectStorageProfileRepository;
 use App\Repository\StorageRuleRepository;
+use App\Service\AuditService;
 use App\Service\StorageDriverFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -37,6 +38,7 @@ class ProjectStorageController extends AbstractController
         #[Autowire(service: 'limiter.storage_test_limiter')]
         private readonly ?RateLimiterFactory $storageTestLimiter = null,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?AuditService $auditService = null,
     ) {}
 
     private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
@@ -102,6 +104,15 @@ class ProjectStorageController extends AbstractController
 
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'storage_config_update',
+            project: $project,
+            input: ['strategy' => $project->storageStrategy],
+            output: ['success' => true],
+            status: 'success',
+            source: 'admin_storage',
+        );
+
         return $this->getConfig($uuid);
     }
 
@@ -136,6 +147,15 @@ class ProjectStorageController extends AbstractController
 
         $this->em->persist($profile);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'storage_profile_create',
+            project: $project,
+            input: ['profile_uuid' => $profile->uuid?->toRfc4122(), 'driver' => $profile->driver, 'name' => $profile->name],
+            output: ['success' => true],
+            status: 'success',
+            source: 'admin_storage',
+        );
 
         return $this->secureJson(['data' => $profile->toArray()], 201);
     }
@@ -174,6 +194,15 @@ class ProjectStorageController extends AbstractController
 
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'storage_profile_update',
+            project: $project,
+            input: ['profile_id' => $profile->id, 'driver' => $profile->driver, 'name' => $profile->name],
+            output: ['success' => true],
+            status: 'success',
+            source: 'admin_storage',
+        );
+
         return $this->secureJson(['data' => $profile->toArray()]);
     }
 
@@ -202,15 +231,42 @@ class ProjectStorageController extends AbstractController
             $testFileName = '.jambo_test_' . bin2hex(random_bytes(8)) . '.txt';
             $filesystem->write($testFileName, 'ping');
             if (!$filesystem->fileExists($testFileName)) {
+                $this->auditService?->log(
+                    toolName: 'storage_profile_test',
+                    project: $project,
+                    input: ['profile_id' => $profile->id, 'driver' => $profile->driver],
+                    output: null,
+                    status: 'failure',
+                    errorMessage: 'Written test file was not readable',
+                    source: 'admin_storage',
+                );
                 return $this->secureJson(['error' => $this->trans('project.storage.test_read_failed', [], 'Storage test failed: written file was not readable.')], 422);
             }
             $filesystem->delete($testFileName);
+
+            $this->auditService?->log(
+                toolName: 'storage_profile_test',
+                project: $project,
+                input: ['profile_id' => $profile->id, 'driver' => $profile->driver],
+                output: ['success' => true],
+                status: 'success',
+                source: 'admin_storage',
+            );
 
             return $this->secureJson([
                 'success' => true,
                 'message' => $this->trans('project.storage.test_success', ['%driver%' => $profile->driver], sprintf('Storage driver "%s" tested successfully.', $profile->driver)),
             ]);
         } catch (\Throwable $e) {
+            $this->auditService?->log(
+                toolName: 'storage_profile_test',
+                project: $project,
+                input: ['profile_id' => $profile->id, 'driver' => $profile->driver],
+                output: null,
+                status: 'failure',
+                errorMessage: $e->getMessage(),
+                source: 'admin_storage',
+            );
             return $this->secureJson([
                 'error' => $this->trans('project.storage.test_failed', ['%message%' => $e->getMessage()], 'Storage test failed: ' . $e->getMessage()),
             ], 422);
@@ -238,8 +294,19 @@ class ProjectStorageController extends AbstractController
             return $this->secureJson(['error' => $this->trans('project.storage.cannot_delete_default_profile', [], 'Cannot delete the default profile. Set another profile as default first.')], 422);
         }
 
+        $profileId = $profile->id;
+        $profileName = $profile->name;
         $this->em->remove($profile);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'storage_profile_delete',
+            project: $project,
+            input: ['profile_id' => $profileId, 'name' => $profileName],
+            output: ['success' => true],
+            status: 'success',
+            source: 'admin_storage',
+        );
 
         return $this->secureJson(null, 204);
     }
@@ -271,6 +338,15 @@ class ProjectStorageController extends AbstractController
 
         $this->em->persist($rule);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'storage_rule_create',
+            project: $project,
+            input: ['rule_id' => $rule->id, 'profile_uuid' => $rule->storageProfile->uuid?->toRfc4122()],
+            output: ['success' => true],
+            status: 'success',
+            source: 'admin_storage',
+        );
 
         return $this->secureJson($this->serializeRule($rule), 201);
     }
@@ -304,6 +380,15 @@ class ProjectStorageController extends AbstractController
         }
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'storage_rule_update',
+            project: $project,
+            input: ['rule_id' => $rule->id, 'profile_uuid' => $rule->storageProfile->uuid?->toRfc4122()],
+            output: ['success' => true],
+            status: 'success',
+            source: 'admin_storage',
+        );
+
         return $this->secureJson($this->serializeRule($rule));
     }
 
@@ -320,8 +405,18 @@ class ProjectStorageController extends AbstractController
             return $this->secureJson(['error' => $this->trans('project.storage.rule_not_found', [], 'Rule not found.')], 404);
         }
 
+        $ruleId = $rule->id;
         $this->em->remove($rule);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'storage_rule_delete',
+            project: $project,
+            input: ['rule_id' => $ruleId],
+            output: ['success' => true],
+            status: 'success',
+            source: 'admin_storage',
+        );
 
         return $this->secureJson(null, 204);
     }

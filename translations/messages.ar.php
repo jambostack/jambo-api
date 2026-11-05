@@ -2135,9 +2135,13 @@ return [
 
     // ProjectEmailController
     'email.rate_limit_exceeded'                => 'طلبات بريد إلكتروني كثيرة جداً. يرجى إعادة المحاولة لاحقاً.',
+    'email.payload_too_large'                  => 'حجم بيانات البريد الإلكتروني كبير جداً (الحد الأقصى 128 كيلوبايت).',
     'email.invalid_json'                       => 'نص JSON غير صالح.',
     'email.subject_and_body_required'          => 'الموضوع ونص الرسالة مطلوبان.',
     'email.to_subject_body_required'           => 'إلى والموضوع ونص الرسالة مطلوبة.',
+    'email.subject_too_long'                   => 'يتجاوز الموضوع الحد الأقصى للطول (%max% حرف).',
+    'email.body_too_long'                      => 'يتجاوز نص الرسالة الحد الأقصى للطول (%max% حرف).',
+    'email.too_many_recipients'                => 'عدد كبير جداً من المستلمين في %field% (الحد الأقصى %max%).',
     'email.captcha_required'                   => 'رمز التحقق مطلوب.',
     'email.captcha_expired'                    => 'رمز التحقق منتهي الصلاحية أو غير صالح.',
     'email.captcha_incorrect'                  => 'إجابة رمز التحقق غير صحيحة.',
@@ -2145,9 +2149,12 @@ return [
     'email.invalid_to'                         => 'عنوان بريد المستلم غير صالح.',
     'email.invalid_reply_to'                   => 'عنوان بريد replyTo غير صالح.',
     'email.invalid_recipient'                  => 'عنوان %field% غير صالح: %email%',
+    'email.too_many_attachments'               => 'عدد كبير جداً من المرفقات (الحد الأقصى %max%).',
     'email.attachment_missing_fields'          => 'محتوى المرفق واسم الملف مطلوبان.',
     'email.attachment_too_large'               => 'المرفق كبير جداً (الحد الأقصى 10 ميغابايت).',
+    'email.attachment_filename_too_long'       => 'اسم ملف المرفق طويل جداً.',
     'email.attachment_forbidden_extension'     => 'امتداد المرفق .%ext% محظور تماماً.',
+    'email.invalid_attachment_content'         => 'محتوى المرفق المشفر بـ base64 غير صالح.',
     'email.send_failed'                        => 'حدث خطأ أثناء إرسال البريد الإلكتروني.',
 
     // PreviewController
@@ -2365,6 +2372,7 @@ return [
     'project.export_import.preview_failed'            => 'فشل المعاينة: %error%',
 
     // ─── Project Mailer, JWT & Storage Hardening ───
+    'project.mailer.payload_too_large'                => 'حمولة إعدادات البريد تتجاوز الحد الأقصى (الحد الأقصى 128 كيلوبايت).',
     'project.mailer.invalid_host_control_chars'       => 'المضيف غير صالح: يجب ألا يحتوي على أحرف تحكم أو أسطر جديدة.',
     'project.mailer.invalid_host_length'              => 'المضيف غير صالح: يجب أن يكون بين 1 و 255 حرفًا.',
     'project.mailer.invalid_host_ssrf'                => 'المضيف غير صالح: %reason%.',
@@ -3168,8 +3176,10 @@ return [
     'api_docs.rate_limit_exceeded' => 'طلبات كثيرة جداً لتوثيق واجهة برمجة التطبيقات. يرجى إعادة المحاولة لاحقاً.',
     'api_project.unauthorized' => 'غير مصرح به. يرجى تقديم رمز Bearer صالح.',
     'api_project.insufficient_abilities' => 'صلاحيات الرمز غير كافية.',
+    'api_project.rate_limit_exceeded' => 'طلبات كثيرة جداً لهذا المشروع. يرجى المحاولة مرة أخرى لاحقاً.',
     'api_project_info.not_found' => 'المشروع غير موجود.',
     'api_project_info.public_disabled' => 'تم تعطيل الوصول العام إلى واجهة برمجة التطبيقات لهذا المشروع.',
+    'api_project_info.rate_limit_exceeded' => 'طلبات كثيرة جداً. يرجى المحاولة لاحقاً.',
     'api_collection.unauthorized' => 'غير مصرح به.',
     'api_collection.insufficient_abilities' => 'صلاحيات الرمز غير كافية.',
     'api_collection.not_found' => 'المجموعة غير موجودة.',

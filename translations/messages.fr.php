@@ -2153,9 +2153,13 @@ return [
 
     // ProjectEmailController
     'email.rate_limit_exceeded'                => 'Trop de requêtes d\'envoi d\'email. Veuillez réessayer plus tard.',
+    'email.payload_too_large'                  => 'Charge utile de l\'email trop volumineuse (max 128 Ko).',
     'email.invalid_json'                       => 'Corps JSON invalide.',
     'email.subject_and_body_required'          => 'subject et body sont requis.',
     'email.to_subject_body_required'           => 'to, subject et body sont requis.',
+    'email.subject_too_long'                   => 'L\'objet dépasse la longueur maximale (%max% caractères).',
+    'email.body_too_long'                      => 'Le corps du message dépasse la longueur maximale (%max% caractères).',
+    'email.too_many_recipients'                => 'Trop de destinataires dans %field% (max %max%).',
     'email.captcha_required'                   => 'Captcha requis.',
     'email.captcha_expired'                    => 'Captcha expiré ou invalide.',
     'email.captcha_incorrect'                  => 'Réponse captcha incorrecte.',
@@ -2163,9 +2167,12 @@ return [
     'email.invalid_to'                         => 'Adresse email de destinataire invalide.',
     'email.invalid_reply_to'                   => 'Adresse replyTo invalide.',
     'email.invalid_recipient'                  => 'Adresse %field% invalide : %email%',
+    'email.too_many_attachments'               => 'Trop de pièces jointes (max %max%).',
     'email.attachment_missing_fields'          => 'Le contenu et le nom du fichier de pièce jointe sont requis.',
     'email.attachment_too_large'               => 'Pièce jointe trop volumineuse (max 10MB).',
+    'email.attachment_filename_too_long'       => 'Le nom du fichier de pièce jointe est trop long.',
     'email.attachment_forbidden_extension'     => 'L\'extension de pièce jointe .%ext% est strictement interdite.',
+    'email.invalid_attachment_content'         => 'Contenu de pièce jointe en base64 invalide.',
     'email.send_failed'                        => 'Erreur lors de l\'envoi de l\'email.',
 
     // PreviewController
@@ -2383,6 +2390,7 @@ return [
     'project.export_import.preview_failed'            => 'Échec de l\'aperçu : %error%',
 
     // ─── Project Mailer, JWT & Storage Hardening ───
+    'project.mailer.payload_too_large'                => 'La charge utile des paramètres de messagerie dépasse la limite (max 128 Ko).',
     'project.mailer.invalid_host_control_chars'       => 'Hôte invalide : ne doit pas contenir de caractères de contrôle ou de sauts de ligne.',
     'project.mailer.invalid_host_length'              => 'Hôte invalide : doit être compris entre 1 et 255 caractères.',
     'project.mailer.invalid_host_ssrf'                => 'Hôte invalide : %reason%.',
@@ -3184,8 +3192,10 @@ return [
     'api_docs.rate_limit_exceeded' => 'Trop de requêtes de documentation API. Veuillez réessayer plus tard.',
     'api_project.unauthorized' => 'Non autorisé. Fournissez un jeton Bearer valide.',
     'api_project.insufficient_abilities' => 'Capacités de jeton insuffisantes.',
+    'api_project.rate_limit_exceeded' => 'Trop de requêtes pour ce projet. Veuillez réessayer plus tard.',
     'api_project_info.not_found' => 'Projet introuvable.',
     'api_project_info.public_disabled' => 'L\'accès public à l\'API est désactivé pour ce projet.',
+    'api_project_info.rate_limit_exceeded' => 'Trop de requêtes. Veuillez réessayer plus tard.',
     'api_collection.unauthorized' => 'Non autorisé.',
     'api_collection.insufficient_abilities' => 'Capacités de jeton insuffisantes.',
     'api_collection.not_found' => 'Collection introuvable.',

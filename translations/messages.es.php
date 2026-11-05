@@ -2135,9 +2135,13 @@ return [
 
     // ProjectEmailController
     'email.rate_limit_exceeded'                => 'Demasiadas solicitudes de correo electrónico. Por favor, inténtelo de nuevo más tarde.',
+    'email.payload_too_large'                  => 'Carga útil del correo electrónico demasiado grande (máx. 128 KB).',
     'email.invalid_json'                       => 'Cuerpo JSON inválido.',
     'email.subject_and_body_required'          => 'subject y body son obligatorios.',
     'email.to_subject_body_required'           => 'to, subject y body son obligatorios.',
+    'email.subject_too_long'                   => 'El asunto supera la longitud máxima (%max% caracteres).',
+    'email.body_too_long'                      => 'El cuerpo del mensaje supera la longitud máxima (%max% caracteres).',
+    'email.too_many_recipients'                => 'Demasiados destinatarios en %field% (máx. %max%).',
     'email.captcha_required'                   => 'Captcha obligatorio.',
     'email.captcha_expired'                    => 'Captcha caducado o no válido.',
     'email.captcha_incorrect'                  => 'Respuesta de captcha incorrecta.',
@@ -2145,9 +2149,12 @@ return [
     'email.invalid_to'                         => 'Dirección de correo electrónico de destinatario no válida.',
     'email.invalid_reply_to'                   => 'Dirección de correo replyTo no válida.',
     'email.invalid_recipient'                  => 'Dirección %field% no válida: %email%',
+    'email.too_many_attachments'               => 'Demasiados archivos adjuntos (máx. %max%).',
     'email.attachment_missing_fields'          => 'El contenido y el nombre del archivo adjunto son obligatorios.',
     'email.attachment_too_large'               => 'Archivo adjunto demasiado grande (máx. 10MB).',
+    'email.attachment_filename_too_long'       => 'El nombre del archivo adjunto es demasiado largo.',
     'email.attachment_forbidden_extension'     => 'La extensión de archivo adjunto .%ext% está estrictamente prohibida.',
+    'email.invalid_attachment_content'         => 'Contenido adjunto en base64 no válido.',
     'email.send_failed'                        => 'Ocurrió un error al enviar el correo electrónico.',
 
     // PreviewController
@@ -2365,6 +2372,7 @@ return [
     'project.export_import.preview_failed'            => 'Error de vista previa: %error%',
 
     // ─── Project Mailer, JWT & Storage Hardening ───
+    'project.mailer.payload_too_large'                => 'La carga útil de configuración de correo excede el límite (máx. 128 KB).',
     'project.mailer.invalid_host_control_chars'       => 'Host inválido: no debe contener caracteres de control ni saltos de línea.',
     'project.mailer.invalid_host_length'              => 'Host inválido: debe tener entre 1 y 255 caracteres.',
     'project.mailer.invalid_host_ssrf'                => 'Host inválido: %reason%.',
@@ -3166,8 +3174,10 @@ return [
     'api_docs.rate_limit_exceeded' => 'Demasiadas solicitudes de documentación de API. Inténtelo más tarde.',
     'api_project.unauthorized' => 'No autorizado. Proporcione un token Bearer válido.',
     'api_project.insufficient_abilities' => 'Capacidades de token insuficientes.',
+    'api_project.rate_limit_exceeded' => 'Demasiadas solicitudes para este proyecto. Inténtelo más tarde.',
     'api_project_info.not_found' => 'Proyecto no encontrado.',
     'api_project_info.public_disabled' => 'El acceso a la API pública está deshabilitado para este proyecto.',
+    'api_project_info.rate_limit_exceeded' => 'Demasiadas solicitudes. Inténtelo de nuevo más tarde.',
     'api_collection.unauthorized' => 'No autorizado.',
     'api_collection.insufficient_abilities' => 'Capacidades de token insuficientes.',
     'api_collection.not_found' => 'Colección no encontrada.',

@@ -7,9 +7,11 @@ use App\Repository\CollectionRepository;
 use App\Repository\ProjectRepository;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
-
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
@@ -27,15 +29,28 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/{projectId}', name: 'public_api_project_info_', requirements: ['projectId' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
 class ProjectInfoController extends AbstractController
 {
+    private const SECURITY_HEADERS = [
+        'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        'Pragma' => 'no-cache',
+        'X-Content-Type-Options' => 'nosniff',
+    ];
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private CollectionRepository $collectionRepository,
         private ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.project_limiter')]
+        private ?RateLimiterFactory $projectLimiter = null,
     ) {}
 
     private function trans(string $key, array $params = [], string $default = ''): string
     {
         return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
     #[OA\Get(
@@ -63,24 +78,34 @@ class ProjectInfoController extends AbstractController
         ]
     )]
     #[Route('', name: 'show', methods: ['GET'])]
-    public function show(string $projectId): JsonResponse
+    public function show(string $projectId, Request $request): JsonResponse
     {
+        if ($this->projectLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->projectLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('api_project_info.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('api_project_info.not_found', [], 'Project not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_project_info.not_found', [], 'Project not found.')], 404);
         }
         if ($project === null) {
-            return $this->json(['error' => $this->trans('api_project_info.not_found', [], 'Project not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_project_info.not_found', [], 'Project not found.')], 404);
         }
 
         if (!$project->publicApi) {
-            return $this->json(['error' => $this->trans('api_project_info.public_disabled', [], 'Public API access is disabled for this project.')], 403);
+            return $this->secureJson(['error' => $this->trans('api_project_info.public_disabled', [], 'Public API access is disabled for this project.')], 403);
         }
 
         $collections = $this->collectionRepository->findByProject($project);
 
-        return $this->json([
+        return $this->secureJson([
             'project' => [
                 'uuid'          => $project->uuid?->toString(),
                 'name'          => $project->name,

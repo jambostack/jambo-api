@@ -9,6 +9,7 @@ use App\Message\Attachment;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\AuditService;
 use App\Service\ProjectMailerService;
 use App\Service\UploadSecurityValidator;
 use Doctrine\ORM\EntityManagerInterface;
@@ -26,6 +27,21 @@ class ProjectEmailController extends AbstractController
 {
     use ProjectAwareControllerTrait;
 
+    public const MAX_PUBLIC_PAYLOAD_BYTES = 131072; // 128 KB
+    public const MAX_ADMIN_PAYLOAD_BYTES = 16777216; // 16 MB
+    public const MAX_SUBJECT_LENGTH = 500;
+    public const MAX_PUBLIC_BODY_LENGTH = 65536; // 64 KB
+    public const MAX_ADMIN_BODY_LENGTH = 1048576; // 1 MB
+    public const MAX_RECIPIENTS_COUNT = 20; // per cc / bcc
+    public const MAX_ATTACHMENTS_COUNT = 10;
+    public const MAX_FILENAME_LENGTH = 255;
+
+    private const SECURITY_HEADERS = [
+        'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        'Pragma' => 'no-cache',
+        'X-Content-Type-Options' => 'nosniff',
+    ];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ProjectMailerService $mailerService,
@@ -39,6 +55,7 @@ class ProjectEmailController extends AbstractController
         #[Autowire(service: 'limiter.project_email_admin')]
         private readonly RateLimiterFactory $adminEmailLimiter,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?AuditService $auditService = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -47,6 +64,11 @@ class ProjectEmailController extends AbstractController
             return $this->translator->trans($id, $parameters);
         }
         return $default ?? $id;
+    }
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
     #[Route('/api/{projectUuid}/email', name: 'api_project_email', methods: ['POST'],
@@ -59,30 +81,52 @@ class ProjectEmailController extends AbstractController
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('project.not_found', [], 'Projet introuvable')], 404);
+            return $this->secureJson(['error' => $this->trans('project.not_found', [], 'Projet introuvable')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => $this->trans('project.not_found', [], 'Projet introuvable')], 404);
+            return $this->secureJson(['error' => $this->trans('project.not_found', [], 'Projet introuvable')], 404);
         }
 
         // Rate limiting
-        $limiter = $this->emailLimiter->create($request->getClientIp());
+        $identifier = $request->getClientIp() ?: '127.0.0.1';
+        $limiter = $this->emailLimiter->create($identifier);
         if (!$limiter->consume()->isAccepted()) {
-            return new JsonResponse(['error' => $this->trans('email.rate_limit_exceeded', [], 'Trop de requetes. Reessayez plus tard.')], 429);
+            return $this->secureJson(['error' => $this->trans('email.rate_limit_exceeded', [], 'Trop de requetes. Reessayez plus tard.')], 429);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PUBLIC_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('email.payload_too_large', [], 'Email payload too large (max 128KB).'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413);
         }
 
         // Parser le body
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('email.invalid_json', [], 'JSON invalide')], 400);
+            return $this->secureJson(['error' => $this->trans('email.invalid_json', [], 'JSON invalide')], 400);
         }
 
         // Valider les champs requis
         $subject = trim((string) ($body['subject'] ?? ''));
         $emailBody = trim((string) ($body['body'] ?? ''));
         if ($subject === '' || $emailBody === '') {
-            return new JsonResponse(['error' => $this->trans('email.subject_and_body_required', [], 'subject et body sont requis')], 422);
+            return $this->secureJson(['error' => $this->trans('email.subject_and_body_required', [], 'subject et body sont requis')], 422);
+        }
+
+        if (mb_strlen($subject) > self::MAX_SUBJECT_LENGTH) {
+            return $this->secureJson([
+                'error' => $this->trans('email.subject_too_long', ['%max%' => self::MAX_SUBJECT_LENGTH], sprintf('Subject exceeds maximum length (%d characters).', self::MAX_SUBJECT_LENGTH)),
+                'code'  => 'SUBJECT_TOO_LONG',
+            ], 422);
+        }
+
+        if (mb_strlen($emailBody) > self::MAX_PUBLIC_BODY_LENGTH) {
+            return $this->secureJson([
+                'error' => $this->trans('email.body_too_long', ['%max%' => self::MAX_PUBLIC_BODY_LENGTH], sprintf('Body exceeds maximum length (%d characters).', self::MAX_PUBLIC_BODY_LENGTH)),
+                'code'  => 'BODY_TOO_LONG',
+            ], 422);
         }
 
         // Valider le captcha
@@ -90,21 +134,21 @@ class ProjectEmailController extends AbstractController
         $captchaAnswer = (string) ($body['captchaAnswer'] ?? '');
 
         if ($captchaToken === '' || $captchaAnswer === '') {
-            return new JsonResponse(['error' => $this->trans('email.captcha_required', [], 'Captcha requis')], 422);
+            return $this->secureJson(['error' => $this->trans('email.captcha_required', [], 'Captcha requis')], 422);
         }
 
         $cacheKey = 'captcha.' . $captchaToken;
         $expectedAnswer = $this->cache->get($cacheKey, fn () => null);
 
         if ($expectedAnswer === null) {
-            return new JsonResponse(['error' => $this->trans('email.captcha_expired', [], 'Captcha expire ou invalide')], 422);
+            return $this->secureJson(['error' => $this->trans('email.captcha_expired', [], 'Captcha expire ou invalide')], 422);
         }
 
         // Comparaison case-insensitive
         if (strtolower($captchaAnswer) !== strtolower($expectedAnswer)) {
             // Supprimer l'entree cache apres echec (usage unique)
             $this->cache->delete($cacheKey);
-            return new JsonResponse(['error' => $this->trans('email.captcha_incorrect', [], 'Reponse captcha incorrecte')], 422);
+            return $this->secureJson(['error' => $this->trans('email.captcha_incorrect', [], 'Reponse captcha incorrecte')], 422);
         }
 
         // Supprimer l'entree cache (usage unique)
@@ -113,27 +157,36 @@ class ProjectEmailController extends AbstractController
         // Mode (A) : formulaire de contact — destinataire fixe
         $settings = $this->mailerService->getSettings($project);
         if ($settings === null || !$settings->enabled) {
-            return new JsonResponse(['error' => $this->trans('email.mailer_not_configured', [], 'Mailer non configure pour ce projet')], 503);
+            return $this->secureJson(['error' => $this->trans('email.mailer_not_configured', [], 'Mailer non configure pour ce projet')], 503);
         }
 
         $to = $settings->fromEmail;
         $replyTo = isset($body['replyTo']) ? trim((string) $body['replyTo']) : null;
         if ($replyTo !== null && !filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
-            return new JsonResponse(['error' => $this->trans('email.invalid_reply_to', [], 'replyTo invalide')], 422);
+            return $this->secureJson(['error' => $this->trans('email.invalid_reply_to', [], 'replyTo invalide')], 422);
         }
 
         // Honeypot : champ cache — si rempli, c'est un bot (ne pas envoyer mais retourner succes)
         if (!empty($body['website'] ?? '')) {
-            return new JsonResponse(['sent' => true]);
+            return $this->secureJson(['sent' => true]);
         }
 
         try {
             $this->mailerService->send($project, $to, $subject, $emailBody, $replyTo);
         } catch (\RuntimeException $e) {
-            return new JsonResponse(['error' => $e->getMessage()], 503);
+            $this->auditService?->log(
+                toolName: 'public_email_send',
+                project: $project,
+                input: ['to' => $to, 'subject' => mb_substr($subject, 0, 100)],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Email delivery failed',
+                source: 'public_email',
+            );
+            return $this->secureJson(['error' => $this->trans('email.send_failed', [], 'Email sending failed. Please check mailer settings.'), 'code' => 'EMAIL_SEND_FAILED'], 503);
         }
 
-        return new JsonResponse(['sent' => true]);
+        return $this->secureJson(['sent' => true]);
     }
 
     #[Route('/api/admin/projects/{uuid}/email', name: 'api_admin_project_email', methods: ['POST'],
@@ -148,14 +201,21 @@ class ProjectEmailController extends AbstractController
         // Rate limiting (basé sur le projet)
         $limiter = $this->adminEmailLimiter->create('project_' . $project->id);
         if (!$limiter->consume()->isAccepted()) {
-            return new JsonResponse(['error' => $this->trans('email.rate_limit_exceeded', [], 'Trop de requêtes. Réessayez plus tard.')], 429);
+            return $this->secureJson(['error' => $this->trans('email.rate_limit_exceeded', [], 'Trop de requêtes. Réessayez plus tard.')], 429);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_ADMIN_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('email.payload_too_large', [], 'Email payload exceeds limit (max 16MB).'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413);
         }
 
         // Parser le body
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('email.invalid_json', [], 'JSON invalide')], 400);
+            return $this->secureJson(['error' => $this->trans('email.invalid_json', [], 'JSON invalide')], 400);
         }
 
         // Valider les champs requis
@@ -163,24 +223,44 @@ class ProjectEmailController extends AbstractController
         $subject = trim((string) ($body['subject'] ?? ''));
         $textBody = trim((string) ($body['body'] ?? ''));
         if ($to === '' || $subject === '' || $textBody === '') {
-            return new JsonResponse(['error' => $this->trans('email.to_subject_body_required', [], 'to, subject et body sont requis')], 422);
+            return $this->secureJson(['error' => $this->trans('email.to_subject_body_required', [], 'to, subject et body sont requis')], 422);
         }
         if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
-            return new JsonResponse(['error' => $this->trans('email.invalid_to', [], 'to invalide')], 422);
+            return $this->secureJson(['error' => $this->trans('email.invalid_to', [], 'to invalide')], 422);
+        }
+
+        if (mb_strlen($subject) > self::MAX_SUBJECT_LENGTH) {
+            return $this->secureJson([
+                'error' => $this->trans('email.subject_too_long', ['%max%' => self::MAX_SUBJECT_LENGTH], sprintf('Subject exceeds maximum length (%d characters).', self::MAX_SUBJECT_LENGTH)),
+                'code'  => 'SUBJECT_TOO_LONG',
+            ], 422);
+        }
+
+        if (mb_strlen($textBody) > self::MAX_ADMIN_BODY_LENGTH) {
+            return $this->secureJson([
+                'error' => $this->trans('email.body_too_long', ['%max%' => self::MAX_ADMIN_BODY_LENGTH], sprintf('Body exceeds maximum length (%d characters).', self::MAX_ADMIN_BODY_LENGTH)),
+                'code'  => 'BODY_TOO_LONG',
+            ], 422);
         }
 
         // Valider replyTo
         $replyTo = isset($body['replyTo']) ? trim((string) $body['replyTo']) : null;
         if ($replyTo !== null && !filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
-            return new JsonResponse(['error' => $this->trans('email.invalid_reply_to', [], 'replyTo invalide')], 422);
+            return $this->secureJson(['error' => $this->trans('email.invalid_reply_to', [], 'replyTo invalide')], 422);
         }
 
         // Valider CC / BCC
         foreach (['cc', 'bcc'] as $field) {
             if (isset($body[$field]) && is_array($body[$field])) {
+                if (count($body[$field]) > self::MAX_RECIPIENTS_COUNT) {
+                    return $this->secureJson([
+                        'error' => $this->trans('email.too_many_recipients', ['%field%' => $field, '%max%' => self::MAX_RECIPIENTS_COUNT], sprintf('Too many recipients in %s (max %d).', $field, self::MAX_RECIPIENTS_COUNT)),
+                        'code'  => 'TOO_MANY_RECIPIENTS',
+                    ], 422);
+                }
                 foreach ($body[$field] as $addr) {
-                    if (!filter_var($addr, FILTER_VALIDATE_EMAIL)) {
-                        return new JsonResponse(['error' => $this->trans('email.invalid_recipient', ['%field%' => $field, '%email%' => $addr], $field . ' invalide: ' . $addr)], 422);
+                    if (!is_string($addr) || !filter_var($addr, FILTER_VALIDATE_EMAIL)) {
+                        return $this->secureJson(['error' => $this->trans('email.invalid_recipient', ['%field%' => $field, '%email%' => (string) $addr], $field . ' invalide: ' . (string) $addr)], 422);
                     }
                 }
             }
@@ -189,20 +269,34 @@ class ProjectEmailController extends AbstractController
         // Construire les pièces jointes
         $attachments = [];
         if (isset($body['attachments']) && is_array($body['attachments'])) {
+            if (count($body['attachments']) > self::MAX_ATTACHMENTS_COUNT) {
+                return $this->secureJson([
+                    'error' => $this->trans('email.too_many_attachments', ['%max%' => self::MAX_ATTACHMENTS_COUNT], sprintf('Too many attachments (max %d).', self::MAX_ATTACHMENTS_COUNT)),
+                    'code'  => 'TOO_MANY_ATTACHMENTS',
+                ], 422);
+            }
             foreach ($body['attachments'] as $a) {
-                if (empty($a['content']) || empty($a['filename'])) {
-                    return new JsonResponse(['error' => $this->trans('email.attachment_missing_fields', [], 'attachment content et filename requis')], 422);
+                if (!is_array($a) || empty($a['content']) || empty($a['filename'])) {
+                    return $this->secureJson(['error' => $this->trans('email.attachment_missing_fields', [], 'attachment content et filename requis')], 422);
                 }
                 if (strlen((string) $a['content']) > 15 * 1024 * 1024) {
-                    return new JsonResponse(['error' => $this->trans('email.attachment_too_large', [], 'Pièce jointe trop volumineuse (max 10MB)')], 422);
+                    return $this->secureJson(['error' => $this->trans('email.attachment_too_large', [], 'Pièce jointe trop volumineuse (max 10MB)')], 422);
                 }
-                $safeFilename = basename(str_replace(["\0", "\r", "\n"], '', (string) $a['filename']));
+                $rawFilename = (string) $a['filename'];
+                if (mb_strlen($rawFilename) > self::MAX_FILENAME_LENGTH) {
+                    return $this->secureJson(['error' => $this->trans('email.attachment_filename_too_long', [], 'Attachment filename is too long.')], 422);
+                }
+                $safeFilename = basename(str_replace(["\0", "\r", "\n"], '', $rawFilename));
                 $ext = strtolower(pathinfo($safeFilename, PATHINFO_EXTENSION));
                 if (in_array($ext, UploadSecurityValidator::FORBIDDEN_EXTENSIONS, true)) {
-                    return new JsonResponse(['error' => $this->trans('email.attachment_forbidden_extension', ['%ext%' => $ext], sprintf('L\'extension de pièce jointe .%s est strictement interdite.', $ext))], 422);
+                    return $this->secureJson(['error' => $this->trans('email.attachment_forbidden_extension', ['%ext%' => $ext], sprintf('L\'extension de pièce jointe .%s est strictement interdite.', $ext))], 422);
+                }
+                $decoded = base64_decode((string) $a['content'], true);
+                if ($decoded === false) {
+                    return $this->secureJson(['error' => $this->trans('email.invalid_attachment_content', [], 'Invalid base64 attachment content.'), 'code' => 'INVALID_ATTACHMENT'], 422);
                 }
                 $attachments[] = new Attachment(
-                    content: base64_decode((string) $a['content']),
+                    content: $decoded,
                     filename: $safeFilename,
                     mimeType: (string) ($a['mimeType'] ?? 'application/octet-stream'),
                 );
@@ -223,9 +317,27 @@ class ProjectEmailController extends AbstractController
                 attachments: $attachments,
             );
         } catch (\RuntimeException $e) {
-            return new JsonResponse(['error' => $e->getMessage()], 503);
+            $this->auditService?->log(
+                toolName: 'admin_email_send',
+                project: $project,
+                input: ['to' => $to, 'subject' => mb_substr($subject, 0, 100), 'attachments_count' => count($attachments)],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Email delivery failed',
+                source: 'admin_email',
+            );
+            return $this->secureJson(['error' => $this->trans('email.send_failed', [], 'Email sending failed. Please check mailer settings.'), 'code' => 'EMAIL_SEND_FAILED'], 503);
         }
 
-        return new JsonResponse(['sent' => true]);
+        $this->auditService?->log(
+            toolName: 'admin_email_send',
+            project: $project,
+            input: ['to' => $to, 'subject' => mb_substr($subject, 0, 100), 'attachments_count' => count($attachments)],
+            output: ['sent' => true],
+            status: 'success',
+            source: 'admin_email',
+        );
+
+        return $this->secureJson(['sent' => true]);
     }
 }

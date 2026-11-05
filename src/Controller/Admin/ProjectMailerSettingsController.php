@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 use App\Entity\Project;
 use App\Entity\ProjectMailerSettings;
 use App\Repository\ProjectMailerSettingsRepository;
+use App\Service\AuditService;
 use App\Service\ProjectMailerService;
 use App\Service\Security\SsrfProtectionService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -38,6 +39,7 @@ class ProjectMailerSettingsController extends AbstractController
         private readonly ?RateLimiterFactory $mailerTestLimiter = null,
         ?SsrfProtectionService $ssrfProtection = null,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?AuditService $auditService = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
     }
@@ -166,6 +168,21 @@ class ProjectMailerSettingsController extends AbstractController
 
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'mailer_settings_update',
+            project: $project,
+            input: [
+                'host'       => $settings->host,
+                'port'       => $settings->port,
+                'encryption' => $settings->encryption,
+                'from_email' => $settings->fromEmail,
+                'enabled'    => $settings->enabled,
+            ],
+            output: ['success' => true],
+            status: 'success',
+            source: 'admin_mailer_settings',
+        );
+
         return $this->secureJson(['data' => [
             'host' => $settings->host,
             'port' => $settings->port,
@@ -209,7 +226,24 @@ class ProjectMailerSettingsController extends AbstractController
                 $this->trans('project.mailer.test_email_subject', [], 'Jambo — Email de test'),
                 $this->trans('project.mailer.test_email_body', [], "Bonjour,\n\nCeci est un email de test envoye depuis Jambo.\n\nSi vous recevez cet email, votre configuration SMTP est correcte.\n\n— L'equipe Jambo"),
             );
+            $this->auditService?->log(
+                toolName: 'mailer_test',
+                project: $project,
+                input: ['to' => $settings->fromEmail],
+                output: ['sent' => true],
+                status: 'success',
+                source: 'admin_mailer_settings',
+            );
         } catch (\Throwable $e) {
+            $this->auditService?->log(
+                toolName: 'mailer_test',
+                project: $project,
+                input: ['to' => $settings->fromEmail],
+                output: null,
+                status: 'failure',
+                errorMessage: $e->getMessage(),
+                source: 'admin_mailer_settings',
+            );
             return $this->secureJson([
                 'error' => $this->trans('project.mailer.test_failed', ['%message%' => $e->getMessage()], $e->getMessage()),
             ], 422);
