@@ -7,6 +7,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.153] — 2026-11-05
+
+### Export/Import Hardening, Tenant Quotas Enforcement & Backup Volume Controls (Cycle #86)
+- **Tenant Storage Quota & Media Archive Hardening (`MediaImportHandler` & `ProjectExportImportController`)**:
+  - Implemented cumulative media byte verification during archive extraction (`MAX_TOTAL_MEDIA_BYTES = 250MB`).
+  - Added strict tenant storage quota checks against `MediaRepository::getTotalSizeByProject($project)` during import (`upload.error.quota_exceeded`), preventing project import from bypassing storage caps.
+  - Enforced project creation limit on archive import (`MAX_PROJECTS_PER_USER = 100`) via `project.export_import.max_projects_exceeded`.
+- **Export Permissions & Disk Space Hardening (`ProjectExportImportController` & `ProjectExporter`)**:
+  - Restricted export of sensitive sections (`endUsers`, `settings`) to members with `project.manage` permission (or super admins).
+  - Added filesystem disk free space guard (`MIN_FREE_DISK_BYTES = 500MB`) in `ProjectExporter` before staging export archives.
+  - Wrapped export stream generation in resilient exception handling returning localized error responses.
+- **Tenant & System Backup Volume Controls (`BackupManager` & `BackupController`)**:
+  - Added backup retention policy and storage volume limits (`MAX_TOTAL_BACKUPS = 25`, `MAX_TOTAL_STORAGE_BYTES = 2GB`, `MIN_FREE_DISK_BYTES = 500MB`).
+  - Implemented automatic pruning of oldest backups (`pruneOldBackups`) and partition disk space checks.
+  - Added volume metadata (`total_size`, `count`, `max_count`, `max_bytes`, `available_disk_space`) in `GET /api/admin/backups` response.
+  - Hardened `POST /api/admin/backups` with graceful 422 error handling on storage or disk space limits.
+- **Strict I18n Expansion**:
+  - Added 5 new localized keys across all 4 locales (`en`, `fr`, `es`, `ar`): `backup.insufficient_disk_space`, `backup.storage_limit_reached`, `export.insufficient_disk_space`, `import.media.cumulative_size_exceeded`, `project.export_import.max_projects_exceeded`. Total: 3,343 keys per locale.
+
 ## [1.26.152] — 2026-11-05
 
 ### 2FA & Backup Codes Hardening, Distributed Brute-Force Protection & Admin 2FA Reset (Cycle #86+)

@@ -98,7 +98,16 @@ class BackupController extends AbstractController
         }
 
         $backups = $this->backupManager->listBackups();
-        return $this->secureJson(['data' => $backups]);
+        return $this->secureJson([
+            'data' => $backups,
+            'meta' => [
+                'total_size'           => $this->backupManager->getTotalBackupSize(),
+                'count'                => count($backups),
+                'max_count'            => BackupManager::MAX_TOTAL_BACKUPS,
+                'max_bytes'            => BackupManager::MAX_TOTAL_STORAGE_BYTES,
+                'available_disk_space' => $this->backupManager->getAvailableDiskSpace(),
+            ],
+        ]);
     }
 
     #[Route('', name: 'create', methods: ['POST'])]
@@ -140,7 +149,11 @@ class BackupController extends AbstractController
             return $this->secureJson(['error' => $this->trans('backup.label_invalid_characters', [], 'Backup label contains invalid characters.')], 422);
         }
 
-        $backup = $this->backupManager->createBackup($label);
+        try {
+            $backup = $this->backupManager->createBackup($label);
+        } catch (\RuntimeException $e) {
+            return $this->secureJson(['error' => $e->getMessage()], 422);
+        }
 
         $this->auditService?->log(
             toolName: 'backup_create',

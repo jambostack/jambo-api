@@ -3638,4 +3638,11 @@ return [
     'admin_end_users.2fa_reset_success' => 'Two-factor authentication has been successfully reset for end user %email%.',
     'admin_end_users.2fa_not_enabled' => 'Two-factor authentication is not enabled for this end user.',
     'enduser.auth.backup_codes_locked' => 'Too many invalid backup code attempts. Recovery codes are temporarily locked. Please retry in %seconds% seconds.',
+
+    // ─── Cycle 86+: Export/Import Hardening & Tenant Backup Volume Quotas ───
+    'backup.insufficient_disk_space' => 'Insufficient server disk space to generate backup.',
+    'backup.storage_limit_reached' => 'Backup storage volume limit reached (2 GB).',
+    'export.insufficient_disk_space' => 'Insufficient server disk space to generate export archive.',
+    'import.media.cumulative_size_exceeded' => 'Cumulative imported media size exceeds %max%MB limit.',
+    'project.export_import.max_projects_exceeded' => 'Project limit exceeded (maximum %max% projects).',
 ];

@@ -3640,4 +3640,11 @@ return [
     'admin_end_users.2fa_reset_success' => 'تمت إعادة تعيين التحقق بخطوتين بنجاح للمستخدم النهائي %email%.',
     'admin_end_users.2fa_not_enabled' => 'التحقق بخطوتين غير مفعّل لهذا المستخدم النهائي.',
     'enduser.auth.backup_codes_locked' => 'محاولات كثيرة غير صالحة لرموز النسخ الاحتياطي. تم قفل رموز الاسترداد مؤقتاً. يُرجى المحاولة بعد %seconds% ثانية.',
+
+    // ─── Cycle 86+: Export/Import Hardening & Tenant Backup Volume Quotas ───
+    'backup.insufficient_disk_space' => 'مساحة القرص غير كافية على الخادم لإنشاء النسخة الاحتياطية.',
+    'backup.storage_limit_reached' => 'تم الوصول إلى الحد الأقصى لحجم تخزين النسخ الاحتياطية (2 جيجابايت).',
+    'export.insufficient_disk_space' => 'مساحة القرص غير كافية على الخادم لإنشاء أرشيف التصدير.',
+    'import.media.cumulative_size_exceeded' => 'يتجاوز الحجم الإجمالي للوسائط المستوردة الحد الأقصى البالغ %max% ميغابايت.',
+    'project.export_import.max_projects_exceeded' => 'تم تجاوز الحد الأقصى للمشاريع (الحد الأقصى %max% مشاريع).',
 ];

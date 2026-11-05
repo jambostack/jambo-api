@@ -15,6 +15,7 @@ class ProjectExporter
 {
     public const MAX_EXPORT_FILES = 5000;
     public const MAX_EXPORT_BYTES = 262144000; // 250 MB
+    public const MIN_FREE_DISK_BYTES = 524288000; // 500 MB
 
     /** @var array<string, ExportHandlerInterface> */
     private array $handlers;
@@ -94,6 +95,11 @@ class ProjectExporter
     public function export(Project $project, ExportOptions $options, string $outputPath): void
     {
         $this->cleanStaleTempDirs();
+
+        $free = @disk_free_space($this->getTempDir());
+        if ($free !== false && $free >= 0 && $free < self::MIN_FREE_DISK_BYTES) {
+            throw new \RuntimeException($this->trans('export.insufficient_disk_space', [], 'Insufficient server disk space to generate export archive.'));
+        }
 
         $token = bin2hex(random_bytes(16));
         $tempDir = $this->getTempDir() . '/jambo-export-' . $token;

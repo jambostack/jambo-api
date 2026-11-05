@@ -3656,4 +3656,11 @@ return [
     'admin_end_users.2fa_reset_success' => 'L\'authentification à deux facteurs a été réinitialisée avec succès pour l\'utilisateur final %email%.',
     'admin_end_users.2fa_not_enabled' => 'L\'authentification à deux facteurs n\'est pas activée pour cet utilisateur final.',
     'enduser.auth.backup_codes_locked' => 'Trop de tentatives de codes de secours invalides. Les clés de récupération sont temporairement verrouillées. Veuillez réessayer dans %seconds% secondes.',
+
+    // ─── Cycle 86+: Export/Import Hardening & Tenant Backup Volume Quotas ───
+    'backup.insufficient_disk_space' => 'Espace disque insuffisant sur le serveur pour générer la sauvegarde.',
+    'backup.storage_limit_reached' => 'Limite de volume de stockage des sauvegardes atteinte (2 Go).',
+    'export.insufficient_disk_space' => 'Espace disque insuffisant sur le serveur pour générer l\'archive d\'export.',
+    'import.media.cumulative_size_exceeded' => 'La taille cumulée des médias importés dépasse la limite de %max% Mo.',
+    'project.export_import.max_projects_exceeded' => 'Limite de projets dépassée (maximum %max% projets).',
 ];

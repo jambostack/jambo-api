@@ -11,6 +11,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class BackupManager
 {
     public const MAX_BACKUP_BYTES = 262144000; // 250 MB
+    public const MAX_TOTAL_BACKUPS = 25;
+    public const MAX_TOTAL_STORAGE_BYTES = 2147483648; // 2 GB
+    public const MIN_FREE_DISK_BYTES = 524288000; // 500 MB
     public const FILENAME_REGEX = '/^backup-[a-zA-Z0-9_\-]{8,128}\.(sql|sql\.gz|zip)$/';
 
     private const FORBIDDEN_SQL_PATTERNS = [
@@ -94,6 +97,110 @@ class BackupManager
     }
 
     /**
+     * Calculates the total size in bytes of all valid backups on disk.
+     */
+    public function getTotalBackupSize(): int
+    {
+        $total = 0;
+        if (!is_dir($this->backupDir)) {
+            return 0;
+        }
+        $files = scandir($this->backupDir);
+        if ($files === false) {
+            return 0;
+        }
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..' || !preg_match(self::FILENAME_REGEX, $file)) {
+                continue;
+            }
+            $filePath = $this->backupDir . '/' . $file;
+            if (is_file($filePath)) {
+                $total += filesize($filePath) ?: 0;
+            }
+        }
+        return $total;
+    }
+
+    /**
+     * Calculates the count of existing backups.
+     */
+    public function getBackupCount(): int
+    {
+        if (!is_dir($this->backupDir)) {
+            return 0;
+        }
+        $files = scandir($this->backupDir);
+        if ($files === false) {
+            return 0;
+        }
+        $count = 0;
+        foreach ($files as $file) {
+            if ($file !== '.' && $file !== '..' && preg_match(self::FILENAME_REGEX, $file)) {
+                $filePath = $this->backupDir . '/' . $file;
+                if (is_file($filePath)) {
+                    $count++;
+                }
+            }
+        }
+        return $count;
+    }
+
+    /**
+     * Returns available disk space in bytes on the backup partition.
+     */
+    public function getAvailableDiskSpace(): int
+    {
+        $free = @disk_free_space($this->backupDir);
+        return ($free !== false && $free >= 0) ? (int) $free : PHP_INT_MAX;
+    }
+
+    /**
+     * Prunes oldest backups when count or volume exceeds allowed limits.
+     * Keeps at most $keepCount backups and ensures total bytes <= $maxBytes.
+     *
+     * @return int Number of deleted backup files
+     */
+    public function pruneOldBackups(int $keepCount = self::MAX_TOTAL_BACKUPS, int $maxBytes = self::MAX_TOTAL_STORAGE_BYTES): int
+    {
+        if (!is_dir($this->backupDir)) {
+            return 0;
+        }
+        $files = scandir($this->backupDir);
+        if ($files === false) {
+            return 0;
+        }
+
+        $items = [];
+        $totalBytes = 0;
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..' || !preg_match(self::FILENAME_REGEX, $file)) {
+                continue;
+            }
+            $path = $this->backupDir . '/' . $file;
+            if (is_file($path)) {
+                $size = filesize($path) ?: 0;
+                $mtime = filemtime($path) ?: 0;
+                $totalBytes += $size;
+                $items[] = ['file' => $file, 'path' => $path, 'size' => $size, 'mtime' => $mtime];
+            }
+        }
+
+        // Sort ascending by modification time (oldest first)
+        usort($items, fn ($a, $b) => $a['mtime'] <=> $b['mtime']);
+
+        $deletedCount = 0;
+        while ((count($items) > $keepCount || $totalBytes > $maxBytes) && !empty($items)) {
+            $oldest = array_shift($items);
+            if (@unlink($oldest['path'])) {
+                $totalBytes -= $oldest['size'];
+                $deletedCount++;
+            }
+        }
+
+        return $deletedCount;
+    }
+
+    /**
      * Resolves a backup file path with strict directory traversal protection.
      */
     public function resolveBackupFile(string $filename): ?string
@@ -123,6 +230,19 @@ class BackupManager
      */
     public function createBackup(string $label = 'manual'): array
     {
+        // 1. Strict partition free space check
+        if ($this->getAvailableDiskSpace() < self::MIN_FREE_DISK_BYTES) {
+            throw new \RuntimeException($this->trans('backup.insufficient_disk_space', [], 'Insufficient server disk space to generate backup.'));
+        }
+
+        // 2. Automated volume & count retention pruning
+        $this->pruneOldBackups(self::MAX_TOTAL_BACKUPS - 1, self::MAX_TOTAL_STORAGE_BYTES - self::MAX_BACKUP_BYTES);
+
+        // 3. Post-pruning volume guard
+        if ($this->getTotalBackupSize() >= self::MAX_TOTAL_STORAGE_BYTES) {
+            throw new \RuntimeException($this->trans('backup.storage_limit_reached', [], 'Backup storage volume limit reached (2 GB).'));
+        }
+
         $truncatedLabel = mb_substr(trim($label), 0, 50);
         $safeLabel = preg_replace('/[^a-zA-Z0-9_\-]/', '-', $truncatedLabel) ?: 'manual';
         $safeLabel = trim($safeLabel, '-');

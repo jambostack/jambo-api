@@ -3638,4 +3638,11 @@ return [
     'admin_end_users.2fa_reset_success' => 'La autenticación de dos factores se ha restablecido con éxito para el usuario final %email%.',
     'admin_end_users.2fa_not_enabled' => 'La autenticación de dos factores no está activada para este usuario final.',
     'enduser.auth.backup_codes_locked' => 'Demasiados intentos inválidos de códigos de respaldo. Las claves de recuperación están temporalmente bloqueadas. Vuelva a intentarlo en %seconds% segundos.',
+
+    // ─── Cycle 86+: Export/Import Hardening & Tenant Backup Volume Quotas ───
+    'backup.insufficient_disk_space' => 'Espacio en disco insuficiente en el servidor para generar la copia de seguridad.',
+    'backup.storage_limit_reached' => 'Límite de volumen de almacenamiento de copias de seguridad alcanzado (2 GB).',
+    'export.insufficient_disk_space' => 'Espacio en disco insuficiente en el servidor para generar el archivo de exportación.',
+    'import.media.cumulative_size_exceeded' => 'El tamaño acumulado de los medios importados supera el límite de %max% MB.',
+    'project.export_import.max_projects_exceeded' => 'Límite de proyectos superado (máximo %max% proyectos).',
 ];

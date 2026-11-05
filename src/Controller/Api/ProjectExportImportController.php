@@ -50,6 +50,7 @@ class ProjectExportImportController extends AbstractController
     ) {}
 
     public const MAX_ARCHIVE_BYTES = 52428800; // 50MB
+    public const MAX_PROJECTS_PER_USER = 100;
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
@@ -148,7 +149,18 @@ class ProjectExportImportController extends AbstractController
             $options->structure = true;
         }
 
-        $zipPath = $this->exporter->streamExport($project, $options);
+        // Sensitive data export (end users, settings) requires project.manage permission
+        if ($options->endUsers || $options->settings) {
+            if ($request->attributes->get('_project') !== $project) {
+                $this->denyAccessUnlessGranted('project.manage', $project);
+            }
+        }
+
+        try {
+            $zipPath = $this->exporter->streamExport($project, $options);
+        } catch (\RuntimeException $e) {
+            return $this->json(['error' => $this->trans('project.export_import.failed', ['%error%' => $e->getMessage()], 'Export failed: ' . $e->getMessage())], 422, self::SECURITY_HEADERS);
+        }
 
         $filename = sprintf('export-%s-%s.zip',
             preg_replace('/[^a-zA-Z0-9_-]/', '-', $project->name),
@@ -244,8 +256,14 @@ class ProjectExportImportController extends AbstractController
     #[Route('/import', name: 'import_new', methods: ['POST'])]
     public function importNew(Request $request): JsonResponse
     {
-        if (!$this->getUser()) {
+        $user = $this->getUser();
+        if (!$user) {
             return $this->json(['error' => $this->trans('project.export_import.auth_required', [], 'Authentication required')], 401);
+        }
+
+        $existingCount = count($this->projectRepository->findByMember($user));
+        if ($existingCount >= self::MAX_PROJECTS_PER_USER) {
+            return $this->json(['error' => $this->trans('project.export_import.max_projects_exceeded', ['%max%' => self::MAX_PROJECTS_PER_USER], sprintf('Project limit exceeded (maximum %d projects).', self::MAX_PROJECTS_PER_USER))], 422, self::SECURITY_HEADERS);
         }
 
         $identifier = $this->resolveIdentifier($request);
