@@ -65,12 +65,20 @@ class ContentEntryRepository extends ServiceEntityRepository
 
         // Filtre par date de création
         if ($dateFrom !== null && $dateFrom !== '') {
-            $qb->andWhere('e.createdAt >= :dateFrom')
-               ->setParameter('dateFrom', new \DateTimeImmutable($dateFrom));
+            try {
+                $qb->andWhere('e.createdAt >= :dateFrom')
+                   ->setParameter('dateFrom', new \DateTimeImmutable($dateFrom));
+            } catch (\Throwable) {
+                // Ignore invalid date format in repository query
+            }
         }
         if ($dateTo !== null && $dateTo !== '') {
-            $qb->andWhere('e.createdAt <= :dateTo')
-               ->setParameter('dateTo', new \DateTimeImmutable($dateTo . ' 23:59:59'));
+            try {
+                $qb->andWhere('e.createdAt <= :dateTo')
+                   ->setParameter('dateTo', new \DateTimeImmutable($dateTo . ' 23:59:59'));
+            } catch (\Throwable) {
+                // Ignore invalid date format in repository query
+            }
         }
 
         // Tri personnalisé
@@ -125,12 +133,20 @@ class ContentEntryRepository extends ServiceEntityRepository
 
         // Filtre par date de création
         if ($dateFrom !== null && $dateFrom !== '') {
-            $qb->andWhere('e.createdAt >= :dateFrom')
-               ->setParameter('dateFrom', new \DateTimeImmutable($dateFrom));
+            try {
+                $qb->andWhere('e.createdAt >= :dateFrom')
+                   ->setParameter('dateFrom', new \DateTimeImmutable($dateFrom));
+            } catch (\Throwable) {
+                // Ignore invalid date format in repository query
+            }
         }
         if ($dateTo !== null && $dateTo !== '') {
-            $qb->andWhere('e.createdAt <= :dateTo')
-               ->setParameter('dateTo', new \DateTimeImmutable($dateTo . ' 23:59:59'));
+            try {
+                $qb->andWhere('e.createdAt <= :dateTo')
+                   ->setParameter('dateTo', new \DateTimeImmutable($dateTo . ' 23:59:59'));
+            } catch (\Throwable) {
+                // Ignore invalid date format in repository query
+            }
         }
 
         return (int) $qb->getQuery()->getSingleScalarResult();

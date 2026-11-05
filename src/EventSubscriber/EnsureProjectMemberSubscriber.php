@@ -12,6 +12,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class EnsureProjectMemberSubscriber implements EventSubscriberInterface
 {
@@ -20,7 +21,13 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
         private ProjectMemberRepository $memberRepo,
         private TokenStorageInterface $tokenStorage,
         private ApiTokenChecker $tokenChecker,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], string $default = ''): string
+    {
+        return $this->translator?->trans($id, $parameters) ?? $default;
+    }
 
     public static function getSubscribedEvents(): array
     {
@@ -79,19 +86,28 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            $event->setResponse(new JsonResponse(['error' => 'Project not found.'], 404));
+            $event->setResponse(new JsonResponse([
+                'error' => $this->trans('collection.admin.project_not_found', [], 'Project not found.'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404));
             return;
         }
 
         if ($project === null) {
-            $event->setResponse(new JsonResponse(['error' => 'Project not found.'], 404));
+            $event->setResponse(new JsonResponse([
+                'error' => $this->trans('collection.admin.project_not_found', [], 'Project not found.'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404));
             return;
         }
 
         $member = $this->memberRepo->findActiveByUserAndProject($user, $project);
 
         if ($member === null) {
-            $event->setResponse(new JsonResponse(['error' => 'Access denied to this project.'], 403));
+            $event->setResponse(new JsonResponse([
+                'error' => $this->trans('project.access_denied', [], 'Access denied to this project.'),
+                'code' => 'ACCESS_DENIED',
+            ], 403));
             return;
         }
 
@@ -102,18 +118,27 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
     {
         $apiToken = $this->tokenChecker->resolve($request);
         if ($apiToken === null) {
-            $event->setResponse(new JsonResponse(['error' => 'Authentication required.'], 401));
+            $event->setResponse(new JsonResponse([
+                'error' => $this->trans('field.admin.auth_required', [], 'Authentication required.'),
+                'code' => 'AUTH_REQUIRED',
+            ], 401));
             return;
         }
 
         if ($apiToken->project->uuid?->toString() !== $projectUuid) {
-            $event->setResponse(new JsonResponse(['error' => 'Access denied to this project.'], 403));
+            $event->setResponse(new JsonResponse([
+                'error' => $this->trans('project.access_denied', [], 'Access denied to this project.'),
+                'code' => 'ACCESS_DENIED',
+            ], 403));
             return;
         }
 
         // Cloisonnement strict des portées selon la méthode HTTP via ApiTokenChecker
         if (!$this->tokenChecker->isAllowedForMethod($apiToken, $request->getMethod())) {
-            $event->setResponse(new JsonResponse(['error' => 'Insufficient token abilities.'], 403));
+            $event->setResponse(new JsonResponse([
+                'error' => $this->trans('project.insufficient_token_abilities', [], 'Insufficient token abilities.'),
+                'code' => 'INSUFFICIENT_ABILITIES',
+            ], 403));
             return;
         }
 

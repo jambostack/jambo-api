@@ -28,6 +28,9 @@ class CollectionController extends AbstractController
 {
     use AdminApiControllerTrait;
 
+    public const MAX_PAYLOAD_BYTES = 524288; // 512KB
+    public const MAX_EXPORT_ROWS = 50000;
+
     public function __construct(
         private ProjectRepository $projects,
         private CollectionRepository $collections,
@@ -49,7 +52,7 @@ class CollectionController extends AbstractController
     {
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
         return $this->json(['data' => array_map(
@@ -63,12 +66,12 @@ class CollectionController extends AbstractController
     {
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
         $c = $this->collections->findOneByProjectAndSlug($project, $slug);
         if (!$c) {
-            return $this->json(['error' => $this->trans('admin_api.collection.not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
         return $this->json(['data' => $this->serialize($c, withFields: true)]);
     }
@@ -79,37 +82,42 @@ class CollectionController extends AbstractController
         $this->requireScope($request, 'schema:write');
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->trans('admin_api.collection.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('admin_api.collection.invalid_json')], 400);
+            return $this->json(['error' => $this->trans('admin_api.collection.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         $name = trim((string) ($body['name'] ?? ''));
         if ($name === '') {
-            return $this->json(['error' => $this->trans('admin_api.collection.name_required')], 422);
+            return $this->json(['error' => $this->trans('admin_api.collection.name_required'), 'code' => 'NAME_REQUIRED'], 422);
         }
         if (mb_strlen($name) > 255) {
-            return $this->json(['error' => $this->trans('admin_api.collection.name_too_long')], 422);
+            return $this->json(['error' => $this->trans('admin_api.collection.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
         }
 
         if (isset($body['slug'])) {
             $slug = trim((string) $body['slug']);
             if (mb_strlen($slug) > 255) {
-                return $this->json(['error' => $this->trans('admin_api.collection.slug_too_long')], 422);
+                return $this->json(['error' => $this->trans('admin_api.collection.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($slug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
-                return $this->json(['error' => $this->trans('admin_api.collection.invalid_slug_format')], 422);
+                return $this->json(['error' => $this->trans('admin_api.collection.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
         }
 
         try {
             $c = $this->provisioner->createCollection($project, $body);
         } catch (SchemaException $e) {
-            return $this->json(['error' => $e->getMessage()], $e->statusCode());
+            return $this->json(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
         return $this->json(['data' => ['name' => $c->name, 'slug' => $c->slug, 'isSingleton' => $c->isSingleton]], 201);
     }
@@ -120,36 +128,41 @@ class CollectionController extends AbstractController
         $this->requireScope($request, 'schema:write');
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         $c = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$c) {
-            return $this->json(['error' => $this->trans('admin_api.collection.not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->trans('admin_api.collection.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('admin_api.collection.invalid_json')], 400);
+            return $this->json(['error' => $this->trans('admin_api.collection.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         if (isset($body['name'])) {
             $name = trim((string) $body['name']);
             if ($name === '') {
-                return $this->json(['error' => $this->trans('admin_api.collection.name_required')], 422);
+                return $this->json(['error' => $this->trans('admin_api.collection.name_required'), 'code' => 'NAME_REQUIRED'], 422);
             }
             if (mb_strlen($name) > 255) {
-                return $this->json(['error' => $this->trans('admin_api.collection.name_too_long')], 422);
+                return $this->json(['error' => $this->trans('admin_api.collection.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
             }
         }
 
         if (isset($body['slug'])) {
             $newSlug = trim((string) $body['slug']);
             if (mb_strlen($newSlug) > 255) {
-                return $this->json(['error' => $this->trans('admin_api.collection.slug_too_long')], 422);
+                return $this->json(['error' => $this->trans('admin_api.collection.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($newSlug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $newSlug)) {
-                return $this->json(['error' => $this->trans('admin_api.collection.invalid_slug_format')], 422);
+                return $this->json(['error' => $this->trans('admin_api.collection.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
         }
 
@@ -163,12 +176,12 @@ class CollectionController extends AbstractController
         $this->requireScope($request, 'schema:write');
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $project);
         $c = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$c) {
-            return $this->json(['error' => $this->trans('admin_api.collection.not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
         $this->provisioner->deleteCollection($c);
         return new JsonResponse(null, 204);
@@ -179,13 +192,13 @@ class CollectionController extends AbstractController
     {
         $project = $this->resolveProject($uuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
 
         $collection = $this->collections->findOneByProjectAndSlug($project, $slug);
         if (!$collection) {
-            return $this->json(['error' => $this->trans('admin_api.collection.not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
 
         $fields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
@@ -212,12 +225,14 @@ class CollectionController extends AbstractController
             if ($this->entries !== null) {
                 $batchSize = 100;
                 $offset = 0;
+                $totalExported = 0;
 
-                while (true) {
+                while ($totalExported < self::MAX_EXPORT_ROWS) {
+                    $limit = min($batchSize, self::MAX_EXPORT_ROWS - $totalExported);
                     $entries = $this->entries->findBy(
                         ['collection' => $collection, 'deletedAt' => null],
                         ['id' => 'ASC'],
-                        $batchSize,
+                        $limit,
                         $offset
                     );
 
@@ -235,6 +250,7 @@ class CollectionController extends AbstractController
                             $row[] = $vals[$s] ?? '';
                         }
                         fputcsv($output, $sanitizer->sanitizeRow($row), ',', '"', "\\");
+                        $totalExported++;
                     }
 
                     flush();

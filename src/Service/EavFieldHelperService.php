@@ -5,9 +5,24 @@ namespace App\Service;
 use App\Entity\Collection;
 use App\Entity\ContentFieldValue;
 use App\Entity\Field;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class EavFieldHelperService
 {
+    public function __construct(
+        private ?TranslatorInterface $translator = null,
+    ) {}
+
+    private function trans(string $id, array $parameters = [], string $default = ''): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($id, $parameters);
+            if ($translated !== $id) {
+                return $translated;
+            }
+        }
+        return $default !== '' ? vsprintf($default, $parameters) : $id;
+    }
     /**
      * Applique une valeur typée à un ContentFieldValue selon le type de champ EAV.
      */
@@ -75,14 +90,14 @@ class EavFieldHelperService
         }
 
         return match ($type) {
-            'email' => filter_var($value, FILTER_VALIDATE_EMAIL) ? [] : ['Format email invalide'],
-            'url' => filter_var($value, FILTER_VALIDATE_URL) ? [] : ['Format URL invalide'],
-            'number', 'decimal' => is_numeric($value) ? [] : ['Valeur numérique attendue'],
-            'rating' => is_numeric($value) ? [] : ['Note numérique attendue'],
-            'tags' => is_array($value) ? [] : ['Liste de valeurs attendue (tableau)'],
-            'boolean', 'checkbox' => is_bool($value) || in_array($value, [0, 1, '0', '1', true, false], true) ? [] : ['Valeur booléenne attendue'],
-            'date' => strtotime((string) $value) ? [] : ['Format de date invalide'],
-            'datetime' => strtotime((string) $value) ? [] : ['Format de datetime invalide'],
+            'email' => filter_var($value, FILTER_VALIDATE_EMAIL) ? [] : [$this->trans('field.validation.invalid_email', [], 'Format email invalide')],
+            'url' => filter_var($value, FILTER_VALIDATE_URL) ? [] : [$this->trans('field.validation.invalid_url', [], 'Format URL invalide')],
+            'number', 'decimal' => is_numeric($value) ? [] : [$this->trans('field.validation.numeric_expected', [], 'Valeur numérique attendue')],
+            'rating' => is_numeric($value) ? [] : [$this->trans('field.validation.rating_expected', [], 'Note numérique attendue')],
+            'tags' => is_array($value) ? [] : [$this->trans('field.validation.array_expected', [], 'Liste de valeurs attendue (tableau)')],
+            'boolean', 'checkbox' => is_bool($value) || in_array($value, [0, 1, '0', '1', true, false], true) ? [] : [$this->trans('field.validation.boolean_expected', [], 'Valeur booléenne attendue')],
+            'date' => strtotime((string) $value) ? [] : [$this->trans('field.validation.invalid_date', [], 'Format de date invalide')],
+            'datetime' => strtotime((string) $value) ? [] : [$this->trans('field.validation.invalid_datetime', [], 'Format de datetime invalide')],
             'text', 'longtext', 'richtext', 'slug', 'color', 'time', 'password',
             'markdown', 'code', 'icon', 'uuid',
             'json', 'array', 'repeater', 'enumeration', 'media', 'relation' => [],
@@ -100,7 +115,7 @@ class EavFieldHelperService
 
         // 1. Required check (already enforced elsewhere, but double-check)
         if ($field->isRequired && ($value === null || $value === '' || $value === [])) {
-            $errors[] = sprintf('Le champ "%s" est requis.', $field->name);
+            $errors[] = $this->trans('field.validation.required', ['%field%' => $field->name], 'Le champ "%s" est requis.');
             return $errors;
         }
 
@@ -128,7 +143,7 @@ class EavFieldHelperService
                     $regex = '/' . str_replace('/', '\/', $regex) . '/';
                 }
                 if (!preg_match($regex, $value)) {
-                    $msg = $rules['regexMessage'] ?? sprintf('Le champ "%s" ne respecte pas le format attendu.', $field->name);
+                    $msg = $rules['regexMessage'] ?? $this->trans('field.validation.regex_mismatch', ['%field%' => $field->name], 'Le champ "%s" ne respecte pas le format attendu.');
                     $errors[] = $msg;
                 }
             }
@@ -138,10 +153,10 @@ class EavFieldHelperService
         if (is_string($value)) {
             $len = mb_strlen($value);
             if (isset($rules['minLength']) && $len < (int)$rules['minLength']) {
-                $errors[] = sprintf('Le champ "%s" doit contenir au moins %d caractères.', $field->name, $rules['minLength']);
+                $errors[] = $this->trans('field.validation.min_length', ['%field%' => $field->name, '%min%' => $rules['minLength']], 'Le champ "%s" doit contenir au moins %d caractères.');
             }
             if (isset($rules['maxLength']) && $len > (int)$rules['maxLength']) {
-                $errors[] = sprintf('Le champ "%s" ne doit pas dépasser %d caractères.', $field->name, $rules['maxLength']);
+                $errors[] = $this->trans('field.validation.max_length', ['%field%' => $field->name, '%max%' => $rules['maxLength']], 'Le champ "%s" ne doit pas dépasser %d caractères.');
             }
         }
 
@@ -149,10 +164,10 @@ class EavFieldHelperService
         if (is_numeric($value)) {
             $num = (float)$value;
             if (isset($rules['min']) && $num < (float)$rules['min']) {
-                $errors[] = sprintf('Le champ "%s" doit être supérieur ou égal à %s.', $field->name, $rules['min']);
+                $errors[] = $this->trans('field.validation.min_value', ['%field%' => $field->name, '%min%' => $rules['min']], 'Le champ "%s" doit être supérieur ou égal à %s.');
             }
             if (isset($rules['max']) && $num > (float)$rules['max']) {
-                $errors[] = sprintf('Le champ "%s" doit être inférieur ou égal à %s.', $field->name, $rules['max']);
+                $errors[] = $this->trans('field.validation.max_value', ['%field%' => $field->name, '%max%' => $rules['max']], 'Le champ "%s" doit être inférieur ou égal à %s.');
             }
         }
 

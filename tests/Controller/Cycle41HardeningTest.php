@@ -360,10 +360,10 @@ class Cycle41HardeningTest extends WebTestCase
         $es = require $baseDir . '/translations/messages.es.php';
         $ar = require $baseDir . '/translations/messages.ar.php';
 
-        $this->assertSame(2476, count($en), 'Expected 2476 translation keys in English');
-        $this->assertSame(2476, count($fr), 'Expected 2476 translation keys in French');
-        $this->assertSame(2476, count($es), 'Expected 2476 translation keys in Spanish');
-        $this->assertSame(2476, count($ar), 'Expected 2476 translation keys in Arabic');
+        $this->assertGreaterThanOrEqual(2476, count($en), 'Expected at least 2476 translation keys in English');
+        $this->assertSame(count($en), count($fr), 'Expected translation keys in French to match English');
+        $this->assertSame(count($en), count($es), 'Expected translation keys in Spanish to match English');
+        $this->assertSame(count($en), count($ar), 'Expected translation keys in Arabic to match English');
 
         $this->assertEmpty(array_diff_key($en, $fr), 'Missing keys between EN and FR');
         $this->assertEmpty(array_diff_key($en, $es), 'Missing keys between EN and ES');

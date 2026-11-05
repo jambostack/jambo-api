@@ -7,6 +7,40 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.97] — 2026-11-05
+
+### CollectionController, FieldController & ContentController Hardening, Dynamic Schema Protection & Strict I18N
+- **FieldController Hardening**:
+  - Full Symfony `TranslatorInterface` injection eliminating all remaining hardcoded English text strings (`field.admin.*`).
+  - Added structured machine-readable error codes (`PROJECT_NOT_FOUND`, `COLLECTION_NOT_FOUND`, `FIELD_NOT_FOUND`, `AUTH_REQUIRED`, `INVALID_JSON`, `PAYLOAD_TOO_LARGE`, `NAME_REQUIRED`, `NAME_TOO_LONG`, `TYPE_REQUIRED`, `INVALID_FIELD_TYPE`, `SLUG_TOO_LONG`, `INVALID_SLUG_FORMAT`, `OPTIONS_TOO_LARGE`, `OPTIONS_TOO_DEEP`, `INVALID_REORDER_LIST`, `SCHEMA_ERROR`).
+  - Implemented strict UUID format validation on URL project parameters (`^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).
+  - Enforced strict payload size bounding (max 512KB) preventing DoS via oversized JSON bodies (HTTP 413).
+  - Validated field definitions against `ALLOWED_TYPES` whitelist, slug formatting rules, and options complexity limits (max 64KB JSON, max 6 nesting depth levels).
+  - Hardened field reordering: validated array structure, capped batch size at 500 items, and sanitized field identifiers and order boundaries (0 to 10000).
+  - Integrated `AuditService` audit trail logging on field creation, updates, reordering, and soft deletion (`field_management`).
+- **CollectionController & AdminApi Hardening**:
+  - Added strict UUID format verification on `projectUuid` parameters before executing repository lookups.
+  - Added structured machine error codes across standard API and Admin API façades (`PROJECT_NOT_FOUND`, `COLLECTION_NOT_FOUND`, `AUTH_REQUIRED`, `INVALID_JSON`, `PAYLOAD_TOO_LARGE`, `NAME_REQUIRED`, `NAME_TOO_LONG`, `SLUG_TOO_LONG`, `INVALID_SLUG_FORMAT`, `SLUG_ALREADY_EXISTS`, `DESCRIPTION_TOO_LONG`, `REORDER_INVALID_LIST`).
+  - Enforced payload size limit (max 512KB) on collection creation, updates, and reorder.
+  - Bounded CSV exports in `AdminApi\CollectionController` to 50,000 rows max per batch to prevent memory exhaustion on massive databases.
+- **ContentController (Admin Entries) Hardening**:
+  - Added strict UUID format verification on `projectUuid` preventing invalid database lookups.
+  - Added structured machine-readable error codes across all entry actions (`PROJECT_NOT_FOUND`, `COLLECTION_NOT_FOUND`, `ENTRY_NOT_FOUND`, `AUTH_REQUIRED`, `INVALID_JSON`, `TOO_MANY_FIELDS`, `INVALID_STATUS`, `LOCALE_NOT_ENABLED`, `SINGLETON_ALREADY_EXISTS`, `ASSIGNEE_NOT_MEMBER`, `INVALID_UUID_FORMAT`, `SEARCH_QUERY_TOO_LONG`, `INVALID_SORT_CLAUSE`, `INVALID_DATE_FILTER`, `PAYLOAD_TOO_LARGE`, `VALIDATION_FAILED`).
+  - Payload bounding enforced at 1MB (HTTP 413 `content.admin.payload_too_large`).
+  - Replaced hardcoded version snapshot label (`'Sauvegarde'`) with translated token (`content.admin.version_save_label`).
+  - Wired full-text `$search` query parameter into `findByCollectionPaginated` and `countByCollection`.
+  - Hardened sort clauses with strict whitelist validation (`created_at`, `updated_at`, `published_at`, `id` with `asc`/`desc` direction), rejecting malicious injections.
+  - Hardened `date_from` and `date_to` query filters with strict ISO-8601 regex validation (`YYYY-MM-DD`), preventing uncaught `\Exception` 500 errors.
+  - Protected `ContentEntryRepository` against invalid date parsing with exception handling.
+  - Hardened payload field validator: bounded rich text/wysiwyg/code types to 1,000,000 characters, validated email format, and validated numeric fields.
+- **EavFieldHelperService & EnsureProjectMemberSubscriber Hardening**:
+  - Injected `TranslatorInterface` and extracted all hardcoded French validation error strings to `field.validation.*`.
+  - Added structured error codes and translations in `EnsureProjectMemberSubscriber`.
+- **I18N Parity**:
+  - Added 40 new translation keys, bringing total keys to 2,516 with strict parity across English (`en`), French (`fr`), Spanish (`es`), and Arabic (`ar`).
+- **Test Suite**:
+  - Added `Cycle42HardeningTest` (9 tests, 60 assertions), 100% passing.
+
 ## [1.26.96] — 2026-11-05
 
 ### AppSettingsController, RedirectController & FormController Hardening & Strict I18N

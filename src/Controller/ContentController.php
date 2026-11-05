@@ -25,6 +25,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries', name: 'api_content_')]
 class ContentController extends AbstractController
 {
+    public const MAX_PAYLOAD_BYTES = 1048576; // 1MB
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private CollectionRepository $collectionRepository,
@@ -58,9 +60,9 @@ class ContentController extends AbstractController
             $this->denyAccessUnlessGranted('project.view', $collection->project);
         }
 
-        $search = (string) $request->query->get('search', '');
+        $search = trim((string) $request->query->get('search', ''));
         if (mb_strlen($search) > 255) {
-            return $this->json(['error' => $this->trans('content.admin.search_query_too_long')], 422);
+            return $this->json(['error' => $this->trans('content.admin.search_query_too_long'), 'code' => 'SEARCH_QUERY_TOO_LONG'], 422);
         }
 
         $page    = max(1, $request->query->getInt('page', 1));
@@ -73,8 +75,63 @@ class ContentController extends AbstractController
         $statusRaw = $request->query->get('status') ?? $request->query->get('filter_status');
         $status    = in_array($statusRaw, ['draft', 'published'], true) ? $statusRaw : null;
 
-        $entries  = $this->entryRepository->findByCollectionPaginated($collection, $page, $perPage, $locale, $status);
-        $total    = $this->entryRepository->countByCollection($collection, $locale, $status);
+        // Sort validation
+        $sortRaw = $request->query->getString('sort', 'created_at:desc');
+        $sortParts = explode(':', $sortRaw, 2);
+        $sortField = strtolower($sortParts[0] ?? 'created_at');
+        $sortDir   = strtolower($sortParts[1] ?? 'desc');
+        $allowedSortFields = ['created_at', 'updated_at', 'published_at', 'id'];
+        $allowedSortDirs = ['asc', 'desc'];
+        if (!in_array($sortField, $allowedSortFields, true) || !in_array($sortDir, $allowedSortDirs, true)) {
+            return $this->json(['error' => $this->trans('content.admin.invalid_sort_clause'), 'code' => 'INVALID_SORT_CLAUSE'], 422);
+        }
+        $sort = $sortField . ':' . $sortDir;
+
+        // Date filters validation
+        $dateFrom = $request->query->has('date_from') ? trim($request->query->getString('date_from')) : null;
+        $dateTo   = $request->query->has('date_to') ? trim($request->query->getString('date_to')) : null;
+
+        if ($dateFrom !== null && $dateFrom !== '') {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?)?$/', $dateFrom) || strtotime($dateFrom) === false) {
+                return $this->json(['error' => $this->trans('content.admin.invalid_date_filter'), 'code' => 'INVALID_DATE_FILTER'], 422);
+            }
+        } else {
+            $dateFrom = null;
+        }
+
+        if ($dateTo !== null && $dateTo !== '') {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?)?$/', $dateTo) || strtotime($dateTo) === false) {
+                return $this->json(['error' => $this->trans('content.admin.invalid_date_filter'), 'code' => 'INVALID_DATE_FILTER'], 422);
+            }
+        } else {
+            $dateTo = null;
+        }
+
+        $assignedToId = $request->query->has('assigned_to_id') ? $request->query->getInt('assigned_to_id') : null;
+        if ($assignedToId !== null && $assignedToId <= 0) {
+            $assignedToId = null;
+        }
+
+        $entries  = $this->entryRepository->findByCollectionPaginated(
+            $collection,
+            $page,
+            $perPage,
+            $locale,
+            $status,
+            $search !== '' ? $search : null,
+            $sort,
+            $dateFrom,
+            $dateTo,
+            $assignedToId
+        );
+        $total    = $this->entryRepository->countByCollection(
+            $collection,
+            $locale,
+            $status,
+            $search !== '' ? $search : null,
+            $dateFrom,
+            $dateTo
+        );
 
         $lastPage = max(1, (int) ceil($total / $perPage));
         $from     = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
@@ -128,16 +185,20 @@ class ContentController extends AbstractController
             $this->denyAccessUnlessGranted('content.create', $collection->project);
         }
 
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->trans('content.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
         $project = $collection->project;
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('content.admin.invalid_json')], 400);
+            return $this->json(['error' => $this->trans('content.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
         $user = $this->getUser();
 
         if (isset($data['fields']) && is_array($data['fields']) && count($data['fields']) > 200) {
-            return $this->json(['error' => $this->trans('content.admin.too_many_fields')], 422);
+            return $this->json(['error' => $this->trans('content.admin.too_many_fields'), 'code' => 'TOO_MANY_FIELDS'], 422);
         }
 
         // Validate status against workflow
@@ -146,17 +207,17 @@ class ContentController extends AbstractController
         $validStatuses = array_merge(array_column($statuses, 'slug'), $systemStatuses);
         $status = $data['status'] ?? 'draft';
         if (!in_array($status, $validStatuses, true)) {
-            return $this->json(['errors' => ['status' => $this->trans('content.admin.invalid_status')]], 422);
+            return $this->json(['errors' => ['status' => $this->trans('content.admin.invalid_status')], 'code' => 'INVALID_STATUS'], 422);
         }
 
         $locale = $data['locale'] ?? $project->defaultLocale;
         $validLocales = array_unique(array_merge($project->locales ?? [], [$project->defaultLocale]));
         if (!in_array($locale, $validLocales, true)) {
-            return $this->json(['error' => $this->trans('content.admin.locale_not_enabled', ['%locale%' => $locale])], 422);
+            return $this->json(['error' => $this->trans('content.admin.locale_not_enabled', ['%locale%' => $locale]), 'code' => 'LOCALE_NOT_ENABLED'], 422);
         }
 
         if ($collection->isSingleton && $this->entryRepository->hasNonDeletedEntryForCollection($collection)) {
-            return $this->json(['error' => $this->trans('content.admin.singleton_already_exists')], 409);
+            return $this->json(['error' => $this->trans('content.admin.singleton_already_exists'), 'code' => 'SINGLETON_ALREADY_EXISTS'], 409);
         }
 
         $entry = new ContentEntry();
@@ -176,7 +237,7 @@ class ContentController extends AbstractController
             if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $collection->project) !== null) {
                 $entry->assignedTo = $assignee;
             } elseif ($assignee !== null) {
-                return $this->json(['errors' => ['assigned_to_id' => $this->trans('content.admin.assignee_not_member')]], 422);
+                return $this->json(['errors' => ['assigned_to_id' => $this->trans('content.admin.assignee_not_member')], 'code' => 'ASSIGNEE_NOT_MEMBER'], 422);
             }
         }
 
@@ -185,7 +246,7 @@ class ContentController extends AbstractController
         // Validation des champs avant saveFieldValues
         $validationErrors = $this->validatePayloadFields($collection, $data['fields'] ?? [], $entry);
         if (!empty($validationErrors)) {
-            return $this->json(['errors' => $validationErrors], 422);
+            return $this->json(['errors' => $validationErrors, 'code' => 'VALIDATION_FAILED'], 422);
         }
 
         $this->saveFieldValues($entry, $collection, $data['fields'] ?? []);
@@ -235,14 +296,18 @@ class ContentController extends AbstractController
             $this->denyAccessUnlessGranted('content.update', $entry->project);
         }
 
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->trans('content.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('content.admin.invalid_json')], 400);
+            return $this->json(['error' => $this->trans('content.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         if (isset($data['fields']) && is_array($data['fields']) && count($data['fields']) > 200) {
-            return $this->json(['error' => $this->trans('content.admin.too_many_fields')], 422);
+            return $this->json(['error' => $this->trans('content.admin.too_many_fields'), 'code' => 'TOO_MANY_FIELDS'], 422);
         }
 
         // Validate status against workflow
@@ -251,13 +316,13 @@ class ContentController extends AbstractController
         $validStatuses = array_merge(array_column($statuses, 'slug'), $systemStatuses);
         $status = $data['status'] ?? 'draft';
         if (!in_array($status, $validStatuses, true)) {
-            return $this->json(['errors' => ['status' => $this->trans('content.admin.invalid_status')]], 422);
+            return $this->json(['errors' => ['status' => $this->trans('content.admin.invalid_status')], 'code' => 'INVALID_STATUS'], 422);
         }
 
         if (isset($data['locale'])) {
             $validLocales = array_unique(array_merge($entry->project->locales ?? [], [$entry->project->defaultLocale]));
             if (!in_array($data['locale'], $validLocales, true)) {
-                return $this->json(['error' => $this->trans('content.admin.locale_not_enabled', ['%locale%' => $data['locale']])], 422);
+                return $this->json(['error' => $this->trans('content.admin.locale_not_enabled', ['%locale%' => $data['locale']]), 'code' => 'LOCALE_NOT_ENABLED'], 422);
             }
             $entry->locale = $data['locale'];
         }
@@ -277,7 +342,7 @@ class ContentController extends AbstractController
                 if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $entry->collection->project) !== null) {
                     $entry->assignedTo = $assignee;
                 } elseif ($assignee !== null) {
-                    return $this->json(['errors' => ['assigned_to_id' => $this->trans('content.admin.assignee_not_member')]], 422);
+                    return $this->json(['errors' => ['assigned_to_id' => $this->trans('content.admin.assignee_not_member')], 'code' => 'ASSIGNEE_NOT_MEMBER'], 422);
                 }
             } else {
                 $entry->assignedTo = null;
@@ -288,12 +353,12 @@ class ContentController extends AbstractController
             // Validation des champs avant la transaction
             $validationErrors = $this->validatePayloadFields($entry->collection, $data['fields'], $entry);
             if (!empty($validationErrors)) {
-                return $this->json(['errors' => $validationErrors], 422);
+                return $this->json(['errors' => $validationErrors, 'code' => 'VALIDATION_FAILED'], 422);
             }
 
             // Capture l'état courant comme version AVANT d'écraser les champs (EAV)
             if ($entry->fieldValues->count() > 0) {
-                $this->versioning->createVersion($entry, 'Sauvegarde');
+                $this->versioning->createVersion($entry, $this->trans('content.admin.version_save_label'));
             }
 
             $this->em->wrapInTransaction(function () use ($entry, $data): void {
@@ -452,12 +517,12 @@ class ContentController extends AbstractController
         try {
             $uuidObj = Uuid::fromString($uuid);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('content.admin.invalid_uuid_format')], 422);
+            return $this->json(['error' => $this->trans('content.admin.invalid_uuid_format'), 'code' => 'INVALID_UUID_FORMAT'], 422);
         }
 
         $entry = $this->entryRepository->findOneBy(['uuid' => $uuidObj, 'collection' => $collection]);
         if ($entry === null) {
-            return $this->json(['error' => $this->trans('content.admin.entry_not_found')], 404);
+            return $this->json(['error' => $this->trans('content.admin.entry_not_found'), 'code' => 'ENTRY_NOT_FOUND'], 404);
         }
 
         $entry->deletedAt = null;
@@ -492,12 +557,12 @@ class ContentController extends AbstractController
         try {
             $uuidObj = Uuid::fromString($uuid);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('content.admin.invalid_uuid_format')], 422);
+            return $this->json(['error' => $this->trans('content.admin.invalid_uuid_format'), 'code' => 'INVALID_UUID_FORMAT'], 422);
         }
 
         $entry = $this->entryRepository->findOneBy(['uuid' => $uuidObj, 'collection' => $collection]);
         if ($entry === null) {
-            return $this->json(['error' => $this->trans('content.admin.entry_not_found')], 404);
+            return $this->json(['error' => $this->trans('content.admin.entry_not_found'), 'code' => 'ENTRY_NOT_FOUND'], 404);
         }
 
         $entryId = $entry->id;
@@ -537,9 +602,19 @@ class ContentController extends AbstractController
                     $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_text_too_long', ['%field%' => $field->name]);
                     continue;
                 }
+                if (in_array($field->type, ['longtext', 'richtext', 'wysiwyg', 'markdown', 'code'], true) && mb_strlen($fieldValue) > 1000000) {
+                    $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_rich_text_too_long', ['%field%' => $field->name]);
+                    continue;
+                }
                 if ($field->type === 'url' && $fieldValue !== '') {
                     if (!filter_var($fieldValue, FILTER_VALIDATE_URL) || !preg_match('#^https?://#i', $fieldValue)) {
                         $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_url_invalid', ['%field%' => $field->name]);
+                        continue;
+                    }
+                }
+                if ($field->type === 'email' && $fieldValue !== '') {
+                    if (!filter_var($fieldValue, FILTER_VALIDATE_EMAIL)) {
+                        $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_email_invalid', ['%field%' => $field->name]);
                         continue;
                     }
                 }
@@ -551,6 +626,13 @@ class ContentController extends AbstractController
                 }
                 if ($this->getArrayDepth($fieldValue) > 10) {
                     $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_json_too_deep', ['%field%' => $field->name]);
+                    continue;
+                }
+            }
+
+            if (in_array($field->type, ['number', 'decimal', 'rating'], true) && $fieldValue !== null && $fieldValue !== '') {
+                if (!is_numeric($fieldValue)) {
+                    $validationErrors['fields.' . $field->slug] = $this->trans('content.admin.field_numeric_invalid', ['%field%' => $field->name]);
                     continue;
                 }
             }
@@ -642,18 +724,22 @@ class ContentController extends AbstractController
 
     private function resolveCollection(string $projectUuid, string $collectionSlug): Collection|JsonResponse
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return $this->json(['error' => $this->trans('content.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('content.admin.project_not_found')], 404);
+            return $this->json(['error' => $this->trans('content.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         if ($project === null) {
-            return $this->json(['error' => $this->trans('content.admin.project_not_found')], 404);
+            return $this->json(['error' => $this->trans('content.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => $this->trans('content.admin.collection_not_found')], 404);
+            return $this->json(['error' => $this->trans('content.admin.collection_not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
 
         return $collection;
@@ -669,7 +755,7 @@ class ContentController extends AbstractController
         try {
             $uuidObj = Uuid::fromString($uuid);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('content.admin.invalid_uuid_format')], 422);
+            return $this->json(['error' => $this->trans('content.admin.invalid_uuid_format'), 'code' => 'INVALID_UUID_FORMAT'], 422);
         }
 
         $entry = $this->entryRepository->findOneBy([
@@ -679,7 +765,7 @@ class ContentController extends AbstractController
         ]);
 
         if ($entry === null) {
-            return $this->json(['error' => $this->trans('content.admin.entry_not_found')], 404);
+            return $this->json(['error' => $this->trans('content.admin.entry_not_found'), 'code' => 'ENTRY_NOT_FOUND'], 404);
         }
 
         return $entry;

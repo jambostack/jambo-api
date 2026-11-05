@@ -20,6 +20,8 @@ class FieldController extends AbstractController
 {
     use AdminApiControllerTrait;
 
+    public const MAX_PAYLOAD_BYTES = 524288; // 512KB
+
     public function __construct(
         private ProjectRepository $projects,
         private CollectionRepository $collections,
@@ -37,20 +39,20 @@ class FieldController extends AbstractController
     private function resolveCollection(string $uuid, string $slug): array
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $uuid)) {
-            return [null, $this->json(['error' => $this->trans('admin_api.field.project_not_found')], 404)];
+            return [null, $this->json(['error' => $this->trans('admin_api.field.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404)];
         }
         try {
             $project = $this->projects->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return [null, $this->json(['error' => $this->trans('admin_api.field.project_not_found')], 404)];
+            return [null, $this->json(['error' => $this->trans('admin_api.field.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404)];
         }
         if (!$project) {
-            return [null, $this->json(['error' => $this->trans('admin_api.field.project_not_found')], 404)];
+            return [null, $this->json(['error' => $this->trans('admin_api.field.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404)];
         }
         $this->denyAccessUnlessGranted(ProjectVoter::VIEW, $project);
         $c = $this->collections->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$c) {
-            return [null, $this->json(['error' => $this->trans('admin_api.field.collection_not_found')], 404)];
+            return [null, $this->json(['error' => $this->trans('admin_api.field.collection_not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404)];
         }
         return [$c, null];
     }
@@ -84,24 +86,29 @@ class FieldController extends AbstractController
             return $err;
         }
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $c->project);
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->trans('admin_api.field.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('admin_api.field.invalid_json')], 400);
+            return $this->json(['error' => $this->trans('admin_api.field.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         $name = trim((string) ($body['name'] ?? ''));
         if ($name === '') {
-            return $this->json(['error' => $this->trans('admin_api.field.name_required')], 422);
+            return $this->json(['error' => $this->trans('admin_api.field.name_required'), 'code' => 'NAME_REQUIRED'], 422);
         }
         if (mb_strlen($name) > 255) {
-            return $this->json(['error' => $this->trans('admin_api.field.name_too_long')], 422);
+            return $this->json(['error' => $this->trans('admin_api.field.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
         }
 
         try {
             $f = $this->provisioner->addField($c, $body);
         } catch (SchemaException $e) {
-            return $this->json(['error' => $e->getMessage()], $e->statusCode());
+            return $this->json(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
         return $this->json(['data' => ['name' => $f->name, 'slug' => $f->slug, 'type' => $f->type, 'isRequired' => $f->isRequired]], 201);
     }
@@ -117,28 +124,33 @@ class FieldController extends AbstractController
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $c->project);
         $f = $this->fields->findOneBy(['collection' => $c, 'slug' => $fieldSlug]);
         if (!$f) {
-            return $this->json(['error' => $this->trans('admin_api.field.not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.field.not_found'), 'code' => 'FIELD_NOT_FOUND'], 404);
         }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->trans('admin_api.field.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('admin_api.field.invalid_json')], 400);
+            return $this->json(['error' => $this->trans('admin_api.field.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         if (isset($body['name'])) {
             $name = trim((string) $body['name']);
             if ($name === '') {
-                return $this->json(['error' => $this->trans('admin_api.field.name_required')], 422);
+                return $this->json(['error' => $this->trans('admin_api.field.name_required'), 'code' => 'NAME_REQUIRED'], 422);
             }
             if (mb_strlen($name) > 255) {
-                return $this->json(['error' => $this->trans('admin_api.field.name_too_long')], 422);
+                return $this->json(['error' => $this->trans('admin_api.field.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
             }
         }
 
         try {
             $this->provisioner->updateField($f, $body);
         } catch (SchemaException $e) {
-            return $this->json(['error' => $e->getMessage()], $e->statusCode());
+            return $this->json(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
         return $this->json(['data' => ['slug' => $f->slug, 'type' => $f->type]]);
     }
@@ -154,7 +166,7 @@ class FieldController extends AbstractController
         $this->denyAccessUnlessGranted(ProjectVoter::MANAGE, $c->project);
         $f = $this->fields->findOneBy(['collection' => $c, 'slug' => $fieldSlug]);
         if (!$f) {
-            return $this->json(['error' => $this->trans('admin_api.field.not_found')], 404);
+            return $this->json(['error' => $this->trans('admin_api.field.not_found'), 'code' => 'FIELD_NOT_FOUND'], 404);
         }
         $this->provisioner->deleteField($f);
         return new JsonResponse(null, 204);
