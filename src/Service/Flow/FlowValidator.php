@@ -128,31 +128,118 @@ class FlowValidator
         // 3. DAG check (algorithme de Kahn)
         if (!$this->isDAG($nodes, $edges)) {
             $errors[] = 'Le graphe contient un cycle — les flows doivent être acycliques';
+        } else {
+            // 3b. Limite de profondeur du graphe
+            $maxDepth = $this->calculateMaxDepth($nodes, $edges);
+            if ($maxDepth > self::MAX_GRAPH_DEPTH) {
+                $errors[] = sprintf('Le graphe dépasse la profondeur maximale de %d niveaux (profondeur: %d)', self::MAX_GRAPH_DEPTH, $maxDepth);
+            }
         }
 
         // 4. Au moins un trigger
-        $hasTrigger = false;
+        $triggerCount = 0;
         foreach ($nodes as $node) {
             if (str_starts_with((string) ($node['type'] ?? ''), 'trigger.')) {
-                $hasTrigger = true;
-                break;
+                $triggerCount++;
             }
         }
-        if (!$hasTrigger) {
+        if ($triggerCount === 0) {
             $errors[] = 'Le graphe doit contenir au moins un trigger';
+        } elseif ($triggerCount > 10) {
+            $errors[] = 'Le graphe ne peut pas contenir plus de 10 triggers';
         }
 
-        // 5. Pas de node orphelin (sauf triggers qui sont les racines)
+        // 5. Validation des entrées/sorties des nodes et anti-SSRF sur URLs statiques
         $targetIds = array_map(fn($e) => (string) ($e['target'] ?? ''), $edges);
         foreach ($nodes as $node) {
             $nid = (string) ($node['id'] ?? '');
-            $isTrigger = str_starts_with((string) ($node['type'] ?? ''), 'trigger.');
+            $type = (string) ($node['type'] ?? '');
+            $isTrigger = str_starts_with($type, 'trigger.');
+
+            if ($isTrigger && in_array($nid, $targetIds, true)) {
+                $errors[] = "Node {$nid}: un trigger ne peut pas recevoir d'arêtes entrantes";
+            }
             if (!$isTrigger && !in_array($nid, $targetIds, true)) {
                 $errors[] = "Node {$nid}: orphelin — aucune entrée et n'est pas un trigger";
+            }
+
+            // Contrôle de taille du payload config (anti-DoS mémoire)
+            $config = $node['data']['config'] ?? null;
+            if (is_array($config)) {
+                $encodedConfig = json_encode($config);
+                if ($encodedConfig !== false && strlen($encodedConfig) > 65536) {
+                    $errors[] = "Node {$nid}: configuration trop volumineuse (max 64 Ko)";
+                }
+
+                // Anti-SSRF préventif sur les URLs statiques d'actions HTTP / Webhook
+                if (isset($config['url']) && is_string($config['url'])) {
+                    $url = trim($config['url']);
+                    if ($url !== '' && !str_contains($url, '{{')) {
+                        $parsed = parse_url($url);
+                        if ($parsed === false || !isset($parsed['scheme'], $parsed['host'])) {
+                            $errors[] = "Node {$nid}: URL invalide ('{$url}')";
+                        } elseif (!in_array(strtolower($parsed['scheme']), ['http', 'https'], true)) {
+                            $errors[] = "Node {$nid}: protocole non autorisé ('{$parsed['scheme']}'). Seuls HTTP et HTTPS sont supportés.";
+                        } else {
+                            $host = strtolower($parsed['host']);
+                            if (in_array($host, ['localhost', '127.0.0.1', '::1', '0.0.0.0', '169.254.169.254', 'metadata.google.internal', 'instance-data'], true)
+                                || str_ends_with($host, '.localhost')
+                                || str_ends_with($host, '.internal')
+                                || str_ends_with($host, '.local')
+                            ) {
+                                $errors[] = "Node {$nid}: hôte interdit ('{$host}') par la politique de sécurité anti-SSRF.";
+                            }
+                        }
+                    }
+                }
             }
         }
 
         return ['valid' => empty($errors), 'errors' => $errors];
+    }
+
+    private function calculateMaxDepth(array $nodes, array $edges): int
+    {
+        $adj = [];
+        $inDegree = [];
+        foreach ($nodes as $n) {
+            $nid = (string) ($n['id'] ?? '');
+            $adj[$nid] = [];
+            $inDegree[$nid] = 0;
+        }
+
+        foreach ($edges as $e) {
+            $source = (string) ($e['source'] ?? '');
+            $target = (string) ($e['target'] ?? '');
+            if (isset($adj[$source], $inDegree[$target])) {
+                $adj[$source][] = $target;
+                $inDegree[$target]++;
+            }
+        }
+
+        $queue = [];
+        $depth = [];
+        foreach ($inDegree as $id => $deg) {
+            $depth[$id] = 1;
+            if ($deg === 0) {
+                $queue[] = $id;
+            }
+        }
+
+        while (!empty($queue)) {
+            $curr = array_shift($queue);
+            foreach ($adj[$curr] as $nxt) {
+                if (($depth[$curr] ?? 1) + 1 > ($depth[$nxt] ?? 1)) {
+                    $depth[$nxt] = ($depth[$curr] ?? 1) + 1;
+                }
+                $inDegree[$nxt]--;
+                if ($inDegree[$nxt] === 0) {
+                    $queue[] = $nxt;
+                }
+            }
+        }
+
+        return empty($depth) ? 0 : max($depth);
     }
 
     private function isDAG(array $nodes, array $edges): bool

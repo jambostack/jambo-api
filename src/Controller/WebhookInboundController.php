@@ -11,6 +11,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Point d'entrée public pour les webhooks entrants.
@@ -28,7 +29,16 @@ class WebhookInboundController extends AbstractController
         private readonly LoggerInterface $logger,
         private readonly ?RateLimiterFactory $webhookInboundLimiter = null,
         private readonly ?WebhookSecretService $secretService = null,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default ?? $id;
+    }
 
     /**
      * Reçoit un webhook entrant et déclenche l'automatisation correspondante.
@@ -43,7 +53,7 @@ class WebhookInboundController extends AbstractController
         if ($this->webhookInboundLimiter !== null) {
             $limiter = $this->webhookInboundLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->json(['error' => 'Too many webhook requests. Try again later.'], 429);
+                return $this->json(['error' => $this->trans('automation.admin.webhook_rate_limit', [], 'Too many webhook requests. Try again later.')], 429);
             }
         }
 
@@ -51,20 +61,20 @@ class WebhookInboundController extends AbstractController
         try {
             $automation = $this->automationRepo->findOneByUuid($automationUuid);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Webhook endpoint not found'], 404);
+            return $this->json(['error' => $this->trans('automation.admin.webhook_endpoint_not_found', [], 'Webhook endpoint not found')], 404);
         }
 
         if (!$automation) {
-            return $this->json(['error' => 'Webhook endpoint not found'], 404);
+            return $this->json(['error' => $this->trans('automation.admin.webhook_endpoint_not_found', [], 'Webhook endpoint not found')], 404);
         }
 
         if (!$automation->isActive) {
-            return $this->json(['error' => 'Automation is not active'], 410);
+            return $this->json(['error' => $this->trans('automation.admin.webhook_automation_inactive', [], 'Automation is not active')], 410);
         }
 
         $graph = $automation->flowGraph;
         if (!$graph || empty($graph['nodes'])) {
-            return $this->json(['error' => 'Automation has no flow graph'], 400);
+            return $this->json(['error' => $this->trans('automation.admin.no_flow_graph', [], 'Automation has no flow graph')], 400);
         }
 
         // Cherche le trigger dans tous les nœuds (pas seulement nodes[0])
@@ -73,13 +83,13 @@ class WebhookInboundController extends AbstractController
         $triggerType = $triggerInfo['type'];
 
         if (!$triggerNode || $triggerType !== 'trigger.webhook.inbound') {
-            return $this->json(['error' => 'Not a webhook inbound automation'], 400);
+            return $this->json(['error' => $this->trans('automation.admin.not_webhook_trigger', [], 'Not a webhook inbound automation')], 400);
         }
 
         // Parse et contrôle strict de la taille du corps (max 2 Mo)
         $body = (string) $request->getContent();
         if (strlen($body) > 2 * 1024 * 1024) {
-            return $this->json(['error' => 'Payload too large (max 2MB)'], 413);
+            return $this->json(['error' => $this->trans('automation.admin.payload_too_large', [], 'Payload too large (max 2MB)')], 413);
         }
 
         // Vérifie le secret ou signature HMAC si configuré
@@ -90,18 +100,18 @@ class WebhookInboundController extends AbstractController
                 try {
                     $resolvedSecret = $this->secretService->decrypt(substr($resolvedSecret, 4));
                 } catch (\Throwable) {
-                    return $this->json(['error' => 'Webhook secret decryption failure'], 500);
+                    return $this->json(['error' => $this->trans('automation.admin.webhook_secret_decrypt_error', [], 'Webhook secret decryption failure')], 500);
                 }
             }
 
             if (!$this->verifyWebhookSecretOrSignature($request, $body, $resolvedSecret)) {
-                return $this->json(['error' => 'Invalid webhook secret or signature'], 403);
+                return $this->json(['error' => $this->trans('automation.admin.webhook_invalid_signature', [], 'Invalid webhook secret or signature')], 403);
             }
         }
 
         $decoded = null;
         if ($body !== '') {
-            $decoded = json_decode($body, true);
+            $decoded = json_decode($body, true, 32);
         }
         $payload = is_array($decoded) ? $decoded : ['raw_body' => $body];
         $payload['trigger'] = 'webhook.inbound';
@@ -128,7 +138,7 @@ class WebhookInboundController extends AbstractController
             ]);
             return $this->json([
                 'success' => false,
-                'error' => 'Internal error processing webhook',
+                'error' => $this->trans('automation.admin.webhook_internal_error', [], 'Internal error processing webhook'),
             ], 500);
         }
     }

@@ -7,6 +7,34 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.87] — 2026-11-05
+
+### Security Hardening, Trigger Defenses, Inbound Anti-SSRF & Full Automation/Flow I18N
+- **AutomationController & FlowController Hardening**:
+  - Injected `TranslatorInterface` with fallback across `AutomationController`, `FlowController`, and `WebhookInboundController`.
+  - Replaced all hardcoded error and notification messages with strict translation keys under `automation.admin.*` and `flow.admin.*`.
+  - Added strict payload validations:
+    - Automation name bounds check (max 255 characters).
+    - DryRun and test payloads validated against malformed data types and excessive sizes.
+    - TestNode validated for required `node_type` and registry resolution.
+  - Added dedicated flow validation endpoint `api_automation_validate_flow` (`POST /api/automations/validate-flow`) on `FlowController` for direct frontend canvas graph validation.
+- **Trigger Hardening & Inbound Payload Defenses**:
+  - `FlowValidator` structural integrity improvements:
+    - Enforced that triggers cannot receive incoming edges (in-degree must be 0).
+    - Limited trigger count per automation graph (max 10 triggers).
+    - Enforced graph maximum depth traversal limit (`MAX_GRAPH_DEPTH = 50`) using Kahn's topological DAG depth calculation to prevent execution stack exhaustion.
+    - Enforced node configuration size limits (max 64 KB per node config) against DoS memory attacks.
+    - Enforced preventive static anti-SSRF validation on `action.call_webhook` and `http.request` URLs (blocking loopback, private subnets, cloud metadata hostnames, and invalid schemes).
+  - `WebhookInboundController`:
+    - Strict payload body size enforcement (max 2MB).
+    - Recursion depth limit (`depth: 32`) on inbound JSON deserialization.
+    - Elimination of all hardcoded error strings in favor of `automation.admin.webhook_*` translations.
+- **Locale Handling & Internationalization**:
+  - Enhanced `LocaleSubscriber` to dynamically update `TranslatorInterface` locale based on authenticated user preference or `Accept-Language` HTTP header (`en`, `fr`, `es`, `ar`).
+  - Added 30 new translation keys across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`) maintaining strict 4-way parity (2181 keys, 0 discrepancy).
+- **Test Suite**:
+  - Added comprehensive test suite `AutomationAndFlowHardeningTest` covering catalog retrieval, flow validation, SSRF URL rejection, trigger in-degree enforcement, max depth enforcement, cyclic graph detection, payload validation, and multilingual error resolution (FR, ES, AR).
+
 ## [1.26.86] — 2026-11-05
 
 ### Security Hardening, Anti-XSS, Anti-SSRF, Redirect Limitation & Strict I18N
