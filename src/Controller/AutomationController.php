@@ -7,6 +7,7 @@ use App\Repository\AutomationRepository;
 use App\Repository\AutomationRunRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
+use App\Service\AuditService;
 use App\Service\Automation\AutomationEngine;
 use App\Service\Automation\AutomationExportImportService;
 use App\Service\Flow\FlowContext;
@@ -16,14 +17,20 @@ use App\Service\Flow\NodeOutput;
 use App\Service\Flow\NodeRegistry;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/projects/{projectUuid}/automations', name: 'api_automation_')]
 class AutomationController extends AbstractController
 {
+    public const MAX_PAYLOAD_BYTES = 524288; // 512 KB
+    public const MAX_NODES_COUNT = 100;
+    public const MAX_EDGES_COUNT = 200;
+
     private readonly FlowValidator $validator;
     private readonly AutomationExportImportService $exportImport;
 
@@ -45,6 +52,9 @@ class AutomationController extends AbstractController
         ?FlowValidator $flowValidator = null,
         ?AutomationExportImportService $exportImportService = null,
         private readonly ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.automation_limiter')]
+        private readonly ?RateLimiterFactory $automationLimiter = null,
+        private readonly ?AuditService $auditService = null,
     ) {
         $this->validator = $flowValidator ?? new FlowValidator();
         $this->exportImport = $exportImportService ?? new AutomationExportImportService($em, $automationRepo, $this->validator, $nodeRegistry);
@@ -61,6 +71,48 @@ class AutomationController extends AbstractController
     private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
     {
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->automationLimiter === null) {
+            return null;
+        }
+        $identifier = $request->getClientIp() ?: '127.0.0.1';
+        try {
+            $user = $this->getUser();
+            if ($user !== null) {
+                $identifier = $user->getUserIdentifier();
+            }
+        } catch (\Throwable) {}
+
+        if (false === $this->automationLimiter->create($identifier)->consume(1)->isAccepted()) {
+            return $this->secureJson([
+                'error' => $this->trans('automation.admin.rate_limit_exceeded', [], 'Too many automation requests. Please retry later.'),
+                'code'  => 'RATE_LIMIT_EXCEEDED',
+            ], 429);
+        }
+        return null;
+    }
+
+    private function validatePayloadSize(Request $request): ?JsonResponse
+    {
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('automation.admin.payload_too_large', [], 'Payload too large (max 512KB)'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('automation.admin.payload_too_large', [], 'Payload too large (max 512KB)'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
+        return null;
     }
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -80,6 +132,14 @@ class AutomationController extends AbstractController
     #[Route('', name: 'store', methods: ['POST'])]
     public function store(string $projectUuid, Request $request): JsonResponse
     {
+        if ($limitRes = $this->checkRateLimit($request)) {
+            return $limitRes;
+        }
+
+        if ($sizeRes = $this->validatePayloadSize($request)) {
+            return $sizeRes;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->secureJson(['error' => $this->trans('automation.admin.project_not_found', [], 'Project not found')], 404);
         $this->denyProjectAccess($project, $request, 'project.manage');
@@ -87,11 +147,19 @@ class AutomationController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_json', [], 'Invalid JSON')], 400);
+            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_json', [], 'Invalid JSON payload.')], 400);
         }
 
         $flowGraph = $data['flow_graph'] ?? null;
         if (!empty($flowGraph)) {
+            $nodes = $flowGraph['nodes'] ?? [];
+            if (is_array($nodes) && count($nodes) > self::MAX_NODES_COUNT) {
+                return $this->secureJson(['error' => $this->trans('flow.admin.nodes_limit_exceeded', ['%max%' => self::MAX_NODES_COUNT], sprintf('Flow graph cannot contain more than %d nodes.', self::MAX_NODES_COUNT))], 422);
+            }
+            $edges = $flowGraph['edges'] ?? [];
+            if (is_array($edges) && count($edges) > self::MAX_EDGES_COUNT) {
+                return $this->secureJson(['error' => $this->trans('flow.admin.edges_limit_exceeded', ['%max%' => self::MAX_EDGES_COUNT], sprintf('Flow graph cannot contain more than %d edges.', self::MAX_EDGES_COUNT))], 422);
+            }
             $validation = $this->validator->validate($flowGraph, $this->nodeRegistry);
             if (!$validation['valid']) {
                 return $this->secureJson(['error' => $this->trans('automation.admin.invalid_flow_graph', [], 'Invalid flow graph'), 'details' => $validation['errors']], 422);
@@ -114,6 +182,17 @@ class AutomationController extends AbstractController
         $this->em->persist($automation);
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'automation_create',
+            project: $project,
+            input: ['name' => $automation->name, 'is_active' => $automation->isActive],
+            output: ['success' => true, 'id' => $automation->id, 'uuid' => $automation->uuid?->toRfc4122()],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'automation_management'
+        );
+        $this->auditService?->flush();
+
         return $this->secureJson(['data' => $this->serialize($automation)], 201);
     }
 
@@ -131,6 +210,10 @@ class AutomationController extends AbstractController
     #[Route('/import', name: 'import', methods: ['POST'], priority: 10)]
     public function import(string $projectUuid, Request $request): JsonResponse
     {
+        if ($limitRes = $this->checkRateLimit($request)) {
+            return $limitRes;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->secureJson(['error' => $this->trans('automation.admin.project_not_found', [], 'Project not found')], 404);
         $this->denyProjectAccess($project, $request, 'project.manage');
@@ -149,6 +232,16 @@ class AutomationController extends AbstractController
         try {
             if (isset($data['automations'])) {
                 $imported = $this->exportImport->importProjectAutomations($project, $data);
+                $this->auditService?->log(
+                    toolName: 'automation_import_bundle',
+                    project: $project,
+                    input: ['count' => count($imported)],
+                    output: ['success' => true, 'count' => count($imported)],
+                    status: 'success',
+                    createdBy: $this->getUser()?->getUserIdentifier(),
+                    source: 'automation_management'
+                );
+                $this->auditService?->flush();
                 return $this->secureJson([
                     'message' => $this->trans('automation.admin.imported_multiple_success', ['%count%' => count($imported)], sprintf('%d automation(s) imported successfully.', count($imported))),
                     'data'    => array_map(fn (Automation $a) => $this->serialize($a), $imported),
@@ -156,6 +249,16 @@ class AutomationController extends AbstractController
             }
 
             $automation = $this->exportImport->importAutomation($project, $data);
+            $this->auditService?->log(
+                toolName: 'automation_import_single',
+                project: $project,
+                input: ['name' => $automation->name],
+                output: ['success' => true, 'id' => $automation->id, 'uuid' => $automation->uuid?->toRfc4122()],
+                status: 'success',
+                createdBy: $this->getUser()?->getUserIdentifier(),
+                source: 'automation_management'
+            );
+            $this->auditService?->flush();
             return $this->secureJson([
                 'message' => $this->trans('automation.admin.imported_single_success', [], 'Automation imported successfully.'),
                 'data'    => $this->serialize($automation),
@@ -195,6 +298,14 @@ class AutomationController extends AbstractController
     #[Route('/{id}', name: 'update', methods: ['PUT', 'PATCH'], requirements: ['id' => '\d+'])]
     public function update(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($limitRes = $this->checkRateLimit($request)) {
+            return $limitRes;
+        }
+
+        if ($sizeRes = $this->validatePayloadSize($request)) {
+            return $sizeRes;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->secureJson(['error' => $this->trans('automation.admin.project_not_found', [], 'Project not found')], 404);
         $this->denyProjectAccess($project, $request, 'project.manage');
@@ -205,7 +316,7 @@ class AutomationController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_json', [], 'Invalid JSON')], 400);
+            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_json', [], 'Invalid JSON payload.')], 400);
         }
 
         if (array_key_exists('name', $data)) {
@@ -218,6 +329,14 @@ class AutomationController extends AbstractController
         if (isset($data['flow_graph'])) {
             $flowGraph = $data['flow_graph'];
             if (!empty($flowGraph)) {
+                $nodes = $flowGraph['nodes'] ?? [];
+                if (is_array($nodes) && count($nodes) > self::MAX_NODES_COUNT) {
+                    return $this->secureJson(['error' => $this->trans('flow.admin.nodes_limit_exceeded', ['%max%' => self::MAX_NODES_COUNT], sprintf('Flow graph cannot contain more than %d nodes.', self::MAX_NODES_COUNT))], 422);
+                }
+                $edges = $flowGraph['edges'] ?? [];
+                if (is_array($edges) && count($edges) > self::MAX_EDGES_COUNT) {
+                    return $this->secureJson(['error' => $this->trans('flow.admin.edges_limit_exceeded', ['%max%' => self::MAX_EDGES_COUNT], sprintf('Flow graph cannot contain more than %d edges.', self::MAX_EDGES_COUNT))], 422);
+                }
                 $validation = $this->validator->validate($flowGraph, $this->nodeRegistry);
                 if (!$validation['valid']) {
                     return $this->secureJson(['error' => $this->trans('automation.admin.invalid_flow_graph', [], 'Invalid flow graph'), 'details' => $validation['errors']], 422);
@@ -230,12 +349,27 @@ class AutomationController extends AbstractController
 
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'automation_update',
+            project: $project,
+            input: ['id' => $automation->id, 'name' => $automation->name, 'is_active' => $automation->isActive],
+            output: ['success' => true, 'id' => $automation->id],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'automation_management'
+        );
+        $this->auditService?->flush();
+
         return $this->secureJson(['data' => $this->serialize($automation)]);
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
     public function delete(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($limitRes = $this->checkRateLimit($request)) {
+            return $limitRes;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->secureJson(['error' => $this->trans('automation.admin.project_not_found', [], 'Project not found')], 404);
         $this->denyProjectAccess($project, $request, 'project.manage');
@@ -243,8 +377,20 @@ class AutomationController extends AbstractController
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->secureJson(['error' => $this->trans('automation.admin.not_found', [], 'Automation not found')], 404);
 
+        $autoName = $automation->name;
         $this->em->remove($automation);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'automation_delete',
+            project: $project,
+            input: ['id' => $id, 'name' => $autoName],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'automation_management'
+        );
+        $this->auditService?->flush();
 
         return $this->secureJson(null, 204);
     }
@@ -253,6 +399,10 @@ class AutomationController extends AbstractController
     #[Route('/{id}/test', name: 'test', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function test(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($limitRes = $this->checkRateLimit($request)) {
+            return $limitRes;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->secureJson(['error' => $this->trans('automation.admin.project_not_found', [], 'Project not found')], 404);
         $this->denyProjectAccess($project, $request, 'project.manage');
@@ -299,6 +449,10 @@ class AutomationController extends AbstractController
     #[Route('/{id}/run', name: 'run', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function run(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($limitRes = $this->checkRateLimit($request)) {
+            return $limitRes;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->secureJson(['error' => $this->trans('automation.admin.project_not_found', [], 'Project not found')], 404);
         $this->denyProjectAccess($project, $request, 'project.manage');
@@ -315,6 +469,17 @@ class AutomationController extends AbstractController
 
         try {
             $run = $this->engine->execute($automation, $payload);
+
+            $this->auditService?->log(
+                toolName: 'automation_run',
+                project: $project,
+                input: ['id' => $automation->id, 'name' => $automation->name],
+                output: ['success' => $run->status !== 'failed', 'run_id' => $run->id, 'status' => $run->status],
+                status: $run->status === 'failed' ? 'error' : 'success',
+                createdBy: $this->getUser()?->getUserIdentifier(),
+                source: 'automation_management'
+            );
+            $this->auditService?->flush();
 
             return $this->secureJson([
                 'success' => $run->status !== 'failed',
@@ -336,6 +501,14 @@ class AutomationController extends AbstractController
     #[Route('/{id}/dry-run', name: 'dry_run', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function dryRun(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($limitRes = $this->checkRateLimit($request)) {
+            return $limitRes;
+        }
+
+        if ($sizeRes = $this->validatePayloadSize($request)) {
+            return $sizeRes;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->secureJson(['error' => $this->trans('automation.admin.project_not_found', [], 'Project not found')], 404);
         $this->denyProjectAccess($project, $request, 'project.manage');
@@ -349,7 +522,7 @@ class AutomationController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_json', [], 'Invalid JSON')], 400);
+            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_json', [], 'Invalid JSON payload.')], 400);
         }
 
         $payload = $data['payload'] ?? [];
@@ -378,6 +551,14 @@ class AutomationController extends AbstractController
     #[Route('/{id}/test-node', name: 'test_node', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function testNode(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($limitRes = $this->checkRateLimit($request)) {
+            return $limitRes;
+        }
+
+        if ($sizeRes = $this->validatePayloadSize($request)) {
+            return $sizeRes;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) return $this->secureJson(['error' => $this->trans('automation.admin.project_not_found', [], 'Project not found')], 404);
         $this->denyProjectAccess($project, $request, 'project.manage');
@@ -388,16 +569,34 @@ class AutomationController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_json', [], 'Invalid JSON')], 400);
+            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_json', [], 'Invalid JSON payload.')], 400);
         }
 
-        $nodeId   = (string) ($data['node_id'] ?? '');
-        $nodeType = (string) ($data['node_type'] ?? '');
+        $nodeId   = trim((string) ($data['node_id'] ?? ''));
+        $nodeType = trim((string) ($data['node_type'] ?? ''));
         $config   = is_array($data['config'] ?? null) ? $data['config'] : [];
         $input    = is_array($data['input'] ?? null) ? $data['input'] : [];
 
         if ($nodeType === '') {
             return $this->secureJson(['error' => $this->trans('automation.admin.node_type_required', [], 'Node type is required.')], 422);
+        }
+
+        if (strlen($nodeType) > 64 || !preg_match('/^[a-zA-Z0-9_.-]+$/', $nodeType)) {
+            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_node_type', [], 'Invalid node type format.')], 422);
+        }
+
+        if ($nodeId !== '' && (strlen($nodeId) > 64 || !preg_match('/^[a-zA-Z0-9_\-]+$/', $nodeId))) {
+            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_node_id', [], 'Invalid node id format.')], 422);
+        }
+
+        $encodedConfig = json_encode($config);
+        if ($encodedConfig !== false && strlen($encodedConfig) > 65536) {
+            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_node_config', [], 'Node configuration exceeds 64KB limit.')], 422);
+        }
+
+        $encodedInput = json_encode($input);
+        if ($encodedInput !== false && strlen($encodedInput) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('automation.admin.invalid_node_input', [], 'Node input payload exceeds limit.')], 422);
         }
 
         $handler = $this->nodeRegistry->resolve($nodeType);
@@ -425,7 +624,7 @@ class AutomationController extends AbstractController
         $automation = $this->automationRepo->findOneBy(['id' => $id, 'project' => $project]);
         if (!$automation) return $this->secureJson(['error' => $this->trans('automation.admin.not_found', [], 'Automation not found')], 404);
 
-        $page    = max(1, (int) $request->query->get('page', 1));
+        $page    = max(1, min(10000, (int) $request->query->get('page', 1)));
         $perPage = min(100, max(1, (int) $request->query->get('per_page', 20)));
 
         $runs  = $this->runRepo->findByAutomationPaginated($automation, $page, $perPage);

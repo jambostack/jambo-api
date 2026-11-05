@@ -7,6 +7,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.134] — 2026-11-05
+
+### Security Hardening on Automations, Flows & Outbound Webhooks (Phase 86 — Cycle #71)
+- **AutomationController Hardening**:
+  - Configured and injected granular rate limiting (`limiter.automation_limiter`, 30 req/min) covering write, import, and execution endpoints (`store`, `update`, `delete`, `import`, `run`, `test`, `dryRun`, `testNode`).
+  - Added strict payload size bounds (`MAX_PAYLOAD_BYTES = 512 KB`) across `store`, `update`, `dryRun`, and `testNode` with early 413 rejection (`automation.admin.payload_too_large`).
+  - Enforced node count (`MAX_NODES_COUNT = 100`) and edge count (`MAX_EDGES_COUNT = 200`) limits upon storing and updating automation flow graphs.
+  - Hardened isolated node execution (`testNode`): validated `node_id` (alphanumeric/dash/underscore, max 64 chars), validated `node_type` format (max 64 chars), constrained config size (<= 64 KB), and bounded input payload (<= 512 KB).
+  - Sanitized runs pagination: bounded `$page` (1 - 10,000) and `$perPage` (1 - 100) to mitigate memory consumption and pagination denial of service.
+  - Integrated audit trail logging (`auditService`) for automation creation, updates, deletions, and execution runs (`automation_create`, `automation_update`, `automation_delete`, `automation_run`, `automation_import_single`, `automation_import_bundle`).
+- **Flow Handlers Security & Outbound Anti-SSRF (CallWebhookHandler & HttpRequestHandler)**:
+  - Enforced strict HTTP method allowlist (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`) across both `CallWebhookHandler` and `HttpRequestHandler`.
+  - Added rigorous scheme validation (strictly allowing only `http` and `https`), rejecting dangerous protocols (`file://`, `gopher://`, `phar://`, `ldap://`, etc.).
+  - Enforced maximum URL length (`MAX_URL_LENGTH = 2048`) and request body limits (`MAX_BODY_BYTES = 2 MB`).
+  - Implemented header sanitization preventing CRLF injection (`\r`, `\n`, `\0`) and stripping dangerous/smuggling headers (`Host`, `Transfer-Encoding`, `Connection`, `Upgrade`, `Keep-Alive`, `Proxy-Connection`).
+  - Extended safe context interpolation with secure dotted path navigation (e.g. `{{ entry.slug }}`) while strictly neutralizing attempts to leak environment variables, tokens, credentials, AWS keys, or secrets.
+  - Leveraged `SsrfProtectionService::buildSafeHttpClientOptions` with DNS pinning (preventing DNS rebinding) and zero redirects (`max_redirects = 0`).
+- **AutomationExportImportService Hardening**:
+  - Implemented `MAX_BUNDLE_ITEMS = 50` in `importProjectAutomations` to prevent bundle parsing DoS attacks.
+- **BackupController Compatibility**:
+  - Made `$request` parameter nullable in `list`, `download`, and `delete` to ensure robust fallback when called directly in tests or internal pipelines.
+- **Strict I18N Parity**:
+  - Maintained complete 4-language parity (`en`, `fr`, `es`, `ar`) across `translations/messages.*.php` for all automation, flow, and webhook messages.
+
 ## [1.26.133] — 2026-11-05
 
 ### Security Hardening on Content, Field & Collection Controllers (Phase 85 — Cycle #70)

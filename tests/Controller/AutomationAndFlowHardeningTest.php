@@ -332,6 +332,93 @@ class AutomationAndFlowHardeningTest extends WebTestCase
         $this->assertStringContainsString('profondeur', implode(' ', $data['details']));
     }
 
+    public function testStoreAutomationRejectsOversizedPayload(): void
+    {
+        $this->client->loginUser($this->adminUser);
+        $projectUuid = $this->project->uuid->toRfc4122();
+
+        $oversizedBody = json_encode([
+            'name' => 'Big flow',
+            'flow_graph' => $this->validFlowGraph(),
+            'junk' => str_repeat('X', 525000),
+        ]);
+
+        $this->client->request('POST', "/api/projects/{$projectUuid}/automations", [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], $oversizedBody);
+
+        $this->assertSame(413, $this->client->getResponse()->getStatusCode());
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        $this->assertSame('PAYLOAD_TOO_LARGE', $data['code'] ?? null);
+    }
+
+    public function testTestNodeValidatesNodeIdAndTypeLimits(): void
+    {
+        $this->client->loginUser($this->adminUser);
+        $projectUuid = $this->project->uuid->toRfc4122();
+
+        $automation = new Automation();
+        $automation->project = $this->project;
+        $automation->name = 'Node Limit Flow';
+        $automation->isActive = true;
+        $automation->flowGraph = $this->validFlowGraph();
+        $this->em->persist($automation);
+        $this->em->flush();
+
+        // Invalid nodeId format
+        $this->client->request('POST', "/api/projects/{$projectUuid}/automations/{$automation->id}/test-node", [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'node_id' => 'bad!node@id#',
+            'node_type' => 'util.noop',
+        ]));
+        $this->assertSame(422, $this->client->getResponse()->getStatusCode());
+
+        // Invalid nodeType format
+        $this->client->request('POST', "/api/projects/{$projectUuid}/automations/{$automation->id}/test-node", [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'node_id' => 'node_1',
+            'node_type' => 'bad type with spaces & symbols!',
+        ]));
+        $this->assertSame(422, $this->client->getResponse()->getStatusCode());
+
+        // Oversized config
+        $this->client->request('POST', "/api/projects/{$projectUuid}/automations/{$automation->id}/test-node", [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'node_id' => 'node_1',
+            'node_type' => 'util.noop',
+            'config' => ['huge' => str_repeat('C', 70000)],
+        ]));
+        $this->assertSame(422, $this->client->getResponse()->getStatusCode());
+    }
+
+    public function testImportBundleRejectsOverMaxItems(): void
+    {
+        $this->client->loginUser($this->adminUser);
+        $projectUuid = $this->project->uuid->toRfc4122();
+
+        $automations = [];
+        for ($i = 0; $i < 55; $i++) {
+            $automations[] = [
+                'name' => "Auto {$i}",
+                'flow_graph' => $this->validFlowGraph(),
+            ];
+        }
+
+        $this->client->request('POST', "/api/projects/{$projectUuid}/automations/import", [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'schema_version' => '1.0',
+            'automations' => $automations,
+        ]));
+
+        $this->assertSame(422, $this->client->getResponse()->getStatusCode());
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        $this->assertStringContainsString('too many automations', $data['error']);
+    }
+
     private function assertStringContainsKeyOrString(string $needle, string $haystack): void
     {
         $this->assertTrue(str_contains($haystack, $needle) || str_contains($haystack, 'name_too_long'), "String '$haystack' does not contain '$needle'");

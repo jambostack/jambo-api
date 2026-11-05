@@ -12,6 +12,7 @@ class CallWebhookHandler implements FlowNodeHandler
 {
     private const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'];
     private const MAX_BODY_BYTES = 2097152; // 2MB
+    private const MAX_URL_LENGTH = 2048;
 
     private SsrfProtectionService $ssrfProtection;
     private ?\Symfony\Contracts\HttpClient\HttpClientInterface $httpClient;
@@ -31,8 +32,15 @@ class CallWebhookHandler implements FlowNodeHandler
         $config = $ctx->variables['_node_config'] ?? [];
         $url    = (string) ($config['url'] ?? '');
         $method = strtoupper((string) ($config['method'] ?? 'POST'));
-        $headers = is_array($config['headers'] ?? null) ? $config['headers'] : [];
-        $body    = (string) ($config['body'] ?? '');
+        $rawHeaders = $config['headers'] ?? [];
+        $headers = is_array($rawHeaders) ? $rawHeaders : [];
+        if (is_string($rawHeaders) && trim($rawHeaders) !== '') {
+            $decoded = json_decode($rawHeaders, true);
+            if (is_array($decoded)) {
+                $headers = $decoded;
+            }
+        }
+        $body   = (string) ($config['body'] ?? '');
 
         if (!in_array($method, self::ALLOWED_METHODS, true)) {
             return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => sprintf('Unsupported HTTP method "%s"', $method)]);
@@ -50,6 +58,41 @@ class CallWebhookHandler implements FlowNodeHandler
         if ($url === '') {
             return new NodeOutput(data: ['called' => false, 'url' => '', 'error' => 'URL is empty']);
         }
+
+        if (strlen($url) > self::MAX_URL_LENGTH) {
+            return new NodeOutput(data: ['called' => false, 'url' => substr($url, 0, 100) . '...', 'error' => sprintf('Webhook URL exceeds %d characters limit', self::MAX_URL_LENGTH)]);
+        }
+
+        $parsedUrl = parse_url($url);
+        if ($parsedUrl === false || !isset($parsedUrl['scheme'])) {
+            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => 'Invalid webhook URL format']);
+        }
+        $scheme = strtolower((string) $parsedUrl['scheme']);
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => sprintf('Unsupported protocol "%s". Only HTTP and HTTPS are permitted.', $scheme)]);
+        }
+        if (!isset($parsedUrl['host'])) {
+            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => 'Invalid webhook URL format']);
+        }
+
+        // Nettoyage et assainissement des en-têtes (anti-CRLF, anti-Host spoofing, anti-smuggling)
+        $cleanHeaders = [];
+        foreach ($headers as $hKey => $hVal) {
+            if (!is_string($hKey) || !is_scalar($hVal)) {
+                continue;
+            }
+            $hKeyTrim = trim($hKey);
+            $hValStr = trim((string) $hVal);
+            if (preg_match('/[\r\n\x00]/', $hKeyTrim) || preg_match('/[\r\n\x00]/', $hValStr)) {
+                continue;
+            }
+            $hKeyLower = strtolower($hKeyTrim);
+            if (in_array($hKeyLower, ['host', 'transfer-encoding', 'connection', 'upgrade', 'keep-alive', 'proxy-connection'], true)) {
+                continue;
+            }
+            $cleanHeaders[$hKeyTrim] = $hValStr;
+        }
+        $headers = $cleanHeaders;
 
         // Signature HMAC et headers par défaut
         $secret = trim((string) ($config['secret'] ?? ''));
@@ -90,11 +133,12 @@ class CallWebhookHandler implements FlowNodeHandler
         $forbiddenEnvPatterns = [
             '/\{\{\s*(?:_?ENV|_?SERVER|GLOBALS|getenv|putenv|env|server|system|exec|passthru|shell_exec|eval)\b[^\}]*\}\}/i',
             '/\{\{\s*(?:APP_SECRET|APP_ENV|DATABASE_URL|MAILER_DSN|JWT_SECRET|MERCURE_JWT_SECRET|PHP_SELF|DOCUMENT_ROOT)[^\}]*\}\}/i',
-            '/\{\{\s*(?:[a-zA-Z0-9_\.]*(?:password|secret|token|credential|hash|salt|bearer|jwt|database_url))[^\}]*\}\}/i',
+            '/\{\{\s*(?:[a-zA-Z0-9_\.]*(?:password|secret|token|credential|hash|salt|bearer|jwt|database_url|api_?key|access_?token|auth))[^\}]*\}\}/i',
         ];
         $result = (string) preg_replace($forbiddenEnvPatterns, '', $text);
         $merged = array_merge($safeVars, $data);
 
+        // Clés simples directes
         foreach ($merged as $key => $value) {
             if (!is_string($key) || str_starts_with($key, '_')) {
                 continue;
@@ -103,6 +147,32 @@ class CallWebhookHandler implements FlowNodeHandler
                 $valStr = (string) ($value ?? '');
                 $result = str_replace('{{ ' . $key . ' }}', $valStr, $result);
                 $result = str_replace('{{' . $key . '}}', $valStr, $result);
+            }
+        }
+
+        // Chemins en notation pointée (ex: {{ entry.title }})
+        if (preg_match_all('/\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}/', $result, $matches)) {
+            foreach ($matches[1] as $fullMatch) {
+                if (str_starts_with($fullMatch, '_') || preg_match('/(?:env|server|globals|secret|password|token|key|credential|jwt|auth)/i', $fullMatch)) {
+                    continue;
+                }
+                if (str_contains($fullMatch, '.')) {
+                    $parts = explode('.', $fullMatch);
+                    $val = $merged;
+                    foreach ($parts as $part) {
+                        if (is_array($val) && array_key_exists($part, $val)) {
+                            $val = $val[$part];
+                        } else {
+                            $val = null;
+                            break;
+                        }
+                    }
+                    if (is_scalar($val) || $val === null) {
+                        $valStr = (string) ($val ?? '');
+                        $result = str_replace('{{ ' . $fullMatch . ' }}', $valStr, $result);
+                        $result = str_replace('{{' . $fullMatch . '}}', $valStr, $result);
+                    }
+                }
             }
         }
 

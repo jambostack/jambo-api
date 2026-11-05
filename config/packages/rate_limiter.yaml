@@ -152,6 +152,10 @@ framework:
             policy: sliding_window
             limit: 30
             interval: '60 seconds'
+        automation_limiter:
+            policy: sliding_window
+            limit: 30
+            interval: '60 seconds'
         template_limiter:
             policy: sliding_window
             limit: 30
@@ -321,6 +325,10 @@ when@test:
                 limit: 10000
                 interval: '60 seconds'
             flow_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            automation_limiter:
                 policy: sliding_window
                 limit: 10000
                 interval: '60 seconds'

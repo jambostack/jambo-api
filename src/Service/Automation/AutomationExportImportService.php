@@ -19,6 +19,7 @@ class AutomationExportImportService
 {
     public const SCHEMA_VERSION = '1.0';
     public const MAX_PAYLOAD_SIZE = 2097152; // 2 Mo max
+    public const MAX_BUNDLE_ITEMS = 50;
 
     public function __construct(
         private readonly EntityManagerInterface $em,
@@ -164,6 +165,10 @@ class AutomationExportImportService
         $items = $payload['automations'] ?? null;
         if (!is_array($items)) {
             throw new \InvalidArgumentException('Payload missing "automations" array.');
+        }
+
+        if (count($items) > self::MAX_BUNDLE_ITEMS) {
+            throw new \InvalidArgumentException(sprintf('Bundle contains too many automations (max %d, received %d).', self::MAX_BUNDLE_ITEMS, count($items)));
         }
 
         $checksum = $payload['checksum'] ?? null;

@@ -87,13 +87,13 @@ class BackupController extends AbstractController
     }
 
     #[Route('', name: 'list', methods: ['GET'])]
-    public function list(Request $request): JsonResponse
+    public function list(?Request $request = null): JsonResponse
     {
         if ($error = $this->denyNonSuperAdmin('list')) {
             return $error;
         }
 
-        if ($rateLimit = $this->checkRateLimit($request)) {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
             return $rateLimit;
         }
 
@@ -160,13 +160,13 @@ class BackupController extends AbstractController
     }
 
     #[Route('/{filename}/download', name: 'download', methods: ['GET'], requirements: ['filename' => 'backup-[a-zA-Z0-9_\-]{8,128}\.(sql|sql\.gz|zip)'])]
-    public function download(string $filename, Request $request): Response
+    public function download(string $filename, ?Request $request = null): Response
     {
         if ($error = $this->denyNonSuperAdmin('download')) {
             return $error;
         }
 
-        if ($rateLimit = $this->checkRateLimit($request)) {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
             return $rateLimit;
         }
 
@@ -271,13 +271,13 @@ class BackupController extends AbstractController
     }
 
     #[Route('/{filename}', name: 'delete', methods: ['DELETE'], requirements: ['filename' => 'backup-[a-zA-Z0-9_\-]{8,128}\.(sql|sql\.gz|zip)'])]
-    public function delete(string $filename, Request $request): JsonResponse
+    public function delete(string $filename, ?Request $request = null): JsonResponse
     {
         if ($error = $this->denyNonSuperAdmin('delete')) {
             return $error;
         }
 
-        if ($rateLimit = $this->checkRateLimit($request)) {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
             return $rateLimit;
         }
 
