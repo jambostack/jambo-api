@@ -6,6 +6,9 @@ use Symfony\Component\Messenger\MessageBusInterface;
 
 class FlowInterpreter
 {
+    public const MAX_FLOW_NODES = 100;
+    public const MAX_EXECUTION_TIME_SECONDS = 60.0;
+
     public function __construct(
         private readonly NodeRegistry $registry,
         private readonly FlowValidator $validator,
@@ -22,8 +25,12 @@ class FlowInterpreter
             return new FlowResult(status: 'failed', error: implode('; ', $validation['errors']));
         }
 
-        $nodes = $graph['nodes'];
-        $edges = $graph['edges'];
+        $nodes = $graph['nodes'] ?? [];
+        $edges = $graph['edges'] ?? [];
+
+        if (count($nodes) > self::MAX_FLOW_NODES) {
+            return new FlowResult(status: 'failed', error: sprintf('Flow exceeds maximum allowed node limit (%d).', self::MAX_FLOW_NODES));
+        }
 
         // 2. Initialise les variables du flow avec cloisonnement strict
         $rawVars = $graph['variables'] ?? [];
@@ -47,6 +54,13 @@ class FlowInterpreter
         // 5. Exécute séquentiellement avec filtrage par branche
         $nodeOutputs = [];
         foreach ($sorted as $nodeId) {
+            // Vérification du délai global d'exécution
+            if ((microtime(true) - $startTime) > self::MAX_EXECUTION_TIME_SECONDS) {
+                $ctx->logStep($nodeId, 'flow.timeout', 'Timeout', 'failed', 0, [], [], 'Flow execution timeout exceeded (60s)');
+                $totalMs = (int)((microtime(true) - $startTime) * 1000);
+                return new FlowResult(status: 'failed', error: 'Flow execution timeout exceeded (60s)', totalDurationMs: $totalMs);
+            }
+
             $node = $nodeIndex[$nodeId] ?? null;
             if (!$node) continue;
 

@@ -68,7 +68,8 @@ class AutomationRunScheduledCommand extends Command
                 }
             }
 
-            $output->writeln("<info>$executed automatisation(s) exécutée(s)</info>");
+            $msg = $this->trans('cli.automation.executed_count', ['%count%' => $executed], null, null, "$executed automatisation(s) exécutée(s)");
+            $output->writeln("<info>$msg</info>");
             return Command::SUCCESS;
         } finally {
             $this->release();

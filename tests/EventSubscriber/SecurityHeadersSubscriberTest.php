@@ -272,4 +272,35 @@ class SecurityHeadersSubscriberTest extends TestCase
         $this->assertTrue($hardened->isSecure());
         $this->assertSame('strict', strtolower((string) $hardened->getSameSite()));
     }
+
+    public function testErrorResponsesHaveStrictNoCacheAndSecurityHeaders(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber('prod');
+        $request = Request::create('https://example.com/api/unknown-endpoint');
+        $request->server->set('HTTPS', 'on');
+        $response = new Response('{"error": "Not Found"}', 404, ['Content-Type' => 'application/json']);
+
+        $subscriber->onKernelResponse($this->makeEvent($request, $response));
+
+        $cacheControl = (string) $response->headers->get('Cache-Control');
+        $this->assertStringContainsString('no-store', $cacheControl);
+        $this->assertStringContainsString('no-cache', $cacheControl);
+        $this->assertSame('no-cache', $response->headers->get('Pragma'));
+        $this->assertSame('0', $response->headers->get('Expires'));
+        $this->assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        $this->assertSame('none', $response->headers->get('X-Permitted-Cross-Domain-Policies'));
+    }
+
+    public function testServerErrorResponsesStripSetCookie(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber('prod');
+        $request = Request::create('https://example.com/api/crash');
+        $request->server->set('HTTPS', 'on');
+        $response = new Response('{"error": "Fatal"}', 500);
+        $response->headers->setCookie(\Symfony\Component\HttpFoundation\Cookie::create('LEAKEDSESSID', 'bad'));
+
+        $subscriber->onKernelResponse($this->makeEvent($request, $response));
+
+        $this->assertEmpty($response->headers->getCookies());
+    }
 }

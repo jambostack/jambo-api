@@ -2,28 +2,32 @@
 
 namespace App\EventSubscriber;
 
+use App\Service\Error\JsonErrorHandler;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
-use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Garantit des réponses JSON {"error": "...", "code": "..."} pour toute
- * exception levée sous /api/ (l'API publique).
+ * exception levée sous /api/ (l'API publique) avec en-têtes de sécurité et anti-cache stricts.
  */
 class PublicApiExceptionSubscriber implements EventSubscriberInterface
 {
+    private JsonErrorHandler $errorHandler;
+
     public function __construct(
         #[Autowire('%kernel.environment%')]
         private string $environment = 'prod',
         private LoggerInterface $logger = new NullLogger(),
         private ?TranslatorInterface $translator = null,
-    ) {}
+        ?JsonErrorHandler $errorHandler = null,
+    ) {
+        $this->errorHandler = $errorHandler ?? new JsonErrorHandler($this->environment, $this->logger, $this->translator);
+    }
 
     public static function getSubscribedEvents(): array
     {
@@ -40,50 +44,7 @@ class PublicApiExceptionSubscriber implements EventSubscriberInterface
             return;
         }
 
-        $e = $event->getThrowable();
-        $status = $e instanceof HttpExceptionInterface ? $e->getStatusCode() : 500;
-        if ($status >= 500) {
-            $this->logger->error('Public API 500 error: ' . $e->getMessage(), [
-                'exception' => $e,
-                'path' => $path,
-            ]);
-        }
-
-        // Essayer d'extraire un code d'erreur plus spécifique
-        $errorCode = match ($status) {
-            400 => 'BAD_REQUEST',
-            401 => 'UNAUTHORIZED',
-            403 => 'FORBIDDEN',
-            404 => 'NOT_FOUND',
-            405 => 'METHOD_NOT_ALLOWED',
-            422 => 'VALIDATION_ERROR',
-            429 => 'RATE_LIMITED',
-            default => 'INTERNAL_ERROR',
-        };
-
-        // En mode dev, on garde le message original ; en prod on le simplifie
-        $message = $e->getMessage();
-        if ($status === 500 && $this->environment === 'prod') {
-            $message = $this->translator?->trans('api.unexpected_error', [], 'messages') ?? 'An unexpected error occurred.';
-            $errorCode = 'INTERNAL_ERROR';
-        }
-
-        $payload = [
-            'error' => $message,
-            'code'  => $errorCode,
-        ];
-
-        // Ajouter les infos de validation si présentes (ViolationException)
-        if (method_exists($e, 'getViolations')) {
-            $violations = [];
-            foreach ($e->getViolations() as $v) {
-                $violations[$v->getPropertyPath()] = $v->getMessage();
-            }
-            if ($violations !== []) {
-                $payload['errors'] = $violations;
-            }
-        }
-
-        $event->setResponse(new JsonResponse($payload, $status));
+        $response = $this->errorHandler->createResponse($event->getThrowable(), $request);
+        $event->setResponse($response);
     }
 }

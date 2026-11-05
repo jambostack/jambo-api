@@ -8,6 +8,8 @@ use App\Service\Security\SsrfProtectionService;
 use App\Service\WebhookSecretService;
 use App\Service\WebhookService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -24,6 +26,7 @@ class SendWebhookMessageHandler
         private WebhookSecretService $secretService,
         ?SsrfProtectionService $ssrfProtection = null,
         ?WebhookService $webhookService = null,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
         $this->webhookService = $webhookService ?? new WebhookService(
@@ -37,6 +40,15 @@ class SendWebhookMessageHandler
 
     public function __invoke(SendWebhookMessage $message): void
     {
+        // Vérification de délai d'expiration (TTL)
+        if ($message->dispatchedAt > 0 && (time() - $message->dispatchedAt) > $message->ttlSeconds) {
+            $this->logger->warning('Webhook delivery skipped due to expired TTL', [
+                'webhook_id' => $message->webhookId,
+                'event' => $message->event,
+            ]);
+            return;
+        }
+
         $webhook = $this->webhookRepository->find($message->webhookId);
 
         if ($webhook === null || !$webhook->isActive) {
@@ -46,3 +58,4 @@ class SendWebhookMessageHandler
         $this->webhookService->send($webhook, $message->event, $message->payload);
     }
 }
+

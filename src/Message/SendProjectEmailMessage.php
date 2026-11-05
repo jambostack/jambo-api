@@ -4,6 +4,11 @@ namespace App\Message;
 
 class SendProjectEmailMessage
 {
+    public const MAX_ATTACHMENT_SIZE = 10485760; // 10 Mo
+    public const MAX_TOTAL_ATTACHMENTS_SIZE = 26214400; // 25 Mo
+
+    public readonly int $dispatchedAt;
+
     /**
      * @param string[]      $cc          Recipients en copie
      * @param string[]      $bcc         Recipients en copie cachée
@@ -27,14 +32,21 @@ class SendProjectEmailMessage
         public readonly array $bcc = [],
         public readonly array $attachments = [],
         public readonly int    $projectId = 0,
-    ) {}
+        ?int $dispatchedAt = null,
+        public readonly int $ttlSeconds = 86400,
+    ) {
+        $totalBytes = 0;
+        foreach ($attachments as $att) {
+            if ($att instanceof Attachment) {
+                $totalBytes += strlen($att->content);
+            }
+        }
+        if ($totalBytes > self::MAX_TOTAL_ATTACHMENTS_SIZE) {
+            throw new \LengthException(sprintf('Total attachments size (%d bytes) exceeds maximum limit of %d bytes.', $totalBytes, self::MAX_TOTAL_ATTACHMENTS_SIZE));
+        }
+
+        $this->dispatchedAt = ($dispatchedAt !== null && $dispatchedAt > 0) ? $dispatchedAt : time();
+    }
 }
 
-class Attachment
-{
-    public function __construct(
-        public readonly string $content,   // contenu binaire brut
-        public readonly string $filename,  // nom affiché dans l'email
-        public readonly string $mimeType,  // ex: application/pdf
-    ) {}
-}
+

@@ -7,6 +7,7 @@ use App\Entity\AutomationRun;
 use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowInterpreter;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Moteur d'exécution des automatisations.
@@ -22,6 +23,7 @@ class AutomationEngine
     public function __construct(
         private readonly FlowInterpreter $interpreter,
         private readonly EntityManagerInterface $em,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
 
     /**
@@ -34,7 +36,8 @@ class AutomationEngine
     {
         $graph = $automation->flowGraph;
         if (!$graph || empty($graph['nodes'])) {
-            throw new \RuntimeException('Automation has no flow graph');
+            $msg = $this->translator?->trans('automation.error.no_flow_graph', [], 'messages') ?? 'Automation has no flow graph';
+            throw new \RuntimeException($msg);
         }
 
         $startTime = microtime(true);

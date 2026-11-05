@@ -180,5 +180,16 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
                 $response->headers->setCookie($hardenedCookie);
             }
         }
+
+        // 11. Durcissement systématique des réponses d'erreur (HTTP 4xx et 5xx) : anti-cache absolu et suppression des cookies en cas de 500
+        if ($response->getStatusCode() >= 400) {
+            $headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+            $headers->set('Pragma', 'no-cache');
+            $headers->set('Expires', '0');
+
+            if ($response->getStatusCode() >= 500) {
+                $headers->remove('Set-Cookie');
+            }
+        }
     }
 }

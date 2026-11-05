@@ -8,12 +8,14 @@ use App\Repository\AutomationRunRepository;
 use App\Service\Automation\AutomationEngine;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Handler asynchrone pour ExecuteAutomationMessage.
  *
  * Délègue à AutomationEngine::execute() qui gère
  * l'exécution du flowGraph et la persistance du Run.
+ * Comporte une protection anti-réexécution idempotente et vérification d'expiration TTL.
  */
 #[AsMessageHandler]
 class ExecuteAutomationMessageHandler
@@ -23,17 +25,34 @@ class ExecuteAutomationMessageHandler
         private readonly AutomationRunRepository $runRepo,
         private readonly AutomationEngine $engine,
         private readonly EntityManagerInterface $em,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
 
     public function __invoke(ExecuteAutomationMessage $message): void
     {
         $run = $this->runRepo->find($message->runId);
-        if ($run === null) return;
+        if ($run === null) {
+            return;
+        }
+
+        // Idempotence & état : ne pas réexécuter si annulé, terminé avec succès ou en échec
+        if ($run->status === 'cancelled' || $run->status === 'success' || $run->status === 'failed') {
+            return;
+        }
+
+        // Vérification de délai d'expiration (TTL)
+        if ($message->dispatchedAt > 0 && (time() - $message->dispatchedAt) > $message->ttlSeconds) {
+            $run->status = 'failed';
+            $run->errorMessage = $this->trans('automation.error.message_expired', 'Automation message expired in queue.');
+            $run->finishedAt = new \DateTimeImmutable();
+            $this->em->flush();
+            return;
+        }
 
         $automation = $this->automationRepo->find($message->automationId);
         if ($automation === null || !$automation->isActive) {
             $run->status = 'failed';
-            $run->errorMessage = 'Automation not found or inactive';
+            $run->errorMessage = $this->trans('automation.error.inactive_or_not_found', 'Automation not found or inactive');
             $run->finishedAt = new \DateTimeImmutable();
             $this->em->flush();
             return;
@@ -51,4 +70,13 @@ class ExecuteAutomationMessageHandler
 
         $this->em->flush();
     }
+
+    private function trans(string $id, string $default, array $parameters = []): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return $default;
+    }
 }
+

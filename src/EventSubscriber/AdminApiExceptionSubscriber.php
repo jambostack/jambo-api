@@ -2,13 +2,12 @@
 
 namespace App\EventSubscriber;
 
+use App\Service\Error\JsonErrorHandler;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
-use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -18,12 +17,17 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  */
 class AdminApiExceptionSubscriber implements EventSubscriberInterface
 {
+    private JsonErrorHandler $errorHandler;
+
     public function __construct(
         #[Autowire('%kernel.environment%')]
         private string $environment = 'prod',
         private LoggerInterface $logger = new NullLogger(),
         private ?TranslatorInterface $translator = null,
-    ) {}
+        ?JsonErrorHandler $errorHandler = null,
+    ) {
+        $this->errorHandler = $errorHandler ?? new JsonErrorHandler($this->environment, $this->logger, $this->translator);
+    }
 
     public static function getSubscribedEvents(): array
     {
@@ -32,26 +36,13 @@ class AdminApiExceptionSubscriber implements EventSubscriberInterface
 
     public function onException(ExceptionEvent $event): void
     {
-        $path = $event->getRequest()->getPathInfo();
+        $request = $event->getRequest();
+        $path = $request->getPathInfo();
         if (!str_starts_with($path, '/admin-api')) {
             return;
         }
 
-        $e = $event->getThrowable();
-        $status = $e instanceof HttpExceptionInterface ? $e->getStatusCode() : 500;
-
-        if ($status >= 500) {
-            $this->logger->error('Admin API error: ' . $e->getMessage(), [
-                'exception' => $e,
-                'path' => $path,
-            ]);
-        }
-
-        $message = $e->getMessage();
-        if ($status >= 500 && $this->environment === 'prod') {
-            $message = $this->translator?->trans('api.unexpected_error', [], 'messages') ?? 'An unexpected error occurred.';
-        }
-
-        $event->setResponse(new JsonResponse(['error' => $message], $status));
+        $response = $this->errorHandler->createResponse($event->getThrowable(), $request);
+        $event->setResponse($response);
     }
 }

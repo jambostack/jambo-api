@@ -8,11 +8,15 @@ use App\Service\Flow\NodeOutput;
 
 class DelayHandler implements FlowNodeHandler
 {
+    public const MAX_DELAY_MS = 30000; // 30 secondes max pour éviter le blocage des workers
+
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
         $config = $ctx->variables['_node_config'] ?? [];
-        $ms = ($config['delay_ms'] ?? 1000);
-        usleep($ms * 1000);
+        $ms = max(0, min(self::MAX_DELAY_MS, (int) ($config['delay_ms'] ?? 1000)));
+        if ($ms > 0) {
+            usleep($ms * 1000);
+        }
         $firstInput = array_values($input)[0] ?? [];
         $data = is_object($firstInput) ? ($firstInput->data ?? []) : [];
 

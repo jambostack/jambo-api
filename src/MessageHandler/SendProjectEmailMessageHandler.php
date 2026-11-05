@@ -4,14 +4,18 @@ namespace App\MessageHandler;
 
 use App\Entity\EmailLog;
 use App\Entity\Project;
+use App\Message\Attachment;
 use App\Message\SendProjectEmailMessage;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Mailer\Mailer;
 use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Component\Mime\Email;
 use Symfony\Component\Mime\Part\DataPart;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsMessageHandler]
 class SendProjectEmailMessageHandler
@@ -20,12 +24,28 @@ class SendProjectEmailMessageHandler
         private readonly EntityManagerInterface $em,
         #[Autowire('%kernel.secret%')]
         private readonly string $appSecret = '',
+        private readonly ?TranslatorInterface $translator = null,
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {}
 
     public function __invoke(SendProjectEmailMessage $message): void
     {
         $project = $this->em->getRepository(Project::class)->find($message->projectId);
         if (!$project) {
+            return;
+        }
+
+        // Vérification de délai d'expiration (TTL)
+        if ($message->dispatchedAt > 0 && (time() - $message->dispatchedAt) > $message->ttlSeconds) {
+            $this->logger->warning('Email sending skipped due to expired TTL', [
+                'project_id' => $message->projectId,
+                'to' => $message->to,
+                'subject' => $message->subject,
+            ]);
+            $log = new EmailLog($project, $message->to, $message->subject);
+            $log->error = $this->trans('project_mailer.error.expired', 'Email dispatch expired in queue.');
+            $this->em->persist($log);
+            $this->em->flush();
             return;
         }
 
@@ -80,11 +100,16 @@ class SendProjectEmailMessageHandler
 
         // Pièces jointes
         foreach ($message->attachments as $attachment) {
-            $email->addPart(new DataPart(
-                $attachment->content,
-                $attachment->filename,
-                $attachment->mimeType,
-            ));
+            if (is_array($attachment)) {
+                $attachment = Attachment::fromArray($attachment);
+            }
+            if ($attachment instanceof Attachment) {
+                $email->addPart(new DataPart(
+                    $attachment->content,
+                    $attachment->filename,
+                    $attachment->mimeType,
+                ));
+            }
         }
 
         $log = new EmailLog($project, $message->to, $message->subject);
@@ -107,7 +132,7 @@ class SendProjectEmailMessageHandler
     private function decrypt(string $encrypted): string
     {
         if ($encrypted === '') {
-            throw new \RuntimeException('SMTP password not configured.');
+            throw new \RuntimeException($this->trans('project_mailer.error.password_not_configured', 'SMTP password not configured.'));
         }
         $decoded = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL);
         $nonce   = mb_substr($decoded, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES, '8bit');
@@ -115,4 +140,13 @@ class SendProjectEmailMessageHandler
         $key     = sodium_crypto_generichash($this->appSecret, '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
         return sodium_crypto_secretbox_open($cipher, $nonce, $key);
     }
+
+    private function trans(string $id, string $default, array $parameters = []): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return $default;
+    }
 }
+
