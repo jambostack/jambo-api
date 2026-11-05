@@ -7,6 +7,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.129] — 2026-11-05
+
+### Security Hardening on Async Messenger Flows, Workers & HTTP Error Headers (Cycle #66)
+- **Async Messenger Flows & TTL Expiration Protection (Phase 79)**:
+  - Enforced message payload validation and TTL expiration checks across all Messenger messages (`ExecuteAutomationMessage`, `ExecuteSubFlowMessage`, `SendWebhookMessage`, `SendProjectEmailMessage`).
+  - Added timestamp tracking (`$dispatchedAt`) and configurable TTL (`$ttlSeconds = 86400` / 24h) to prevent zombie/stale background tasks from executing delayed side effects after server outages.
+  - Implemented idempotent state checking in `ExecuteAutomationMessageHandler`: execution automatically skips runs that are already `success`, `failed`, or `cancelled`, preventing duplicate runs during queue replays.
+  - Hardened `Attachment`: decoupled into PSR-4 compliant standalone class with individual file size limit (10 MB), filename sanitization (`basename`, CRLF/control char stripping), MIME format whitelist validation (`^[a-zA-Z0-9_\-\.\+]+/[a-zA-Z0-9_\-\.\+]+$`), and `JsonSerializable` support.
+  - Enforced total cumulative attachment size cap (25 MB) in `SendProjectEmailMessage`.
+  - Added recursion depth limiter (`depth <= 5`) and TTL check in `ExecuteSubFlowMessage` and `ExecuteSubFlowMessageHandler`.
+  - Bounded `DelayHandler` delay duration to a safe ceiling (max 30 seconds / `MAX_DELAY_MS = 30000`), preventing worker starvation from malicious or runaway workflows.
+  - Implemented global execution timeout guard in `FlowInterpreter` (`MAX_EXECUTION_TIME_SECONDS = 60.0`) and node count ceiling (`MAX_FLOW_NODES = 100`).
+  - Internationalized all worker, flow, and CLI command messages across all 4 locales (`en`, `fr`, `es`, `ar`).
+- **HTTP Security Headers & Error Response Hardening (Phase 80)**:
+  - Created centralized `JsonErrorHandler` service for generating standardized, hardened JSON error responses.
+  - Configured automatic internal error masking in `prod` environment for 500 status codes, preventing database credential, file path, and stack trace leaks.
+  - Integrated `JsonErrorHandler` into `AdminApiExceptionSubscriber` and `PublicApiExceptionSubscriber`.
+  - Hardened `SecurityHeadersSubscriber`: systematically enforces anti-caching headers (`Cache-Control: no-store, no-cache, must-revalidate, private`, `Pragma: no-cache`, `Expires: 0`) and MIME sniffing protection (`X-Content-Type-Options: nosniff`) on all HTTP 4xx and 5xx error responses.
+  - Added sensitive cookie removal (`remove('Set-Cookie')`) on 500 internal server error responses to prevent state poisoning during fatal server faults.
+  - Created customized, brand-aligned Twig error templates (`templates/bundles/TwigBundle/Exception/error.html.twig`, `error404.html.twig`, `error403.html.twig`, `error500.html.twig`) with `robots: noindex, nofollow`, RTL support for Arabic, and full i18n localization.
+- **Unit Testing & Verification**:
+  - Added `tests/MessageHandler/MessengerHardeningTest.php` with 11 tests covering validation, TTL expiration, idempotency, attachment size limits, delay capping, and error response headers.
+  - Expanded `tests/EventSubscriber/SecurityHeadersSubscriberTest.php` to verify no-cache headers and cookie stripping on error responses.
+
 ## [1.26.128] — 2026-11-05
 
 ### Security Hardening on Image Transformation, Route Manifest & Client Generator (Cycle #65)
