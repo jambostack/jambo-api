@@ -91,7 +91,7 @@ class Cycle49SecurityHardeningTest extends WebTestCase
         $client->request('GET', '/health');
         self::assertResponseIsSuccessful();
         $data = json_decode($client->getResponse()->getContent(), true);
-        self::assertSame('1.26.108', $data['version']);
+        self::assertSame(\App\Controller\HealthController::VERSION, $data['version']);
     }
 
     public function testEmbedWidgetSecurityHeadersAndI18n(): void

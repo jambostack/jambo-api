@@ -168,6 +168,10 @@ framework:
             policy: sliding_window
             limit: 30
             interval: '60 seconds'
+        image_transform_limiter:
+            policy: sliding_window
+            limit: 60
+            interval: '60 seconds'
 
 when@test:
     framework:
@@ -317,6 +321,10 @@ when@test:
                 limit: 10000
                 interval: '60 seconds'
             seo_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            image_transform_limiter:
                 policy: sliding_window
                 limit: 10000
                 interval: '60 seconds'

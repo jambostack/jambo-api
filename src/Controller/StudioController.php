@@ -16,18 +16,29 @@ use App\Repository\StudioChatMessageRepository;
 use App\Service\AiContentService;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\File as HttpFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[IsGranted('IS_AUTHENTICATED_FULLY')]
 class StudioController extends InertiaController
 {
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+
+    private const SECURITY_HEADERS = [
+        'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        'X-Content-Type-Options' => 'nosniff',
+    ];
+
     public function __construct(
         private EntityManagerInterface $em,
         private ProjectRepository $projectRepository,
@@ -43,8 +54,33 @@ class StudioController extends InertiaController
         private LoggerInterface $logger = new \Psr\Log\NullLogger(),
         private ?\App\Service\Security\SsrfProtectionService $ssrfProtection = null,
         private ?\App\Service\UploadSecurityValidator $uploadValidator = null,
+        #[Autowire(service: 'limiter.ai_limiter')]
+        private readonly ?RateLimiterFactory $aiLimiter = null,
+        ?TranslatorInterface $translator = null,
     ) {
         $this->ssrfProtection ??= new \App\Service\Security\SsrfProtectionService();
+        if ($translator !== null) {
+            $this->translator = $translator;
+        }
+    }
+
+    private function jsonResponse(array $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->aiLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->aiLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->jsonResponse([
+                    'error' => $this->trans('studio.rate_limit_exceeded', [], 'Too many AI requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+        return null;
     }
 
     /** Conventions de nommage imposées aux schémas générés par l'IA. */
@@ -289,7 +325,7 @@ EUSER;
     public function listCollections(string $uuid): JsonResponse
     {
         $project = $this->findProject($uuid);
-        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        if (!$project) return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
 
         $collections = $this->em->getRepository(Collection::class)
@@ -312,7 +348,7 @@ EUSER;
             ];
         }, $collections);
 
-        return $this->json(['data' => $data]);
+        return $this->jsonResponse(['data' => $data]);
     }
 
     /**
@@ -321,14 +357,16 @@ EUSER;
     #[Route('/api/projects/{uuid}/studio/ai-schema', name: 'studio_ai_schema', methods: ['POST'])]
     public function aiSchema(string $uuid, Request $request): JsonResponse
     {
+        if ($resp = $this->checkRateLimit($request)) return $resp;
+
         $project = $this->findProject($uuid);
-        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        if (!$project) return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = json_decode($request->getContent(), true);
-        if (!is_array($body)) return $this->json(['error' => 'Invalid JSON body'], 400);
+        if (!is_array($body)) return $this->jsonResponse(['error' => $this->trans('studio.invalid_json', [], 'Invalid JSON body')], 400);
         $prompt = trim((string) ($body['prompt'] ?? ''));
-        if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
+        if ($prompt === '') return $this->jsonResponse(['error' => $this->trans('studio.prompt_required', [], 'Prompt required')], 422);
 
         $namingRules = self::NAMING_CONVENTIONS;
         $systemPrompt = <<<PROMPT
@@ -380,7 +418,7 @@ PROMPT;
             // Fallback: génération basée sur des règles (pas d'IA configurée)
             $schema = $this->ruleBasedSchema($prompt);
             $schema['collections'] = $this->normalizeSchema($schema['collections'] ?? []);
-            return $this->json($schema);
+            return $this->jsonResponse($schema);
         }
 
         try {
@@ -394,33 +432,35 @@ PROMPT;
                 $data = json_decode($m[0], true);
                 if ($data && isset($data['collections'])) {
                     $data['collections'] = $this->normalizeSchema($data['collections']);
-                    return $this->json($data);
+                    return $this->jsonResponse($data);
                 }
             }
 
-            return $this->json(['error' => 'à‰chec du parsing JSON de la réponse IA'], 500);
+            return $this->jsonResponse(['error' => $this->trans('studio.ai_json_parse_failed', [], 'AI JSON parsing failed')], 500);
         } catch (\Throwable $e) {
             $this->logger->error('AI schema generation failed', [
                 'exception' => $e,
                 'project'   => $uuid,
             ]);
-            return $this->json(['error' => 'à‰chec de la génération IA. Réessayez.'], 500);
+            return $this->jsonResponse(['error' => $this->trans('studio.ai_generation_failed', [], 'AI generation failed. Please retry.')], 500);
         }
     }
 
     /**
      * Chat IA conversationnel pour générer/modifier le schéma de collections.
-     * Reà§oit l'historique de conversation + le contexte des collections existantes.
+     * Reçoit l'historique de conversation + le contexte des collections existantes.
      */
     #[Route('/api/projects/{uuid}/studio/ai-chat', name: 'studio_ai_chat', methods: ['POST'])]
     public function aiChat(string $uuid, Request $request): Response
     {
+        if ($resp = $this->checkRateLimit($request)) return $resp;
+
         $project = $this->findProject($uuid);
-        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        if (!$project) return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = json_decode($request->getContent(), true);
-        if (!is_array($body)) return $this->json(['error' => 'Invalid JSON body'], 400);
+        if (!is_array($body)) return $this->jsonResponse(['error' => $this->trans('studio.invalid_json', [], 'Invalid JSON body')], 400);
         $prompt  = trim((string) ($body['prompt'] ?? ''));
         $context = trim((string) ($body['context'] ?? ''));
         $history = is_array($body['history'] ?? null) ? $body['history'] : [];
@@ -429,7 +469,7 @@ PROMPT;
             : 'schema';
         $attachment = is_array($body['attachment'] ?? null) ? $body['attachment'] : null;
 
-        if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
+        if ($prompt === '') return $this->jsonResponse(['error' => $this->trans('studio.prompt_required', [], 'Prompt required')], 422);
 
         $attachmentContext = '';
         if ($attachment !== null) {
@@ -730,16 +770,16 @@ PROMPT;
     public function applyEntries(string $uuid, Request $request): JsonResponse
     {
         $project = $this->findProject($uuid);
-        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        if (!$project) return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = json_decode($request->getContent(), true);
-        if (!is_array($body)) return $this->json(['error' => 'Invalid JSON body'], 400);
+        if (!is_array($body)) return $this->jsonResponse(['error' => $this->trans('studio.invalid_json', [], 'Invalid JSON body')], 400);
         $collectionSlug = $body['collection'] ?? '';
         $entryData = $body['entry'] ?? [];
 
         if ($collectionSlug === '' || empty($entryData)) {
-            return $this->json(['error' => 'Collection et entry requis'], 422);
+            return $this->jsonResponse(['error' => $this->trans('studio.collection_and_entry_required', [], 'Collection and entry required')], 422);
         }
 
         // Cas spécial EndUsers
@@ -752,7 +792,7 @@ PROMPT;
             ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
 
         if (!$collection) {
-            return $this->json(['error' => "Collection '$collectionSlug' introuvable"], 404);
+            return $this->jsonResponse(['error' => $this->trans('studio.collection_not_found', ['%collection%' => $collectionSlug], sprintf("Collection '%s' introuvable", $collectionSlug))], 404);
         }
 
         $entry = new \App\Entity\ContentEntry();
@@ -769,14 +809,14 @@ PROMPT;
 
         $this->em->flush();
 
-        return $this->json(['success' => true, 'uuid' => $entry->uuid?->toRfc4122()], 201);
+        return $this->jsonResponse(['success' => true, 'uuid' => $entry->uuid?->toRfc4122()], 201);
     }
 
     private function createEndUserEntry(Project $project, array $data): JsonResponse
     {
         $email = $data['email'] ?? null;
         if (!$email) {
-            return $this->json(['error' => 'Email requis pour EndUser'], 422);
+            return $this->jsonResponse(['error' => $this->trans('studio.end_user_email_required', [], 'Email requis pour EndUser')], 422);
         }
 
         // Vérifier si l'utilisateur existe déjà 
@@ -784,7 +824,7 @@ PROMPT;
             ->findOneBy(['project' => $project, 'email' => $email]);
 
         if ($existing) {
-            return $this->json(['success' => true, 'uuid' => $existing->uuid?->toRfc4122(), 'existed' => true]);
+            return $this->jsonResponse(['success' => true, 'uuid' => $existing->uuid?->toRfc4122(), 'existed' => true]);
         }
 
         $endUser = new \App\Entity\EndUser($project, $email);
@@ -808,7 +848,7 @@ PROMPT;
         $this->em->persist($endUser);
         $this->em->flush();
 
-        return $this->json(['success' => true, 'uuid' => $endUser->uuid?->toRfc4122()], 201);
+        return $this->jsonResponse(['success' => true, 'uuid' => $endUser->uuid?->toRfc4122()], 201);
     }
 
     /**
@@ -843,12 +883,12 @@ PROMPT;
     public function listChatMessages(string $uuid): JsonResponse
     {
         $project = $this->findProject($uuid);
-        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        if (!$project) return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
 
         $messages = $this->chatMessageRepository->findByProject($project);
 
-        return $this->json([
+        return $this->jsonResponse([
             'data' => array_map(fn (\App\Entity\StudioChatMessage $m) => [
                 'id'      => $m->id,
                 'role'    => $m->role,
@@ -867,12 +907,12 @@ PROMPT;
     public function clearChatMessages(string $uuid): JsonResponse
     {
         $project = $this->findProject($uuid);
-        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        if (!$project) return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $this->chatMessageRepository->deleteByProject($project);
 
-        return $this->json(['success' => true]);
+        return $this->jsonResponse(['success' => true]);
     }
 
     /**
@@ -1073,15 +1113,48 @@ PROMPT;
      */
     private function resolveMediaAsBase64(string $mediaUuid, \App\Entity\Project $project): ?string
     {
+        if (!preg_match(self::UUID_REGEX, $mediaUuid)) {
+            return null;
+        }
+
         $media = $this->em->getRepository(\App\Entity\Media::class)->findOneBy([
             'uuid'    => $mediaUuid,
             'project' => $project,
         ]);
         if ($media === null || $media->fileName === null) return null;
 
-        // basename() empêche toute traversée de chemin via un fileName compromis
-        $fullPath = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . basename($media->fileName);
-        if (!is_file($fullPath)) return null;
+        // basename() et assainissement empêchent toute traversée de chemin via un fileName compromis
+        $fileName = basename((string) $media->fileName);
+        if ($fileName === '' || $fileName === '.' || $fileName === '..' || str_contains($fileName, "\0")) {
+            return null;
+        }
+
+        $mediaRoot = $this->getParameter('kernel.project_dir') . '/public/uploads/media/';
+
+        // 1. Emplacement local partitionné par projet
+        $fullPath = null;
+        if ($project->uuid !== null && preg_match(self::UUID_REGEX, (string) $project->uuid)) {
+            $candidate = $mediaRoot . (string) $project->uuid . '/' . $fileName;
+            if (is_file($candidate)) {
+                $fullPath = $candidate;
+            }
+        }
+
+        // 2. Emplacement local plat (fallback)
+        if ($fullPath === null) {
+            $candidate = $mediaRoot . $fileName;
+            if (is_file($candidate)) {
+                $fullPath = $candidate;
+            }
+        }
+
+        if ($fullPath === null || !is_file($fullPath)) return null;
+
+        // Anti-DoS mémoire : borne à 10 Mo pour l'encodage base64 en mémoire
+        $size = @filesize($fullPath);
+        if ($size === false || $size > 10 * 1024 * 1024) {
+            return null;
+        }
 
         $content = file_get_contents($fullPath);
         return $content !== false ? base64_encode($content) : null;
@@ -1176,13 +1249,13 @@ PROMPT;
     {
         $project = $this->findProject($uuid);
         if (!$project) {
-            return $this->json(['error' => 'Projet introuvable'], 404);
+            return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         }
 
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $data = json_decode($request->getContent(), true);
-        if (!is_array($data)) return $this->json(['error' => 'Invalid JSON body'], 400);
+        if (!is_array($data)) return $this->jsonResponse(['error' => $this->trans('studio.invalid_json', [], 'Invalid JSON body')], 400);
         // Garantie ultime : on normalise au point de persistance, donc quelle que
         // soit la source (chat IA, schéma IA, builder visuel), les conventions de
         // nommage sont toujours respectées en base.
@@ -1304,7 +1377,7 @@ PROMPT;
 
         $this->em->flush();
 
-        return $this->json([
+        return $this->jsonResponse([
             'success' => true,
             'created' => $created,
             'updated' => $updated,
@@ -1321,10 +1394,10 @@ PROMPT;
     public function aiCapabilities(string $uuid): JsonResponse
     {
         $project = $this->findProject($uuid);
-        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        if (!$project) return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         $this->denyAccessUnlessGranted('project.view', $project);
 
-        return $this->json($this->aiService->getCapabilities());
+        return $this->jsonResponse($this->aiService->getCapabilities());
     }
 
     /**
@@ -1333,14 +1406,16 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/ai-execute', name: 'studio_ai_execute', methods: ['POST'])]
     public function aiExecute(string $uuid, Request $request): JsonResponse
     {
+        if ($resp = $this->checkRateLimit($request)) return $resp;
+
         $project = $this->findProject($uuid);
-        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        if (!$project) return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = json_decode($request->getContent(), true);
-        if (!is_array($body)) return $this->json(['error' => 'Invalid JSON body'], 400);
+        if (!is_array($body)) return $this->jsonResponse(['error' => $this->trans('studio.invalid_json', [], 'Invalid JSON body')], 400);
         $actions = $body['actions'] ?? [];
-        if (empty($actions)) return $this->json(['error' => 'Aucune action fournie'], 422);
+        if (empty($actions)) return $this->jsonResponse(['error' => $this->trans('studio.no_actions_provided', [], 'No actions provided')], 422);
 
         $log = [];
         $halt = false;
@@ -1381,7 +1456,7 @@ PROMPT;
             $log[] = ['tool' => $tool, 'result' => $result];
         }
 
-        return $this->json(['log' => $log, 'halted' => $halt]);
+        return $this->jsonResponse(['log' => $log, 'halted' => $halt]);
     }
 
     /**
@@ -1390,21 +1465,23 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/ai-generate-image', name: 'studio_ai_generate_image', methods: ['POST'])]
     public function aiGenerateImage(string $uuid, Request $request): JsonResponse
     {
+        if ($resp = $this->checkRateLimit($request)) return $resp;
+
         $project = $this->findProject($uuid);
-        if (!$project) return $this->json(['error' => 'Projet introuvable'], 404);
+        if (!$project) return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $body = json_decode($request->getContent(), true);
-        if (!is_array($body)) return $this->json(['error' => 'Invalid JSON body'], 400);
+        if (!is_array($body)) return $this->jsonResponse(['error' => $this->trans('studio.invalid_json', [], 'Invalid JSON body')], 400);
         $prompt = $body['prompt'] ?? '';
-        if ($prompt === '') return $this->json(['error' => 'Prompt requis'], 422);
+        if ($prompt === '') return $this->jsonResponse(['error' => $this->trans('studio.prompt_required', [], 'Prompt required')], 422);
 
         // Tenter la génération via le provider
         $imageUrl = $this->aiService->generateImage($prompt);
         if ($imageUrl === null) {
             // Fallback placeholder
             $placeholder = $this->aiService->generatePlaceholder($body['label'] ?? 'Jambo');
-            return $this->json(['url' => $placeholder, 'type' => 'placeholder']);
+            return $this->jsonResponse(['url' => $placeholder, 'type' => 'placeholder']);
         }
 
         // Télécharger l'image et l'uploader dans la médiathèque
@@ -1442,7 +1519,7 @@ PROMPT;
             $this->em->persist($media);
             $this->em->flush();
 
-            return $this->json([
+            return $this->jsonResponse([
                 'url'  => $media->getPublicUrl(),
                 'uuid' => $media->uuid?->toRfc4122(),
                 'type' => 'generated',
@@ -1453,7 +1530,7 @@ PROMPT;
                 'error'   => $e->getMessage(),
             ]);
             $placeholder = $this->aiService->generatePlaceholder($body['label'] ?? 'Jambo');
-            return $this->json(['url' => $placeholder, 'type' => 'placeholder', 'error' => 'Image generation failed. Using placeholder instead.']);
+            return $this->jsonResponse(['url' => $placeholder, 'type' => 'placeholder', 'error' => $this->trans('studio.image_generation_failed', [], 'Image generation failed. Using placeholder instead.')]);
         } finally {
             if ($tmpFile !== null) @unlink($tmpFile);
         }
@@ -1729,7 +1806,7 @@ PROMPT;
     private function executeGenerateImages(Project $project, array $params): array
     {
         $prompts = $params['prompts'] ?? [];
-        if (empty($prompts)) return ['error' => 'Aucun prompt'];
+        if (empty($prompts)) return ['error' => $this->trans('studio.no_prompts_provided', [], 'Aucun prompt')];
 
         $caps = $this->aiService->getCapabilities();
         if (!$caps['images']) {
@@ -1753,15 +1830,31 @@ PROMPT;
                     if ($imageData) {
                         $tmpFile = tempnam(sys_get_temp_dir(), 'jambo_ai_');
                         file_put_contents($tmpFile, $imageData);
-                        $media = new \App\Entity\Media();
-                        $media->project = $project;
-                        $media->originalName = 'ai-' . substr(md5($p['description'] ?? ''), 0, 8) . '.png';
-                        $media->alt = $p['alt'] ?? ($p['label'] ?? '');
-                        $media->setFile(new \Symfony\Component\HttpFoundation\File\File($tmpFile));
-                        $this->em->persist($media);
-                        $this->em->flush();
-                        $results[] = ['url' => $media->getPublicUrl(), 'uuid' => $media->uuid?->toRfc4122(), 'type' => 'generated'];
-                        continue;
+
+                        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+                        $mime = $finfo->file($tmpFile);
+                        $allowedMimes = [
+                            'image/png'  => 'png',
+                            'image/jpeg' => 'jpg',
+                            'image/webp' => 'webp',
+                            'image/gif'  => 'gif',
+                        ];
+                        if (isset($allowedMimes[$mime])) {
+                            $ext = $allowedMimes[$mime];
+                            if ($this->uploadValidator !== null) {
+                                $this->uploadValidator->validateFileContent($tmpFile, $ext);
+                            }
+
+                            $media = new \App\Entity\Media();
+                            $media->project = $project;
+                            $media->originalName = 'ai-' . substr(md5($p['description'] ?? ''), 0, 8) . '.' . $ext;
+                            $media->alt = $p['alt'] ?? ($p['label'] ?? '');
+                            $media->setFile(new \Symfony\Component\HttpFoundation\File\File($tmpFile));
+                            $this->em->persist($media);
+                            $this->em->flush();
+                            $results[] = ['url' => $media->getPublicUrl(), 'uuid' => $media->uuid?->toRfc4122(), 'type' => 'generated'];
+                            continue;
+                        }
                     }
                 }
             } catch (\Throwable $e) {
@@ -1782,13 +1875,20 @@ PROMPT;
         $uuids         = $params['uuids'] ?? [];
 
         if ($collectionSlug === '' || empty($targetLocales)) {
-            return ['error' => 'Collection et target_locales requis'];
+            return ['error' => $this->trans('studio.collection_and_locales_required', [], 'Collection et target_locales requis')];
+        }
+
+        // Limiter et assainir les locales cibles
+        $targetLocales = array_slice((array) $targetLocales, 0, 10);
+        $targetLocales = array_values(array_filter($targetLocales, fn($loc) => is_string($loc) && preg_match('/^[a-z]{2}(-[a-zA-Z0-9]{2,8})?$/', $loc)));
+        if (empty($targetLocales)) {
+            return ['error' => $this->trans('studio.invalid_target_locales', [], 'No valid target locales provided')];
         }
 
         // Récupérer la collection
         $collection = $this->em->getRepository(Collection::class)
             ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
-        if (!$collection) return ['error' => "Collection '$collectionSlug' introuvable"];
+        if (!$collection) return ['error' => $this->trans('studio.collection_not_found', ['%collection%' => $collectionSlug], sprintf("Collection '%s' introuvable", $collectionSlug))];
 
         // Récupérer les entrées source
         if (empty($uuids)) {
@@ -1803,7 +1903,7 @@ PROMPT;
             }
         }
 
-        if (empty($entries)) return ['error' => 'Aucune entree source trouvee'];
+        if (empty($entries)) return ['error' => $this->trans('studio.no_source_entries_found', [], 'Aucune entree source trouvee')];
 
         $created = 0; $errors = 0;
 
@@ -1934,8 +2034,10 @@ PROMPT;
     {
         $project = $this->findProject($uuid);
         if (!$project) {
-            return $this->json(['error' => 'Projet introuvable'], 404);
+            return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         }
+
+        $this->denyAccessUnlessGranted('project.view', $project);
 
         $collections = $this->em->getRepository(Collection::class)
             ->findBy(['project' => $project, 'deletedAt' => null]);
@@ -1956,7 +2058,7 @@ PROMPT;
             ];
         }
 
-        return $this->json(['types' => $types]);
+        return $this->jsonResponse(['types' => $types]);
     }
 
     private function slugify(string $text): string
@@ -1980,6 +2082,10 @@ PROMPT;
 
     private function findProject(string $uuid): ?Project
     {
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return null;
+        }
+
         try {
             return $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {

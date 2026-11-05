@@ -39,9 +39,9 @@ class SeoPublicController extends AbstractController
         return $default ?? $id;
     }
 
-    private function checkRateLimit(Request $request): ?Response
+    private function checkRateLimit(?Request $request): ?Response
     {
-        if ($this->seoLimiter !== null) {
+        if ($request !== null && $this->seoLimiter !== null) {
             $limiter = $this->seoLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
                 return new Response($this->trans('seo.rate_limit_exceeded', [], 'Too many SEO requests. Try again later.'), 429, [
@@ -56,7 +56,7 @@ class SeoPublicController extends AbstractController
 
     #[Route('/{projectUuid}/sitemap.xml', name: 'public_sitemap', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
     #[Route('/api/projects/{projectUuid}/sitemap.xml', name: 'api_public_sitemap')]
-    public function sitemap(string $projectUuid, Request $request): Response
+    public function sitemap(string $projectUuid, ?Request $request = null): Response
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
@@ -82,7 +82,7 @@ class SeoPublicController extends AbstractController
 
     #[Route('/{projectUuid}/sitemap-images.xml', name: 'public_image_sitemap', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
     #[Route('/api/projects/{projectUuid}/sitemap-images.xml', name: 'api_public_image_sitemap')]
-    public function imageSitemap(string $projectUuid, Request $request): Response
+    public function imageSitemap(string $projectUuid, ?Request $request = null): Response
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
@@ -108,7 +108,7 @@ class SeoPublicController extends AbstractController
 
     #[Route('/{projectUuid}/robots.txt', name: 'public_robots', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
     #[Route('/api/projects/{projectUuid}/robots.txt', name: 'api_public_robots')]
-    public function robots(string $projectUuid, Request $request): Response
+    public function robots(string $projectUuid, ?Request $request = null): Response
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
