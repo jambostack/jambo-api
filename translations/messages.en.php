@@ -2143,6 +2143,8 @@ return [
     'form.payload_too_large'                   => 'Payload too large (max 1MB).',
     'form.validation_failed'                   => 'Validation failed.',
     'form.invalid_slug'                        => 'Invalid form slug.',
+    'form.submission_failed'                   => 'Form submission failed. Please try again.',
+    'redirect.pattern_replace_error'           => 'Redirect pattern could not be applied.',
 
     // RedirectPublicController
     'redirect.project_not_found'               => 'Project not found.',

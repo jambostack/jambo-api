@@ -2161,6 +2161,8 @@ return [
     'form.payload_too_large'                   => 'Charge utile trop volumineuse (max 1 Mo).',
     'form.validation_failed'                   => 'La validation a échoué.',
     'form.invalid_slug'                        => 'Slug de formulaire invalide.',
+    'form.submission_failed'                   => 'Échec de la soumission du formulaire. Veuillez réessayer.',
+    'redirect.pattern_replace_error'           => 'Le modèle de redirection n\'a pas pu être appliqué.',
 
     // RedirectPublicController
     'redirect.project_not_found'               => 'Projet introuvable.',

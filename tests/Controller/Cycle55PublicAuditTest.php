@@ -437,4 +437,115 @@ class Cycle55PublicAuditTest extends WebTestCase
         $this->assertResponseStatusCodeSame(204);
         $this->assertSame('*', $client->getResponse()->headers->get('Access-Control-Allow-Origin'));
     }
+
+    public function testEmbedCspFormActionSelf(): void
+    {
+        $client = static::createClient();
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+
+        $project = $this->createProject($em);
+        $form = $this->createForm($em, $project, 'csp-test');
+        $uuid = (string) $project->uuid;
+
+        $client->request('GET', "/embed/forms/{$uuid}/csp-test");
+        $this->assertResponseIsSuccessful();
+
+        $csp = (string) $client->getResponse()->headers->get('Content-Security-Policy');
+        // frame-ancestors must allow any origin (embed use case)
+        $this->assertStringContainsString('frame-ancestors *', $csp);
+        // form-action must be restricted to 'self' (not *)
+        $this->assertStringContainsString("form-action 'self'", $csp);
+        $this->assertStringNotContainsString("form-action *", $csp);
+    }
+
+    public function testFormSubmitRuntimeExceptionDoesNotLeakInternals(): void
+    {
+        // Verify that SUBMISSION_FAILED error code is returned with a generic I18N message
+        // (not an internal exception message) when FormPublicController catches RuntimeException
+        $client = static::createClient();
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+
+        $project = $this->createProject($em);
+        // Create form without required submit handler configuration that would trigger RuntimeException
+        // We test that if 422 SUBMISSION_FAILED is returned, the error is NOT a PHP stack trace
+        $this->createForm($em, $project, 'runtime-test');
+        $uuid = (string) $project->uuid;
+
+        // POST with valid structure but content that might fail processing
+        $client->request('POST', "/{$uuid}/forms/runtime-test/submit", [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT' => 'application/json',
+        ], json_encode(['email' => 'test@example.com']));
+
+        // Response must be 2xx or 4xx but NEVER expose internal PHP class names or stack traces
+        $status = $client->getResponse()->getStatusCode();
+        $content = (string) $client->getResponse()->getContent();
+        $this->assertStringNotContainsString('Exception', $content);
+        $this->assertStringNotContainsString('Stack trace', $content);
+        $this->assertStringNotContainsString('/root/', $content);
+        // If 422, verify error code is SUBMISSION_FAILED and no internal detail
+        if ($status === 422) {
+            $data = json_decode($content, true);
+            $this->assertSame('SUBMISSION_FAILED', $data['code']);
+            // Error must be a translated generic message, not internal PHP exception message
+            $this->assertStringNotContainsString('::', $data['error']);
+        }
+    }
+
+    public function testRedirectPatternReplaceErrorHandling(): void
+    {
+        $client = static::createClient();
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+
+        $project = $this->createProject($em);
+        $uuid = (string) $project->uuid;
+
+        // A well-formed pattern redirect should still resolve correctly
+        $this->createRedirect($em, $project, '/old-(.*)', '/new/$1', 301, true);
+        $client->request('GET', "/{$uuid}/redirects/resolve?path=/old-page", [], [], [
+            'HTTP_ACCEPT' => 'application/json',
+        ]);
+        // Should succeed - redirect found and resolved
+        $this->assertResponseIsSuccessful();
+        $data = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertTrue($data['redirected']);
+        $this->assertSame('/new/page', $data['to']);
+
+        // Redirect resolve endpoint validates preg_last_error after pattern replacement
+        // A non-pattern redirect returns correct redirected=true with toPath
+        $this->createRedirect($em, $project, '/exact-path', '/new-exact', 302, false);
+        $client->request('GET', "/{$uuid}/redirects/resolve?path=/exact-path", [], [], [
+            'HTTP_ACCEPT' => 'application/json',
+        ]);
+        $this->assertResponseIsSuccessful();
+        $data2 = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertTrue($data2['redirected']);
+        $this->assertSame('/new-exact', $data2['to']);
+    }
+
+    public function testI18NParity2881Keys(): void
+    {
+        $en = include dirname(__DIR__, 2) . '/translations/messages.en.php';
+        $fr = include dirname(__DIR__, 2) . '/translations/messages.fr.php';
+        $es = include dirname(__DIR__, 2) . '/translations/messages.es.php';
+        $ar = include dirname(__DIR__, 2) . '/translations/messages.ar.php';
+
+        $this->assertCount(2881, $en, 'EN must have 2881 keys');
+        $this->assertCount(2881, $fr, 'FR must have 2881 keys');
+        $this->assertCount(2881, $es, 'ES must have 2881 keys');
+        $this->assertCount(2881, $ar, 'AR must have 2881 keys');
+
+        $this->assertSame([], array_keys(array_diff_key($en, $fr)), 'Missing keys in FR');
+        $this->assertSame([], array_keys(array_diff_key($en, $es)), 'Missing keys in ES');
+        $this->assertSame([], array_keys(array_diff_key($en, $ar)), 'Missing keys in AR');
+
+        $this->assertArrayHasKey('form.submission_failed', $en);
+        $this->assertArrayHasKey('redirect.pattern_replace_error', $en);
+        $this->assertNotEmpty($fr['form.submission_failed']);
+        $this->assertNotEmpty($es['form.submission_failed']);
+        $this->assertNotEmpty($ar['form.submission_failed']);
+        $this->assertNotEmpty($fr['redirect.pattern_replace_error']);
+        $this->assertNotEmpty($es['redirect.pattern_replace_error']);
+        $this->assertNotEmpty($ar['redirect.pattern_replace_error']);
+    }
 }

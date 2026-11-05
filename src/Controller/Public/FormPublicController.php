@@ -227,9 +227,9 @@ class FormPublicController extends AbstractController
                 'validation_errors' => $errors,
                 'code' => 'VALIDATION_FAILED',
             ], 422);
-        } catch (\RuntimeException $e) {
+        } catch (\RuntimeException) {
             return $this->secureJson([
-                'error' => $e->getMessage(),
+                'error' => $this->trans('form.submission_failed', [], 'Form submission failed. Please try again.'),
                 'code' => 'SUBMISSION_FAILED',
             ], 422);
         }

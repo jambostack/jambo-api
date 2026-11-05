@@ -109,10 +109,19 @@ class RedirectPublicController extends AbstractController
         }
 
         // Résolution de la destination finale (prise en compte des regex patterns)
-        $dest = $redirect->isPattern
-            ? (string) @preg_replace('#' . str_replace('#', '\#', $redirect->fromPath) . '#', $redirect->toPath, $path, 1)
-            : $redirect->toPath;
-        $dest = trim($dest);
+        if ($redirect->isPattern) {
+            $escaped = str_replace('#', '\#', $redirect->fromPath);
+            $result = @preg_replace('#' . $escaped . '#', $redirect->toPath, $path, 1);
+            if (preg_last_error() !== PREG_NO_ERROR || $result === null) {
+                return $this->secureJson([
+                    'error' => $this->trans('redirect.pattern_replace_error', [], 'Redirect pattern could not be applied.'),
+                    'code' => 'PATTERN_ERROR',
+                ], 400);
+            }
+            $dest = trim((string) $result);
+        } else {
+            $dest = trim($redirect->toPath);
+        }
         $lowerDest = strtolower($dest);
 
         // Validation stricte anti-XSS et anti-bypasses protocol-relative

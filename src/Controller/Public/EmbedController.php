@@ -109,7 +109,7 @@ class EmbedController extends AbstractController
             'Content-Type' => 'text/html; charset=utf-8',
             'Cache-Control' => 'public, max-age=60',
             'X-Content-Type-Options' => 'nosniff',
-            'Content-Security-Policy' => "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; frame-ancestors *; form-action *;",
+            'Content-Security-Policy' => "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; frame-ancestors *; form-action 'self';",
         ]);
     }
 

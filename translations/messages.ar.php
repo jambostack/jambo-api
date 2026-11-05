@@ -2143,6 +2143,8 @@ return [
     'form.payload_too_large'                   => 'الحمولة كبيرة جداً (الحد الأقصى 1 ميجابايت).',
     'form.validation_failed'                   => 'فشلت عملية التحقق.',
     'form.invalid_slug'                        => 'معرف النموذج غير صالح.',
+    'form.submission_failed'                   => 'فشل إرسال النموذج. يرجى المحاولة مرة أخرى.',
+    'redirect.pattern_replace_error'           => 'تعذّر تطبيق نمط إعادة التوجيه.',
 
     // RedirectPublicController
     'redirect.project_not_found'               => 'المشروع غير موجود.',

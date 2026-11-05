@@ -2143,6 +2143,8 @@ return [
     'form.payload_too_large'                   => 'Carga útil demasiado grande (máx. 1MB).',
     'form.validation_failed'                   => 'Error de validación.',
     'form.invalid_slug'                        => 'Slug de formulario no válido.',
+    'form.submission_failed'                   => 'Error al enviar el formulario. Por favor, inténtelo de nuevo.',
+    'redirect.pattern_replace_error'           => 'No se pudo aplicar el patrón de redirección.',
 
     // RedirectPublicController
     'redirect.project_not_found'               => 'Proyecto no encontrado.',
