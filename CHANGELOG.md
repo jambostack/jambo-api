@@ -7,6 +7,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.139] — 2026-11-05
+
+### Security & i18n Hardening — AiContentService strict i18n & translator injection (Cycle #76)
+- **AiContentService — strict i18n compliance**:
+  - Injected `TranslatorInterface` as 5th constructor argument (autowired).
+  - Replaced all 6 hardcoded French error strings with i18n translation keys: `ai.error.parse_response`, `ai.error.translation`, `ai.error.seo`, `ai.error.analyze`, `ai.error.no_provider` (×2 occurrences in `streamPrompt` and `ask`).
+  - Added 4 new translation keys to all 4 language dictionaries (`messages.en.php`, `messages.fr.php`, `messages.es.php`, `messages.ar.php`): `ai.error.parse_response`, `ai.error.translation`, `ai.error.seo`, `ai.error.analyze`.
+- **Test suite — updated for new constructor signature**:
+  - `AiContentServiceTest`: added `TranslatorInterface` mock injection, updated `expectExceptionMessage` to use i18n key.
+  - `AiContentServiceStreamTest`: added `TranslatorInterface` mock injection, updated exception message assertion.
+  - All 1711 tests pass (508 service tests, 0 failures, 0 errors).
+
+---
+
 ## [1.26.136] — 2026-11-05
 
 ### Security Hardening on MCP (Model Context Protocol), Rate Limiting, Audit Trail & Strict i18n (Phase 88 — Cycle #73)

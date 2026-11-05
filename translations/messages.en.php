@@ -2786,6 +2786,10 @@ return [
     'ai.error.no_provider'                            => 'No AI provider is configured or available.',
     'ai.error.execution_failed'                       => 'An error occurred during AI processing.',
     'ai.error.seo_generation_failed'                  => 'Failed to generate SEO metadata.',
+    'ai.error.parse_response'                         => 'Failed to parse the AI response.',
+    'ai.error.translation'                            => 'An error occurred during translation.',
+    'ai.error.seo'                                    => 'An error occurred during SEO generation.',
+    'ai.error.analyze'                                => 'Failed to analyze the content.',
 
     // AuditController
     'audit.invalid_project_uuid'                      => 'Invalid project UUID format.',

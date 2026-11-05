@@ -2788,6 +2788,10 @@ return [
     'ai.error.no_provider'                            => 'لا يوجد مزود ذكاء اصطناعي مهيأ أو متاح.',
     'ai.error.execution_failed'                       => 'حدث خطأ أثناء معالجة الذكاء الاصطناعي.',
     'ai.error.seo_generation_failed'                  => 'تعذر إنشاء البيانات الوصفية لتحسين محركات البحث.',
+    'ai.error.parse_response'                         => 'تعذر تحليل استجابة الذكاء الاصطناعي.',
+    'ai.error.translation'                            => 'حدث خطأ أثناء الترجمة.',
+    'ai.error.seo'                                    => 'حدث خطأ أثناء إنشاء بيانات SEO.',
+    'ai.error.analyze'                                => 'تعذر تحليل المحتوى.',
 
     // AuditController
     'audit.invalid_project_uuid'                      => 'تنسيق المعرف الفريد للمشروع غير صالح.',

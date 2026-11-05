@@ -7,6 +7,7 @@ use App\Entity\Project;
 use App\Repository\AppSettingsRepository;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class AiContentService
 {
@@ -50,6 +51,7 @@ class AiContentService
         private readonly HttpClientInterface $httpClient,
         private readonly AuditService $audit,
         private readonly Security $security,
+        private readonly TranslatorInterface $translator,
     ) {}
 
     private function tracked(string $action, ?Project $project, array $input, callable $fn): mixed
@@ -345,7 +347,7 @@ class AiContentService
         $active = $this->resolveProviders();
 
         if (empty($active)) {
-            throw new \RuntimeException('Aucun fournisseur IA activé. Configurez-en un dans Paramètres → Fournisseurs IA.');
+            throw new \RuntimeException($this->translator->trans('ai.error.no_provider'));
         }
 
         // Fournisseur explicitement demandé
@@ -387,7 +389,7 @@ class AiContentService
             }
         }
 
-        throw new \RuntimeException('Aucun fournisseur IA disponible pour le streaming : ' . ($lastError?->getMessage() ?? 'erreur inconnue'));
+        throw new \RuntimeException($this->translator->trans('ai.error.no_provider') . ': ' . ($lastError?->getMessage() ?? ''));
     }
 
     public function ask(string $prompt, string $model = 'gpt-4o-mini', ?string $provider = null): string
@@ -395,7 +397,7 @@ class AiContentService
         $active = $this->resolveProviders();
 
         if (empty($active)) {
-            throw new \RuntimeException('Aucun fournisseur IA activé. Configurez-en un dans Paramètres → Fournisseurs IA.');
+            throw new \RuntimeException($this->translator->trans('ai.error.no_provider'));
         }
 
         // Fournisseur explicitement demandé
@@ -434,7 +436,7 @@ class AiContentService
             }
         }
 
-        throw new \RuntimeException('Aucun fournisseur IA disponible : ' . ($lastError?->getMessage() ?? 'erreur inconnue'));
+        throw new \RuntimeException($this->translator->trans('ai.error.no_provider') . ': ' . ($lastError?->getMessage() ?? ''));
     }
 
     public function generateContent(string $brief, Collection $collection, string $locale = 'fr'): array
@@ -461,7 +463,7 @@ Retourne UNIQUEMENT un objet JSON valide avec les champs comme clés (pas de tex
 PROMPT;
                 $response = $this->ask($prompt, self::MODELS['smart']);
                 $json = $this->extractJson($response);
-                return $json ?? ['error' => 'Impossible de parser la réponse IA', 'raw' => $response];
+                return $json ?? ['error' => $this->translator->trans('ai.error.parse_response'), 'raw' => $response];
             }
         );
     }
@@ -475,7 +477,7 @@ PROMPT;
             function () use ($content, $targetLocale) {
                 $prompt = "Traduis ce contenu JSON en $targetLocale. Conserve la structure exacte, ne traduis QUE les valeurs textuelles. Retourne UNIQUEMENT le JSON traduit:\n\n" . json_encode($content, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
                 $response = $this->ask($prompt, self::MODELS['fast']);
-                return $this->extractJson($response) ?? ['error' => 'Erreur de traduction'];
+                return $this->extractJson($response) ?? ['error' => $this->translator->trans('ai.error.translation')];
             }
         );
     }
@@ -511,7 +513,7 @@ Analyse ce contenu et génère les métadonnées SEO. Retourne UNIQUEMENT un JSO
 
 Contenu: $text
 PROMPT;
-                return $this->extractJson($this->ask($prompt, self::MODELS['fast'])) ?? ['error' => 'Erreur SEO'];
+                return $this->extractJson($this->ask($prompt, self::MODELS['fast'])) ?? ['error' => $this->translator->trans('ai.error.seo')];
             }
         );
     }
@@ -538,7 +540,7 @@ Collection: {$collection->name} ({$collection->slug})
 Champs existants:
 $fields
 PROMPT;
-                return $this->extractJson($this->ask($prompt, self::MODELS['smart'])) ?? ['suggestions' => [], 'error' => 'Impossible d\'analyser'];
+                return $this->extractJson($this->ask($prompt, self::MODELS['smart'])) ?? ['suggestions' => [], 'error' => $this->translator->trans('ai.error.analyze')];
             }
         );
     }

@@ -12,6 +12,7 @@ use Doctrine\Common\Collections\ArrayCollection;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class AiContentServiceTest extends TestCase
 {
@@ -48,8 +49,10 @@ class AiContentServiceTest extends TestCase
         $httpClient = $this->createMock(HttpClientInterface::class);
         $audit = $this->createMock(AuditService::class);
         $security = $this->createMock(Security::class);
+        $translator = $this->createMock(TranslatorInterface::class);
+        $translator->method('trans')->willReturnArgument(0);
 
-        return new AiContentService($appSettingsRepo, $httpClient, $audit, $security);
+        return new AiContentService($appSettingsRepo, $httpClient, $audit, $security, $translator);
     }
 
     public function testIsConfiguredReturnsFalseWithoutProvider(): void
@@ -104,7 +107,7 @@ class AiContentServiceTest extends TestCase
         $collection->fields->add($field);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Aucun fournisseur IA activ');
+        $this->expectExceptionMessage('ai.error.no_provider');
 
         $service->generateContent('Un article de blog', $collection);
     }

@@ -2804,6 +2804,10 @@ return [
     'ai.error.no_provider'                            => 'Aucun fournisseur IA n\'est configuré ou disponible.',
     'ai.error.execution_failed'                       => 'Une erreur est survenue lors du traitement IA.',
     'ai.error.seo_generation_failed'                  => 'Impossible de générer les métadonnées SEO.',
+    'ai.error.parse_response'                         => 'Impossible de parser la réponse IA.',
+    'ai.error.translation'                            => 'Une erreur est survenue lors de la traduction.',
+    'ai.error.seo'                                    => 'Une erreur est survenue lors de la génération SEO.',
+    'ai.error.analyze'                                => 'Impossible d\'analyser le contenu.',
 
     // AuditController
     'audit.invalid_project_uuid'                      => 'Format d\'UUID de projet invalide.',

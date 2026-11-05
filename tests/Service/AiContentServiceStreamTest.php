@@ -12,6 +12,7 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use Symfony\Contracts\HttpClient\ResponseStreamInterface;
 use Symfony\Contracts\HttpClient\ChunkInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class AiContentServiceStreamTest extends TestCase
 {
@@ -67,8 +68,10 @@ class AiContentServiceStreamTest extends TestCase
 
         $audit = $this->createMock(AuditService::class);
         $security = $this->createMock(Security::class);
+        $translator = $this->createMock(TranslatorInterface::class);
+        $translator->method('trans')->willReturnArgument(0);
 
-        $service = new AiContentService($appSettingsRepo, $mockHttpClient, $audit, $security);
+        $service = new AiContentService($appSettingsRepo, $mockHttpClient, $audit, $security, $translator);
 
         $collected = [];
         $service->streamPrompt(
@@ -92,11 +95,13 @@ class AiContentServiceStreamTest extends TestCase
         $mockHttpClient = $this->createMock(HttpClientInterface::class);
         $audit = $this->createMock(AuditService::class);
         $security = $this->createMock(Security::class);
+        $translator = $this->createMock(TranslatorInterface::class);
+        $translator->method('trans')->willReturnArgument(0);
 
-        $service = new AiContentService($appSettingsRepo, $mockHttpClient, $audit, $security);
+        $service = new AiContentService($appSettingsRepo, $mockHttpClient, $audit, $security, $translator);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Aucun fournisseur IA activé');
+        $this->expectExceptionMessage('ai.error.no_provider');
 
         $service->streamPrompt('Test prompt', function () {});
     }
