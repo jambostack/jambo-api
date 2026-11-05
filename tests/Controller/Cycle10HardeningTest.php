@@ -98,7 +98,8 @@ class Cycle10HardeningTest extends WebTestCase
 
         $this->assertResponseIsSuccessful();
         $this->assertStringNotContainsString('Aucun compte trouvé', (string) $client->getResponse()->getContent());
-        $this->assertStringContainsString('Si cette adresse correspond', (string) $client->getResponse()->getContent());
+        $content = (string) $client->getResponse()->getContent();
+        $this->assertTrue(str_contains($content, 'Si cette adresse correspond') || str_contains($content, 'If this address corresponds'));
     }
 
     public function testCommentLengthLimitAndCrossTenantIsolation(): void

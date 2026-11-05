@@ -3002,4 +3002,12 @@ return [
     'project_settings.mailer_name_crlf' => 'يحتوي from_name على أحرف غير صالحة أو أسطر جديدة.',
     'project_settings.mailer_not_configured' => 'خدمة البريد غير مهيأة أو معطلة.',
     'project_settings.mailer_test_failed' => 'فشل إرسال بريد الاختبار الإلكتروني. تحقق من تكوين SMTP وحاول مرة أخرى.',
+    'insights.rate_limit_exceeded' => 'عدد كبير جداً من طلبات التحليلات. يرجى إعادة المحاولة لاحقاً.',
+    'flow.admin.rate_limit_exceeded' => 'عدد كبير جداً من طلبات التدفق. يرجى إعادة المحاولة لاحقاً.',
+    'flow.admin.payload_too_large' => 'حجم حمولة التدفق يتجاوز الحد الأقصى المسموح به (512 كيلوبايت).',
+    'flow.admin.nodes_limit_exceeded' => 'لا يمكن أن يحتوي مخطط التدفق على أكثر من %max% عقدة.',
+    'flow.admin.edges_limit_exceeded' => 'لا يمكن أن يحتوي مخطط التدفق على أكثر من %max% حافة.',
+    'versioning.rate_limit_exceeded' => 'عدد كبير جداً من طلبات الإصدارات. يرجى إعادة المحاولة لاحقاً.',
+    'template.rate_limit_exceeded' => 'عدد كبير جداً من طلبات القوالب. يرجى إعادة المحاولة لاحقاً.',
+    'template.payload_too_large' => 'حمولة الطلب كبيرة جداً (الحد الأقصى 512 كيلوبايت).',
 ];

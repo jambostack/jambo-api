@@ -3018,4 +3018,12 @@ return [
     'project_settings.mailer_name_crlf' => 'from_name contient des caractères non autorisés ou des sauts de ligne.',
     'project_settings.mailer_not_configured' => 'Service de messagerie non configuré ou désactivé.',
     'project_settings.mailer_test_failed' => 'Échec de l\'envoi de l\'email de test. Vérifiez votre configuration SMTP et réessayez.',
+    'insights.rate_limit_exceeded' => 'Trop de requêtes de statistiques. Veuillez réessayer plus tard.',
+    'flow.admin.rate_limit_exceeded' => 'Trop de requêtes de flux. Veuillez réessayer plus tard.',
+    'flow.admin.payload_too_large' => 'La charge utile du flux dépasse la taille maximale autorisée (512 Ko).',
+    'flow.admin.nodes_limit_exceeded' => 'Le graphe de flux ne peut pas contenir plus de %max% nœuds.',
+    'flow.admin.edges_limit_exceeded' => 'Le graphe de flux ne peut pas contenir plus de %max% liaisons.',
+    'versioning.rate_limit_exceeded' => 'Trop de requêtes de gestion de version. Veuillez réessayer plus tard.',
+    'template.rate_limit_exceeded' => 'Trop de requêtes de modèles. Veuillez réessayer plus tard.',
+    'template.payload_too_large' => 'Charge utile trop volumineuse (max 512 Ko).',
 ];

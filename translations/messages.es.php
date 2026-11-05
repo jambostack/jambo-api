@@ -3000,4 +3000,12 @@ return [
     'project_settings.mailer_name_crlf' => 'from_name contiene caracteres no válidos o saltos de línea.',
     'project_settings.mailer_not_configured' => 'Servicio de correo no configurado o desactivado.',
     'project_settings.mailer_test_failed' => 'Error al enviar el correo de prueba. Verifique su configuración SMTP y vuelva a intentarlo.',
+    'insights.rate_limit_exceeded' => 'Demasiadas solicitudes de estadísticas. Por favor, inténtelo de nuevo más tarde.',
+    'flow.admin.rate_limit_exceeded' => 'Demasiadas solicitudes de flujos. Por favor, inténtelo de nuevo más tarde.',
+    'flow.admin.payload_too_large' => 'La carga útil del flujo supera el tamaño máximo permitido (512 KB).',
+    'flow.admin.nodes_limit_exceeded' => 'El grafo del flujo no puede contener más de %max% nodos.',
+    'flow.admin.edges_limit_exceeded' => 'El grafo del flujo no puede contener más de %max% aristas.',
+    'versioning.rate_limit_exceeded' => 'Demasiadas solicitudes de versiones. Por favor, inténtelo de nuevo más tarde.',
+    'template.rate_limit_exceeded' => 'Demasiadas solicitudes de plantillas. Por favor, inténtelo de nuevo más tarde.',
+    'template.payload_too_large' => 'Carga útil demasiado grande (máx. 512 KB).',
 ];

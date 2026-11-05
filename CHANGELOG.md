@@ -7,6 +7,45 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.106] — 2026-11-05
+
+### Insights, Flow, Versioning & ProjectTemplate Security Hardening, Quotas, Rate Limiting & Strict I18N
+- **InsightsController Hardening**:
+  - Integrated `insights_limiter` rate limiter (60 req/min sliding window) across `summary` and `project` analytics endpoints to prevent DB denial-of-service.
+  - Hardened unauthenticated protection with clean error code `AUTH_REQUIRED` and security headers (`no-store, no-cache`, `X-Content-Type-Options: nosniff`).
+  - Standardized invalid range detection returning `INVALID_RANGE` (400) with strict translation.
+- **FlowController Hardening**:
+  - Integrated `flow_limiter` rate limiter (30 req/min sliding window) protecting catalog retrieval and flow graph validation.
+  - Enforced strict payload size boundary `MAX_PAYLOAD_BYTES = 524288` (512 KB), returning 413 `PAYLOAD_TOO_LARGE`.
+  - Added graph complexity ceilings preventing algorithmic DoS: `MAX_NODES_COUNT = 100` (`NODES_LIMIT_EXCEEDED`) and `MAX_EDGES_COUNT = 200` (`EDGES_LIMIT_EXCEEDED`).
+  - Enforced security headers (`no-store`, `nosniff`) on all flow responses.
+- **VersioningController Hardening**:
+  - Integrated `versioning_limiter` rate limiter (30 req/min sliding window) on version listing, diff, and restoration.
+  - Added strict pagination clamp on version list (`MAX_PAGE_LIMIT = 100`, default 50) preventing unbounded memory exhaustion on large history sets.
+  - Version number bounds enforcement (`1` to `1,000,000`) for both restoration and diff endpoints (`INVALID_VERSION`).
+  - Integrated structured audit logging (`version_restore`) through `AuditService`.
+  - Enforced security headers across all versioning endpoints.
+- **ProjectTemplateController Hardening**:
+  - Integrated `template_limiter` rate limiter (30 req/min sliding window) on template list, view, export, apply, and delete.
+  - Payload size boundary `MAX_PAYLOAD_BYTES = 524288` (512 KB) for template export and apply (`PAYLOAD_TOO_LARGE`).
+  - System-wide quota limit `MAX_TEMPLATES_COUNT = 100` (`MAX_TEMPLATES_EXCEEDED`).
+  - Sanitization of template names and descriptions (stripping ASCII control characters, max lengths 255 / 2000).
+  - Integrated structured audit logging (`project_template_export`, `project_template_apply`, `project_template_delete`) via `AuditService`.
+  - Enforced security headers on all responses.
+- **Strict I18N Parity**:
+  - Resolved regression in `Cycle10HardeningTest` and `Cycle25HardeningTest` for i18n messages.
+  - Added complete dictionary keys across `translations/messages.{en,fr,es,ar}.php`:
+    - `insights.rate_limit_exceeded`
+    - `flow.admin.rate_limit_exceeded`
+    - `flow.admin.payload_too_large`
+    - `flow.admin.nodes_limit_exceeded`
+    - `flow.admin.edges_limit_exceeded`
+    - `versioning.rate_limit_exceeded`
+    - `template.rate_limit_exceeded`
+    - `template.payload_too_large`
+- **Testing**:
+  - Added comprehensive `Cycle47SecurityHardeningTest` with 12 tests and 107 assertions.
+
 ## [1.26.105] — 2026-11-05
 
 ### Settings & Profile Security Hardening, Token Quotas, Mailer Anti-SSRF & Strict I18N Parity

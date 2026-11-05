@@ -47,7 +47,7 @@ class MercureFallbackController extends AbstractController
             $limiter = $this->realtimeLimiter->create($identifier);
             if (false === $limiter->consume(1)->isAccepted()) {
                 return new JsonResponse([
-                    'error' => $this->trans('mercure.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
+                    'error' => $this->trans('mercure.rate_limit_exceeded', [], 'Too many requests. Try again later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
                 ], 429);
             }
