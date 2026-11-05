@@ -2581,4 +2581,30 @@ return [
     'realtime.access_denied'                          => 'Acceso denegado',
     'realtime.mercure_not_configured'                 => 'Mercure no configurado en este servidor. Recurriendo al sondeo.',
     'realtime.mercure_init_error'                     => 'Error de inicialización de Mercure. Recurriendo al sondeo.',
+
+    // MediaController
+    'media.project_not_found'                         => 'Proyecto no encontrado',
+    'media.no_file_uploaded'                          => 'Ningún archivo subido',
+    'media.no_file_provided'                          => 'Ningún archivo proporcionado',
+    'media.invalid_json'                              => 'Cuerpo JSON no válido',
+    'media.payload_too_large'                         => 'Carga útil demasiado grande',
+    'media.folder_id_required'                        => 'folder_id es obligatorio',
+    'media.folder_not_found'                          => 'Carpeta no encontrada',
+    'media.crop_image_required'                       => 'El recorte requiere un archivo de imagen (permitidos: %allowed%).',
+    'media.bulk_limit_exceeded'                       => 'No se pueden eliminar más de %max% elementos multimedia a la vez.',
+    'media.alt_too_long'                              => 'El texto alternativo no puede superar los %max% caracteres.',
+    'media.caption_too_long'                          => 'La leyenda no puede superar los %max% caracteres.',
+    'media.invalid_uuid'                              => 'Formato de UUID de medio no válido',
+    'media.invalid_project_uuid'                      => 'Formato de UUID de proyecto no válido',
+
+    // AssetController
+    'asset.project_not_found'                         => 'Proyecto no encontrado.',
+    'asset.public_api_disabled'                       => 'El acceso a la API pública está deshabilitado para este proyecto.',
+    'asset.auth_required'                             => 'Autenticación requerida',
+    'asset.file_not_found'                            => 'Archivo no encontrado.',
+    'asset.no_file_uploaded'                          => 'Ningún archivo subido',
+    'asset.file_too_large'                            => 'Archivo demasiado grande. El tamaño máximo es de 10 MB.',
+    'asset.delete_unauthorized'                       => 'No autorizado. El token requiere permiso de eliminación.',
+    'asset.invalid_project_uuid'                      => 'Formato de UUID de proyecto no válido',
+    'asset.invalid_identifier'                        => 'Identificador de archivo no válido',
 ];

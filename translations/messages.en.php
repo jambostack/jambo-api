@@ -2581,4 +2581,30 @@ return [
     'realtime.access_denied'                          => 'Access denied',
     'realtime.mercure_not_configured'                 => 'Mercure not configured on this server. Fallback to polling.',
     'realtime.mercure_init_error'                     => 'Mercure initialization error. Fallback to polling.',
+
+    // MediaController
+    'media.project_not_found'                         => 'Project not found',
+    'media.no_file_uploaded'                          => 'No file uploaded',
+    'media.no_file_provided'                          => 'No file provided',
+    'media.invalid_json'                              => 'Invalid JSON body',
+    'media.payload_too_large'                         => 'Payload too large',
+    'media.folder_id_required'                        => 'folder_id is required',
+    'media.folder_not_found'                          => 'Folder not found',
+    'media.crop_image_required'                       => 'Cropping requires an image file (allowed: %allowed%).',
+    'media.bulk_limit_exceeded'                       => 'Cannot delete more than %max% media items at once.',
+    'media.alt_too_long'                              => 'Alt text cannot exceed %max% characters.',
+    'media.caption_too_long'                          => 'Caption cannot exceed %max% characters.',
+    'media.invalid_uuid'                              => 'Invalid media UUID format',
+    'media.invalid_project_uuid'                      => 'Invalid project UUID format',
+
+    // AssetController
+    'asset.project_not_found'                         => 'Project not found.',
+    'asset.public_api_disabled'                       => 'Public API access is disabled for this project.',
+    'asset.auth_required'                             => 'Authentication required',
+    'asset.file_not_found'                            => 'File not found.',
+    'asset.no_file_uploaded'                          => 'No file uploaded',
+    'asset.file_too_large'                            => 'File too large. Maximum size is 10 MB.',
+    'asset.delete_unauthorized'                       => 'Unauthorized. Token requires delete ability.',
+    'asset.invalid_project_uuid'                      => 'Invalid project UUID format',
+    'asset.invalid_identifier'                        => 'Invalid file identifier',
 ];

@@ -17,6 +17,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Uid\Uuid;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Vich\UploaderBundle\Handler\UploadHandler;
 
 #[Route('/api/projects/{projectUuid}/media', name: 'api_media_')]
@@ -31,14 +32,26 @@ class MediaController extends AbstractController
         private MediaFolderRepository $folderRepository,
         private MercurePublisher $mercure,
         private UploadSecurityValidator $uploadValidator,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        if ($default !== null) {
+            return strtr($default, $parameters);
+        }
+        return $id;
+    }
 
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('media.project_not_found', [], 'Project not found')], 404);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $project);
@@ -158,7 +171,7 @@ class MediaController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('media.project_not_found', [], 'Project not found')], 404);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.create', $project);
@@ -166,7 +179,7 @@ class MediaController extends AbstractController
 
         $uploadedFile = $request->files->get('file');
         if (!$uploadedFile) {
-            return $this->json(['error' => 'No file uploaded'], 422);
+            return $this->json(['error' => $this->trans('media.no_file_uploaded', [], 'No file uploaded')], 422);
         }
 
         try {
@@ -175,21 +188,35 @@ class MediaController extends AbstractController
             return $this->json(['error' => $e->getMessage()], 422);
         }
 
+        $rawAlt = $request->request->get('alt');
+        $alt = is_scalar($rawAlt) ? trim((string) $rawAlt) : null;
+        if ($alt !== null && mb_strlen($alt) > 500) {
+            return $this->json(['error' => $this->trans('media.alt_too_long', ['%max%' => 500], 'Alt text cannot exceed 500 characters.')], 422);
+        }
+
+        $rawCaption = $request->request->get('caption');
+        $caption = is_scalar($rawCaption) ? trim((string) $rawCaption) : null;
+        if ($caption !== null && mb_strlen($caption) > 2000) {
+            return $this->json(['error' => $this->trans('media.caption_too_long', ['%max%' => 2000], 'Caption cannot exceed 2000 characters.')], 422);
+        }
+
         $cleanFilename = $this->uploadValidator->sanitizeAndValidateFilename($uploadedFile->getClientOriginalName());
 
         $media               = new Media();
         $media->project      = $project;
-        $media->alt          = $request->request->get('alt');
-        $media->caption      = $request->request->get('caption');
+        $media->alt          = $alt;
+        $media->caption      = $caption;
         $media->originalName = $cleanFilename;
         $media->setFile($uploadedFile);
 
         // Dossier cible optionnel
         $folderId = $request->request->get('folder_id');
         if ($folderId !== null && $folderId !== '') {
-            $folder = $this->folderRepository->findOneBy(['id' => (int) $folderId, 'project' => $project]);
-            if ($folder) {
-                $media->folder = $folder;
+            if (is_numeric($folderId) && (int) $folderId > 0) {
+                $folder = $this->folderRepository->findOneBy(['id' => (int) $folderId, 'project' => $project]);
+                if ($folder && !$folder->isDeleted()) {
+                    $media->folder = $folder;
+                }
             }
         }
 
@@ -216,10 +243,14 @@ class MediaController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('media.project_not_found', [], 'Project not found')], 404);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.delete', $project);
+        }
+
+        if (strlen($request->getContent()) > 65536) {
+            return $this->json(['error' => $this->trans('media.payload_too_large', [], 'Payload too large')], 413);
         }
 
         try {
@@ -229,6 +260,13 @@ class MediaController extends AbstractController
         }
 
         $ids = $data['asset_ids'] ?? $data['ids'] ?? $data['uuids'] ?? [];
+        if (!is_array($ids)) {
+            return $this->json(['error' => $this->trans('media.invalid_json', [], 'Invalid JSON body')], 400);
+        }
+        if (count($ids) > 100) {
+            return $this->json(['error' => $this->trans('media.bulk_limit_exceeded', ['%max%' => 100], 'Cannot delete more than 100 media items at once.')], 422);
+        }
+
         foreach ($ids as $identifier) {
             $criteria = is_numeric($identifier)
                 ? ['id' => (int) $identifier, 'project' => $project]
@@ -276,17 +314,29 @@ class MediaController extends AbstractController
             $this->denyAccessUnlessGranted('content.update', $media->project);
         }
 
+        if (strlen($request->getContent()) > 16384) {
+            return $this->json(['error' => $this->trans('media.payload_too_large', [], 'Payload too large')], 413);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->trans('media.invalid_json', [], 'Invalid JSON body')], 400);
         }
 
         if (array_key_exists('alt', $data)) {
-            $media->alt = is_scalar($data['alt']) ? (string) $data['alt'] : null;
+            $alt = is_scalar($data['alt']) ? trim((string) $data['alt']) : null;
+            if ($alt !== null && mb_strlen($alt) > 500) {
+                return $this->json(['error' => $this->trans('media.alt_too_long', ['%max%' => 500], 'Alt text cannot exceed 500 characters.')], 422);
+            }
+            $media->alt = $alt;
         }
         if (array_key_exists('caption', $data)) {
-            $media->caption = is_scalar($data['caption']) ? (string) $data['caption'] : null;
+            $caption = is_scalar($data['caption']) ? trim((string) $data['caption']) : null;
+            if ($caption !== null && mb_strlen($caption) > 2000) {
+                return $this->json(['error' => $this->trans('media.caption_too_long', ['%max%' => 2000], 'Caption cannot exceed 2000 characters.')], 422);
+            }
+            $media->caption = $caption;
         }
 
         $this->em->flush();
@@ -305,27 +355,34 @@ class MediaController extends AbstractController
             $this->denyAccessUnlessGranted('content.update', $media->project);
         }
 
+        if (strlen($request->getContent()) > 8192) {
+            return $this->json(['error' => $this->trans('media.payload_too_large', [], 'Payload too large')], 413);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->trans('media.invalid_json', [], 'Invalid JSON body')], 400);
         }
 
         if (!array_key_exists('folder_id', $data)) {
-            return $this->json(['error' => 'folder_id is required'], 422);
+            return $this->json(['error' => $this->trans('media.folder_id_required', [], 'folder_id is required')], 422);
         }
 
         $folderId = $data['folder_id'];
         if ($folderId === null || $folderId === 'null' || $folderId === '') {
             $media->folder = null;
         } else {
+            if (!is_numeric($folderId) || (int) $folderId <= 0) {
+                return $this->json(['error' => $this->trans('media.folder_not_found', [], 'Folder not found')], 404);
+            }
             $project = $this->resolveProject($projectUuid);
             if (!$project) {
-                return $this->json(['error' => 'Project not found'], 404);
+                return $this->json(['error' => $this->trans('media.project_not_found', [], 'Project not found')], 404);
             }
             $folder = $this->folderRepository->findOneBy(['id' => (int) $folderId, 'project' => $project]);
-            if (!$folder) {
-                return $this->json(['error' => 'Folder not found'], 404);
+            if (!$folder || $folder->isDeleted()) {
+                return $this->json(['error' => $this->trans('media.folder_not_found', [], 'Folder not found')], 404);
             }
             $media->folder = $folder;
         }
@@ -348,14 +405,15 @@ class MediaController extends AbstractController
 
         $uploadedFile = $request->files->get('file');
         if (!$uploadedFile) {
-            return $this->json(['error' => 'No file provided'], 422);
+            return $this->json(['error' => $this->trans('media.no_file_provided', [], 'No file provided')], 422);
         }
 
         $clientName = $uploadedFile->getClientOriginalName();
         $ext = strtolower(pathinfo($clientName, PATHINFO_EXTENSION));
         $allowedCropExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'];
         if (!in_array($ext, $allowedCropExts, true)) {
-            return $this->json(['error' => sprintf('Cropping requires an image file (allowed: %s).', implode(', ', $allowedCropExts))], 422);
+            $allowedStr = implode(', ', $allowedCropExts);
+            return $this->json(['error' => $this->trans('media.crop_image_required', ['%allowed%' => $allowedStr], sprintf('Cropping requires an image file (allowed: %s).', $allowedStr))], 422);
         }
 
         try {
@@ -396,6 +454,9 @@ class MediaController extends AbstractController
 
     private function resolveProject(string $projectUuid): ?Project
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return null;
+        }
         try {
             return $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
@@ -407,7 +468,7 @@ class MediaController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('media.project_not_found', [], 'Project not found')], 404);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $project);
@@ -424,8 +485,8 @@ class MediaController extends AbstractController
                 : null;
         }
 
-        if (!$media) {
-            return $this->json(['error' => 'Media not found'], 404);
+        if (!$media || $media->deletedAt !== null) {
+            return $this->json(['error' => $this->trans('media.not_found', [], 'Media not found')], 404);
         }
 
         return $media;

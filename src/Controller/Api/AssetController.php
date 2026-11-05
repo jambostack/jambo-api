@@ -22,6 +22,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[OA\Tag(name: 'Assets')]
 #[Route('/api/{projectId}/files', name: 'public_api_files_')]
@@ -38,7 +39,19 @@ class AssetController extends AbstractController
         private StorageRuleRepository $ruleRepo,
         private StorageDriverFactory $driverFactory,
         private ?UploadSecurityValidator $uploadValidator = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        if ($default !== null) {
+            return strtr($default, $parameters);
+        }
+        return $id;
+    }
 
     #[OA\Get(
         path: '/api/{projectId}/files',
@@ -110,11 +123,11 @@ class AssetController extends AbstractController
         try {
             $media = $this->mediaRepository->findOneBy(['uuid' => $identifier, 'project' => $project, 'deletedAt' => null]);
         } catch (\Throwable) {
-            return $this->corsResponse($this->json(['error' => 'File not found.'], 404));
+            return $this->corsResponse($this->json(['error' => $this->trans('asset.file_not_found', [], 'File not found.')], 404));
         }
 
         if ($media === null) {
-            return $this->corsResponse($this->json(['error' => 'File not found.'], 404));
+            return $this->corsResponse($this->json(['error' => $this->trans('asset.file_not_found', [], 'File not found.')], 404));
         }
 
         return $this->corsResponse($this->json($this->serializeMedia($media)));
@@ -156,12 +169,12 @@ class AssetController extends AbstractController
 
         // Authentification via token API
         if (!$this->isAuthorized($request, $project)) {
-            return $this->corsResponse($this->json(['error' => 'Authentication required'], 401));
+            return $this->corsResponse($this->json(['error' => $this->trans('asset.auth_required', [], 'Authentication required')], 401));
         }
 
         $uploadedFile = $request->files->get('file');
         if (!$uploadedFile) {
-            return $this->corsResponse($this->json(['error' => 'No file uploaded'], 422));
+            return $this->corsResponse($this->json(['error' => $this->trans('asset.no_file_uploaded', [], 'No file uploaded')], 422));
         }
 
         // Validation sécurité et quotas via UploadSecurityValidator
@@ -174,7 +187,7 @@ class AssetController extends AbstractController
         } else {
             // Validation fallback taille: 10 Mo max
             if ($uploadedFile->getSize() > 10 * 1024 * 1024) {
-                return $this->corsResponse($this->json(['error' => 'File too large. Maximum size is 10 MB.'], 422));
+                return $this->corsResponse($this->json(['error' => $this->trans('asset.file_too_large', [], 'File too large. Maximum size is 10 MB.')], 422));
             }
         }
 
@@ -232,16 +245,16 @@ class AssetController extends AbstractController
         // Suppression : ability « delete » requise (voie publique §4, comme le contenu).
         $token = $this->tokenChecker->resolve($request);
         if ($token === null || !$token->can('delete') || $token->project?->id !== $project->id) {
-            return $this->corsResponse($this->json(['error' => 'Unauthorized. Token requires delete ability.'], 401));
+            return $this->corsResponse($this->json(['error' => $this->trans('asset.delete_unauthorized', [], 'Unauthorized. Token requires delete ability.')], 401));
         }
 
         try {
             $media = $this->mediaRepository->findOneBy(['uuid' => $uuid, 'project' => $project, 'deletedAt' => null]);
         } catch (\Throwable) {
-            return $this->corsResponse($this->json(['error' => 'File not found.'], 404));
+            return $this->corsResponse($this->json(['error' => $this->trans('asset.file_not_found', [], 'File not found.')], 404));
         }
         if ($media === null) {
-            return $this->corsResponse($this->json(['error' => 'File not found.'], 404));
+            return $this->corsResponse($this->json(['error' => $this->trans('asset.file_not_found', [], 'File not found.')], 404));
         }
 
         $media->deletedAt = new \DateTimeImmutable();
@@ -277,17 +290,20 @@ class AssetController extends AbstractController
 
     private function resolvePublicProject(string $projectId): Project|JsonResponse
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectId)) {
+            return $this->json(['error' => $this->trans('asset.invalid_project_uuid', [], 'Invalid project UUID format')], 400);
+        }
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found.'], 404);
+            return $this->json(['error' => $this->trans('asset.project_not_found', [], 'Project not found.')], 404);
         }
         if ($project === null) {
-            return $this->json(['error' => 'Project not found.'], 404);
+            return $this->json(['error' => $this->trans('asset.project_not_found', [], 'Project not found.')], 404);
         }
 
         if (!$project->publicApi) {
-            return $this->json(['error' => 'Public API access is disabled for this project.'], 403);
+            return $this->json(['error' => $this->trans('asset.public_api_disabled', [], 'Public API access is disabled for this project.')], 403);
         }
 
         return $project;

@@ -2599,4 +2599,30 @@ return [
     'realtime.access_denied'                          => 'Accès refusé',
     'realtime.mercure_not_configured'                 => 'Mercure non configuré sur ce serveur. Bascule sur le polling.',
     'realtime.mercure_init_error'                     => 'Erreur d’initialisation de Mercure. Bascule sur le polling.',
+
+    // MediaController
+    'media.project_not_found'                         => 'Projet introuvable',
+    'media.no_file_uploaded'                          => 'Aucun fichier téléversé',
+    'media.no_file_provided'                          => 'Aucun fichier fourni',
+    'media.invalid_json'                              => 'Corps JSON invalide',
+    'media.payload_too_large'                         => 'Charge utile trop volumineuse',
+    'media.folder_id_required'                        => 'folder_id est requis',
+    'media.folder_not_found'                          => 'Dossier introuvable',
+    'media.crop_image_required'                       => 'Le recadrage nécessite un fichier image (autorisés : %allowed%).',
+    'media.bulk_limit_exceeded'                       => 'Impossible de supprimer plus de %max% médias à la fois.',
+    'media.alt_too_long'                              => 'Le texte alternatif ne peut pas dépasser %max% caractères.',
+    'media.caption_too_long'                          => 'La légende ne peut pas dépasser %max% caractères.',
+    'media.invalid_uuid'                              => 'Format d\'UUID de média invalide',
+    'media.invalid_project_uuid'                      => 'Format d\'UUID de projet invalide',
+
+    // AssetController
+    'asset.project_not_found'                         => 'Projet introuvable.',
+    'asset.public_api_disabled'                       => 'L\'accès à l\'API publique est désactivé pour ce projet.',
+    'asset.auth_required'                             => 'Authentification requise',
+    'asset.file_not_found'                            => 'Fichier introuvable.',
+    'asset.no_file_uploaded'                          => 'Aucun fichier téléversé',
+    'asset.file_too_large'                            => 'Fichier trop volumineux. La taille maximale est de 10 Mo.',
+    'asset.delete_unauthorized'                       => 'Non autorisé. Le jeton requiert le droit de suppression.',
+    'asset.invalid_project_uuid'                      => 'Format d\'UUID de projet invalide',
+    'asset.invalid_identifier'                        => 'Identifiant de fichier invalide',
 ];

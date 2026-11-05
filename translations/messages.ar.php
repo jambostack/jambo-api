@@ -2583,4 +2583,30 @@ return [
     'realtime.access_denied'                          => 'تم رفض الوصول',
     'realtime.mercure_not_configured'                 => 'Mercure غير مكوّن على هذا الخادم. الرجوع إلى الاستقصاء الدوري.',
     'realtime.mercure_init_error'                     => 'خطأ في تهيئة Mercure. الرجوع إلى الاستقصاء الدوري.',
+
+    // MediaController
+    'media.project_not_found'                         => 'المشروع غير موجود',
+    'media.no_file_uploaded'                          => 'لم يتم تحميل أي ملف',
+    'media.no_file_provided'                          => 'لم يتم تقديم أي ملف',
+    'media.invalid_json'                              => 'نص JSON غير صالح',
+    'media.payload_too_large'                         => 'حمولة الطلب كبيرة جدًا',
+    'media.folder_id_required'                        => 'folder_id مطلوب',
+    'media.folder_not_found'                          => 'المجلد غير موجود',
+    'media.crop_image_required'                       => 'يتطلب القص ملف صورة (المسموح به: %allowed%).',
+    'media.bulk_limit_exceeded'                       => 'لا يمكن حذف أكثر من %max% من عناصر الوسائط في المرة الواحدة.',
+    'media.alt_too_long'                              => 'لا يمكن أن يتجاوز النص البديل %max% حرفًا.',
+    'media.caption_too_long'                          => 'لا يمكن أن يتجاوز التوضيح %max% حرفًا.',
+    'media.invalid_uuid'                              => 'صيغة UUID للوسائط غير صالحة',
+    'media.invalid_project_uuid'                      => 'صيغة UUID للمشروع غير صالحة',
+
+    // AssetController
+    'asset.project_not_found'                         => 'المشروع غير موجود.',
+    'asset.public_api_disabled'                       => 'تم تعطيل الوصول إلى واجهة برمجة التطبيقات العامة لهذا المشروع.',
+    'asset.auth_required'                             => 'المصادقة مطلوبة',
+    'asset.file_not_found'                            => 'الملف غير موجود.',
+    'asset.no_file_uploaded'                          => 'لم يتم تحميل أي ملف',
+    'asset.file_too_large'                            => 'الملف كبير جدًا. الحجم الأقصى هو 10 ميغابايت.',
+    'asset.delete_unauthorized'                       => 'غير مصرح. الرمز يتطلب صلاحية الحذف.',
+    'asset.invalid_project_uuid'                      => 'صيغة UUID للمشروع غير صالحة',
+    'asset.invalid_identifier'                        => 'معرّف الملف غير صالح',
 ];

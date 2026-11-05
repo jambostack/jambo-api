@@ -7,6 +7,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.92] — 2026-11-05
+
+### MediaController & AssetController Hardening, Payload Bounds & Strict I18N
+- **MediaController Hardening**:
+  - Injected Symfony `TranslatorInterface` and removed all hardcoded error/status strings.
+  - Added strict payload size constraints: bulk delete (`<= 64KB`), media metadata update (`<= 16KB`), folder move (`<= 8KB`).
+  - Added bulk deletion item count bounds: maximum 100 media IDs/UUIDs per request (HTTP 422).
+  - Added text bounds validation for media metadata: `alt` text capped at 500 characters, `caption` text capped at 2,000 characters.
+  - Added target folder integrity validation on file upload and move operations (numeric ID, existence, soft-delete check).
+  - Protected image cropping endpoint by requiring valid image mime types and translated error messages.
+  - Reinforced media lookup against soft-deleted records (`deletedAt !== null` returns 404).
+- **AssetController (Public API) Hardening**:
+  - Injected Symfony `TranslatorInterface` and replaced all hardcoded error strings.
+  - Validated RFC 4122 UUID format for `projectId` on public files routes (returns HTTP 400 for malformed identifiers).
+  - Reinforced public API access controls and token deletion ability validation with localized error messages.
+- **Strict I18N Parity**:
+  - Added 22 new translation keys (`media.*`, `asset.*`) across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+  - Strict 100% dictionary key parity maintained (2,359 keys across each of the 4 languages, 0 missing).
+- **Quality Assurance**:
+  - Added comprehensive test suite `tests/Controller/Cycle37HardeningTest.php` (20 tests, 218 assertions).
+  - All test suites passing green.
+
 ## [1.26.91] — 2026-11-05
 
 ### MediaFolder & Realtime Hardening, Path Traversal Defense, Depth Bounds & Strict I18N
