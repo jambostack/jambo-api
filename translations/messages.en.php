@@ -3336,4 +3336,6 @@ return [
     'permission.admin.name_control_chars' => 'Permission name contains invalid control characters.',
     'permission.admin.label_control_chars' => 'Permission label contains invalid control characters.',
     'permission.admin.group_control_chars' => 'Permission group contains invalid control characters.',
+    'backup.label_control_chars' => 'Backup label contains invalid control characters.',
+    'backup.label_invalid_characters' => 'Backup label contains invalid characters.',
 ];

@@ -11,7 +11,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class BackupManager
 {
     public const MAX_BACKUP_BYTES = 262144000; // 250 MB
-    public const FILENAME_REGEX = '/^backup-[a-zA-Z0-9_\-]{8,64}\.(sql|sql\.gz|zip)$/';
+    public const FILENAME_REGEX = '/^backup-[a-zA-Z0-9_\-]{8,128}\.(sql|sql\.gz|zip)$/';
 
     private const FORBIDDEN_SQL_PATTERNS = [
         '/\bINTO\s+OUTFILE\b/i',
@@ -123,7 +123,12 @@ class BackupManager
      */
     public function createBackup(string $label = 'manual'): array
     {
-        $safeLabel = preg_replace('/[^a-zA-Z0-9_\-]/', '-', $label) ?: 'manual';
+        $truncatedLabel = mb_substr(trim($label), 0, 50);
+        $safeLabel = preg_replace('/[^a-zA-Z0-9_\-]/', '-', $truncatedLabel) ?: 'manual';
+        $safeLabel = trim($safeLabel, '-');
+        if ($safeLabel === '') {
+            $safeLabel = 'manual';
+        }
         $timestamp = (new \DateTimeImmutable())->format('Ymd-His');
         $random = bin2hex(random_bytes(4));
         $filename = "backup-{$safeLabel}-{$timestamp}-{$random}.sql";

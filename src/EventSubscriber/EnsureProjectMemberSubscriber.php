@@ -16,6 +16,12 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class EnsureProjectMemberSubscriber implements EventSubscriberInterface
 {
+    private const SECURITY_HEADERS = [
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate, private',
+        'Pragma'                 => 'no-cache',
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+    ];
     public function __construct(
         private ProjectRepository $projectRepository,
         private ProjectMemberRepository $memberRepo,
@@ -27,6 +33,11 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
     private function trans(string $id, array $parameters = [], string $default = ''): string
     {
         return $this->translator?->trans($id, $parameters) ?? $default;
+    }
+
+    private function secureJson(mixed $data, int $status = 200): JsonResponse
+    {
+        return new JsonResponse($data, $status, self::SECURITY_HEADERS);
     }
 
     public static function getSubscribedEvents(): array
@@ -86,7 +97,7 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            $event->setResponse(new JsonResponse([
+            $event->setResponse($this->secureJson([
                 'error' => $this->trans('collection.admin.project_not_found', [], 'Project not found.'),
                 'code' => 'PROJECT_NOT_FOUND',
             ], 404));
@@ -94,7 +105,7 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
         }
 
         if ($project === null) {
-            $event->setResponse(new JsonResponse([
+            $event->setResponse($this->secureJson([
                 'error' => $this->trans('collection.admin.project_not_found', [], 'Project not found.'),
                 'code' => 'PROJECT_NOT_FOUND',
             ], 404));
@@ -104,7 +115,7 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
         $member = $this->memberRepo->findActiveByUserAndProject($user, $project);
 
         if ($member === null) {
-            $event->setResponse(new JsonResponse([
+            $event->setResponse($this->secureJson([
                 'error' => $this->trans('project.access_denied_to_project', [], 'Access denied to this project.'),
                 'code' => 'ACCESS_DENIED',
             ], 403));
@@ -118,7 +129,7 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
     {
         $apiToken = $this->tokenChecker->resolve($request);
         if ($apiToken === null) {
-            $event->setResponse(new JsonResponse([
+            $event->setResponse($this->secureJson([
                 'error' => $this->trans('field.admin.auth_required', [], 'Authentication required.'),
                 'code' => 'AUTH_REQUIRED',
             ], 401));
@@ -126,7 +137,7 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
         }
 
         if ($apiToken->project->uuid?->toString() !== $projectUuid) {
-            $event->setResponse(new JsonResponse([
+            $event->setResponse($this->secureJson([
                 'error' => $this->trans('project.access_denied_to_project', [], 'Access denied to this project.'),
                 'code' => 'ACCESS_DENIED',
             ], 403));
@@ -135,7 +146,7 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
 
         // Cloisonnement strict des portées selon la méthode HTTP via ApiTokenChecker
         if (!$this->tokenChecker->isAllowedForMethod($apiToken, $request->getMethod())) {
-            $event->setResponse(new JsonResponse([
+            $event->setResponse($this->secureJson([
                 'error' => $this->trans('project.insufficient_token_abilities', [], 'Insufficient token abilities.'),
                 'code' => 'INSUFFICIENT_ABILITIES',
             ], 403));

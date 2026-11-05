@@ -22,9 +22,10 @@ class SearchController extends AbstractController
     public const MAX_OFFSET = 10000;
 
     private const SECURITY_HEADERS = [
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate, private',
+        'Pragma'                 => 'no-cache',
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options'        => 'DENY',
-        'Cache-Control'          => 'no-store',
     ];
 
     public function __construct(

@@ -20,9 +20,10 @@ class NotificationController extends AbstractController
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
 
     private const SECURITY_HEADERS = [
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate, private',
+        'Pragma'                 => 'no-cache',
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options'        => 'DENY',
-        'Cache-Control'          => 'no-store',
     ];
 
     public function __construct(

@@ -3336,4 +3336,6 @@ return [
     'permission.admin.name_control_chars' => 'El nombre del permiso contiene caracteres de control no válidos.',
     'permission.admin.label_control_chars' => 'La etiqueta del permiso contiene caracteres de control no válidos.',
     'permission.admin.group_control_chars' => 'El grupo de permisos contiene caracteres de control no válidos.',
+    'backup.label_control_chars' => 'La etiqueta del respaldo contiene caracteres de control no válidos.',
+    'backup.label_invalid_characters' => 'La etiqueta del respaldo contiene caracteres no válidos.',
 ];

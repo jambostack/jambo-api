@@ -3338,4 +3338,6 @@ return [
     'permission.admin.name_control_chars' => 'يحتوي اسم الصلاحية على أحرف تحكم غير صالحة.',
     'permission.admin.label_control_chars' => 'تحتوي تسمية الصلاحية على أحرف تحكم غير صالحة.',
     'permission.admin.group_control_chars' => 'تحتوي مجموعة الصلاحيات على أحرف تحكم غير صالحة.',
+    'backup.label_control_chars' => 'يحتوي وصف النسخة الاحتياطية على أحرف تحكم غير صالحة.',
+    'backup.label_invalid_characters' => 'يحتوي وصف النسخة الاحتياطية على أحرف غير صالحة.',
 ];

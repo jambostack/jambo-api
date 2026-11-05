@@ -7,6 +7,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.132] — 2026-11-05
+
+### Security Hardening on Backup, Audit, Notifications, Search & Multi-Tenant Enforcement (Cycle #69)
+- **Backup Controller & Manager Hardening (Phase 84)**:
+  - `BackupController`:
+    - Enforced full HTTP security response headers (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store, no-cache, must-revalidate, private`, `Pragma: no-cache`) across all backup endpoints including binary download streams.
+    - Added route parameter requirements on `/{filename}/download` and `/{filename}` to reject invalid names and path traversal attempts at the routing layer.
+    - Extended rate limiting coverage to `list()`, `download()`, and `delete()` in addition to `create()` and `restore()`.
+    - Sanitized backup labels: rejected control characters/null bytes (`backup.label_control_chars`), invalid characters (`backup.label_invalid_characters`), and length overflow (> 50 chars).
+    - Hardened payload parsing with strict JSON validation (`backup.invalid_json`).
+    - Added immediate audit logging and flush for backup creation, download, restore, deletion, and unauthorized access attempts (`backup_access_denied`, `backup_delete_rejected`).
+  - `BackupManager`:
+    - Expanded `FILENAME_REGEX` to `{8,128}` to accommodate timestamped, labeled, and hashed backup filenames safely without truncation issues.
+    - Sanitized and bounded labels defensively.
+- **Audit, Notifications & Search Security Response Headers**:
+  - `AuditController`: Added `X-Frame-Options: DENY` across all audit log responses.
+  - `NotificationController`: Hardened anti-cache and security headers (`X-Frame-Options: DENY`, `Pragma: no-cache`, `Cache-Control: no-store, no-cache, must-revalidate, private`).
+  - `SearchController`: Added `Pragma: no-cache`, `Cache-Control: no-store, no-cache, must-revalidate, private` to prevent sensitive project search query leaks in browser/proxy caches.
+  - `EnsureProjectMemberSubscriber`: Applied hardened security headers (`X-Frame-Options: DENY`, `no-store`, `nosniff`) across all early termination responses (401, 403, 404).
+- **Multilingual Parity (Strict i18n Rule)**:
+  - Added new translation keys (`backup.label_control_chars`, `backup.label_invalid_characters`) with 100% parity across English (`messages.en.php`), French (`messages.fr.php`), Spanish (`messages.es.php`), and Arabic (`messages.ar.php`).
+- **Automated Testing**:
+  - Added `tests/Service/BackupManagerTest.php` (7 tests, 32 assertions).
+  - Added `tests/Controller/Admin/BackupControllerSecurityTest.php` (5 tests, 24 assertions).
+  - Added `tests/Controller/NotificationAndAuditHardeningTest.php` (3 tests, 27 assertions).
+  - 100% passing rate across all targeted and security suites.
+
 ## [1.26.131] — 2026-11-05
 
 ### Security Hardening on User Management (Users, Roles, Permissions) & Lock DSN Fallback (Cycle #68)

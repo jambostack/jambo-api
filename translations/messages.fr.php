@@ -3354,4 +3354,6 @@ return [
     'permission.admin.name_control_chars' => 'Le nom de la permission contient des caractères de contrôle non autorisés.',
     'permission.admin.label_control_chars' => 'Le libellé de la permission contient des caractères de contrôle non autorisés.',
     'permission.admin.group_control_chars' => 'Le groupe de permissions contient des caractères de contrôle non autorisés.',
+    'backup.label_control_chars' => 'Le libellé de sauvegarde contient des caractères de contrôle non autorisés.',
+    'backup.label_invalid_characters' => 'Le libellé de sauvegarde contient des caractères non autorisés.',
 ];
