@@ -7,6 +7,31 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.82] — 2026-11-05
+
+### Security, OAuth RFC 7636 PKCE & Custom Fields Hardening
+- **SocialLoginService OAuth & PKCE RFC 7636 Hardening**:
+  - Added native support for RFC 7636 PKCE (`code_challenge`, `code_challenge_method`, `code_verifier`) across Google, Microsoft, GitHub, GitLab.
+  - Strict validation on authorization code length (max 2048 chars), rejection of control characters / null bytes.
+  - Avatar URL sanitization to only permit `http://` and `https://` schemas, preventing `javascript:` and SSRF vector injection.
+  - Username sanitization with control character removal and 100 character bounds.
+  - Forwarded PKCE parameters through `EndUserAuthController::getSocialUrl` and `EndUserAuthController::socialLogin`.
+- **PasswordPolicyValidator Dynamic I18N**:
+  - Injected `TranslatorInterface` with fallback mechanism across `validate()`, `validateAdminPassword()`, and `validateRotation()`.
+  - Added 12 localized error keys under `password.policy.*` with dynamic parameter interpolation (`%min%`, `%max%`).
+- **EndUserCustomFieldsSanitizer Service & Mass-Assignment Defense**:
+  - Created standalone `EndUserCustomFieldsSanitizer` defending against prototype pollution (`__proto__`, `constructor`, `prototype`), operator injection (`$`), and internal attribute modification (`roles`, `password`, `tokenVersion`, `twoFactorSecret`).
+  - Strict limits: max depth 5, max 100 keys, max 64KB JSON payload, sanitization of null bytes and ASCII control characters.
+  - Integrated into `EndUserAdminController` (`create`, `update`) and `EndUserAuthController` (`register`, `updateMe`).
+- **EndUserAdminController I18N**:
+  - Injected `TranslatorInterface` and replaced all hardcoded responses with translatable keys under `enduser.admin.*`.
+- **Strict Translation Parity**:
+  - Added 28 new translation keys across English, French, Spanish, and Arabic dictionaries, bringing total dictionary size to **2,000 keys** with 100% parity (0 missing keys).
+- **Automated Test Suite**:
+  - Expanded test suite to **1,008 tests / 4,158 assertions / 0 failures**.
+
+---
+
 ## [1.26.81] — 2026-11-05
 
 ### Security & Strict I18N Hardening

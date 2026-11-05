@@ -112,6 +112,10 @@ class SocialLoginService
     /** @param array{clientId: string, clientSecret: string} $credentials */
     private function buildProvider(string $provider, array $credentials): AbstractProvider
     {
+        if (!isset(self::PROVIDER_CONFIG[$provider])) {
+            throw new \InvalidArgumentException("Unknown provider: $provider");
+        }
+
         $cfg = self::PROVIDER_CONFIG[$provider];
         $class = $cfg['class'];
 
@@ -137,11 +141,25 @@ class SocialLoginService
 
     /**
      * Génère l'URL d'autorisation OAuth et renvoie également l'état CSRF (state).
+     * Supporte PKCE RFC 7636 via code_challenge et code_challenge_method.
      *
      * @return array{url: string, state: string}
      */
-    public function getAuthorizationUrlAndState(string $provider, string $redirectUri, ?array $config = null): array
-    {
+    public function getAuthorizationUrlAndState(
+        string $provider,
+        string $redirectUri,
+        ?array $config = null,
+        ?string $codeChallenge = null,
+        string $codeChallengeMethod = 'S256',
+    ): array {
+        if (!isset(self::PROVIDER_CONFIG[$provider])) {
+            throw new \InvalidArgumentException("Unknown provider: $provider");
+        }
+
+        if ($codeChallenge !== null && !preg_match('/^[A-Za-z0-9\-._~]{43,128}$/', $codeChallenge)) {
+            throw new \InvalidArgumentException('Invalid PKCE code_challenge format.');
+        }
+
         $oauthProvider = $config
             ? $this->buildProvider($provider, $config)
             : $this->getProviderForAdmin($provider);
@@ -151,7 +169,15 @@ class SocialLoginService
         }
 
         $cfg = self::PROVIDER_CONFIG[$provider];
-        $url = $oauthProvider->getAuthorizationUrl(['scope' => $cfg['scopes']]);
+        $options = ['scope' => $cfg['scopes']];
+        if ($codeChallenge !== null) {
+            $options['code_challenge'] = $codeChallenge;
+            $options['code_challenge_method'] = in_array(strtoupper($codeChallengeMethod), ['S256', 'PLAIN'], true)
+                ? strtoupper($codeChallengeMethod)
+                : 'S256';
+        }
+
+        $url = $oauthProvider->getAuthorizationUrl($options);
         $state = (string) $oauthProvider->getState();
 
         return [
@@ -167,8 +193,29 @@ class SocialLoginService
 
     // ─── User from Provider ────────────────────────────────────────────────
 
-    public function getUserFromProvider(string $provider, string $code, string $redirectUri, ?array $config = null): SocialUser
-    {
+    /**
+     * Échange le code d'autorisation contre un token et récupère le profil utilisateur.
+     * Supporte la validation PKCE RFC 7636 avec code_verifier.
+     */
+    public function getUserFromProvider(
+        string $provider,
+        string $code,
+        string $redirectUri,
+        ?array $config = null,
+        ?string $codeVerifier = null,
+    ): SocialUser {
+        if (!isset(self::PROVIDER_CONFIG[$provider])) {
+            throw new \InvalidArgumentException("Unknown provider: $provider");
+        }
+
+        if (strlen($code) < 1 || strlen($code) > 2048 || preg_match('/[\x00-\x1F\x7F]/', $code)) {
+            throw new \InvalidArgumentException('Invalid authorization code format.');
+        }
+
+        if ($codeVerifier !== null && !preg_match('/^[A-Za-z0-9\-._~]{43,128}$/', $codeVerifier)) {
+            throw new \InvalidArgumentException('Invalid PKCE code_verifier format.');
+        }
+
         $oauthProvider = $config
             ? $this->buildProvider($provider, $config)
             : $this->getProviderForAdmin($provider);
@@ -177,7 +224,12 @@ class SocialLoginService
             throw new \RuntimeException("Provider '$provider' is not configured.");
         }
 
-        $token = $oauthProvider->getAccessToken('authorization_code', ['code' => $code, 'redirect_uri' => $redirectUri]);
+        $tokenParams = ['code' => $code, 'redirect_uri' => $redirectUri];
+        if ($codeVerifier !== null) {
+            $tokenParams['code_verifier'] = $codeVerifier;
+        }
+
+        $token = $oauthProvider->getAccessToken('authorization_code', $tokenParams);
         $owner = $oauthProvider->getResourceOwner($token);
 
         return $this->mapToSocialUser($provider, $owner);
@@ -190,30 +242,47 @@ class SocialLoginService
         return match ($provider) {
             'google' => new SocialUser(
                 providerId: (string) ($data['sub'] ?? ''),
-                email:      (string) ($data['email'] ?? ''),
-                username:   (string) ($data['name'] ?? ''),
-                avatarUrl:  $data['picture'] ?? null,
+                email:      strtolower(trim((string) ($data['email'] ?? ''))),
+                username:   $this->sanitizeUsername((string) ($data['name'] ?? '')),
+                avatarUrl:  $this->sanitizeAvatarUrl($data['picture'] ?? null),
             ),
             'microsoft' => new SocialUser(
                 providerId: (string) ($data['oid'] ?? ''),
-                email:      (string) ($data['email'] ?? ($data['userPrincipalName'] ?? '')),
-                username:   (string) ($data['displayName'] ?? ($data['name'] ?? '')),
+                email:      strtolower(trim((string) ($data['email'] ?? ($data['userPrincipalName'] ?? '')))),
+                username:   $this->sanitizeUsername((string) ($data['displayName'] ?? ($data['name'] ?? ''))),
                 avatarUrl:  null,
             ),
             'github' => new SocialUser(
                 providerId: (string) ($data['id'] ?? ''),
-                email:      (string) ($data['email'] ?? ''),
-                username:   (string) ($data['login'] ?? ''),
-                avatarUrl:  $data['avatar_url'] ?? null,
+                email:      strtolower(trim((string) ($data['email'] ?? ''))),
+                username:   $this->sanitizeUsername((string) ($data['login'] ?? '')),
+                avatarUrl:  $this->sanitizeAvatarUrl($data['avatar_url'] ?? null),
             ),
             'gitlab' => new SocialUser(
                 providerId: (string) ($data['id'] ?? ''),
-                email:      (string) ($data['email'] ?? ''),
-                username:   (string) ($data['username'] ?? ''),
-                avatarUrl:  $data['avatar_url'] ?? null,
+                email:      strtolower(trim((string) ($data['email'] ?? ''))),
+                username:   $this->sanitizeUsername((string) ($data['username'] ?? '')),
+                avatarUrl:  $this->sanitizeAvatarUrl($data['avatar_url'] ?? null),
             ),
             default => throw new \InvalidArgumentException("Unknown provider: $provider"),
         };
+    }
+
+    private function sanitizeUsername(string $username): string
+    {
+        $clean = preg_replace('/[\x00-\x1F\x7F]/', '', trim($username));
+        return mb_substr($clean ?? '', 0, 100);
+    }
+
+    private function sanitizeAvatarUrl(?string $url): ?string
+    {
+        if ($url === null || $url === '') {
+            return null;
+        }
+        if (!filter_var($url, FILTER_VALIDATE_URL) || !preg_match('#^https?://#i', $url)) {
+            return null;
+        }
+        return $url;
     }
 
     // ─── Admin User ────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ use App\Repository\EndUserRepository;
 use App\Repository\ProjectAuthRefreshTokenRepository;
 use App\Repository\ProjectAuthSessionRepository;
 use App\Repository\ProjectRepository;
+use App\Service\EndUserCustomFieldsSanitizer;
 use App\Service\EndUserJwtService;
 use App\Service\ProjectMailerService;
 use App\Service\Security\PasswordPolicyValidator;
@@ -59,7 +60,10 @@ class EndUserAuthController extends AbstractController
         #[Autowire(service: 'limiter.password_reset_limiter')]
         private ?RateLimiterFactory $passwordResetLimiter = null,
         private readonly ?TranslatorInterface $translator = null,
-    ) {}
+        private ?EndUserCustomFieldsSanitizer $customFieldsSanitizer = null,
+    ) {
+        $this->customFieldsSanitizer ??= new EndUserCustomFieldsSanitizer($this->translator);
+    }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
@@ -114,7 +118,25 @@ class EndUserAuthController extends AbstractController
         }
         $email = $data['email'] ?? '';
         $password = $data['password'] ?? '';
-        $username = $data['username'] ?? $data['name'] ?? null;
+        $rawUsername = $data['username'] ?? $data['name'] ?? null;
+        $username = null;
+        if ($rawUsername !== null && $rawUsername !== '') {
+            $cleaned = trim((string) $rawUsername);
+            if (mb_strlen($cleaned) > 100 || preg_match('/[\x00-\x1F\x7F]/', $cleaned)) {
+                return $this->json(['error' => $this->trans('enduser.auth.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
+            }
+            $username = $cleaned !== '' ? $cleaned : null;
+        }
+
+        $sanitizedCustomFields = null;
+        if (isset($data['custom_fields'])) {
+            $sanitizer = $this->customFieldsSanitizer ?? new EndUserCustomFieldsSanitizer($this->translator);
+            $cfRes = $sanitizer->sanitize($data['custom_fields']);
+            if (!$cfRes['valid']) {
+                return $this->json(['error' => $cfRes['error']], 422);
+            }
+            $sanitizedCustomFields = $cfRes['sanitized'];
+        }
 
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return $this->json(['error' => $this->trans('enduser.auth.email_required', [], 'Valid email is required')], 422);
@@ -135,6 +157,9 @@ class EndUserAuthController extends AbstractController
         $endUser->username = $username;
         $endUser->password = $this->hasher->hashPassword($endUser, $password);
         $endUser->passwordChangedAt = new \DateTimeImmutable();
+        if ($sanitizedCustomFields !== null) {
+            $endUser->customFields = $sanitizedCustomFields;
+        }
 
         $this->em->persist($endUser);
         $this->em->flush();
@@ -505,12 +530,30 @@ class EndUserAuthController extends AbstractController
         }
 
         if (isset($data['username'])) {
-            $endUser->username = $data['username'];
+            $cleaned = trim((string) $data['username']);
+            if ($cleaned !== '') {
+                if (mb_strlen($cleaned) > 100 || preg_match('/[\x00-\x1F\x7F]/', $cleaned)) {
+                    return $this->json(['error' => $this->trans('enduser.auth.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
+                }
+            }
+            $endUser->username = $cleaned !== '' ? $cleaned : null;
         } elseif (isset($data['name'])) {
-            $endUser->username = $data['name'];
+            $cleaned = trim((string) $data['name']);
+            if ($cleaned !== '') {
+                if (mb_strlen($cleaned) > 100 || preg_match('/[\x00-\x1F\x7F]/', $cleaned)) {
+                    return $this->json(['error' => $this->trans('enduser.auth.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
+                }
+            }
+            $endUser->username = $cleaned !== '' ? $cleaned : null;
         }
+
         if (isset($data['custom_fields'])) {
-            $endUser->customFields = $data['custom_fields'];
+            $sanitizer = $this->customFieldsSanitizer ?? new EndUserCustomFieldsSanitizer($this->translator);
+            $cfRes = $sanitizer->sanitize($data['custom_fields']);
+            if (!$cfRes['valid']) {
+                return $this->json(['error' => $cfRes['error']], 422);
+            }
+            $endUser->customFields = $cfRes['sanitized'];
         }
         if (isset($data['password'])) {
             $newPassword = (string) $data['password'];
@@ -837,9 +880,17 @@ class EndUserAuthController extends AbstractController
         }
 
         $redirectUri = $request->getSchemeAndHttpHost() . "/api/{$projectId}/auth/social/{$provider}";
+        $codeChallenge = $request->query->get('code_challenge');
+        $codeChallengeMethod = $request->query->get('code_challenge_method', 'S256');
 
         try {
-            $data = $this->socialLogin->getAuthorizationUrlAndState($provider, $redirectUri, $credentials);
+            $data = $this->socialLogin->getAuthorizationUrlAndState(
+                $provider,
+                $redirectUri,
+                $credentials,
+                is_string($codeChallenge) && $codeChallenge !== '' ? $codeChallenge : null,
+                is_string($codeChallengeMethod) ? $codeChallengeMethod : 'S256',
+            );
             return $this->json($data);
         } catch (\Throwable $e) {
             return $this->json(['error' => $e->getMessage()], 400);
@@ -901,7 +952,10 @@ class EndUserAuthController extends AbstractController
         if ($data instanceof JsonResponse) {
             return $data;
         }
-        $code = $data['code'] ?? '';
+        $code = (string) ($data['code'] ?? '');
+        $codeVerifier = isset($data['code_verifier']) && is_string($data['code_verifier']) && $data['code_verifier'] !== ''
+            ? $data['code_verifier']
+            : null;
 
         if (empty($code)) {
             return $this->json(['error' => $this->trans('enduser.auth.social_code_required', [], 'Authorization code is required')], 422);
@@ -923,6 +977,7 @@ class EndUserAuthController extends AbstractController
                 $code,
                 $redirectUri,
                 $credentials,
+                $codeVerifier,
             );
 
             $endUser = $this->socialLogin->findOrCreateEndUser($project, $socialUser, $provider);

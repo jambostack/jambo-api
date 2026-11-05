@@ -2185,4 +2185,39 @@ return [
     'enduser.auth.social_code_required'       => 'Le code d\'autorisation OAuth est requis.',
     'enduser.auth.social_login_failed'        => 'Échec de la connexion sociale : %message%',
     'enduser.auth.payload_too_large'          => 'Données de requête trop volumineuses (max 1 Mo).',
+    'enduser.auth.invalid_username'           => 'Format de nom d\'utilisateur invalide ou trop long (100 caractères maximum).',
+
+    // Password Policy
+    'password.policy.min_length'              => 'Le mot de passe doit comporter au moins %min% caractères.',
+    'password.policy.max_length'              => 'Le mot de passe ne doit pas dépasser %max% caractères.',
+    'password.policy.require_lowercase'       => 'Le mot de passe doit inclure au moins une lettre minuscule.',
+    'password.policy.require_uppercase'       => 'Le mot de passe doit inclure au moins une lettre majuscule.',
+    'password.policy.require_number'          => 'Le mot de passe doit inclure au moins un chiffre.',
+    'password.policy.too_common'              => 'Le mot de passe est trop courant ou facile à deviner.',
+    'password.policy.contains_email'          => 'Le mot de passe ne peut pas contenir le préfixe de votre adresse e-mail.',
+    'password.policy.contains_username'       => 'Le mot de passe ne peut pas contenir votre nom d\'utilisateur.',
+    'password.policy.contains_name'           => 'Le mot de passe ne peut pas contenir votre nom.',
+    'password.policy.current_required'        => 'Le mot de passe actuel est requis pour changer de mot de passe.',
+    'password.policy.current_incorrect'       => 'Le mot de passe actuel est incorrect.',
+    'password.policy.must_differ'             => 'Le nouveau mot de passe doit être différent du mot de passe actuel.',
+
+    // EndUser Custom Fields Sanitization
+    'enduser.custom_fields.must_be_object'    => 'Les champs personnalisés doivent être un objet clé-valeur valide.',
+    'enduser.custom_fields.too_large'         => 'Les champs personnalisés dépassent la taille maximale autorisée (64 Ko).',
+    'enduser.custom_fields.max_depth_exceeded'=> 'L\'imbrication des champs personnalisés dépasse la profondeur maximale de 5.',
+    'enduser.custom_fields.too_many_keys'     => 'Les champs personnalisés contiennent trop d\'entrées (100 maximum).',
+    'enduser.custom_fields.key_too_long'      => 'Le nom du champ personnalisé dépasse la longueur maximale de 64 caractères.',
+    'enduser.custom_fields.invalid_key_name'  => 'Clé de champ personnalisé invalide "%key%".',
+    'enduser.custom_fields.forbidden_key'     => 'La clé de champ "%key%" est réservée et ne peut pas être modifiée.',
+
+    // EndUser Admin CRUD
+    'enduser.admin.not_found'                 => 'Introuvable',
+    'enduser.admin.invalid_json'              => 'JSON invalide',
+    'enduser.admin.valid_email_required'      => 'Une adresse e-mail valide est requise',
+    'enduser.admin.password_min_length'       => 'Le mot de passe doit comporter au moins %min% caractères',
+    'enduser.admin.invalid_status'            => 'Statut invalide',
+    'enduser.admin.invalid_username'          => 'Format de nom d\'utilisateur invalide ou trop long (100 caractères maximum).',
+    'enduser.admin.email_already_registered'  => 'Adresse e-mail déjà enregistrée',
+    'enduser.admin.email_already_taken'       => 'Adresse e-mail déjà utilisée',
+    'enduser.admin.invalid_email'             => 'Adresse e-mail invalide',
 ];

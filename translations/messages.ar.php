@@ -2167,4 +2167,39 @@ return [
     'enduser.auth.social_code_required'       => 'رمز ترخيص OAuth مطلوب.',
     'enduser.auth.social_login_failed'        => 'فشل تسجيل الدخول الاجتماعي: %message%',
     'enduser.auth.payload_too_large'          => 'الطلب أكبر من الحد المسموح به (1 ميغابايت كحد أقصى).',
+    'enduser.auth.invalid_username'           => 'تنسيق اسم المستخدم غير صالح أو طويل جدًا (بحد أقصى 100 حرف).',
+
+    // Password Policy
+    'password.policy.min_length'              => 'يجب أن تتكون كلمة المرور من %min% أحرف على الأقل.',
+    'password.policy.max_length'              => 'يجب ألا تتجاوز كلمة المرور %max% حرفًا.',
+    'password.policy.require_lowercase'       => 'يجب أن تحتوي كلمة المرور على حرف صغير واحد على الأقل.',
+    'password.policy.require_uppercase'       => 'يجب أن تحتوي كلمة المرور على حرف كبير واحد على الأقل.',
+    'password.policy.require_number'          => 'يجب أن تحتوي كلمة المرور على رقم واحد على الأقل.',
+    'password.policy.too_common'              => 'كلمة المرور شائعة جدًا أو سهلة التخمين.',
+    'password.policy.contains_email'          => 'لا يمكن أن تحتوي كلمة المرور على بادئة بريدك الإلكتروني.',
+    'password.policy.contains_username'       => 'لا يمكن أن تحتوي كلمة المرور على اسم المستخدم الخاص بك.',
+    'password.policy.contains_name'           => 'لا يمكن أن تحتوي كلمة المرور على اسمك.',
+    'password.policy.current_required'        => 'كلمة المرور الحالية مطلوبة لتغيير كلمة المرور.',
+    'password.policy.current_incorrect'       => 'كلمة المرور الحالية غير صحيحة.',
+    'password.policy.must_differ'             => 'يجب أن تكون كلمة المرور الجديدة مختلفة عن كلمة المرور الحالية.',
+
+    // EndUser Custom Fields Sanitization
+    'enduser.custom_fields.must_be_object'    => 'يجب أن تكون الحقول المخصصة كائن مفتاح-قيمة صالحًا.',
+    'enduser.custom_fields.too_large'         => 'تتجاوز الحقول المخصصة الحجم الأقصى المسموح به (64 كيلوبايت).',
+    'enduser.custom_fields.max_depth_exceeded'=> 'تجاوز تداخل الحقول المخصصة الحد الأقصى للعمق وهو 5.',
+    'enduser.custom_fields.too_many_keys'     => 'تحتوي الحقول المخصصة على عدد كبير جدًا من المدخلات (بحد أقصى 100).',
+    'enduser.custom_fields.key_too_long'      => 'يتجاوز اسم الحقل المخصص الحد الأقصى للطول وهو 64 حرفًا.',
+    'enduser.custom_fields.invalid_key_name'  => 'مفتاح حقل مخصص غير صالح "%key%".',
+    'enduser.custom_fields.forbidden_key'     => 'مفتاح الحقل "%key%" محجوز ولا يمكن تعديله.',
+
+    // EndUser Admin CRUD
+    'enduser.admin.not_found'                 => 'غير موجود',
+    'enduser.admin.invalid_json'              => 'JSON غير صالح',
+    'enduser.admin.valid_email_required'      => 'البريد الإلكتروني الصالح مطلوب',
+    'enduser.admin.password_min_length'       => 'يجب أن تتكون كلمة المرور من %min% أحرف على الأقل',
+    'enduser.admin.invalid_status'            => 'حالة غير صالحة',
+    'enduser.admin.invalid_username'          => 'تنسيق اسم المستخدم غير صالح أو طويل جدًا (بحد أقصى 100 حرف).',
+    'enduser.admin.email_already_registered'  => 'البريد الإلكتروني مسجل بالفعل',
+    'enduser.admin.email_already_taken'       => 'البريد الإلكتروني مأخوذ بالفعل',
+    'enduser.admin.invalid_email'             => 'بريد إلكتروني غير صالح',
 ];

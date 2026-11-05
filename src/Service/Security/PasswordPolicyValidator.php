@@ -8,6 +8,7 @@ use App\Entity\EndUser;
 use App\Entity\Project;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Validateur de politique de complexité, rotation et cycle de vie des mots de passe.
@@ -35,6 +36,22 @@ class PasswordPolicyValidator
         'administrator', 'adminadmin', 'jamboadmin',
     ];
 
+    public function __construct(
+        private ?TranslatorInterface $translator = null,
+    ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($key, $params);
+            if ($translated !== $key) {
+                return $translated;
+            }
+        }
+
+        return strtr($default !== '' ? $default : $key, $params);
+    }
+
     /**
      * Valide un mot de passe vis-à-vis des critères de sécurité EndUser.
      *
@@ -53,43 +70,43 @@ class PasswordPolicyValidator
 
         // 1. Longueur minimale & maximale
         if ($length < $minLength) {
-            $errors[] = sprintf('Password must be at least %d characters.', $minLength);
+            $errors[] = $this->trans('password.policy.min_length', ['%min%' => (string) $minLength], 'Password must be at least %min% characters.');
         }
 
         if ($length > self::MAX_LENGTH) {
-            $errors[] = sprintf('Password must not exceed %d characters.', self::MAX_LENGTH);
+            $errors[] = $this->trans('password.policy.max_length', ['%max%' => (string) self::MAX_LENGTH], 'Password must not exceed %max% characters.');
         }
 
         // 2. Diversité de caractères : si explicitement demandée par les options du projet
         $requireComplexity = (bool) ($securityConfig['requirePasswordComplexity'] ?? false);
         if ($requireComplexity && $length >= $minLength) {
             if (!preg_match('/[a-z]/', $password)) {
-                $errors[] = 'Password must include at least one lowercase letter.';
+                $errors[] = $this->trans('password.policy.require_lowercase', [], 'Password must include at least one lowercase letter.');
             }
             if (!preg_match('/[A-Z]/', $password)) {
-                $errors[] = 'Password must include at least one uppercase letter.';
+                $errors[] = $this->trans('password.policy.require_uppercase', [], 'Password must include at least one uppercase letter.');
             }
             if (!preg_match('/[0-9]/', $password)) {
-                $errors[] = 'Password must include at least one number.';
+                $errors[] = $this->trans('password.policy.require_number', [], 'Password must include at least one number.');
             }
 
             $normalized = strtolower(trim($password));
             if (in_array($normalized, self::COMMON_PASSWORDS, true)) {
-                $errors[] = 'Password is too common or easily guessable.';
+                $errors[] = $this->trans('password.policy.too_common', [], 'Password is too common or easily guessable.');
             }
 
             if ($email !== null && $email !== '') {
                 $emailParts = explode('@', strtolower($email));
                 $localPart = $emailParts[0] ?? '';
                 if (strlen($localPart) >= 4 && str_contains($normalized, $localPart)) {
-                    $errors[] = 'Password cannot contain your email prefix.';
+                    $errors[] = $this->trans('password.policy.contains_email', [], 'Password cannot contain your email prefix.');
                 }
             }
 
             if ($username !== null && strlen($username) >= 4) {
                 $normalizedUser = strtolower(trim($username));
                 if (str_contains($normalized, $normalizedUser)) {
-                    $errors[] = 'Password cannot contain your username.';
+                    $errors[] = $this->trans('password.policy.contains_username', [], 'Password cannot contain your username.');
                 }
             }
         }
@@ -120,42 +137,42 @@ class PasswordPolicyValidator
         }
 
         if ($length < $minLength) {
-            $errors[] = sprintf('Password must be at least %d characters.', $minLength);
+            $errors[] = $this->trans('password.policy.min_length', ['%min%' => (string) $minLength], 'Password must be at least %min% characters.');
         }
 
         if ($length > self::MAX_LENGTH) {
-            $errors[] = sprintf('Password must not exceed %d characters.', self::MAX_LENGTH);
+            $errors[] = $this->trans('password.policy.max_length', ['%max%' => (string) self::MAX_LENGTH], 'Password must not exceed %max% characters.');
         }
 
         $normalized = strtolower(trim($password));
         if (in_array($normalized, self::COMMON_PASSWORDS, true)) {
-            $errors[] = 'Password is too common or easily guessable.';
+            $errors[] = $this->trans('password.policy.too_common', [], 'Password is too common or easily guessable.');
         }
 
         if ($email !== null && $email !== '') {
             $emailParts = explode('@', strtolower($email));
             $localPart = $emailParts[0] ?? '';
             if (strlen($localPart) >= 4 && str_contains($normalized, $localPart)) {
-                $errors[] = 'Password cannot contain your email prefix.';
+                $errors[] = $this->trans('password.policy.contains_email', [], 'Password cannot contain your email prefix.');
             }
         }
 
         if ($name !== null && strlen($name) >= 4) {
             $normalizedName = strtolower(trim($name));
             if (str_contains($normalized, $normalizedName)) {
-                $errors[] = 'Password cannot contain your name.';
+                $errors[] = $this->trans('password.policy.contains_name', [], 'Password cannot contain your name.');
             }
         }
 
         if ($requireComplexity && $length >= $minLength) {
             if (!preg_match('/[a-z]/', $password)) {
-                $errors[] = 'Password must include at least one lowercase letter.';
+                $errors[] = $this->trans('password.policy.require_lowercase', [], 'Password must include at least one lowercase letter.');
             }
             if (!preg_match('/[A-Z]/', $password)) {
-                $errors[] = 'Password must include at least one uppercase letter.';
+                $errors[] = $this->trans('password.policy.require_uppercase', [], 'Password must include at least one uppercase letter.');
             }
             if (!preg_match('/[0-9]/', $password)) {
-                $errors[] = 'Password must include at least one number.';
+                $errors[] = $this->trans('password.policy.require_number', [], 'Password must include at least one number.');
             }
         }
 
@@ -182,16 +199,16 @@ class PasswordPolicyValidator
         if ($existingHash !== null && $existingHash !== '') {
             if ($requireCurrentPassword) {
                 if ($currentPassword === null || $currentPassword === '') {
-                    return ['valid' => false, 'error' => 'Current password is required to change password.'];
+                    return ['valid' => false, 'error' => $this->trans('password.policy.current_required', [], 'Current password is required to change password.')];
                 }
 
                 if (!$hasher->isPasswordValid($user, $currentPassword)) {
-                    return ['valid' => false, 'error' => 'Current password is incorrect.'];
+                    return ['valid' => false, 'error' => $this->trans('password.policy.current_incorrect', [], 'Current password is incorrect.')];
                 }
             }
 
             if ($hasher->isPasswordValid($user, $newPassword)) {
-                return ['valid' => false, 'error' => 'New password must be different from current password.'];
+                return ['valid' => false, 'error' => $this->trans('password.policy.must_differ', [], 'New password must be different from current password.')];
             }
         }
 

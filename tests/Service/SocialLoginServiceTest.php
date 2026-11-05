@@ -179,4 +179,62 @@ class SocialLoginServiceTest extends TestCase
         $this->assertIsArray($linked);
         $this->assertEmpty($linked, 'Un utilisateur sans connexion sociale ne doit avoir aucun provider lie');
     }
+
+    public function testPkceChallengeIncludedInAuthorizationUrl(): void
+    {
+        $service = $this->createServiceWithGoogleConfig();
+        $codeChallenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+
+        $authData = $service->getAuthorizationUrlAndState(
+            'google',
+            'https://example.com/callback',
+            null,
+            $codeChallenge,
+            'S256'
+        );
+
+        $this->assertStringContainsString('code_challenge=' . $codeChallenge, $authData['url']);
+        $this->assertStringContainsString('code_challenge_method=S256', $authData['url']);
+    }
+
+    public function testPkceRejectsInvalidChallenge(): void
+    {
+        $service = $this->createServiceWithGoogleConfig();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid PKCE code_challenge format.');
+
+        $service->getAuthorizationUrlAndState(
+            'google',
+            'https://example.com/callback',
+            null,
+            'too-short'
+        );
+    }
+
+    public function testGetUserFromProviderRejectsInvalidCodeFormat(): void
+    {
+        $service = $this->createServiceWithGoogleConfig();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid authorization code format.');
+
+        $service->getUserFromProvider('google', "code\0with-null-byte", 'https://example.com/callback');
+    }
+
+    public function testGetUserFromProviderRejectsInvalidCodeVerifier(): void
+    {
+        $service = $this->createServiceWithGoogleConfig();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid PKCE code_verifier format.');
+
+        $service->getUserFromProvider(
+            'google',
+            'valid-code-12345',
+            'https://example.com/callback',
+            null,
+            'invalid/verifier/chars'
+        );
+    }
 }

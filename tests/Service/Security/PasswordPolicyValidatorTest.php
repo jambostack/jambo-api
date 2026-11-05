@@ -199,4 +199,33 @@ class PasswordPolicyValidatorTest extends TestCase
         $this->assertSame(95, $this->validator->getPasswordAgeDays($old));
         $this->assertTrue($this->validator->isPasswordExpired($old, 90));
     }
+
+    public function testTranslatorReturnsLocalizedMessages(): void
+    {
+        $translator = $this->createMock(\Symfony\Contracts\Translation\TranslatorInterface::class);
+        $translator->method('trans')->willReturnCallback(function (string $id, array $params = []) {
+            if ($id === 'password.policy.min_length') {
+                return 'Le mot de passe doit comporter au moins ' . ($params['%min%'] ?? '8') . ' caractères.';
+            }
+            if ($id === 'password.policy.current_incorrect') {
+                return 'Le mot de passe actuel est incorrect.';
+            }
+            return $id;
+        });
+
+        $validatorWithTranslator = new PasswordPolicyValidator($translator);
+
+        $res = $validatorWithTranslator->validate('short');
+        $this->assertFalse($res['valid']);
+        $this->assertContains('Le mot de passe doit comporter au moins 8 caractères.', $res['errors']);
+
+        $user = new EndUser(new Project(), 'test@example.com');
+        $user->password = '$2y$13$hashed';
+        $hasher = $this->createMock(UserPasswordHasherInterface::class);
+        $hasher->method('isPasswordValid')->willReturn(false);
+
+        $rot = $validatorWithTranslator->validateRotation('wrong', 'NewPass123!', $user, $hasher);
+        $this->assertFalse($rot['valid']);
+        $this->assertSame('Le mot de passe actuel est incorrect.', $rot['error']);
+    }
 }

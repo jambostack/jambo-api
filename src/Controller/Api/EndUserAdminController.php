@@ -7,6 +7,7 @@ use App\Repository\EndUserRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\EndUserCustomFieldsSanitizer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use App\Controller\Api\ProjectAwareControllerTrait;
@@ -15,6 +16,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Admin CRUD for EndUsers — JSON API used by admin UI (Inertia) AND CRM apps via ApiToken.
@@ -34,7 +36,19 @@ class EndUserAdminController extends AbstractController
         private UserPasswordHasherInterface $hasher,
         private ?\App\Repository\ProjectAuthSessionRepository $sessionRepo = null,
         private ?\App\Repository\ProjectAuthRefreshTokenRepository $refreshTokenRepo = null,
-    ) {}
+        private ?TranslatorInterface $translator = null,
+        private ?EndUserCustomFieldsSanitizer $customFieldsSanitizer = null,
+    ) {
+        $this->customFieldsSanitizer ??= new EndUserCustomFieldsSanitizer($this->translator);
+    }
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default !== null ? strtr($default, $parameters) : $id;
+    }
 
     // ─── LIST ────────────────────────────────────────────────────────────────
 
@@ -107,7 +121,7 @@ class EndUserAdminController extends AbstractController
         if ($project instanceof JsonResponse) return $project;
 
         $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
-        if (!$endUser) return $this->json(['error' => 'Not found'], 404);
+        if (!$endUser) return $this->json(['error' => $this->trans('enduser.admin.not_found', [], 'Not found')], 404);
 
         return $this->json(['data' => $this->serializeUser($endUser)]);
     }
@@ -123,45 +137,51 @@ class EndUserAdminController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->trans('enduser.admin.invalid_json', [], 'Invalid JSON')], 400);
         }
-        $email    = trim($data['email'] ?? '');
-        $password = $data['password'] ?? '';
-        $username = trim($data['username'] ?? '');
-        $status   = $data['status'] ?? 'active';
+        $email    = trim((string) ($data['email'] ?? ''));
+        $password = (string) ($data['password'] ?? '');
+        $rawUsername = $data['username'] ?? '';
+        $username = trim((string) $rawUsername);
+        $status   = (string) ($data['status'] ?? 'active');
         $customFields = $data['custom_fields'] ?? null;
 
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return $this->json(['error' => 'Valid email is required'], 422);
+            return $this->json(['error' => $this->trans('enduser.admin.valid_email_required', [], 'Valid email is required')], 422);
         }
         if (strlen($password) < 6) {
-            return $this->json(['error' => 'Password must be at least 6 characters'], 422);
+            return $this->json(['error' => $this->trans('enduser.admin.password_min_length', ['%min%' => '6'], 'Password must be at least 6 characters')], 422);
         }
         if (!in_array($status, ['active', 'banned', 'pending'], true)) {
-            return $this->json(['error' => 'Invalid status'], 422);
+            return $this->json(['error' => $this->trans('enduser.admin.invalid_status', [], 'Invalid status')], 422);
         }
         if ($username !== '') {
             if (mb_strlen($username) > 100 || preg_match('/[\x00-\x1F\x7F]/', $username)) {
-                return $this->json(['error' => 'Invalid username format or too long (max 100 characters).'], 422);
+                return $this->json(['error' => $this->trans('enduser.admin.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
             }
         }
+
+        $sanitizedCustomFields = null;
         if ($customFields !== null) {
-            if (!is_array($customFields) || strlen(json_encode($customFields) ?: '') > 65536) {
-                return $this->json(['error' => 'Custom fields must be a valid object (max 64KB).'], 422);
+            $sanitizer = $this->customFieldsSanitizer ?? new EndUserCustomFieldsSanitizer($this->translator);
+            $cfRes = $sanitizer->sanitize($customFields);
+            if (!$cfRes['valid']) {
+                return $this->json(['error' => $cfRes['error']], 422);
             }
+            $sanitizedCustomFields = $cfRes['sanitized'];
         }
 
         $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $email);
         if ($existing) {
-            return $this->json(['error' => 'Email already registered'], 409);
+            return $this->json(['error' => $this->trans('enduser.admin.email_already_registered', [], 'Email already registered')], 409);
         }
 
         $endUser = new EndUser($project, $email);
         $endUser->username = $username !== '' ? $username : null;
         $endUser->status = $status;
         $endUser->password = $this->hasher->hashPassword($endUser, $password);
-        if ($customFields !== null) {
-            $endUser->customFields = (array) $customFields;
+        if ($sanitizedCustomFields !== null) {
+            $endUser->customFields = $sanitizedCustomFields;
         }
 
         $this->em->persist($endUser);
@@ -179,58 +199,61 @@ class EndUserAdminController extends AbstractController
         if ($project instanceof JsonResponse) return $project;
 
         $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
-        if (!$endUser) return $this->json(['error' => 'Not found'], 404);
+        if (!$endUser) return $this->json(['error' => $this->trans('enduser.admin.not_found', [], 'Not found')], 404);
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->trans('enduser.admin.invalid_json', [], 'Invalid JSON')], 400);
         }
 
         if (isset($data['email'])) {
-            $email = trim($data['email']);
+            $email = trim((string) $data['email']);
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                return $this->json(['error' => 'Invalid email'], 422);
+                return $this->json(['error' => $this->trans('enduser.admin.invalid_email', [], 'Invalid email')], 422);
             }
             $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $email);
             if ($existing && $existing->uuid->toString() !== $endUserUuid) {
-                return $this->json(['error' => 'Email already taken'], 409);
+                return $this->json(['error' => $this->trans('enduser.admin.email_already_taken', [], 'Email already taken')], 409);
             }
             $endUser->email = $email;
         }
         if (isset($data['username'])) {
-            $cleanUser = trim($data['username']);
+            $cleanUser = trim((string) $data['username']);
             if ($cleanUser !== '') {
                 if (mb_strlen($cleanUser) > 100 || preg_match('/[\x00-\x1F\x7F]/', $cleanUser)) {
-                    return $this->json(['error' => 'Invalid username format or too long (max 100 characters).'], 422);
+                    return $this->json(['error' => $this->trans('enduser.admin.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
                 }
             }
             $endUser->username = $cleanUser ?: null;
         }
         if (isset($data['status'])) {
-            if (!in_array($data['status'], ['active', 'banned', 'pending'], true)) {
-                return $this->json(['error' => 'Invalid status'], 422);
+            $statusVal = (string) $data['status'];
+            if (!in_array($statusVal, ['active', 'banned', 'pending'], true)) {
+                return $this->json(['error' => $this->trans('enduser.admin.invalid_status', [], 'Invalid status')], 422);
             }
-            $endUser->status = $data['status'];
-            if ($data['status'] === 'banned') {
+            $endUser->status = $statusVal;
+            if ($statusVal === 'banned') {
                 $endUser->tokenVersion++;
                 $this->sessionRepo?->revokeAllForEndUser($endUser);
                 $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
             }
         }
         if (isset($data['custom_fields'])) {
-            $cf = $data['custom_fields'];
-            if (!is_array($cf) || strlen(json_encode($cf) ?: '') > 65536) {
-                return $this->json(['error' => 'Custom fields must be a valid object (max 64KB).'], 422);
+            $sanitizer = $this->customFieldsSanitizer ?? new EndUserCustomFieldsSanitizer($this->translator);
+            $cfRes = $sanitizer->sanitize($data['custom_fields']);
+            if (!$cfRes['valid']) {
+                return $this->json(['error' => $cfRes['error']], 422);
             }
-            $endUser->customFields = (array) $cf;
+            $endUser->customFields = $cfRes['sanitized'];
         }
         // Reset password (admin-initiated)
         if (!empty($data['password'] ?? '')) {
-            if (strlen($data['password']) < 6) {
-                return $this->json(['error' => 'Password must be at least 6 characters'], 422);
+            $pwd = (string) $data['password'];
+            if (strlen($pwd) < 6) {
+                return $this->json(['error' => $this->trans('enduser.admin.password_min_length', ['%min%' => '6'], 'Password must be at least 6 characters')], 422);
             }
-            $endUser->password = $this->hasher->hashPassword($endUser, $data['password']);
+            $endUser->password = $this->hasher->hashPassword($endUser, $pwd);
             $endUser->tokenVersion++;
             $this->sessionRepo?->revokeAllForEndUser($endUser);
             $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
@@ -250,7 +273,7 @@ class EndUserAdminController extends AbstractController
         if ($project instanceof JsonResponse) return $project;
 
         $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
-        if (!$endUser) return $this->json(['error' => 'Not found'], 404);
+        if (!$endUser) return $this->json(['error' => $this->trans('enduser.admin.not_found', [], 'Not found')], 404);
 
         $this->sessionRepo?->revokeAllForEndUser($endUser);
         $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
@@ -269,16 +292,16 @@ class EndUserAdminController extends AbstractController
         if ($project instanceof JsonResponse) return $project;
 
         $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
-        if (!$endUser) return $this->json(['error' => 'Not found'], 404);
+        if (!$endUser) return $this->json(['error' => $this->trans('enduser.admin.not_found', [], 'Not found')], 404);
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->trans('enduser.admin.invalid_json', [], 'Invalid JSON')], 400);
         }
-        $newStatus = $data['status'] ?? '';
+        $newStatus = (string) ($data['status'] ?? '');
         if (!in_array($newStatus, ['active', 'banned', 'pending'], true)) {
-            return $this->json(['error' => 'Invalid status'], 422);
+            return $this->json(['error' => $this->trans('enduser.admin.invalid_status', [], 'Invalid status')], 422);
         }
 
         $endUser->status = $newStatus;

@@ -2167,4 +2167,39 @@ return [
     'enduser.auth.social_code_required'       => 'OAuth authorization code is required.',
     'enduser.auth.social_login_failed'        => 'Social login failed: %message%',
     'enduser.auth.payload_too_large'          => 'Request payload too large (max 1MB).',
+    'enduser.auth.invalid_username'           => 'Invalid username format or too long (max 100 characters).',
+
+    // Password Policy
+    'password.policy.min_length'              => 'Password must be at least %min% characters.',
+    'password.policy.max_length'              => 'Password must not exceed %max% characters.',
+    'password.policy.require_lowercase'       => 'Password must include at least one lowercase letter.',
+    'password.policy.require_uppercase'       => 'Password must include at least one uppercase letter.',
+    'password.policy.require_number'          => 'Password must include at least one number.',
+    'password.policy.too_common'              => 'Password is too common or easily guessable.',
+    'password.policy.contains_email'          => 'Password cannot contain your email prefix.',
+    'password.policy.contains_username'       => 'Password cannot contain your username.',
+    'password.policy.contains_name'           => 'Password cannot contain your name.',
+    'password.policy.current_required'        => 'Current password is required to change password.',
+    'password.policy.current_incorrect'       => 'Current password is incorrect.',
+    'password.policy.must_differ'             => 'New password must be different from current password.',
+
+    // EndUser Custom Fields Sanitization
+    'enduser.custom_fields.must_be_object'    => 'Custom fields must be a valid key-value object.',
+    'enduser.custom_fields.too_large'         => 'Custom fields exceed maximum allowed size (max 64KB).',
+    'enduser.custom_fields.max_depth_exceeded'=> 'Custom fields nesting exceeds maximum depth of 5.',
+    'enduser.custom_fields.too_many_keys'     => 'Custom fields contain too many entries (max 100).',
+    'enduser.custom_fields.key_too_long'      => 'Custom field name exceeds maximum length of 64 characters.',
+    'enduser.custom_fields.invalid_key_name'  => 'Invalid custom field key "%key%".',
+    'enduser.custom_fields.forbidden_key'     => 'Field key "%key%" is reserved and cannot be modified.',
+
+    // EndUser Admin CRUD
+    'enduser.admin.not_found'                 => 'Not found',
+    'enduser.admin.invalid_json'              => 'Invalid JSON',
+    'enduser.admin.valid_email_required'      => 'Valid email is required',
+    'enduser.admin.password_min_length'       => 'Password must be at least %min% characters',
+    'enduser.admin.invalid_status'            => 'Invalid status',
+    'enduser.admin.invalid_username'          => 'Invalid username format or too long (max 100 characters).',
+    'enduser.admin.email_already_registered'  => 'Email already registered',
+    'enduser.admin.email_already_taken'       => 'Email already taken',
+    'enduser.admin.invalid_email'             => 'Invalid email',
 ];
