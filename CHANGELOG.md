@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.149] — 2026-11-05
+
+### Multi-Tenant Token & Session Retention Purge Hardening, PHP 8.5 Warning Elimination & Strict I18n (Cycle #84)
+- **Multi-Tenant Token & Inactive Session Retention Purge Hardening**:
+  - Extended `PurgeExpiredTokensCommand` (`app:purge-expired-tokens`) with `--project` (`-p`) option to safely scope retention purging to a specific project UUID, ID, or name.
+  - Extended count and purge methods with optional tenant context (`?Project $project = null`) across `ApiTokenRepository` (`countExpired`, `deleteExpired`), `ShareRepository` (`countExpired`, `purgeExpired`), `ProjectAuthRefreshTokenRepository` (`countExpired`, `deleteExpired`), `ProjectAuthAuthorizationCodeRepository` (`countExpired`, `deleteExpired`), `ProjectAuthSessionRepository` (`countInactive`, `deleteInactive`), and `AssetUploadIntentRepository` (`countOldIntents`, `deleteOldIntents`).
+  - Preserved global purge behavior when no project filter is supplied, purging global password reset tokens and personal access tokens (PAT).
+- **PHP 8.5 & Runtime Warning Elimination**:
+  - Fixed undefined variable `$project` in `WebhookController::test`, using `$webhook->project?->uuid?->toRfc4122() ?? $projectUuid`, completely resolving 2 PHP warnings.
+- **Strict 100% I18n Compliance**:
+  - Completely localized `PurgeExpiredTokensCommand` (command description, options, table headers, category labels, dry-run banners, success summaries) using `$this->trans()`.
+  - Added 28 new translation keys (`cli.purge_tokens.*`) across all 4 locales with 100% parity (3,315 keys in `messages.en.php`, `messages.fr.php`, `messages.es.php`, `messages.ar.php`).
+- **Test Suite Verification**:
+  - Added dedicated test `Cycle84TokenAndSessionRetentionPurgeTest` covering simulation, project error handling, tenant purge isolation, and 4-locale parity (4 tests, 252 assertions, 100% success).
+
 ## [1.26.148] — 2026-11-05
 
 ### Symfony 8.1 Preparation, Burst Rate Limiting & Public Endpoints CSP/HSTS Hardening (Cycle #83 Part 2)

@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\EndUser;
+use App\Entity\Project;
 use App\Entity\ProjectAuthSession;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -93,23 +94,34 @@ class ProjectAuthSessionRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
-    public function countInactive(\DateTimeImmutable $threshold): int
+    public function countInactive(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('s')
+        $qb = $this->createQueryBuilder('s')
             ->select('COUNT(s.id)')
             ->where('s.lastActiveAt < :threshold')
-            ->setParameter('threshold', $threshold)
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $qb->join('s.endUser', 'u')
+               ->andWhere('u.project = :project')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
-    public function deleteInactive(\DateTimeImmutable $threshold): int
+    public function deleteInactive(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return $this->createQueryBuilder('s')
+        $qb = $this->createQueryBuilder('s')
             ->delete()
             ->where('s.lastActiveAt < :threshold')
-            ->setParameter('threshold', $threshold)
-            ->getQuery()
-            ->execute();
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $qb->andWhere('s.endUser IN (SELECT u.id FROM App\Entity\EndUser u WHERE u.project = :project)')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->execute();
     }
 }

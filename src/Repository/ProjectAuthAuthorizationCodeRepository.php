@@ -2,6 +2,7 @@
 
 namespace App\Repository;
 
+use App\Entity\Project;
 use App\Entity\ProjectAuthAuthorizationCode;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -28,23 +29,34 @@ class ProjectAuthAuthorizationCodeRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
-    public function countExpired(): int
+    public function countExpired(?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('c')
+        $qb = $this->createQueryBuilder('c')
             ->select('COUNT(c.id)')
             ->where('c.expiresAt < :now OR c.isUsed = true')
-            ->setParameter('now', new \DateTimeImmutable())
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('now', new \DateTimeImmutable());
+
+        if ($project !== null) {
+            $qb->join('c.endUser', 'u')
+               ->andWhere('u.project = :project')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
-    public function deleteExpired(): int
+    public function deleteExpired(?Project $project = null): int
     {
-        return $this->createQueryBuilder('c')
+        $qb = $this->createQueryBuilder('c')
             ->delete()
             ->where('c.expiresAt < :now OR c.isUsed = true')
-            ->setParameter('now', new \DateTimeImmutable())
-            ->getQuery()
-            ->execute();
+            ->setParameter('now', new \DateTimeImmutable());
+
+        if ($project !== null) {
+            $qb->andWhere('c.endUser IN (SELECT u.id FROM App\Entity\EndUser u WHERE u.project = :project)')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->execute();
     }
 }

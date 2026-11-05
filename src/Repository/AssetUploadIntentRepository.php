@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\AssetUploadIntent;
+use App\Entity\Project;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -72,9 +73,9 @@ class AssetUploadIntentRepository extends ServiceEntityRepository
     /**
      * Supprime définitivement les intentions clôturées ou expirées antérieures au seuil de rétention.
      */
-    public function deleteOldIntents(\DateTimeImmutable $threshold): int
+    public function deleteOldIntents(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('i')
+        $qb = $this->createQueryBuilder('i')
             ->delete()
             ->where('i.createdAt < :threshold')
             ->andWhere('i.status IN (:terminalStatuses)')
@@ -83,14 +84,19 @@ class AssetUploadIntentRepository extends ServiceEntityRepository
                 AssetUploadIntent::STATUS_COMPLETED,
                 AssetUploadIntent::STATUS_ABORTED,
                 AssetUploadIntent::STATUS_EXPIRED,
-            ])
-            ->getQuery()
-            ->execute();
+            ]);
+
+        if ($project !== null) {
+            $qb->andWhere('i.project = :project')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->execute();
     }
 
-    public function countOldIntents(\DateTimeImmutable $threshold): int
+    public function countOldIntents(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('i')
+        $qb = $this->createQueryBuilder('i')
             ->select('COUNT(i.id)')
             ->where('i.createdAt < :threshold')
             ->andWhere('i.status IN (:terminalStatuses)')
@@ -99,8 +105,13 @@ class AssetUploadIntentRepository extends ServiceEntityRepository
                 AssetUploadIntent::STATUS_COMPLETED,
                 AssetUploadIntent::STATUS_ABORTED,
                 AssetUploadIntent::STATUS_EXPIRED,
-            ])
-            ->getQuery()
-            ->getSingleScalarResult();
+            ]);
+
+        if ($project !== null) {
+            $qb->andWhere('i.project = :project')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 }

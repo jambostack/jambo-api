@@ -553,7 +553,7 @@ class WebhookController extends AbstractController
         ];
 
         if ($this->bus !== null) {
-            $this->bus->dispatch(new SendWebhookMessage($webhook->id, 'ping', $payload, null, 86400, $project->uuid?->toRfc4122()));
+            $this->bus->dispatch(new SendWebhookMessage($webhook->id, 'ping', $payload, null, 86400, $webhook->project?->uuid?->toRfc4122() ?? $projectUuid));
             return $this->secureJson([
                 'success' => true,
                 'message' => $this->trans('webhook.test_queued', [], 'Test webhook queued successfully'),

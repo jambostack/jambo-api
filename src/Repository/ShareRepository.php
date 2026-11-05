@@ -2,6 +2,7 @@
 
 namespace App\Repository;
 
+use App\Entity\Project;
 use App\Entity\Share;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -59,23 +60,33 @@ class ShareRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
-    public function countExpired(): int
+    public function countExpired(?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('s')
+        $qb = $this->createQueryBuilder('s')
             ->select('COUNT(s.id)')
             ->where('(s.expiresAt IS NOT NULL AND s.expiresAt < :now) OR s.revokedAt IS NOT NULL')
-            ->setParameter('now', new \DateTimeImmutable())
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('now', new \DateTimeImmutable());
+
+        if ($project !== null) {
+            $qb->andWhere('s.project = :project')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
-    public function purgeExpired(): int
+    public function purgeExpired(?Project $project = null): int
     {
-        return $this->createQueryBuilder('s')
+        $qb = $this->createQueryBuilder('s')
             ->delete()
             ->where('(s.expiresAt IS NOT NULL AND s.expiresAt < :now) OR s.revokedAt IS NOT NULL')
-            ->setParameter('now', new \DateTimeImmutable())
-            ->getQuery()
-            ->execute();
+            ->setParameter('now', new \DateTimeImmutable());
+
+        if ($project !== null) {
+            $qb->andWhere('s.project = :project')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->execute();
     }
 }

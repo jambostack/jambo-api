@@ -41,23 +41,33 @@ class ApiTokenRepository extends ServiceEntityRepository
         return $this->findBy(['project' => $project], ['createdAt' => 'DESC']);
     }
 
-    public function countExpired(): int
+    public function countExpired(?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('a')
+        $qb = $this->createQueryBuilder('a')
             ->select('COUNT(a.id)')
             ->where('a.expiresAt IS NOT NULL AND a.expiresAt < :now')
-            ->setParameter('now', new \DateTimeImmutable())
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('now', new \DateTimeImmutable());
+
+        if ($project !== null) {
+            $qb->andWhere('a.project = :project')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
-    public function deleteExpired(): int
+    public function deleteExpired(?Project $project = null): int
     {
-        return $this->createQueryBuilder('a')
+        $qb = $this->createQueryBuilder('a')
             ->delete()
             ->where('a.expiresAt IS NOT NULL AND a.expiresAt < :now')
-            ->setParameter('now', new \DateTimeImmutable())
-            ->getQuery()
-            ->execute();
+            ->setParameter('now', new \DateTimeImmutable());
+
+        if ($project !== null) {
+            $qb->andWhere('a.project = :project')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->execute();
     }
 }
