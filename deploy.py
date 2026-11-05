@@ -97,8 +97,8 @@ def main():
         ("Git sync", f"git fetch --all --tags --prune --force && git checkout {target_tag}" if target_tag else "git pull origin main"),
         ("Composer dependencies", "composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-scripts"),
         ("Frontend build", "if command -v npm >/dev/null 2>&1; then npm ci --prefer-offline && npm run build; else echo 'Notice: npm not found in server environment, skipping frontend build.'; fi"),
-        ("Doctrine migrations", "php bin/console doctrine:migrations:migrate --no-interaction --all-or-nothing"),
-        ("Cache warmup", "php bin/console cache:clear --no-warmup && php bin/console cache:warmup --env=prod"),
+        ("Doctrine migrations", "php -d memory_limit=1G bin/console doctrine:migrations:migrate --no-interaction --all-or-nothing"),
+        ("Cache warmup", "php -d memory_limit=1G bin/console cache:clear --no-warmup && php -d memory_limit=1G bin/console cache:warmup --env=prod"),
         ("File permissions hardening", "chmod 600 .env .env.local .env.backup_* 2>/dev/null || true; chmod 700 var var/cache var/log 2>/dev/null || true; chmod 644 public/uploads/.htaccess 2>/dev/null || true"),
     ]
 
