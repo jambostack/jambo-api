@@ -2102,4 +2102,47 @@ return [
     'email.attachment_too_large'               => 'Pièce jointe trop volumineuse (max 10MB).',
     'email.attachment_forbidden_extension'     => 'L\'extension de pièce jointe .%ext% est strictement interdite.',
     'email.send_failed'                        => 'Erreur lors de l\'envoi de l\'email.',
+
+    // PreviewController
+    'preview.rate_limit_exceeded'              => 'Trop de requêtes de prévisualisation. Veuillez réessayer plus tard.',
+    'preview.auth_required'                    => 'Authentification requise.',
+    'preview.project_not_found'                => 'Projet introuvable.',
+    'preview.entry_not_found'                  => 'Entrée introuvable.',
+    'preview.invalid_ttl_not_int'              => 'TTL du jeton de prévisualisation invalide : doit être un entier.',
+    'preview.invalid_ttl_range'                => 'TTL du jeton de prévisualisation invalide : doit être compris entre %min% et %max% secondes.',
+    'preview.url_required'                     => 'L\'URL est requise.',
+    'preview.payload_too_large'                => 'Charge utile trop volumineuse.',
+    'preview.target_url_empty'                 => 'URL cible de prévisualisation invalide : l\'URL ne peut pas être vide.',
+    'preview.target_url_too_long'              => 'URL cible de prévisualisation invalide : dépasse 2048 caractères.',
+    'preview.target_url_control_chars'         => 'URL cible de prévisualisation invalide : caractères de contrôle détectés.',
+    'preview.target_url_malformed'             => 'URL cible de prévisualisation invalide : URL malformée.',
+    'preview.target_url_scheme_invalid'        => 'URL cible de prévisualisation invalide : seuls http et https sont autorisés.',
+    'preview.target_url_credentials_forbidden' => 'URL cible de prévisualisation invalide : les identifiants dans l\'URL sont strictement interdits.',
+    'preview.target_url_missing_host'          => 'URL cible de prévisualisation invalide : hôte manquant dans l\'URL.',
+    'preview.target_url_ssrf_detected'         => 'URL cible de prévisualisation invalide : la cible ne doit pas pointer vers des adresses privées ou réservées.',
+    'preview.target_url_forbidden_port'        => 'URL cible de prévisualisation invalide : le port %port% n\'est pas autorisé pour la prévisualisation.',
+    'preview.missing_token'                    => 'En-tête d\'autorisation ou paramètre de jeton de prévisualisation manquant ou malformé.',
+    'preview.token_invalid_or_expired'         => 'Jeton de prévisualisation invalide ou expiré.',
+    'preview.token_project_mismatch'           => 'Le jeton ne correspond pas au projet.',
+    'preview.token_entry_mismatch'             => 'Le jeton ne correspond pas à l\'entrée.',
+    'preview.token_collection_mismatch'        => 'Le jeton ne correspond pas à la collection.',
+    'preview.not_enabled'                      => 'La prévisualisation n\'est pas activée pour ce projet.',
+
+    // FormPublicController
+    'form.project_not_found'                   => 'Projet introuvable.',
+    'form.not_found'                           => 'Formulaire introuvable.',
+    'form.rate_limit_exceeded'                 => 'Trop de soumissions de formulaires. Veuillez réessayer plus tard.',
+    'form.payload_too_large'                   => 'Charge utile trop volumineuse (max 1 Mo).',
+    'form.validation_failed'                   => 'La validation a échoué.',
+    'form.invalid_slug'                        => 'Slug de formulaire invalide.',
+
+    // RedirectPublicController
+    'redirect.project_not_found'               => 'Projet introuvable.',
+    'redirect.path_too_long'                   => 'Le chemin dépasse la longueur maximale de 2048 caractères.',
+    'redirect.path_control_chars'              => 'Le chemin contient des caractères de contrôle non valides.',
+    'redirect.unsafe_destination'              => 'Destination de redirection non sécurisée.',
+    'redirect.rate_limit_exceeded'             => 'Trop de requêtes de redirection. Veuillez réessayer plus tard.',
+
+    // SeoPublicController
+    'seo.project_not_found'                    => 'Projet introuvable.',
 ];

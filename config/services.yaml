@@ -22,6 +22,8 @@ services:
             $webhookInboundLimiter: '@limiter.webhook_inbound_limiter'
             $tokenLimiter: '@limiter.token_management_limiter'
             $shareLimiter: '@limiter.share_limiter'
+            $formSubmitLimiter: '@limiter.form_submit'
+            $redirectLimiter: '@limiter.redirect_limiter'
             $aiStreamLimiter: '@limiter.ai_stream_limiter'
             $aiLimiter: '@limiter.ai_limiter'
             $searchLimiter: '@limiter.search_limiter'

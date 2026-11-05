@@ -2084,4 +2084,47 @@ return [
     'email.attachment_too_large'               => 'Attachment is too large (maximum 10MB).',
     'email.attachment_forbidden_extension'     => 'Attachment extension .%ext% is strictly forbidden.',
     'email.send_failed'                        => 'An error occurred while sending the email.',
+
+    // PreviewController
+    'preview.rate_limit_exceeded'              => 'Too many preview requests. Try again later.',
+    'preview.auth_required'                    => 'Authentication required',
+    'preview.project_not_found'                => 'Project not found',
+    'preview.entry_not_found'                  => 'Entry not found',
+    'preview.invalid_ttl_not_int'              => 'Invalid preview token TTL: must be an integer.',
+    'preview.invalid_ttl_range'                => 'Invalid preview token TTL: must be between %min% and %max% seconds.',
+    'preview.url_required'                     => 'URL is required.',
+    'preview.payload_too_large'                => 'Payload too large.',
+    'preview.target_url_empty'                 => 'Invalid preview target URL: URL cannot be empty.',
+    'preview.target_url_too_long'              => 'Invalid preview target URL: exceeds 2048 characters.',
+    'preview.target_url_control_chars'         => 'Invalid preview target URL: control characters detected.',
+    'preview.target_url_malformed'             => 'Invalid preview target URL: malformed URL.',
+    'preview.target_url_scheme_invalid'        => 'Invalid preview target URL: only http and https allowed.',
+    'preview.target_url_credentials_forbidden' => 'Invalid preview target URL: credentials in URL are strictly forbidden.',
+    'preview.target_url_missing_host'          => 'Invalid preview target URL: missing host in URL.',
+    'preview.target_url_ssrf_detected'         => 'Invalid preview target URL: target must not point to private or reserved addresses.',
+    'preview.target_url_forbidden_port'        => 'Invalid preview target URL: port %port% is not allowed for preview.',
+    'preview.missing_token'                    => 'Missing or malformed Authorization header or preview token parameter',
+    'preview.token_invalid_or_expired'         => 'Invalid or expired preview token',
+    'preview.token_project_mismatch'           => 'Token does not match project',
+    'preview.token_entry_mismatch'             => 'Token does not match entry',
+    'preview.token_collection_mismatch'        => 'Token does not match collection',
+    'preview.not_enabled'                      => 'Preview not enabled for this project',
+
+    // FormPublicController
+    'form.project_not_found'                   => 'Project not found.',
+    'form.not_found'                           => 'Form not found.',
+    'form.rate_limit_exceeded'                 => 'Too many form submissions. Try again later.',
+    'form.payload_too_large'                   => 'Payload too large (max 1MB).',
+    'form.validation_failed'                   => 'Validation failed.',
+    'form.invalid_slug'                        => 'Invalid form slug.',
+
+    // RedirectPublicController
+    'redirect.project_not_found'               => 'Project not found.',
+    'redirect.path_too_long'                   => 'Path exceeds maximum length of 2048 characters.',
+    'redirect.path_control_chars'              => 'Path contains invalid control characters.',
+    'redirect.unsafe_destination'              => 'Unsafe redirect destination.',
+    'redirect.rate_limit_exceeded'             => 'Too many redirect requests. Try again later.',
+
+    // SeoPublicController
+    'seo.project_not_found'                    => 'Project not found.',
 ];

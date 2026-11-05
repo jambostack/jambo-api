@@ -2084,4 +2084,47 @@ return [
     'email.attachment_too_large'               => 'المرفق كبير جداً (الحد الأقصى 10 ميغابايت).',
     'email.attachment_forbidden_extension'     => 'امتداد المرفق .%ext% محظور تماماً.',
     'email.send_failed'                        => 'حدث خطأ أثناء إرسال البريد الإلكتروني.',
+
+    // PreviewController
+    'preview.rate_limit_exceeded'              => 'عدد كبير جداً من طلبات المعاينة. يرجى المحاولة مرة أخرى لاحقاً.',
+    'preview.auth_required'                    => 'المصادقة مطلوبة.',
+    'preview.project_not_found'                => 'المشروع غير موجود.',
+    'preview.entry_not_found'                  => 'الإدخال غير موجود.',
+    'preview.invalid_ttl_not_int'              => 'مدة صلاحية رمز المعاينة غير صالحة: يجب أن تكون عدداً صحيحاً.',
+    'preview.invalid_ttl_range'                => 'مدة صلاحية رمز المعاينة غير صالحة: يجب أن تكون بين %min% و %max% ثانية.',
+    'preview.url_required'                     => 'الرابط مطلوب.',
+    'preview.payload_too_large'                => 'الحمولة كبيرة جداً.',
+    'preview.target_url_empty'                 => 'رابط وجهة المعاينة غير صالح: لا يمكن أن يكون فارغاً.',
+    'preview.target_url_too_long'              => 'رابط وجهة المعاينة غير صالح: يتجاوز 2048 حرفاً.',
+    'preview.target_url_control_chars'         => 'رابط وجهة المعاينة غير صالح: تم اكتشاف أحرف تحكم.',
+    'preview.target_url_malformed'             => 'رابط وجهة المعاينة غير صالح: تنسيق الرابط غير صحيح.',
+    'preview.target_url_scheme_invalid'        => 'رابط وجهة المعاينة غير صالح: يُسمح بـ http و https فقط.',
+    'preview.target_url_credentials_forbidden' => 'رابط وجهة المعاينة غير صالح: بيانات الاعتماد في الرابط محظورة تماماً.',
+    'preview.target_url_missing_host'          => 'رابط وجهة المعاينة غير صالح: اسم المضيف مفقود في الرابط.',
+    'preview.target_url_ssrf_detected'         => 'رابط وجهة المعاينة غير صالح: يجب ألا تشير الوجهة إلى عناوين خاصة أو محجوزة.',
+    'preview.target_url_forbidden_port'        => 'رابط وجهة المعاينة غير صالح: المنفذ %port% غير مسموح به للمعاينة.',
+    'preview.missing_token'                    => 'ترويسة التفويض أو معلمة رمز المعاينة مفقودة أو غير صالحة.',
+    'preview.token_invalid_or_expired'         => 'رمز المعاينة غير صالح أو منتهي الصلاحية.',
+    'preview.token_project_mismatch'           => 'الرمز لا يطابق المشروع.',
+    'preview.token_entry_mismatch'             => 'الرمز لا يطابق الإدخال.',
+    'preview.token_collection_mismatch'        => 'الرمز لا يطابق المجموعة.',
+    'preview.not_enabled'                      => 'المعاينة غير مفعلة لهذا المشروع.',
+
+    // FormPublicController
+    'form.project_not_found'                   => 'المشروع غير موجود.',
+    'form.not_found'                           => 'النموذج غير موجود.',
+    'form.rate_limit_exceeded'                 => 'عدد كبير جداً من إرسال النماذج. يرجى المحاولة مرة أخرى لاحقاً.',
+    'form.payload_too_large'                   => 'الحمولة كبيرة جداً (الحد الأقصى 1 ميجابايت).',
+    'form.validation_failed'                   => 'فشلت عملية التحقق.',
+    'form.invalid_slug'                        => 'معرف النموذج غير صالح.',
+
+    // RedirectPublicController
+    'redirect.project_not_found'               => 'المشروع غير موجود.',
+    'redirect.path_too_long'                   => 'يتجاوز المسار الحد الأقصى للطول البالغ 2048 حرفاً.',
+    'redirect.path_control_chars'              => 'يحتوي المسار على أحرف تحكم غير صالحة.',
+    'redirect.unsafe_destination'              => 'وجهة إعادة التوجيه غير آمنة.',
+    'redirect.rate_limit_exceeded'             => 'عدد كبير جداً من طلبات إعادة التوجيه. يرجى المحاولة مرة أخرى لاحقاً.',
+
+    // SeoPublicController
+    'seo.project_not_found'                    => 'المشروع غير موجود.',
 ];

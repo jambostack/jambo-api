@@ -56,6 +56,10 @@ framework:
             policy: sliding_window
             limit: 60
             interval: '60 seconds'
+        redirect_limiter:
+            policy: sliding_window
+            limit: 120
+            interval: '60 seconds'
         graphql:
             policy: sliding_window
             limit: 60

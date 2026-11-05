@@ -7,6 +7,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.81] — 2026-11-05
+
+### Security & Strict I18N Hardening
+- **PreviewController Hardening & Complete I18N**:
+  - Injected `TranslatorInterface` with fallback mechanism across all preview endpoints (`token`, `validateUrl`, `content`).
+  - Added strict payload size bounding (max 1MB) on `validateUrl`.
+  - Replaced 23 hardcoded error and validation messages with parameterized translation keys.
+- **FormPublicController Security Constraints & I18N**:
+  - Autowired `formSubmitLimiter` (`limiter.form_submit`) with sliding window protection against flood submissions.
+  - Added strict UUIDv4 format check on `projectUuid` and regex validation (`/^[a-zA-Z0-9_\-]{1,128}$/`) on `slug`.
+  - Enforced 1MB request payload limit and migrated 6 error responses to translation dictionaries.
+- **RedirectPublicController Open-Redirect SSRF Defense & I18N**:
+  - Injected `SsrfProtectionService` to block external redirects pointing to private, loopback, or cloud-metadata destinations.
+  - Added CRLF and control character rejection on path query parameter (400 Bad Request).
+  - Wired `redirect_limiter` rate limiting and migrated all responses to translation keys.
+- **SeoPublicController Topology Defense & I18N**:
+  - Added Anti-SSRF inspection on `previewUrl` before generating `robots.txt` Sitemap header, falling back to `https://example.com` to prevent private topology disclosure.
+  - Added UUID regex validation and translated `NotFoundHttpException` message.
+- **Translation Dictionaries Parity**:
+  - Added 35 new translation keys across `en`, `fr`, `es`, `ar`, bringing the dictionary size to **1,933 keys** (100% parity, 0 missing).
+- **Automated Test Suite**:
+  - Added `tests/Controller/Cycle34HardeningTest.php` with 10 tests and 310 assertions.
+  - Total PHPUnit test suite: **992 tests**, all passing green.
+
 ## [1.26.80] — 2026-11-04
 
 ### Security & Strict I18N Hardening

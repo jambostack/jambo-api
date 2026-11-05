@@ -14,6 +14,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Endpoints pour le systeme de Live Preview.
@@ -32,7 +33,16 @@ class PreviewController extends AbstractController
         private readonly EavDataFormatterService $formatter,
         private readonly SsrfProtectionService $ssrfProtection,
         private readonly ?RateLimiterFactory $previewLimiter = null,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default ?? $id;
+    }
 
     /**
      * Genere un token de preview pour une entree.
@@ -44,21 +54,21 @@ class PreviewController extends AbstractController
         if ($this->previewLimiter !== null) {
             $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many preview requests. Try again later.'], 429);
+                return new JsonResponse(['error' => $this->trans('preview.rate_limit_exceeded', [], 'Too many preview requests. Try again later.')], 429);
             }
         }
 
         if (!$this->getUser()) {
-            return $this->json(['error' => 'Authentication required'], 401);
+            return $this->json(['error' => $this->trans('preview.auth_required', [], 'Authentication required')], 401);
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('preview.project_not_found', [], 'Project not found')], 404);
         }
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('preview.project_not_found', [], 'Project not found')], 404);
         }
 
         if ($request->attributes->get('_project') !== $project) {
@@ -68,10 +78,10 @@ class PreviewController extends AbstractController
         try {
             $entry = $this->entryRepository->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Entry not found'], 404);
+            return $this->json(['error' => $this->trans('preview.entry_not_found', [], 'Entry not found')], 404);
         }
         if (!$entry || $entry->isDeleted()) {
-            return $this->json(['error' => 'Entry not found'], 404);
+            return $this->json(['error' => $this->trans('preview.entry_not_found', [], 'Entry not found')], 404);
         }
 
         // Validation du TTL (entre 60s et 86400s)
@@ -79,15 +89,14 @@ class PreviewController extends AbstractController
         if ($request->query->has('ttl')) {
             $rawTtl = $request->query->get('ttl');
             if (!is_numeric($rawTtl)) {
-                return $this->json(['error' => 'Invalid preview token TTL: must be an integer.'], 422);
+                return $this->json(['error' => $this->trans('preview.invalid_ttl_not_int', [], 'Invalid preview token TTL: must be an integer.')], 422);
             }
             $ttl = (int) $rawTtl;
             if ($ttl < PreviewTokenService::MIN_TTL || $ttl > PreviewTokenService::MAX_TTL) {
-                return $this->json(['error' => sprintf(
-                    'Invalid preview token TTL: must be between %d and %d seconds.',
-                    PreviewTokenService::MIN_TTL,
-                    PreviewTokenService::MAX_TTL
-                )], 422);
+                return $this->json(['error' => $this->trans('preview.invalid_ttl_range', [
+                    '%min%' => PreviewTokenService::MIN_TTL,
+                    '%max%' => PreviewTokenService::MAX_TTL,
+                ], sprintf('Invalid preview token TTL: must be between %d and %d seconds.', PreviewTokenService::MIN_TTL, PreviewTokenService::MAX_TTL))], 422);
             }
         }
 
@@ -117,8 +126,12 @@ class PreviewController extends AbstractController
         if ($this->previewLimiter !== null) {
             $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many preview requests. Try again later.'], 429);
+                return new JsonResponse(['error' => $this->trans('preview.rate_limit_exceeded', [], 'Too many preview requests. Try again later.')], 429);
             }
+        }
+
+        if (strlen($request->getContent()) > 1048576) {
+            return new JsonResponse(['error' => $this->trans('preview.payload_too_large', [], 'Payload too large.')], 413);
         }
 
         $url = $request->query->get('url') ?? $request->query->get('target_url') ?? $request->query->get('preview_url');
@@ -132,7 +145,7 @@ class PreviewController extends AbstractController
         }
 
         if ($url === null || trim((string) $url) === '') {
-            return new JsonResponse(['error' => 'URL is required.'], 422);
+            return new JsonResponse(['error' => $this->trans('preview.url_required', [], 'URL is required.')], 422);
         }
 
         $error = $this->validatePreviewTargetUrl((string) $url);
@@ -151,47 +164,47 @@ class PreviewController extends AbstractController
     {
         $url = trim($url);
         if ($url === '') {
-            return 'Invalid preview target URL: URL cannot be empty.';
+            return $this->trans('preview.target_url_empty', [], 'Invalid preview target URL: URL cannot be empty.');
         }
         if (strlen($url) > 2048) {
-            return 'Invalid preview target URL: exceeds 2048 characters.';
+            return $this->trans('preview.target_url_too_long', [], 'Invalid preview target URL: exceeds 2048 characters.');
         }
         if (preg_match('/[\r\n\x00-\x1F\x7F]/', $url)) {
-            return 'Invalid preview target URL: control characters detected.';
+            return $this->trans('preview.target_url_control_chars', [], 'Invalid preview target URL: control characters detected.');
         }
 
         $parts = parse_url($url);
         if (!is_array($parts) || empty($parts['scheme'])) {
-            return 'Invalid preview target URL: malformed URL.';
+            return $this->trans('preview.target_url_malformed', [], 'Invalid preview target URL: malformed URL.');
         }
 
         $scheme = strtolower((string) $parts['scheme']);
         if (!in_array($scheme, ['http', 'https'], true)) {
-            return 'Invalid preview target URL: only http and https allowed.';
+            return $this->trans('preview.target_url_scheme_invalid', [], 'Invalid preview target URL: only http and https allowed.');
         }
 
         if (!filter_var($url, FILTER_VALIDATE_URL)) {
-            return 'Invalid preview target URL: malformed URL.';
+            return $this->trans('preview.target_url_malformed', [], 'Invalid preview target URL: malformed URL.');
         }
 
         if (isset($parts['user']) || isset($parts['pass'])) {
-            return 'Invalid preview target URL: credentials in URL are strictly forbidden.';
+            return $this->trans('preview.target_url_credentials_forbidden', [], 'Invalid preview target URL: credentials in URL are strictly forbidden.');
         }
 
         $host = strtolower(trim($parts['host'] ?? '', " \t\n\r\0\x0B[]"));
         if ($host === '') {
-            return 'Invalid preview target URL: missing host in URL.';
+            return $this->trans('preview.target_url_missing_host', [], 'Invalid preview target URL: missing host in URL.');
         }
 
         $reason = null;
         if (!$this->ssrfProtection->isSafeHost($host, $reason)) {
-            return 'Invalid preview target URL: target must not point to private or reserved addresses.';
+            return $this->trans('preview.target_url_ssrf_detected', [], 'Invalid preview target URL: target must not point to private or reserved addresses.');
         }
 
         $port = $parts['port'] ?? ($scheme === 'https' ? 443 : 80);
         $forbiddenPorts = [21, 22, 23, 25, 53, 110, 143, 3306, 5432, 6379, 11211, 27017, 9200, 9300];
         if (in_array($port, $forbiddenPorts, true)) {
-            return sprintf('Invalid preview target URL: port %d is not allowed for preview.', $port);
+            return $this->trans('preview.target_url_forbidden_port', ['%port%' => $port], sprintf('Invalid preview target URL: port %d is not allowed for preview.', $port));
         }
 
         return null;
@@ -207,7 +220,7 @@ class PreviewController extends AbstractController
         if ($this->previewLimiter !== null) {
             $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many preview requests. Try again later.'], 429);
+                return new JsonResponse(['error' => $this->trans('preview.rate_limit_exceeded', [], 'Too many preview requests. Try again later.')], 429);
             }
         }
 
@@ -223,47 +236,47 @@ class PreviewController extends AbstractController
         }
 
         if ($token === null || trim($token) === '') {
-            return $this->json(['error' => 'Missing or malformed Authorization header or preview token parameter'], 401);
+            return $this->json(['error' => $this->trans('preview.missing_token', [], 'Missing or malformed Authorization header or preview token parameter')], 401);
         }
 
         $claims = $this->tokenService->validateToken($token);
 
         if ($claims === null) {
-            return $this->json(['error' => 'Invalid or expired preview token'], 401);
+            return $this->json(['error' => $this->trans('preview.token_invalid_or_expired', [], 'Invalid or expired preview token')], 401);
         }
 
         // Verifier que le token correspond a l'URL
         if ($claims['pid'] !== $projectUuid) {
-            return $this->json(['error' => 'Token does not match project'], 403);
+            return $this->json(['error' => $this->trans('preview.token_project_mismatch', [], 'Token does not match project')], 403);
         }
         if ($claims['eid'] !== $entryUuid) {
-            return $this->json(['error' => 'Token does not match entry'], 403);
+            return $this->json(['error' => $this->trans('preview.token_entry_mismatch', [], 'Token does not match entry')], 403);
         }
         if ($claims['col'] !== $collection) {
-            return $this->json(['error' => 'Token does not match collection'], 403);
+            return $this->json(['error' => $this->trans('preview.token_collection_mismatch', [], 'Token does not match collection')], 403);
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('preview.project_not_found', [], 'Project not found')], 404);
         }
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('preview.project_not_found', [], 'Project not found')], 404);
         }
 
         // Verifier que la preview est activee pour ce projet
         if (!$project->previewEnabled) {
-            return $this->json(['error' => 'Preview not enabled for this project'], 403);
+            return $this->json(['error' => $this->trans('preview.not_enabled', [], 'Preview not enabled for this project')], 403);
         }
 
         try {
             $entry = $this->entryRepository->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Entry not found'], 404);
+            return $this->json(['error' => $this->trans('preview.entry_not_found', [], 'Entry not found')], 404);
         }
         if (!$entry || $entry->isDeleted()) {
-            return $this->json(['error' => 'Entry not found'], 404);
+            return $this->json(['error' => $this->trans('preview.entry_not_found', [], 'Entry not found')], 404);
         }
 
         return new JsonResponse($this->formatter->formatEntry($entry), 200, [

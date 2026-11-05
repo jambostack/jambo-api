@@ -9,12 +9,14 @@ use App\Repository\ProjectRepository;
 use App\Service\Form\FormBuilder;
 use App\Service\Form\SubmitHandler;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Validator\Exception\ValidationFailedException;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class FormPublicController extends AbstractController
 {
@@ -23,25 +25,43 @@ class FormPublicController extends AbstractController
         private readonly FormRepository $formRepo,
         private readonly FormBuilder $formBuilder,
         private readonly SubmitHandler $submitHandler,
+        #[Autowire(service: 'limiter.form_submit')]
         private readonly ?RateLimiterFactory $formSubmitLimiter = null,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default ?? $id;
+    }
 
     #[Route('/{projectUuid}/forms/{slug}', name: 'public_form_show', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
     #[Route('/api/projects/{projectUuid}/forms/{slug}', name: 'api_public_form_show')]
     public function show(string $projectUuid, string $slug): JsonResponse
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
+        }
+
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,128}$/', $slug)) {
+            return new JsonResponse(['error' => $this->trans('form.invalid_slug', [], 'Invalid form slug.')], 400);
+        }
+
         try {
             $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
         }
 
         $form = $this->formRepo->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$form) {
-            return new JsonResponse(['error' => 'Form not found.'], 404);
+            return new JsonResponse(['error' => $this->trans('form.not_found', [], 'Form not found.')], 404);
         }
 
         // Validation de la définition du formulaire
@@ -65,26 +85,34 @@ class FormPublicController extends AbstractController
         if ($this->formSubmitLimiter !== null) {
             $limiter = $this->formSubmitLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many form submissions. Try again later.'], 429);
+                return new JsonResponse(['error' => $this->trans('form.rate_limit_exceeded', [], 'Too many form submissions. Try again later.')], 429);
             }
         }
 
         if (strlen($request->getContent()) > 1048576) {
-            return new JsonResponse(['error' => 'Payload too large (max 1MB).'], 413);
+            return new JsonResponse(['error' => $this->trans('form.payload_too_large', [], 'Payload too large (max 1MB).')], 413);
+        }
+
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
+        }
+
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,128}$/', $slug)) {
+            return new JsonResponse(['error' => $this->trans('form.invalid_slug', [], 'Invalid form slug.')], 400);
         }
 
         try {
             $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => 'Project not found.'], 404);
+            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
         }
 
         $form = $this->formRepo->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$form) {
-            return new JsonResponse(['error' => 'Form not found.'], 404);
+            return new JsonResponse(['error' => $this->trans('form.not_found', [], 'Form not found.')], 404);
         }
 
         $contentType = (string) $request->headers->get('Content-Type');
@@ -106,7 +134,7 @@ class FormPublicController extends AbstractController
                 $errors[$violation->getPropertyPath()] = $violation->getMessage();
             }
 
-            return new JsonResponse(['error' => 'Validation failed.', 'validation_errors' => $errors], 422);
+            return new JsonResponse(['error' => $this->trans('form.validation_failed', [], 'Validation failed.'), 'validation_errors' => $errors], 422);
         } catch (\RuntimeException $e) {
             return new JsonResponse(['error' => $e->getMessage()], 422);
         }

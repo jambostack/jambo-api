@@ -2084,4 +2084,47 @@ return [
     'email.attachment_too_large'               => 'Archivo adjunto demasiado grande (máx. 10MB).',
     'email.attachment_forbidden_extension'     => 'La extensión de archivo adjunto .%ext% está estrictamente prohibida.',
     'email.send_failed'                        => 'Ocurrió un error al enviar el correo electrónico.',
+
+    // PreviewController
+    'preview.rate_limit_exceeded'              => 'Demasiadas solicitudes de vista previa. Inténtelo de nuevo más tarde.',
+    'preview.auth_required'                    => 'Autenticación requerida.',
+    'preview.project_not_found'                => 'Proyecto no encontrado.',
+    'preview.entry_not_found'                  => 'Entrada no encontrada.',
+    'preview.invalid_ttl_not_int'              => 'TTL de token de vista previa no válido: debe ser un número entero.',
+    'preview.invalid_ttl_range'                => 'TTL de token de vista previa no válido: debe estar entre %min% y %max% segundos.',
+    'preview.url_required'                     => 'La URL es obligatoria.',
+    'preview.payload_too_large'                => 'Carga útil demasiado grande.',
+    'preview.target_url_empty'                 => 'URL de destino de vista previa no válida: la URL no puede estar vacía.',
+    'preview.target_url_too_long'              => 'URL de destino de vista previa no válida: supera los 2048 caracteres.',
+    'preview.target_url_control_chars'         => 'URL de destino de vista previa no válida: se detectaron caracteres de control.',
+    'preview.target_url_malformed'             => 'URL de destino de vista previa no válida: URL con formato incorrecto.',
+    'preview.target_url_scheme_invalid'        => 'URL de destino de vista previa no válida: solo se permiten http y https.',
+    'preview.target_url_credentials_forbidden' => 'URL de destino de vista previa no válida: las credenciales en la URL están estrictamente prohibidas.',
+    'preview.target_url_missing_host'          => 'URL de destino de vista previa no válida: falta el host en la URL.',
+    'preview.target_url_ssrf_detected'         => 'URL de destino de vista previa no válida: el destino no debe apuntar a direcciones privadas o reservadas.',
+    'preview.target_url_forbidden_port'        => 'URL de destino de vista previa no válida: el puerto %port% no está permitido para la vista previa.',
+    'preview.missing_token'                    => 'Falta el encabezado de autorización o el parámetro de token de vista previa o está mal formado.',
+    'preview.token_invalid_or_expired'         => 'Token de vista previa no válido o caducado.',
+    'preview.token_project_mismatch'           => 'El token no coincide con el proyecto.',
+    'preview.token_entry_mismatch'             => 'El token no coincide con la entrada.',
+    'preview.token_collection_mismatch'        => 'El token no coincide con la colección.',
+    'preview.not_enabled'                      => 'La vista previa no está habilitada para este proyecto.',
+
+    // FormPublicController
+    'form.project_not_found'                   => 'Proyecto no encontrado.',
+    'form.not_found'                           => 'Formulario no encontrado.',
+    'form.rate_limit_exceeded'                 => 'Demasiados envíos de formularios. Inténtelo de nuevo más tarde.',
+    'form.payload_too_large'                   => 'Carga útil demasiado grande (máx. 1MB).',
+    'form.validation_failed'                   => 'Error de validación.',
+    'form.invalid_slug'                        => 'Slug de formulario no válido.',
+
+    // RedirectPublicController
+    'redirect.project_not_found'               => 'Proyecto no encontrado.',
+    'redirect.path_too_long'                   => 'La ruta supera la longitud máxima de 2048 caracteres.',
+    'redirect.path_control_chars'              => 'La ruta contiene caracteres de control no válidos.',
+    'redirect.unsafe_destination'              => 'Destino de redirección no seguro.',
+    'redirect.rate_limit_exceeded'             => 'Demasiadas solicitudes de redirección. Inténtelo de nuevo más tarde.',
+
+    // SeoPublicController
+    'seo.project_not_found'                    => 'Proyecto no encontrado.',
 ];
