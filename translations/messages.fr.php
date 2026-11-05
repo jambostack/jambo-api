@@ -2214,6 +2214,10 @@ return [
     'enduser.auth.social_login_failed'        => 'Échec de la connexion sociale : %message%',
     'enduser.auth.payload_too_large'          => 'Données de requête trop volumineuses (max 1 Mo).',
     'enduser.auth.invalid_username'           => 'Format de nom d\'utilisateur invalide ou trop long (100 caractères maximum).',
+    'enduser.auth.account_locked_out'         => 'Trop de tentatives de connexion échouées. Compte temporairement verrouillé par sécurité. Veuillez réessayer dans %seconds% secondes.',
+    'enduser.auth.rate_limit_2fa_lockout'     => 'Trop de tentatives d\'authentification à deux facteurs invalides. Défi verrouillé. Veuillez réessayer dans %seconds% secondes.',
+    'enduser.auth.reset_cooldown'             => 'Un lien de réinitialisation de mot de passe a été récemment demandé. Veuillez vérifier vos e-mails ou patienter avant de réessayer.',
+    'enduser.auth.sessions_revoked'           => 'Toutes les sessions ont été révoquées avec succès.',
 
     // Password Policy
     'password.policy.min_length'              => 'Le mot de passe doit comporter au moins %min% caractères.',
@@ -2228,6 +2232,8 @@ return [
     'password.policy.current_required'        => 'Le mot de passe actuel est requis pour changer de mot de passe.',
     'password.policy.current_incorrect'       => 'Le mot de passe actuel est incorrect.',
     'password.policy.must_differ'             => 'Le nouveau mot de passe doit être différent du mot de passe actuel.',
+    'password.policy.require_special'         => 'Le mot de passe doit inclure au moins un caractère spécial.',
+    'password.policy.repetitive_chars'        => 'Le mot de passe ne doit pas contenir 4 caractères identiques ou consécutifs consécutifs.',
 
     // EndUser Custom Fields Sanitization
     'enduser.custom_fields.must_be_object'    => 'Les champs personnalisés doivent être un objet clé-valeur valide.',

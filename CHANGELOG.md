@@ -7,6 +7,43 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.119] — 2026-11-05
+
+### Security Audit & Hardening on EndUser Auth API & Password Policy
+- **EndUserAuthController (`/api/{projectId}/auth/*`)**:
+  - **Timing-Safe Comparison & Anti-Enumeration on Login (`/login`)**:
+    - Eliminated username/email enumeration timing oracle: when a target email does not exist, a full cryptographic password hashing check is executed against a dummy user, balancing CPU execution time identically between existing and non-existing accounts.
+    - Status disclosure prevention: verified that inactive/banned account status is only evaluated AFTER credential validation succeeds, preventing attackers from probing for inactive accounts without valid credentials.
+    - Constant-time 401 `Invalid credentials.` error returned uniformly.
+  - **Multi-Tier Rate Limiting & Account Lockout**:
+    - Integrated `ProjectAuthLockoutService` for EndUsers: account lockout tier locks the target account for 15 minutes after 5 consecutive failed login attempts, returning HTTP 429 Too Many Requests with translated `enduser.auth.account_locked_out` and `Retry-After` header.
+    - Lockout attempts counter cleared immediately upon successful authentication.
+  - **Two-Factor Authentication Hardening (`/verify-2fa`)**:
+    - Added 2FA challenge lockout tier (10 minutes lockout after 5 consecutive failed verification attempts), returning HTTP 429 with `enduser.auth.rate_limit_2fa_lockout`.
+    - Made backup codes verification strictly timing-safe across all stored codes in `TwoFactorService::verifyAndConsumeBackupCode`, eliminating array position timing leakage.
+  - **Forgot-Password Cooldown & Anti-Enumeration (`/forgot-password`)**:
+    - Added mail-bombing prevention cooldown (60 seconds per email target) preventing attacker-induced inbox flooding.
+    - Added cryptographic computation equalization on non-existent targets to eliminate timing discrepancies between existing and non-existing emails, always returning 200 with `enduser.auth.reset_link_sent`.
+  - **Password Reset Hardening (`/reset-password`)**:
+    - Enforced 64-character hexadecimal format verification before DB querying.
+    - Applied `hash_equals()` constant-time comparison on reset tokens.
+    - Harmonized error responses to 400 `Invalid or expired reset token.` uniformly (preventing enumeration of valid tokens vs non-existent accounts).
+    - Automatically cleared login lockout counters and revoked all active sessions upon password reset.
+  - **Session Revocation (`/sessions`)**:
+    - Added `DELETE /api/{projectId}/auth/sessions` endpoint to revoke all active sessions for the authenticated end user.
+    - Updated `security.yaml` `end_user` firewall pattern to include `sessions`, ensuring proper bearer JWT authentication for session management.
+  - **Payload Size Limiter**:
+    - Enforced a 64KB payload cap across all JSON auth endpoints (`getJsonPayload`), returning 413 `Request payload too large` on oversized inputs.
+- **PasswordPolicyValidator**:
+  - Expanded `COMMON_PASSWORDS` dictionary with 50+ NIST/OWASP weak patterns.
+  - Added detection of dictionary words with trailing punctuation or numbers.
+  - Added detection of repetitive characters (4+ identical chars like `aaaa`) and sequential patterns (`1234`, `abcd`).
+  - Added support for project-level special character requirement (`requireSpecialChar`).
+- **I18N Parity**:
+  - Added `enduser.auth.account_locked_out`, `enduser.auth.rate_limit_2fa_lockout`, `enduser.auth.reset_cooldown`, `enduser.auth.sessions_revoked`, `password.policy.require_special`, `password.policy.repetitive_chars` across EN, FR, ES, AR (100% parity with 2,890 keys each).
+- **Testing**:
+  - Added `Cycle57EndUserAuthHardeningTest` covering 10 test scenarios and 73 assertions with 100% pass rate.
+
 ## [1.26.118] — 2026-11-05
 
 ### Security Audit & Hardening on Webhook Subsystems (Inbound & Outbound Webhooks)

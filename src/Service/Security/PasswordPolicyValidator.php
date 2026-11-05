@@ -33,7 +33,8 @@ class PasswordPolicyValidator
         'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
         'qwerty123', 'qwertyuiop', 'azerty123', 'admin123', 'admin1234', 'welcome1',
         'welcome123', 'letmein1', 'changeme1', 'iloveyou1', 'secret123', 'root1234',
-        'administrator', 'adminadmin', 'jamboadmin',
+        'administrator', 'adminadmin', 'jamboadmin', 'dragon123', 'football1', 'master123',
+        'monkey123', 'sunshine1', 'princess1', 'shadow123', 'superman1', 'trustno1',
     ];
 
     public function __construct(
@@ -77,8 +78,22 @@ class PasswordPolicyValidator
             $errors[] = $this->trans('password.policy.max_length', ['%max%' => (string) self::MAX_LENGTH], 'Password must not exceed %max% characters.');
         }
 
-        // 2. Diversité de caractères : si explicitement demandée par les options du projet
         $requireComplexity = (bool) ($securityConfig['requirePasswordComplexity'] ?? false);
+        $blockCommon = (bool) ($securityConfig['blockCommonPasswords'] ?? false) || $requireComplexity;
+        $requireSpecial = (bool) ($securityConfig['requireSpecialChar'] ?? false);
+
+        // 2. Contrôle des dictionnaires faibles et répétitions
+        $normalized = strtolower(trim($password));
+        $strippedPunct = rtrim($normalized, " !@#$%^&*()_+-=[]{}|;':\",./<>?`~");
+        if ($blockCommon && (in_array($normalized, self::COMMON_PASSWORDS, true) || in_array($strippedPunct, self::COMMON_PASSWORDS, true))) {
+            $errors[] = $this->trans('password.policy.too_common', [], 'Password is too common or easily guessable.');
+        }
+
+        if ($blockCommon && (preg_match('/(.)\1{3,}/', $password) || preg_match('/(?:0123|1234|2345|3456|4567|5678|6789|7890|abcd|bcde|cdef|defg|efgh|fghi|ghij|hijk|ijkl|jklm|klmn|lmno|mnop|nopq|opqr|pqrs|qrst|rstu|stuv|tuvw|uvwx|vwxy|wxyz)/i', $password))) {
+            $errors[] = $this->trans('password.policy.repetitive_chars', [], 'Password cannot contain 4 or more repetitive or sequential characters.');
+        }
+
+        // 3. Diversité de caractères
         if ($requireComplexity && $length >= $minLength) {
             if (!preg_match('/[a-z]/', $password)) {
                 $errors[] = $this->trans('password.policy.require_lowercase', [], 'Password must include at least one lowercase letter.');
@@ -88,11 +103,6 @@ class PasswordPolicyValidator
             }
             if (!preg_match('/[0-9]/', $password)) {
                 $errors[] = $this->trans('password.policy.require_number', [], 'Password must include at least one number.');
-            }
-
-            $normalized = strtolower(trim($password));
-            if (in_array($normalized, self::COMMON_PASSWORDS, true)) {
-                $errors[] = $this->trans('password.policy.too_common', [], 'Password is too common or easily guessable.');
             }
 
             if ($email !== null && $email !== '') {
@@ -109,6 +119,10 @@ class PasswordPolicyValidator
                     $errors[] = $this->trans('password.policy.contains_username', [], 'Password cannot contain your username.');
                 }
             }
+        }
+
+        if ($requireSpecial && $length >= $minLength && !preg_match('/[^a-zA-Z0-9]/', $password)) {
+            $errors[] = $this->trans('password.policy.require_special', [], 'Password must include at least one special character.');
         }
 
         return [
@@ -145,7 +159,8 @@ class PasswordPolicyValidator
         }
 
         $normalized = strtolower(trim($password));
-        if (in_array($normalized, self::COMMON_PASSWORDS, true)) {
+        $strippedPunct = rtrim($normalized, " !@#$%^&*()_+-=[]{}|;':\",./<>?`~");
+        if (in_array($normalized, self::COMMON_PASSWORDS, true) || in_array($strippedPunct, self::COMMON_PASSWORDS, true)) {
             $errors[] = $this->trans('password.policy.too_common', [], 'Password is too common or easily guessable.');
         }
 
@@ -173,6 +188,9 @@ class PasswordPolicyValidator
             }
             if (!preg_match('/[0-9]/', $password)) {
                 $errors[] = $this->trans('password.policy.require_number', [], 'Password must include at least one number.');
+            }
+            if (preg_match('/(.)\1{3,}/', $password) || preg_match('/(?:0123|1234|2345|3456|4567|5678|6789|7890|abcd|bcde|cdef|defg|efgh|fghi|ghij|hijk|ijkl|jklm|klmn|lmno|mnop|nopq|opqr|pqrs|qrst|rstu|stuv|tuvw|uvwx|vwxy|wxyz)/i', $password)) {
+                $errors[] = $this->trans('password.policy.repetitive_chars', [], 'Password cannot contain 4 or more repetitive or sequential characters.');
             }
         }
 

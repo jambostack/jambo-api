@@ -2196,6 +2196,10 @@ return [
     'enduser.auth.social_login_failed'        => 'Social login failed: %message%',
     'enduser.auth.payload_too_large'          => 'Request payload too large (max 1MB).',
     'enduser.auth.invalid_username'           => 'Invalid username format or too long (max 100 characters).',
+    'enduser.auth.account_locked_out'         => 'Too many failed login attempts. Account temporarily locked for security. Please retry in %seconds% seconds.',
+    'enduser.auth.rate_limit_2fa_lockout'     => 'Too many invalid two-factor verification attempts. Challenge locked. Please retry in %seconds% seconds.',
+    'enduser.auth.reset_cooldown'             => 'A password reset link was recently requested. Please check your inbox or wait before retrying.',
+    'enduser.auth.sessions_revoked'           => 'All sessions have been revoked successfully.',
 
     // Password Policy
     'password.policy.min_length'              => 'Password must be at least %min% characters.',
@@ -2210,6 +2214,8 @@ return [
     'password.policy.current_required'        => 'Current password is required to change password.',
     'password.policy.current_incorrect'       => 'Current password is incorrect.',
     'password.policy.must_differ'             => 'New password must be different from current password.',
+    'password.policy.require_special'         => 'Password must include at least one special character.',
+    'password.policy.repetitive_chars'        => 'Password cannot contain 4 or more repetitive or sequential characters.',
 
     // EndUser Custom Fields Sanitization
     'enduser.custom_fields.must_be_object'    => 'Custom fields must be a valid key-value object.',

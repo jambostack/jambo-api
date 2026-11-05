@@ -2196,6 +2196,10 @@ return [
     'enduser.auth.social_login_failed'        => 'فشل تسجيل الدخول الاجتماعي: %message%',
     'enduser.auth.payload_too_large'          => 'الطلب أكبر من الحد المسموح به (1 ميغابايت كحد أقصى).',
     'enduser.auth.invalid_username'           => 'تنسيق اسم المستخدم غير صالح أو طويل جدًا (بحد أقصى 100 حرف).',
+    'enduser.auth.account_locked_out'         => 'محاولات تسجيل دخول فاشلة كثيرة جداً. تم قفل الحساب مؤقتاً لأسباب أمنية. يُرجى إعادة المحاولة بعد %seconds% ثانية.',
+    'enduser.auth.rate_limit_2fa_lockout'     => 'محاولات تحقق ثنائي غير صالحة كثيرة جداً. تم قفل التحدي. يُرجى إعادة المحاولة بعد %seconds% ثانية.',
+    'enduser.auth.reset_cooldown'             => 'تم طلب رابط إعادة تعيين كلمة المرور مؤخراً. يُرجى التحقق من بريدك أو الانتظار قبل المحاولة مجدداً.',
+    'enduser.auth.sessions_revoked'           => 'تم إلغاء جميع الجلسات بنجاح.',
 
     // Password Policy
     'password.policy.min_length'              => 'يجب أن تتكون كلمة المرور من %min% أحرف على الأقل.',
@@ -2210,6 +2214,8 @@ return [
     'password.policy.current_required'        => 'كلمة المرور الحالية مطلوبة لتغيير كلمة المرور.',
     'password.policy.current_incorrect'       => 'كلمة المرور الحالية غير صحيحة.',
     'password.policy.must_differ'             => 'يجب أن تكون كلمة المرور الجديدة مختلفة عن كلمة المرور الحالية.',
+    'password.policy.require_special'         => 'يجب أن تحتوي كلمة المرور على رمز خاص واحد على الأقل.',
+    'password.policy.repetitive_chars'        => 'لا يمكن أن تحتوي كلمة المرور على 4 أحرف متكررة أو متتالية أو أكثر.',
 
     // EndUser Custom Fields Sanitization
     'enduser.custom_fields.must_be_object'    => 'يجب أن تكون الحقول المخصصة كائن مفتاح-قيمة صالحًا.',

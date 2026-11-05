@@ -21,7 +21,7 @@ security:
             security: false
 
         end_user:
-            pattern: ^/api/[\w-]{36}/auth/(logout|refresh|me)
+            pattern: ^/api/[\w-]{36}/auth/(logout|refresh|me|sessions)
             stateless: true
             provider: end_user_provider
             custom_authenticators:
@@ -73,7 +73,7 @@ security:
         - { path: ^/api/invitations, roles: PUBLIC_ACCESS }
         - { path: ^/mcp, roles: PUBLIC_ACCESS }
         - { path: ^/public-api, roles: PUBLIC_ACCESS }
-        - { path: '^/api/[\w-]{36}/auth/(register|login|forgot-password|reset-password)', roles: PUBLIC_ACCESS }
+        - { path: '^/api/[\w-]{36}/auth/(register|login|forgot-password|reset-password|verify-2fa|social)', roles: PUBLIC_ACCESS }
         # ── Routes publiques SEO / Redirects / Forms / Embeds (v1.19+) ──
         - { path: '^/[\w-]+/(sitemap\.xml|sitemap-images\.xml|robots\.txt)', roles: PUBLIC_ACCESS }
         - { path: '^/[\w-]+/redirects/resolve', roles: PUBLIC_ACCESS }

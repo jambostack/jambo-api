@@ -35,16 +35,16 @@ class ProjectAuthLockoutService
         return max(0, $remaining);
     }
 
-    public function recordFailedAttempt(string $identifier): int
+    public function recordFailedAttempt(string $identifier, int $maxAttempts = self::MAX_ATTEMPTS, int $lockoutDuration = self::LOCKOUT_DURATION): int
     {
         $key = $this->buildKey($identifier);
         $current = $this->cache->get($key, fn() => ['attempts' => 0, 'locked_until' => 0]);
         $attempts = ((int) ($current['attempts'] ?? 0)) + 1;
-        $lockedUntil = $attempts >= self::MAX_ATTEMPTS ? time() + self::LOCKOUT_DURATION : (int) ($current['locked_until'] ?? 0);
+        $lockedUntil = $attempts >= $maxAttempts ? time() + $lockoutDuration : (int) ($current['locked_until'] ?? 0);
 
         $this->cache->delete($key);
-        $this->cache->get($key, function (ItemInterface $item) use ($attempts, $lockedUntil) {
-            $item->expiresAfter(self::LOCKOUT_DURATION);
+        $this->cache->get($key, function (ItemInterface $item) use ($attempts, $lockedUntil, $lockoutDuration) {
+            $item->expiresAfter($lockoutDuration);
             return [
                 'attempts'     => $attempts,
                 'locked_until' => $lockedUntil,
@@ -52,6 +52,23 @@ class ProjectAuthLockoutService
         });
 
         return $attempts;
+    }
+
+    public function setCooldown(string $identifier, int $durationSeconds = 60): void
+    {
+        $key = 'project_auth_cooldown_' . md5($identifier);
+        $this->cache->delete($key);
+        $this->cache->get($key, function (ItemInterface $item) use ($durationSeconds) {
+            $item->expiresAfter($durationSeconds);
+            return time() + $durationSeconds;
+        });
+    }
+
+    public function hasCooldown(string $identifier): bool
+    {
+        $key = 'project_auth_cooldown_' . md5($identifier);
+        $expires = $this->cache->get($key, fn() => 0);
+        return $expires > time();
     }
 
     public function clearAttempts(string $identifier): void

@@ -73,15 +73,22 @@ class TwoFactorService
         $formatted = implode('-', str_split($clean, 4));
         $hash = hash('sha256', $formatted);
 
-        foreach ($storedCodes as &$entry) {
+        $matchedKey = null;
+        foreach ($storedCodes as $k => $entry) {
             if (!is_array($entry) || empty($entry['hash']) || !is_string($entry['hash'])) {
                 continue;
             }
-            if (hash_equals($entry['hash'], $hash) && empty($entry['used'])) {
-                $entry['used'] = true;
-                return true;
+            $isMatch = hash_equals($entry['hash'], $hash);
+            if ($isMatch && empty($entry['used']) && $matchedKey === null) {
+                $matchedKey = $k;
             }
         }
+
+        if ($matchedKey !== null) {
+            $storedCodes[$matchedKey]['used'] = true;
+            return true;
+        }
+
         return false;
     }
 
