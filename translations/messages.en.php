@@ -1950,6 +1950,10 @@ return [
     'versioning.version_not_found' => 'Version not found.',
     'versioning.invalid_version' => 'Invalid version number.',
     'versioning.restored_successfully' => 'Restoration to version %version% completed.',
+    'versioning.version_deleted_successfully' => 'Version %version% was successfully deleted.',
+    'versioning.versions_pruned_successfully' => 'Older versions pruned successfully (%count% removed).',
+    'versioning.cannot_delete_last_version' => 'Cannot delete the only existing version of an entry.',
+    'versioning.keep_invalid' => 'Invalid keep count parameter (must be between 1 and 100).',
     'media.not_found' => 'Media not found.',
     'media.access_denied' => 'Access denied.',
     'media.file_not_found' => 'File not found.',
@@ -2664,6 +2668,9 @@ return [
     'media_folder.cannot_move_into_itself'            => 'Cannot move a folder into itself',
     'media_folder.cannot_move_into_descendants'       => 'Cannot move a folder into one of its descendants',
     'media_folder.max_depth_exceeded'                 => 'Maximum folder hierarchy depth exceeded',
+    'media_folder.duplicate_name'                     => 'A folder with this name already exists in this directory.',
+    'media_folder.reserved_name'                      => 'This folder name is reserved by the system.',
+    'media_folder.circular_reference'                 => 'Circular folder reference detected.',
 
     // RealtimeController
     'realtime.invalid_project_uuid'                   => 'Invalid project UUID format',

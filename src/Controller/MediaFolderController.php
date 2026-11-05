@@ -20,6 +20,13 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class MediaFolderController extends AbstractController
 {
     public const MAX_FOLDERS_PER_PROJECT = 200;
+    public const MAX_DEPTH = 15;
+    public const MAX_NAME_LENGTH = 150;
+    public const RESERVED_NAMES = [
+        '.', '..', 'con', 'prn', 'aux', 'nul',
+        'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+        'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9',
+    ];
 
     private const SECURITY_HEADERS = [
         'Cache-Control' => 'no-store, no-cache, must-revalidate',
@@ -35,6 +42,56 @@ class MediaFolderController extends AbstractController
         private ?AuditService $auditService = null,
         private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function validateFolderName(string $name): ?JsonResponse
+    {
+        if ($name === '') {
+            return new JsonResponse(['error' => $this->trans('media_folder.name_empty', [], 'Name cannot be empty')], 422, self::SECURITY_HEADERS);
+        }
+        if (mb_strlen($name) > self::MAX_NAME_LENGTH) {
+            return new JsonResponse(['error' => $this->trans('media_folder.name_too_long', [], 'Name cannot exceed 150 characters')], 422, self::SECURITY_HEADERS);
+        }
+        if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
+            return new JsonResponse(['error' => $this->trans('media_folder.name_control_characters', [], 'Name contains forbidden control characters')], 422, self::SECURITY_HEADERS);
+        }
+        if ($name === '.' || $name === '..' || str_contains($name, '..') || str_contains($name, '/') || str_contains($name, '\\')) {
+            return new JsonResponse(['error' => $this->trans('media_folder.name_invalid_traversal', [], 'Name cannot contain path traversal sequences or slashes')], 422, self::SECURITY_HEADERS);
+        }
+        if (in_array(strtolower($name), self::RESERVED_NAMES, true)) {
+            return new JsonResponse(['error' => $this->trans('media_folder.reserved_name', [], 'This folder name is reserved by the system.')], 422, self::SECURITY_HEADERS);
+        }
+        return null;
+    }
+
+    private function getFolderDepth(?MediaFolder $folder): int
+    {
+        $depth = 0;
+        $visited = [];
+        $curr = $folder;
+        while ($curr !== null) {
+            if (in_array($curr->id, $visited, true)) {
+                return 999;
+            }
+            $visited[] = $curr->id;
+            $depth++;
+            $curr = $curr->parent;
+        }
+        return $depth;
+    }
+
+    private function getSubtreeHeight(MediaFolder $folder, array $allFolders): int
+    {
+        $maxHeight = 0;
+        foreach ($allFolders as $f) {
+            if (!$f->isDeleted() && $f->parent?->id === $folder->id) {
+                $height = 1 + $this->getSubtreeHeight($f, $allFolders);
+                if ($height > $maxHeight) {
+                    $maxHeight = $height;
+                }
+            }
+        }
+        return $maxHeight;
+    }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
@@ -138,27 +195,18 @@ class MediaFolderController extends AbstractController
             ], 422, self::SECURITY_HEADERS);
         }
 
-        $name = trim((string) ($data['name'] ?? ''));
-        if ($name === '') {
+        $rawName = (string) ($data['name'] ?? '');
+        $name = trim($rawName);
+        if ($name === '' && $rawName === '') {
             return new JsonResponse(['error' => $this->trans('media_folder.name_required', [], 'Name is required')], 422, self::SECURITY_HEADERS);
         }
-        if (mb_strlen($name) > 150) {
-            return new JsonResponse(['error' => $this->trans('media_folder.name_too_long', [], 'Name cannot exceed 150 characters')], 422, self::SECURITY_HEADERS);
+        if ($errResponse = $this->validateFolderName($name)) {
+            return $errResponse;
         }
-        if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
-            return new JsonResponse(['error' => $this->trans('media_folder.name_control_characters', [], 'Name contains forbidden control characters')], 422, self::SECURITY_HEADERS);
-        }
-        if (str_contains($name, '..') || str_contains($name, '/') || str_contains($name, '\\')) {
-            return new JsonResponse(['error' => $this->trans('media_folder.name_invalid_traversal', [], 'Name cannot contain path traversal sequences or slashes')], 422, self::SECURITY_HEADERS);
-        }
-
-        $folder = new MediaFolder();
-        $folder->name = $name;
-        $folder->slug = (new AsciiSlugger())->slug($name)->lower()->toString();
-        $folder->project = $project;
 
         // Position après le dernier dossier du même niveau
         $parentId = $data['parent_id'] ?? null;
+        $parent = null;
         if ($parentId !== null) {
             if (!is_numeric($parentId) || (int) $parentId <= 0) {
                 return new JsonResponse(['error' => $this->trans('media_folder.invalid_parent_id', [], 'Invalid parent folder ID')], 422, self::SECURITY_HEADERS);
@@ -168,19 +216,44 @@ class MediaFolderController extends AbstractController
                 return new JsonResponse(['error' => $this->trans('media_folder.parent_not_found', [], 'Parent folder not found')], 404, self::SECURITY_HEADERS);
             }
 
-            // Hierarchy depth check (prevent unbounded tree nesting)
+            // Hierarchy depth check (prevent unbounded tree nesting and cycles)
             $depth = 1;
             $ancestor = $parent;
+            $visited = [];
             while ($ancestor !== null) {
+                if (in_array($ancestor->id, $visited, true)) {
+                    return new JsonResponse(['error' => $this->trans('media_folder.circular_reference', [], 'Circular folder reference detected.')], 422, self::SECURITY_HEADERS);
+                }
+                $visited[] = $ancestor->id;
                 $depth++;
-                if ($depth > 15) {
+                if ($depth > self::MAX_DEPTH) {
                     return new JsonResponse(['error' => $this->trans('media_folder.max_depth_exceeded', [], 'Maximum folder hierarchy depth exceeded')], 422, self::SECURITY_HEADERS);
                 }
                 $ancestor = $ancestor->parent;
             }
-
-            $folder->parent = $parent;
         }
+
+        // Check duplicate sibling name
+        $targetParentId = $parent?->id;
+        $normalizedName = mb_strtolower($name);
+        foreach ($allFolders as $f) {
+            if (!$f->isDeleted() && ($f->parent?->id === $targetParentId) && mb_strtolower($f->name) === $normalizedName) {
+                return new JsonResponse([
+                    'error' => $this->trans('media_folder.duplicate_name', [], 'A folder with this name already exists in this directory.'),
+                    'code' => 'DUPLICATE_NAME',
+                ], 422, self::SECURITY_HEADERS);
+            }
+        }
+
+        $folder = new MediaFolder();
+        $folder->name = $name;
+        $slug = (new AsciiSlugger())->slug($name)->lower()->toString();
+        if ($slug === '') {
+            $slug = 'folder-' . bin2hex(random_bytes(4));
+        }
+        $folder->slug = $slug;
+        $folder->project = $project;
+        $folder->parent = $parent;
 
         // Calculer la position max parmi les siblings
         $maxPos = 0;
@@ -233,20 +306,29 @@ class MediaFolderController extends AbstractController
         }
         if (array_key_exists('name', $data)) {
             $name = trim((string) $data['name']);
-            if ($name === '') {
-                return new JsonResponse(['error' => $this->trans('media_folder.name_empty', [], 'Name cannot be empty')], 422, self::SECURITY_HEADERS);
+            if ($errResponse = $this->validateFolderName($name)) {
+                return $errResponse;
             }
-            if (mb_strlen($name) > 150) {
-                return new JsonResponse(['error' => $this->trans('media_folder.name_too_long', [], 'Name cannot exceed 150 characters')], 422, self::SECURITY_HEADERS);
+
+            // Duplicate sibling check in the same parent (excluding current folder)
+            $targetParentId = $folder->parent?->id;
+            $normalizedName = mb_strtolower($name);
+            $allFolders = $this->folderRepository->findByProject($project);
+            foreach ($allFolders as $f) {
+                if ($f->id !== $folder->id && !$f->isDeleted() && ($f->parent?->id === $targetParentId) && mb_strtolower($f->name) === $normalizedName) {
+                    return new JsonResponse([
+                        'error' => $this->trans('media_folder.duplicate_name', [], 'A folder with this name already exists in this directory.'),
+                        'code' => 'DUPLICATE_NAME',
+                    ], 422, self::SECURITY_HEADERS);
+                }
             }
-            if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
-                return new JsonResponse(['error' => $this->trans('media_folder.name_control_characters', [], 'Name contains forbidden control characters')], 422, self::SECURITY_HEADERS);
-            }
-            if (str_contains($name, '..') || str_contains($name, '/') || str_contains($name, '\\')) {
-                return new JsonResponse(['error' => $this->trans('media_folder.name_invalid_traversal', [], 'Name cannot contain path traversal sequences or slashes')], 422, self::SECURITY_HEADERS);
-            }
+
             $folder->name = $name;
-            $folder->slug = (new AsciiSlugger())->slug($folder->name)->lower()->toString();
+            $slug = (new AsciiSlugger())->slug($folder->name)->lower()->toString();
+            if ($slug === '') {
+                $slug = 'folder-' . bin2hex(random_bytes(4));
+            }
+            $folder->slug = $slug;
         }
 
         $this->em->flush();
@@ -306,19 +388,54 @@ class MediaFolderController extends AbstractController
             // Empêcher le déplacement vers un descendant (boucle cyclique) et borner la profondeur
             $depth = 1;
             $ancestor = $parent;
+            $visited = [];
             while ($ancestor !== null) {
                 if ($ancestor->id === $folder->id) {
                     return new JsonResponse(['error' => $this->trans('media_folder.cannot_move_into_descendants', [], 'Cannot move a folder into one of its descendants')], 422, self::SECURITY_HEADERS);
                 }
+                if (in_array($ancestor->id, $visited, true)) {
+                    return new JsonResponse(['error' => $this->trans('media_folder.circular_reference', [], 'Circular folder reference detected.')], 422, self::SECURITY_HEADERS);
+                }
+                $visited[] = $ancestor->id;
                 $depth++;
-                if ($depth > 15) {
+                if ($depth > self::MAX_DEPTH) {
                     return new JsonResponse(['error' => $this->trans('media_folder.max_depth_exceeded', [], 'Maximum folder hierarchy depth exceeded')], 422, self::SECURITY_HEADERS);
                 }
                 $ancestor = $ancestor->parent;
             }
 
+            // Depth check combining target parent and moved folder subtree
+            $allFolders = $this->folderRepository->findByProject($project);
+            $parentDepth = $this->getFolderDepth($parent);
+            $subtreeHeight = $this->getSubtreeHeight($folder, $allFolders);
+            if (($parentDepth + 1 + $subtreeHeight) > self::MAX_DEPTH) {
+                return new JsonResponse(['error' => $this->trans('media_folder.max_depth_exceeded', [], 'Maximum folder hierarchy depth exceeded')], 422, self::SECURITY_HEADERS);
+            }
+
+            // Duplicate sibling check in destination parent
+            $normalizedName = mb_strtolower($folder->name);
+            foreach ($allFolders as $f) {
+                if ($f->id !== $folder->id && !$f->isDeleted() && ($f->parent?->id === $parent->id) && mb_strtolower($f->name) === $normalizedName) {
+                    return new JsonResponse([
+                        'error' => $this->trans('media_folder.duplicate_name', [], 'A folder with this name already exists in this directory.'),
+                        'code' => 'DUPLICATE_NAME',
+                    ], 422, self::SECURITY_HEADERS);
+                }
+            }
+
             $folder->parent = $parent;
         } else {
+            // Moving to root: duplicate check among root folders
+            $normalizedName = mb_strtolower($folder->name);
+            $allFolders = $this->folderRepository->findByProject($project);
+            foreach ($allFolders as $f) {
+                if ($f->id !== $folder->id && !$f->isDeleted() && ($f->parent === null) && mb_strtolower($f->name) === $normalizedName) {
+                    return new JsonResponse([
+                        'error' => $this->trans('media_folder.duplicate_name', [], 'A folder with this name already exists in this directory.'),
+                        'code' => 'DUPLICATE_NAME',
+                    ], 422, self::SECURITY_HEADERS);
+                }
+            }
             $folder->parent = null;
         }
 
@@ -349,8 +466,20 @@ class MediaFolderController extends AbstractController
             return new JsonResponse(['error' => $this->trans('media_folder.not_found', [], 'Folder not found')], 404, self::SECURITY_HEADERS);
         }
 
-        // Soft-delete : les enfants et les médias restent, leur FK est SET NULL
         $folderName = $folder->name;
+        $parent = $folder->parent;
+
+        // Disassociate medias attached to this folder (return them to root)
+        $this->em->createQuery('UPDATE App\Entity\Media m SET m.folder = NULL WHERE m.folder = :folder')
+            ->setParameter('folder', $folder)
+            ->execute();
+
+        // Re-parent active child folders to the parent of the deleted folder
+        $this->em->createQuery('UPDATE App\Entity\MediaFolder f SET f.parent = :parent WHERE f.parent = :folder')
+            ->setParameter('parent', $parent)
+            ->setParameter('folder', $folder)
+            ->execute();
+
         $folder->deletedAt = new \DateTimeImmutable();
         $this->em->flush();
 

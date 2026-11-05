@@ -97,16 +97,22 @@ class VersioningService
         $version2 = $this->versionRepo->findVersionByNumber($entry, $v2);
 
         if (!$version1 || !$version2) {
-            return ['error' => 'Version introuvable'];
+            return ['error' => 'version_not_found', 'code' => 'NOT_FOUND'];
         }
 
         $s1 = $version1->snapshot;
         $s2 = $version2->snapshot;
 
+        // Exclude system/technical metadata from content diff
+        $excludedKeys = ['id', 'uuid', 'collection', 'created_at', 'deleted_at'];
         $allKeys = array_unique(array_merge(array_keys($s1), array_keys($s2)));
         $changes = [];
 
         foreach ($allKeys as $key) {
+            if (in_array($key, $excludedKeys, true)) {
+                continue;
+            }
+
             $val1 = $s1[$key] ?? null;
             $val2 = $s2[$key] ?? null;
 
@@ -123,5 +129,64 @@ class VersioningService
             'version2' => $v2,
             'changes' => $changes,
         ];
+    }
+
+    /**
+     * Delete a single version of an entry.
+     * Cannot delete the only existing version.
+     */
+    public function deleteVersion(ContentEntry $entry, int $versionNumber): bool
+    {
+        $allVersions = $this->versionRepo->findByEntry($entry);
+        if (count($allVersions) <= 1) {
+            return false;
+        }
+
+        $targetVersion = null;
+        foreach ($allVersions as $v) {
+            if ($v->versionNumber === $versionNumber) {
+                $targetVersion = $v;
+                break;
+            }
+        }
+
+        if (!$targetVersion) {
+            return false;
+        }
+
+        $this->em->remove($targetVersion);
+        $this->em->flush();
+
+        return true;
+    }
+
+    /**
+     * Prune older versions of an entry, keeping the N most recent versions.
+     */
+    public function pruneVersions(ContentEntry $entry, int $keepCount = 20): int
+    {
+        if ($keepCount < 1) {
+            $keepCount = 1;
+        }
+
+        $allVersions = $this->versionRepo->findByEntry($entry);
+        if (count($allVersions) <= $keepCount) {
+            return 0;
+        }
+
+        // $allVersions is sorted DESC by versionNumber
+        $toPrune = array_slice($allVersions, $keepCount);
+        $prunedCount = 0;
+
+        foreach ($toPrune as $v) {
+            $this->em->remove($v);
+            $prunedCount++;
+        }
+
+        if ($prunedCount > 0) {
+            $this->em->flush();
+        }
+
+        return $prunedCount;
     }
 }

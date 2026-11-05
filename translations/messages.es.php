@@ -1950,6 +1950,10 @@ return [
     'versioning.version_not_found' => 'Versión no encontrada.',
     'versioning.invalid_version' => 'Número de versión inválido.',
     'versioning.restored_successfully' => 'Restauración a la versión %version% completada.',
+    'versioning.version_deleted_successfully' => 'La versión %version% se eliminó con éxito.',
+    'versioning.versions_pruned_successfully' => 'Versiones antiguas depuradas con éxito (%count% eliminadas).',
+    'versioning.cannot_delete_last_version' => 'No se puede eliminar la única versión existente de una entrada.',
+    'versioning.keep_invalid' => 'Parámetro de conservación no válido (debe estar entre 1 y 100).',
     'media.not_found' => 'Medio no encontrado.',
     'media.access_denied' => 'Acceso denegado.',
     'media.file_not_found' => 'Archivo no encontrado.',
@@ -2664,6 +2668,9 @@ return [
     'media_folder.cannot_move_into_itself'            => 'No se puede mover una carpeta dentro de sí misma',
     'media_folder.cannot_move_into_descendants'       => 'No se puede mover una carpeta a uno de sus descendientes',
     'media_folder.max_depth_exceeded'                 => 'Profundidad máxima de la jerarquía de carpetas superada',
+    'media_folder.duplicate_name'                     => 'Ya existe una carpeta con este nombre en este directorio.',
+    'media_folder.reserved_name'                      => 'Este nombre de carpeta está reservado por el sistema.',
+    'media_folder.circular_reference'                 => 'Se ha detectado una referencia circular de carpetas.',
 
     // RealtimeController
     'realtime.invalid_project_uuid'                   => 'Formato UUID de proyecto no válido',

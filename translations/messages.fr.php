@@ -1968,6 +1968,10 @@ return [
     'versioning.version_not_found' => 'Version introuvable.',
     'versioning.invalid_version' => 'Numéro de version invalide.',
     'versioning.restored_successfully' => 'Restauration à la version %version% effectuée.',
+    'versioning.version_deleted_successfully' => 'La version %version% a été supprimée avec succès.',
+    'versioning.versions_pruned_successfully' => 'Anciennes versions nettoyées avec succès (%count% supprimées).',
+    'versioning.cannot_delete_last_version' => 'Impossible de supprimer la seule version existante d\'une entrée.',
+    'versioning.keep_invalid' => 'Paramètre de conservation invalide (doit être compris entre 1 et 100).',
     'media.not_found' => 'Média introuvable.',
     'media.access_denied' => 'Accès non autorisé.',
     'media.file_not_found' => 'Fichier introuvable.',
@@ -2682,6 +2686,9 @@ return [
     'media_folder.cannot_move_into_itself'            => 'Impossible de déplacer un dossier dans lui-même',
     'media_folder.cannot_move_into_descendants'       => 'Impossible de déplacer un dossier dans un de ses descendants',
     'media_folder.max_depth_exceeded'                 => 'Profondeur maximale de la hiérarchie de dossiers dépassée',
+    'media_folder.duplicate_name'                     => 'Un dossier portant ce nom existe déjà dans ce répertoire.',
+    'media_folder.reserved_name'                      => 'Ce nom de dossier est réservé par le système.',
+    'media_folder.circular_reference'                 => 'Référence de dossier circulaire détectée.',
 
     // RealtimeController
     'realtime.invalid_project_uuid'                   => 'Format UUID de projet invalide',

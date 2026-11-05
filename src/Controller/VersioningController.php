@@ -86,7 +86,7 @@ class VersioningController extends AbstractController
         return new JsonResponse($versions, 200, self::SECURITY_HEADERS);
     }
 
-    #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}/restore', name: 'versions_restore', methods: ['POST'])]
+    #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}/restore', name: 'versions_restore', requirements: ['versionNumber' => '\d+'], methods: ['POST'])]
     public function restore(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
     {
         if ($this->versioningLimiter !== null) {
@@ -199,6 +199,178 @@ class VersioningController extends AbstractController
         }
 
         return new JsonResponse($diff, 200, self::SECURITY_HEADERS);
+    }
+
+    #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/prune', name: 'versions_prune', methods: ['POST', 'DELETE'])]
+    public function prune(string $projectUuid, string $collectionSlug, string $uuid, Request $request): JsonResponse
+    {
+        if ($this->versioningLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse([
+                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, self::SECURITY_HEADERS);
+            }
+        }
+
+        $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
+        if (!$entry) return new JsonResponse(['error' => $this->trans('versioning.entry_not_found', [], 'Entry not found.')], 404, self::SECURITY_HEADERS);
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
+            return new JsonResponse(['error' => $this->trans('versioning.auth_required', [], 'Authentication required.')], 401, self::SECURITY_HEADERS);
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.delete', $entry->project);
+        }
+
+        $keep = $request->query->getInt('keep', 20);
+        if ($request->getContent()) {
+            try {
+                $payload = $request->toArray();
+                if (isset($payload['keep'])) {
+                    $keep = (int) $payload['keep'];
+                }
+            } catch (\Throwable) {}
+        }
+
+        if ($keep < 1 || $keep > 100) {
+            return new JsonResponse(['error' => $this->trans('versioning.keep_invalid', [], 'Invalid keep count parameter (must be between 1 and 100).')], 422, self::SECURITY_HEADERS);
+        }
+
+        $prunedCount = $this->versioning->pruneVersions($entry, $keep);
+
+        $this->auditService?->log(
+            toolName: 'version_prune',
+            project: $entry->project,
+            input: ['entry_uuid' => $uuid, 'collection' => $collectionSlug, 'keep' => $keep],
+            output: ['pruned_count' => $prunedCount],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier() ?? 'system',
+            source: 'versioning'
+        );
+        $this->auditService?->flush();
+
+        $msg = $this->trans('versioning.versions_pruned_successfully', ['%count%' => $prunedCount], "Older versions pruned successfully (%count% removed).");
+        return new JsonResponse(['success' => true, 'pruned' => $prunedCount, 'message' => $msg], 200, self::SECURITY_HEADERS);
+    }
+
+    #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}', name: 'versions_detail', requirements: ['versionNumber' => '\d+'], methods: ['GET'])]
+    public function detail(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
+    {
+        if ($this->versioningLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse([
+                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, self::SECURITY_HEADERS);
+            }
+        }
+
+        if ($versionNumber < 1 || $versionNumber > 1000000) {
+            return new JsonResponse(['error' => $this->trans('versioning.invalid_version', [], 'Invalid version number.')], 422, self::SECURITY_HEADERS);
+        }
+
+        $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
+        if (!$entry) return new JsonResponse(['error' => $this->trans('versioning.entry_not_found', [], 'Entry not found.')], 404, self::SECURITY_HEADERS);
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
+            return new JsonResponse(['error' => $this->trans('versioning.auth_required', [], 'Authentication required.')], 401, self::SECURITY_HEADERS);
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $entry->project);
+        }
+
+        $version = $this->versionRepo->findVersionByNumber($entry, $versionNumber);
+        if (!$version) {
+            return new JsonResponse(['error' => $this->trans('versioning.version_not_found', [], 'Version not found.')], 404, self::SECURITY_HEADERS);
+        }
+
+        return new JsonResponse([
+            'uuid' => $version->uuid?->toRfc4122(),
+            'versionNumber' => $version->versionNumber,
+            'label' => $version->label,
+            'snapshot' => $version->snapshot,
+            'createdAt' => $version->createdAt->format(\DateTimeInterface::ATOM),
+            'createdBy' => $version->createdBy ? ($version->createdBy->name ?: $version->createdBy->email) : null,
+        ], 200, self::SECURITY_HEADERS);
+    }
+
+    #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}', name: 'versions_delete', requirements: ['versionNumber' => '\d+'], methods: ['DELETE'])]
+    public function delete(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
+    {
+        if ($this->versioningLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse([
+                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, self::SECURITY_HEADERS);
+            }
+        }
+
+        if ($versionNumber < 1 || $versionNumber > 1000000) {
+            return new JsonResponse(['error' => $this->trans('versioning.invalid_version', [], 'Invalid version number.')], 422, self::SECURITY_HEADERS);
+        }
+
+        $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
+        if (!$entry) return new JsonResponse(['error' => $this->trans('versioning.entry_not_found', [], 'Entry not found.')], 404, self::SECURITY_HEADERS);
+
+        if (!$this->getUser() && $request->attributes->get('_project') !== $entry->project) {
+            return new JsonResponse(['error' => $this->trans('versioning.auth_required', [], 'Authentication required.')], 401, self::SECURITY_HEADERS);
+        }
+
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.delete', $entry->project);
+        }
+
+        $version = $this->versionRepo->findVersionByNumber($entry, $versionNumber);
+        if (!$version) {
+            return new JsonResponse(['error' => $this->trans('versioning.version_not_found', [], 'Version not found.')], 404, self::SECURITY_HEADERS);
+        }
+
+        $deleted = $this->versioning->deleteVersion($entry, $versionNumber);
+        if (!$deleted) {
+            return new JsonResponse(['error' => $this->trans('versioning.cannot_delete_last_version', [], 'Cannot delete the only existing version of an entry.')], 422, self::SECURITY_HEADERS);
+        }
+
+        $this->auditService?->log(
+            toolName: 'version_delete',
+            project: $entry->project,
+            input: ['entry_uuid' => $uuid, 'collection' => $collectionSlug, 'version' => $versionNumber],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier() ?? 'system',
+            source: 'versioning'
+        );
+        $this->auditService?->flush();
+
+        $msg = $this->trans('versioning.version_deleted_successfully', ['%version%' => $versionNumber], "Version %version% was successfully deleted.");
+        return new JsonResponse(['success' => true, 'message' => $msg], 200, self::SECURITY_HEADERS);
     }
 
     private function trans(string $key, array|string $paramsOrDefault = [], array|string $defaultOrParams = []): string

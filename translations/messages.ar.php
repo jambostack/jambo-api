@@ -1950,6 +1950,10 @@ return [
     'versioning.version_not_found' => 'النسخة غير موجودة.',
     'versioning.invalid_version' => 'رقم النسخة غير صالح.',
     'versioning.restored_successfully' => 'تمت استعادة النسخة %version% بنجاح.',
+    'versioning.version_deleted_successfully' => 'تم حذف النسخة %version% بنجاح.',
+    'versioning.versions_pruned_successfully' => 'تم تنظيف النسخ القديمة بنجاح (تمت إزالة %count%).',
+    'versioning.cannot_delete_last_version' => 'لا يمكن حذف النسخة الوحيدة الموجودة لأحد المدخلات.',
+    'versioning.keep_invalid' => 'معلمة عدد النسخ المحتفظ بها غير صالحة (يجب أن تكون بين 1 و 100).',
     'media.not_found' => 'الوسائط غير موجودة.',
     'media.access_denied' => 'تم رفض الوصول.',
     'media.file_not_found' => 'الملف غير موجود.',
@@ -2666,6 +2670,9 @@ return [
     'media_folder.cannot_move_into_itself'            => 'لا يمكن نقل المجلد إلى داخل نفسه',
     'media_folder.cannot_move_into_descendants'       => 'لا يمكن نقل المجلد إلى أحد فروعه',
     'media_folder.max_depth_exceeded'                 => 'تم تجاوز الحد الأقصى لعمق التسلسل الهرمي للمجلدات',
+    'media_folder.duplicate_name'                     => 'يوجد مجلد بهذا الاسم بالفعل في هذا الدليل.',
+    'media_folder.reserved_name'                      => 'اسم المجلد هذا محجوز من قبل النظام.',
+    'media_folder.circular_reference'                 => 'تم اكتشاف مرجع مجلد دائري.',
 
     // RealtimeController
     'realtime.invalid_project_uuid'                   => 'تنسيق UUID للمشروع غير صالح',
