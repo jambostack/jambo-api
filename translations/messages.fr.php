@@ -3640,4 +3640,9 @@ return [
     'enduser.auth.invalid_email_format' => 'Format d\'adresse e-mail invalide.',
     'enduser.auth.reset_ip_locked_out' => 'Trop de requêtes de réinitialisation de mot de passe depuis cette adresse IP. Veuillez réessayer dans %seconds% secondes.',
     'enduser.auth.password_confirmation_mismatch' => 'Le mot de passe et sa confirmation ne correspondent pas.',
+
+    // ─── Cycle 86: OAuth & OIDC Callback Resiliency & Social Hardening ───
+    'auth.social.error_failed' => 'Échec de l\'authentification sociale. Veuillez réessayer.',
+    'auth.social.cancelled' => 'La connexion sociale a été annulée.',
+    'oidc.cancelled' => 'La connexion SSO a été annulée.',
 ];

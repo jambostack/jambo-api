@@ -3622,4 +3622,9 @@ return [
     'enduser.auth.invalid_email_format' => 'Formato de dirección de correo electrónico no válido.',
     'enduser.auth.reset_ip_locked_out' => 'Demasiadas solicitudes de restablecimiento de contraseña desde esta dirección IP. Por favor, inténtelo de nuevo en %seconds% segundos.',
     'enduser.auth.password_confirmation_mismatch' => 'La contraseña y la confirmación de la contraseña no coinciden.',
+
+    // ─── Cycle 86: OAuth & OIDC Callback Resiliency & Social Hardening ───
+    'auth.social.error_failed' => 'Error en la autenticación social. Inténtelo de nuevo.',
+    'auth.social.cancelled' => 'El inicio de sesión social ha sido cancelado.',
+    'oidc.cancelled' => 'El inicio de sesión SSO ha sido cancelado.',
 ];

@@ -7,6 +7,29 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.151] — 2026-11-05
+
+### OAuth & OIDC Callback Resiliency, Anti-Cache Hardening, Social Auth & Strict I18n (Cycle #86)
+- **OAuth & OIDC Callback Exception & Cancellation Resiliency (`SocialLoginController` & `OidcController`)**:
+  - Replaced unhandled 500 `LogicException` on provider errors and user cancellations (`error=access_denied`, etc.) with graceful error handling and redirection to login.
+  - Automatically cleaned up temporary session state (`oauth2state_*`, `oauth2verifier_*`, `oidc_state`, `oidc_code_verifier`, `oidc_nonce`) on callback aborts.
+  - Redirected with translated error keys (`auth.social.cancelled`, `auth.social.error_failed`, `oidc.cancelled`, `oidc.error_failed`).
+- **OAuth & OIDC Authorization URL Anti-Cache Hardening**:
+  - Added strict anti-cache headers (`Cache-Control: no-cache, no-store, must-revalidate`, `Pragma: no-cache`) to authorization redirect responses in both `SocialLoginController::connect` and `OidcController::start` to prevent browsers or intermediaries from caching single-use PKCE and CSRF states.
+  - Ensured explicit session initialization on `/connect/{provider}` before storing state.
+  - Added safe decryption error handling for encrypted OIDC client secrets (`enc:...`) in `OidcController::start`, preventing unhandled 500 error traces and returning translated 404 responses.
+- **Login Error Propagation & Strict I18n (`SecurityController` & `login.tsx`)**:
+  - Safely propagated allowed translated error query keys in `SecurityController::login`, mapping legacy codes (`oidc_failed` -> `oidc.error_failed`, `social_auth_failed` -> `auth.social.error_failed`) while maintaining strict allow-list sanitization against injection attacks.
+  - Updated `assets/js/pages/auth/login.tsx` to dynamically translate error parameters with `t(error)` without hardcoded UI strings.
+- **Enterprise SSO OIDC Identity Recognition (`SocialLoginService`)**:
+  - Extended `SocialLoginService::canUnlinkProvider` to recognize enterprise OIDC identities (`$user->oidcSub`) as a valid persistent authentication mechanism, preventing lockouts while allowing social unlinking.
+- **Registration Flow Password Policy Optimization (`RegisteredUserController`)**:
+  - Reordered validation in `RegisteredUserController::store` to execute NIST/OWASP password policy verification prior to database email uniqueness checks, eliminating unnecessary DB queries for weak passwords.
+- **Strict 100% I18n Compliance**:
+  - Added 3 new translation keys (`auth.social.error_failed`, `auth.social.cancelled`, `oidc.cancelled`) with 100% parity across all 4 supported locales (3,329 keys each in English, French, Spanish, and Arabic).
+- **Test Suite Verification**:
+  - Created dedicated test suite `Cycle86OAuthAndOidcHardeningTest` covering cancellation handling, session purging, anti-cache headers, safe secret decryption, login error propagation, OIDC unlink recognition, registration order, and 4-locale parity (13 tests, 55 assertions, 100% pass).
+
 ## [1.26.150] — 2026-11-05
 
 ### OAuth Flow Hardening, End-User Password Reset Anti-Enumeration & Multi-Tenant Reset Purge (Cycle #85)

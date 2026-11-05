@@ -3622,4 +3622,9 @@ return [
     'enduser.auth.invalid_email_format' => 'Invalid email address format.',
     'enduser.auth.reset_ip_locked_out' => 'Too many password reset requests from this IP address. Please retry in %seconds% seconds.',
     'enduser.auth.password_confirmation_mismatch' => 'Password and password confirmation do not match.',
+
+    // ─── Cycle 86: OAuth & OIDC Callback Resiliency & Social Hardening ───
+    'auth.social.error_failed' => 'Social authentication failed. Please try again.',
+    'auth.social.cancelled' => 'Social login was cancelled.',
+    'oidc.cancelled' => 'SSO login was cancelled.',
 ];

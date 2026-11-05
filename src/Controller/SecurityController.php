@@ -40,8 +40,34 @@ class SecurityController extends InertiaController
             }
         }
 
+        $error = $authUtils->getLastAuthenticationError()?->getMessageKey();
+        if (!$error && $request->query->has('error')) {
+            $rawError = (string) $request->query->get('error');
+            $allowedErrors = [
+                'oidc_failed' => 'oidc.error_failed',
+                'social_auth_failed' => 'auth.social.error_failed',
+                'auth.social.cancelled' => 'auth.social.cancelled',
+                'auth.social.error_failed' => 'auth.social.error_failed',
+                'auth.social.session_required' => 'auth.social.session_required',
+                'auth.social.invalid_csrf_state' => 'auth.social.invalid_csrf_state',
+                'auth.social.email_not_verified' => 'auth.social.email_not_verified',
+                'auth.social.code_required' => 'auth.social.code_required',
+                'auth.social.unknown_provider' => 'auth.social.unknown_provider',
+                'auth.social.rate_limit_exceeded' => 'auth.social.rate_limit_exceeded',
+                'oidc.cancelled' => 'oidc.cancelled',
+                'oidc.error_failed' => 'oidc.error_failed',
+                'oidc.session_expired' => 'oidc.session_expired',
+                'oidc.invalid_state' => 'oidc.invalid_state',
+                'oidc.provider_not_found' => 'oidc.provider_not_found',
+                'oidc.missing_parameters' => 'oidc.missing_parameters',
+            ];
+            if (isset($allowedErrors[$rawError])) {
+                $error = $allowedErrors[$rawError];
+            }
+        }
+
         return $this->inertia($request, 'auth/login', [
-            'error'           => $authUtils->getLastAuthenticationError()?->getMessageKey(),
+            'error'           => $error,
             'lastUsername'    => $authUtils->getLastUsername(),
             'csrfToken'       => $csrfTokenManager->getToken('authenticate')->getValue(),
             'canResetPassword' => true,

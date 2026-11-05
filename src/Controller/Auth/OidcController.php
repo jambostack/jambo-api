@@ -78,7 +78,11 @@ class OidcController extends AbstractController
 
         // Decrypter le secret si chiffre
         if (str_starts_with($clientSecret, 'enc:')) {
-            $clientSecret = $this->secretService->decrypt(substr($clientSecret, 4));
+            try {
+                $clientSecret = $this->secretService->decrypt(substr($clientSecret, 4));
+            } catch (\Throwable) {
+                throw $this->createNotFoundException($this->trans('oidc.provider_not_found', [], 'Unknown or disabled OIDC provider.'));
+            }
         }
 
         $config = $this->oidcManager->discover($issuer);
@@ -97,14 +101,26 @@ class OidcController extends AbstractController
             $clientId,
         );
 
-        return $this->redirect($authUrl);
+        $redirect = $this->redirect($authUrl);
+        $redirect->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        $redirect->headers->set('Pragma', 'no-cache');
+        return $redirect;
     }
 
     #[Route('/oidc/check', name: 'oidc_check')]
-    public function check(): Response
+    public function check(Request $request): Response
     {
-        // Intercepte par OidcAuthenticator
-        throw new \LogicException('This route is handled by OidcAuthenticator.');
+        // When user cancels or OIDC provider returns an error without code
+        $error = $request->query->get('error');
+        if ($request->hasSession()) {
+            $session = $request->getSession();
+            $session->remove('oidc_state');
+            $session->remove('oidc_code_verifier');
+            $session->remove('oidc_nonce');
+        }
+
+        $errorKey = ($error === 'access_denied') ? 'oidc.cancelled' : 'oidc.error_failed';
+        return $this->redirectToRoute('app_login', ['error' => $errorKey]);
     }
 
     /** @return array<array{id: string, name: string, issuer: string, clientId: string, clientSecret: string, enabled: bool}> */

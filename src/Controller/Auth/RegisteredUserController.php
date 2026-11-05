@@ -82,14 +82,14 @@ class RegisteredUserController extends InertiaController
             return $this->secureJson(['errors' => ['password_confirmation' => $this->trans('auth.register.passwords_do_not_match', [], 'Passwords do not match.')]], 422);
         }
 
-        if ($this->em->getRepository(User::class)->findOneBy(['email' => $data['email']]) !== null) {
-            return $this->secureJson(['errors' => ['email' => $this->trans('auth.register.email_in_use', [], 'This email is already in use.')]], 422);
-        }
-
         $pwdValidator = new PasswordPolicyValidator();
         $pwdResult = $pwdValidator->validateAdminPassword($data['password'], $data['email'], $data['name']);
         if (!$pwdResult['valid']) {
             return $this->secureJson(['errors' => ['password' => $pwdResult['errors'][0]]], 422);
+        }
+
+        if ($this->em->getRepository(User::class)->findOneBy(['email' => $data['email']]) !== null) {
+            return $this->secureJson(['errors' => ['email' => $this->trans('auth.register.email_in_use', [], 'This email is already in use.')]], 422);
         }
 
         $user = new User();

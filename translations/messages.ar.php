@@ -3624,4 +3624,9 @@ return [
     'enduser.auth.invalid_email_format' => 'تنسيق عنوان البريد الإلكتروني غير صالح.',
     'enduser.auth.reset_ip_locked_out' => 'عدد كبير جدًا من طلبات إعادة تعيين كلمة المرور من عنوان IP هذا. يرجى المحاولة مرة أخرى بعد %seconds% ثانية.',
     'enduser.auth.password_confirmation_mismatch' => 'كلمة المرور وتأكيد كلمة المرور غير متطابقين.',
+
+    // ─── Cycle 86: OAuth & OIDC Callback Resiliency & Social Hardening ───
+    'auth.social.error_failed' => 'فشل تسجيل الدخول عبر الشبكة الاجتماعية. يُرجى المحاولة مرة أخرى.',
+    'auth.social.cancelled' => 'تم إلغاء تسجيل الدخول عبر الشبكة الاجتماعية.',
+    'oidc.cancelled' => 'تم إلغاء تسجيل الدخول الموحد SSO.',
 ];

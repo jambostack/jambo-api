@@ -424,7 +424,9 @@ class SocialLoginService
             }
         }
 
-        return $hasPassword || $hasOtherProvider;
+        $hasOidc = !empty($user->oidcSub);
+
+        return $hasPassword || $hasOtherProvider || $hasOidc;
     }
 
     /** @return string[] */

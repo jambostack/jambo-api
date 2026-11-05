@@ -65,17 +65,31 @@ class SocialLoginController extends AbstractController
         );
         if ($request->hasSession()) {
             $session = $request->getSession();
+            if (!$session->isStarted()) {
+                $session->start();
+            }
             $session->set('oauth2state_' . $provider, $authData['state']);
             $session->set('oauth2verifier_' . $provider, $codeVerifier);
         }
 
-        return $this->redirect($authData['url']);
+        $redirect = $this->redirect($authData['url']);
+        $redirect->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        $redirect->headers->set('Pragma', 'no-cache');
+        return $redirect;
     }
 
     #[Route('/connect/{provider}/check', name: 'connect_check')]
-    public function check(string $provider): Response
+    public function check(string $provider, Request $request): Response
     {
-        // Jamais exécuté — intercepté par SocialLoginAuthenticator
-        throw new \LogicException('This route is handled by SocialLoginAuthenticator.');
+        // When user cancels or OAuth provider returns an error without code
+        $error = $request->query->get('error');
+        if ($request->hasSession()) {
+            $session = $request->getSession();
+            $session->remove('oauth2state_' . $provider);
+            $session->remove('oauth2verifier_' . $provider);
+        }
+
+        $errorKey = ($error === 'access_denied') ? 'auth.social.cancelled' : 'auth.social.error_failed';
+        return $this->redirectToRoute('app_login', ['error' => $errorKey]);
     }
 }
