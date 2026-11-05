@@ -95,7 +95,7 @@ def main():
 
     steps = [
         ("Git sync", f"git fetch --all --tags --prune --force && git checkout {target_tag}" if target_tag else "git pull origin main"),
-        ("Composer dependencies", "composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-scripts"),
+        ("Composer dependencies", "php -d memory_limit=1G $(command -v composer || echo /usr/local/bin/composer) install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-scripts"),
         ("Frontend build", "if command -v npm >/dev/null 2>&1; then npm ci --prefer-offline && npm run build; else echo 'Notice: npm not found in server environment, skipping frontend build.'; fi"),
         ("Doctrine migrations", "php -d memory_limit=1G bin/console doctrine:migrations:migrate --no-interaction --all-or-nothing"),
         ("Cache warmup", "php -d memory_limit=1G bin/console cache:clear --no-warmup && php -d memory_limit=1G bin/console cache:warmup --env=prod"),
