@@ -147,7 +147,9 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
                 || str_starts_with($path, '/files/')
                 || str_starts_with($path, '/storage/')
                 || str_starts_with($path, '/forms/embed')
-                || str_starts_with($path, '/share/');
+                || str_starts_with($path, '/embed/')
+                || str_starts_with($path, '/share/')
+                || (bool) preg_match('#^/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/(forms|redirects|sitemap|robots)#i', $path);
             $headers->set('Cross-Origin-Resource-Policy', $isPublicAssetOrApi ? 'cross-origin' : 'same-origin');
         }
 

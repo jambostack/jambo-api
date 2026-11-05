@@ -24,6 +24,7 @@ services:
             $tokenLimiter: '@limiter.token_management_limiter'
             $shareLimiter: '@limiter.share_limiter'
             $formSubmitLimiter: '@limiter.form_submit'
+            $formViewLimiter: '@limiter.form_view_limiter'
             $redirectLimiter: '@limiter.redirect_limiter'
             $aiStreamLimiter: '@limiter.ai_stream_limiter'
             $aiLimiter: '@limiter.ai_limiter'

@@ -36,6 +36,10 @@ framework:
             policy: sliding_window
             limit: 10
             interval: '60 seconds'
+        form_view_limiter:
+            policy: sliding_window
+            limit: 60
+            interval: '60 seconds'
         export_limiter:
             policy: sliding_window
             limit: 10
@@ -184,6 +188,14 @@ framework:
 when@test:
     framework:
         rate_limiter:
+            form_submit:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            form_view_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
             login_limiter:
                 policy: sliding_window
                 limit: 10000

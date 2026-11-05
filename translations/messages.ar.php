@@ -3145,4 +3145,7 @@ return [
     'direct_upload.filename_required' => 'اسم الملف مطلوب.',
     'direct_upload.filename_too_long' => 'لا يمكن أن يتجاوز اسم الملف 255 حرفًا.',
     'tus.invalid_content_length' => 'ترويسة Content-Length غير صالحة.',
+    'form.too_many_fields' => 'تم إرسال عدد كبير جداً من حقول النموذج.',
+    'form.field_value_too_large' => 'قيمة الحقل كبيرة جداً.',
+    'form.embed.select_placeholder' => '-- اختر --',
 ];

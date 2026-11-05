@@ -38,7 +38,23 @@ class SubmitHandler
 
         // 2. Build schema and validate visible fields only
         $fieldConstraints = $this->formBuilder->buildFormSchema($form);
-        $collection = new Assert\Collection(fields: $fieldConstraints, allowExtraFields: true);
+        $fieldsByName = [];
+        foreach ($form->fields as $f) {
+            if (is_array($f)) {
+                $fName = $f['name'] ?? $f['id'] ?? null;
+                if ($fName) {
+                    $fieldsByName[$fName] = $f;
+                }
+            }
+        }
+        $wrappedConstraints = [];
+        foreach ($fieldConstraints as $fieldName => $constraints) {
+            $isReq = !empty($fieldsByName[$fieldName]['required']);
+            $wrappedConstraints[$fieldName] = $isReq
+                ? new Assert\Required($constraints)
+                : new Assert\Optional($constraints);
+        }
+        $collection = new Assert\Collection(fields: $wrappedConstraints, allowExtraFields: true);
         $violations = $this->validator->validate($data, $collection);
 
         // Filter out violations for non-visible fields

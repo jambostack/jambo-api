@@ -3143,4 +3143,7 @@ return [
     'direct_upload.filename_required' => 'El nombre de archivo es obligatorio.',
     'direct_upload.filename_too_long' => 'El nombre de archivo no puede exceder los 255 caracteres.',
     'tus.invalid_content_length' => 'Encabezado Content-Length no válido.',
+    'form.too_many_fields' => 'Demasiados campos de formulario enviados.',
+    'form.field_value_too_large' => 'Valor del campo demasiado grande.',
+    'form.embed.select_placeholder' => '-- Seleccionar --',
 ];

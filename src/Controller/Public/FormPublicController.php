@@ -12,7 +12,6 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Validator\Exception\ValidationFailedException;
@@ -20,6 +19,18 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class FormPublicController extends AbstractController
 {
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+    private const SLUG_REGEX = '/^[a-zA-Z0-9_\-]{1,128}$/';
+    private const MAX_CONTENT_LENGTH = 1048576; // 1 MB
+    private const MAX_FIELDS_COUNT = 100;
+    private const MAX_FIELD_VALUE_LENGTH = 65536; // 64 KB
+
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options' => 'DENY',
+        'Cache-Control' => 'no-cache, private',
+    ];
+
     public function __construct(
         private readonly ProjectRepository $projectRepo,
         private readonly FormRepository $formRepo,
@@ -27,6 +38,8 @@ class FormPublicController extends AbstractController
         private readonly SubmitHandler $submitHandler,
         #[Autowire(service: 'limiter.form_submit')]
         private readonly ?RateLimiterFactory $formSubmitLimiter = null,
+        #[Autowire(service: 'limiter.form_view_limiter')]
+        private readonly ?RateLimiterFactory $formViewLimiter = null,
         private readonly ?TranslatorInterface $translator = null,
     ) {}
 
@@ -38,36 +51,66 @@ class FormPublicController extends AbstractController
         return $default ?? $id;
     }
 
-    #[Route('/{projectUuid}/forms/{slug}', name: 'public_form_show', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
-    #[Route('/api/projects/{projectUuid}/forms/{slug}', name: 'api_public_form_show')]
-    public function show(string $projectUuid, string $slug): JsonResponse
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
     {
-        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
-            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
+    #[Route('/{projectUuid}/forms/{slug}', name: 'public_form_show')]
+    #[Route('/api/projects/{projectUuid}/forms/{slug}', name: 'api_public_form_show')]
+    public function show(string $projectUuid, string $slug, ?Request $request = null): JsonResponse
+    {
+        if ($request !== null && $this->formViewLimiter !== null) {
+            $limiter = $this->formViewLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('form.rate_limit_exceeded', [], 'Too many form submissions. Try again later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
         }
 
-        if (!preg_match('/^[a-zA-Z0-9_\-]{1,128}$/', $slug)) {
-            return new JsonResponse(['error' => $this->trans('form.invalid_slug', [], 'Invalid form slug.')], 400);
+        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+            return $this->secureJson([
+                'error' => $this->trans('form.project_not_found', [], 'Project not found.'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
+        }
+
+        if (!preg_match(self::SLUG_REGEX, $slug)) {
+            return $this->secureJson([
+                'error' => $this->trans('form.invalid_slug', [], 'Invalid form slug.'),
+                'code' => 'INVALID_SLUG',
+            ], 400);
         }
 
         try {
             $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
+            return $this->secureJson([
+                'error' => $this->trans('form.project_not_found', [], 'Project not found.'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
+            return $this->secureJson([
+                'error' => $this->trans('form.project_not_found', [], 'Project not found.'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
         }
 
         $form = $this->formRepo->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$form) {
-            return new JsonResponse(['error' => $this->trans('form.not_found', [], 'Form not found.')], 404);
+            return $this->secureJson([
+                'error' => $this->trans('form.not_found', [], 'Form not found.'),
+                'code' => 'FORM_NOT_FOUND',
+            ], 404);
         }
 
         // Validation de la définition du formulaire
         $definition = $this->formBuilder->validateDefinition($form->fields);
 
-        return $this->json([
+        return $this->secureJson([
             'id' => $form->id,
             'name' => $form->name,
             'slug' => $form->slug,
@@ -78,41 +121,62 @@ class FormPublicController extends AbstractController
         ]);
     }
 
-    #[Route('/{projectUuid}/forms/{slug}/submit', name: 'public_form_submit', methods: ['POST'], requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
+    #[Route('/{projectUuid}/forms/{slug}/submit', name: 'public_form_submit', methods: ['POST'])]
     #[Route('/api/projects/{projectUuid}/forms/{slug}/submit', name: 'api_public_form_submit', methods: ['POST'])]
     public function submit(string $projectUuid, string $slug, Request $request): JsonResponse
     {
         if ($this->formSubmitLimiter !== null) {
             $limiter = $this->formSubmitLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('form.rate_limit_exceeded', [], 'Too many form submissions. Try again later.')], 429);
+                return $this->secureJson([
+                    'error' => $this->trans('form.rate_limit_exceeded', [], 'Too many form submissions. Try again later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
             }
         }
 
-        if (strlen($request->getContent()) > 1048576) {
-            return new JsonResponse(['error' => $this->trans('form.payload_too_large', [], 'Payload too large (max 1MB).')], 413);
+        if (strlen($request->getContent()) > self::MAX_CONTENT_LENGTH) {
+            return $this->secureJson([
+                'error' => $this->trans('form.payload_too_large', [], 'Payload too large (max 1MB).'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
         }
 
-        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
-            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
+        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+            return $this->secureJson([
+                'error' => $this->trans('form.project_not_found', [], 'Project not found.'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
         }
 
-        if (!preg_match('/^[a-zA-Z0-9_\-]{1,128}$/', $slug)) {
-            return new JsonResponse(['error' => $this->trans('form.invalid_slug', [], 'Invalid form slug.')], 400);
+        if (!preg_match(self::SLUG_REGEX, $slug)) {
+            return $this->secureJson([
+                'error' => $this->trans('form.invalid_slug', [], 'Invalid form slug.'),
+                'code' => 'INVALID_SLUG',
+            ], 400);
         }
 
         try {
             $project = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
+            return $this->secureJson([
+                'error' => $this->trans('form.project_not_found', [], 'Project not found.'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => $this->trans('form.project_not_found', [], 'Project not found.')], 404);
+            return $this->secureJson([
+                'error' => $this->trans('form.project_not_found', [], 'Project not found.'),
+                'code' => 'PROJECT_NOT_FOUND',
+            ], 404);
         }
 
         $form = $this->formRepo->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$form) {
-            return new JsonResponse(['error' => $this->trans('form.not_found', [], 'Form not found.')], 404);
+            return $this->secureJson([
+                'error' => $this->trans('form.not_found', [], 'Form not found.'),
+                'code' => 'FORM_NOT_FOUND',
+            ], 404);
         }
 
         $contentType = (string) $request->headers->get('Content-Type');
@@ -126,6 +190,29 @@ class FormPublicController extends AbstractController
             $data = $request->request->all();
         }
 
+        if (!is_array($data)) {
+            return $this->secureJson([
+                'error' => $this->trans('form.validation_failed', [], 'Validation failed.'),
+                'code' => 'INVALID_PAYLOAD',
+            ], 400);
+        }
+
+        if (count($data) > self::MAX_FIELDS_COUNT) {
+            return $this->secureJson([
+                'error' => $this->trans('form.too_many_fields', [], 'Too many form fields submitted.'),
+                'code' => 'TOO_MANY_FIELDS',
+            ], 400);
+        }
+
+        foreach ($data as $k => $v) {
+            if (is_string($v) && strlen($v) > self::MAX_FIELD_VALUE_LENGTH) {
+                return $this->secureJson([
+                    'error' => $this->trans('form.field_value_too_large', ['%field%' => (string) $k], 'Field value too large.'),
+                    'code' => 'FIELD_VALUE_TOO_LARGE',
+                ], 400);
+            }
+        }
+
         try {
             $submission = $this->submitHandler->handle($form, $data, $request);
         } catch (ValidationFailedException $e) {
@@ -134,12 +221,20 @@ class FormPublicController extends AbstractController
                 $errors[$violation->getPropertyPath()] = $violation->getMessage();
             }
 
-            return new JsonResponse(['error' => $this->trans('form.validation_failed', [], 'Validation failed.'), 'validation_errors' => $errors], 422);
+            return $this->secureJson([
+                'error' => $this->trans('form.validation_failed', [], 'Validation failed.'),
+                'errors' => $errors,
+                'validation_errors' => $errors,
+                'code' => 'VALIDATION_FAILED',
+            ], 422);
         } catch (\RuntimeException $e) {
-            return new JsonResponse(['error' => $e->getMessage()], 422);
+            return $this->secureJson([
+                'error' => $e->getMessage(),
+                'code' => 'SUBMISSION_FAILED',
+            ], 422);
         }
 
-        return $this->json([
+        return $this->secureJson([
             'success' => true,
             'submission_id' => $submission->id,
             'is_spam' => $submission->isSpam,

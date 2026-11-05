@@ -7,6 +7,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.117] — 2026-11-05
+
+### Security Audit & Hardening on Public Endpoints (Forms, Redirects, Embeds & CORS)
+- **FormPublicController**:
+  - Harmonized all JSON error responses with translated `error`, uppercase machine-readable `code` (`PROJECT_NOT_FOUND`, `INVALID_SLUG`, `FORM_NOT_FOUND`, `PAYLOAD_TOO_LARGE`, `TOO_MANY_FIELDS`, `FIELD_VALUE_TOO_LARGE`, `VALIDATION_FAILED`, `SUBMISSION_FAILED`, `RATE_LIMIT_EXCEEDED`), and `errors` / `validation_errors` maps.
+  - Added payload protection caps: max 100 fields per submission (`TOO_MANY_FIELDS`), max 64KB per string field value (`FIELD_VALUE_TOO_LARGE`), and 1MB overall body size limit (`PAYLOAD_TOO_LARGE`).
+  - Added dedicated `form_view_limiter` rate limiting for public form views (`GET /{projectUuid}/forms/{slug}`).
+  - Enforced security headers on all responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Cache-Control: no-cache, private`.
+- **RedirectPublicController**:
+  - Implemented anti-SSRF validation via `SsrfProtectionService::isSafeUrl()` across all redirect destinations, blocking loops, private RFC1918 CIDRs, loopbacks, Cloud metadata (169.254.169.254), and dangerous URI schemes (`javascript:`, `data:`, `vbscript:`, `file:`, `ftp:`, `blob:`).
+  - Hardened anti-open redirect checks rejecting protocol-relative (`//`), Windows UNC (`\\`), and backslash bypass attempts (`/\`, `\/`).
+  - Added dynamic pattern redirect replacement resolution for regex routes (`isPattern = true`) before validating final destination safety.
+  - Harmonized error responses with `code` (`RATE_LIMIT_EXCEEDED`, `PROJECT_NOT_FOUND`, `PATH_TOO_LONG`, `INVALID_CONTROL_CHARS`, `UNSAFE_DESTINATION`).
+  - Enforced security headers on both JSON responses (`X-Frame-Options: DENY`, `nosniff`) and HTTP RedirectResponses (`Referrer-Policy: strict-origin-when-cross-origin`, `nosniff`, `DENY`).
+- **EmbedController & Forms Iframe Embed**:
+  - Hardened `/forms/embed.js` widget with `X-Content-Type-Options: nosniff`, `Cache-Control: public, max-age=3600`, and `Access-Control-Allow-Origin: *`.
+  - Added standalone secure iframe embed routes `/embed/forms/{projectUuid}/{slug}` and `/forms/embed/{projectUuid}/{slug}` with strict CSP (`frame-ancestors *; default-src 'self'`), dynamic postMessage height reporting (`jambo-form-height`), CSRF/honeypot protection, and localized validation feedback.
+- **CorsSubscriber & SecurityHeadersSubscriber**:
+  - Expanded `CorsSubscriber::isPublicRoute` to properly allow CORS preflight (OPTIONS) on public form submissions, form views, redirects resolution, embeds, shares, and SEO endpoints.
+  - Updated `SecurityHeadersSubscriber` to set `Cross-Origin-Resource-Policy: cross-origin` for public project UUID routes and embeds.
+- **SubmitHandler Bugfix**:
+  - Fixed a false-positive validation error in `SubmitHandler` by properly wrapping non-required fields in `Assert\Optional` instead of defaulting to required in `Assert\Collection`.
+- **Strict I18N & Parity**:
+  - Added new keys across all 4 locales (`en`, `fr`, `es`, `ar`) maintaining 100% dictionary parity (2,879 keys each).
+- **Test Suite**:
+  - Created `Cycle55PublicAuditTest` (6 tests, 96 assertions) validating all public form, redirect, embed, SSRF, payload cap, and CORS flows with 0 warnings.
+
 ## [1.26.116] — 2026-11-05
 
 ### Error Response Harmonization, Anti-SSRF & Upload Security Caps (TUS & Direct Upload)
