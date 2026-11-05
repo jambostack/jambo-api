@@ -150,8 +150,10 @@ class SchemaCrudTest extends WebTestCase
         $client = static::createClient();
         [$plain, $uuid] = $this->setupMemberPat(['schema:write']);
         $h = ['HTTP_AUTHORIZATION' => 'Bearer ' . $plain, 'CONTENT_TYPE' => 'application/json'];
-        $client->request('POST', "/admin-api/projects/$uuid/collections", server: $h, content: json_encode(['name' => 'Stuff']));
-        $client->request('POST', "/admin-api/projects/$uuid/collections/stuff/fields", server: $h, content: json_encode(['name' => 'Bad', 'type' => 'wormhole']));
+        $slug = 'stuff_' . bin2hex(random_bytes(4));
+        $client->request('POST', "/admin-api/projects/$uuid/collections", server: $h, content: json_encode(['name' => $slug]));
+        self::assertSame(201, $client->getResponse()->getStatusCode());
+        $client->request('POST', "/admin-api/projects/$uuid/collections/$slug/fields", server: $h, content: json_encode(['name' => 'Bad', 'type' => 'wormhole']));
         self::assertSame(422, $client->getResponse()->getStatusCode());
     }
 }

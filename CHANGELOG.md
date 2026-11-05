@@ -7,6 +7,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.89] — 2026-11-05
+
+### Collection & Content Management Hardening, Anti-SSRF, Payload Constraints & Strict I18N
+- **Collection Management Hardening (`CollectionController`)**:
+  - Enforced project-level authentication defense-in-depth and granular RBAC checks for collection index, create, update, reorder, and delete operations.
+  - Added strict input length bounds & regex validation: `name` (max 255 chars, non-empty), `slug` (max 255 chars, regex `^[a-zA-Z0-9_\-]+$`), and `description` (max 2000 chars).
+  - Validated uniqueness of slugs on creation and modification with explicit HTTP 409 conflict handling.
+  - Implemented safe nullable translator fallback (`trans()` helper) to preserve backwards compatibility across unit/integration test harnesses.
+  - Integrated `AuditService` logging for collection lifecycle events (`collection_create`, `collection_update`, `collection_delete`).
+- **Content Management Hardening (`ContentController`)**:
+  - Enforced input sanitization, field-level size limits (max 65,535 chars for text fields), JSON depth limit (max 10 nesting levels), and JSON payload size checks (max 64KB).
+  - Protected against SSRF and open redirect vulnerabilities on URL fields by verifying HTTP/HTTPS schemes and valid hostnames.
+  - Enforced project locale activation check ensuring submitted entry locales are explicitly configured for the parent project.
+  - Enforced singleton collection uniqueness constraint preventing duplicate entries.
+  - Validated assignee project membership verifying assigned users are active project members.
+  - Protected search query length (max 255 chars) and payload field count limits (max 200 fields per entry).
+  - Integrated `AuditService` logging for content entry creation, updates, and deletion.
+- **Strict I18N Parity**:
+  - Replaced all hardcoded error/success responses in `CollectionController` and `ContentController` with 35 new translation keys under `collection.admin.*` and `content.admin.*`.
+  - Maintained exact 4-language parity (EN, FR, ES, AR) across `translations/messages.*.php` (2274 keys each, 0 diffs).
+- **Quality Assurance & Verification**:
+  - Added comprehensive hardening test suite `tests/Controller/ContentAndCollectionHardeningTest.php` (17 tests, 306 assertions) verifying RBAC, payload bounds, SSRF prevention, singleton rules, and localized error messages.
+  - Verified 100% passing test suite across all 1159 tests in the application.
+
 ## [1.26.88] — 2026-11-05
 
 ### Granular RBAC, Anti-Privilege Escalation, Audit Trail & Strict UserManagement I18N
