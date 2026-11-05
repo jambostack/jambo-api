@@ -13,6 +13,7 @@ Ce document définit la feuille de route technique de **Jambo API** pour la vers
 | **Phase 3** | Sécurité / Auth | Serveur OAuth2 Client complet par projet (PKCE) | 🟡 Moyenne | ✅ Implémenté | v1.20.0 |
 | **Phase 4** | IA / Studio | Assistant IA Streaming SSE inline dans l'éditeur | 🟡 Moyenne | ✅ Implémenté | v1.20.0 |
 | **Phase 5** | Écosystème | Pack de 11 Starters Frontend & Web Setup Wizard | 🟢 Gain rapide | ✅ Implémenté | v1.20.0 |
+| **Phase 6** | Framework / Core | Mise à niveau et compatibilité complète Symfony 8.1 | 🔴 Haute | 🔄 Planifié (Cron) | v1.27.0 |
 
 ---
 
@@ -148,6 +149,26 @@ Accélérer le démarrage des développeurs et simplifier le déploiement sur to
 
 3. **Export / Import de Blueprints :**
    * Commande `bin/console jambo:blueprint:export [project-slug]` -> exporte un package `.jambo.json` ou archive `.zip` contenant schémas, validations et profils de stockage.
+
+---
+
+## ⚡ Phase 6 : Mise à Niveau & Migration vers Symfony 8.1 (v1.27.0)
+
+### Objectif
+Assurer la pérennité, la sécurité et les performances du noyau Jambo API en effectuant la montée de version vers **Symfony 8.1** sous PHP 8.4/8.5+, en éliminant les dépréciations et en alignant les bundles de l'écosystème.
+
+### Spécifications & Actions Planifiées
+1. **Mise à niveau des dépendances (`composer.json`) :**
+   * Passage de tous les composants `symfony/*` en `8.1.*` (FrameworkBundle, Security, Messenger, Mailer, Validator, Serializer, Routing...).
+   * Mise à jour de `extra.symfony.require` vers `8.1.*`.
+   * Alignement des bundles tiers (`doctrine/doctrine-bundle`, `doctrine/orm`, `twig/twig`, `league/flysystem-bundle`, `knplabs/knp-paginator-bundle`, `lcobucci/jwt`).
+2. **Compatibilité du Noyau Applicatif :**
+   * Adaptation aux nouvelles conventions et deprecations de Symfony 8.1.
+   * Vérification des attributs de routage, contrôleurs invokables, autowiring et injection de dépendances.
+3. **Assurance Qualité & Tests :**
+   * Exécution et passage à 100% de la suite de tests automatisés PHPUnit.
+   * Validation des contrats d'API REST et GraphQL.
+   * Déploiement continu automatisé sur l'infrastructure de production o2switch.
 
 ---
 
