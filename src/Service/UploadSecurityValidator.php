@@ -5,6 +5,7 @@ namespace App\Service;
 use App\Entity\Project;
 use App\Repository\MediaRepository;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class UploadSecurityValidator
 {
@@ -44,7 +45,22 @@ class UploadSecurityValidator
 
     public function __construct(
         private readonly MediaRepository $mediaRepository,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($id, $parameters, 'messages');
+            if ($translated !== $id) {
+                return $translated;
+            }
+        }
+        if ($default !== null) {
+            return strtr($default, $parameters);
+        }
+        return $id;
+    }
 
     /**
      * Valide et nettoie un nom de fichier original.
@@ -52,27 +68,27 @@ class UploadSecurityValidator
     public function sanitizeAndValidateFilename(string $filename): string
     {
         if (str_contains($filename, "\0")) {
-            throw new \InvalidArgumentException('Filename contains forbidden null byte.');
+            throw new \InvalidArgumentException($this->trans('upload.error.null_byte', [], 'Filename contains forbidden null byte.'));
         }
 
         $clean = basename($filename);
         $clean = preg_replace('/[\x00-\x1F\/\\\\]/', '', $clean);
 
         if ($clean === '' || $clean === '.' || $clean === '..') {
-            throw new \InvalidArgumentException('Invalid filename.');
+            throw new \InvalidArgumentException($this->trans('upload.error.invalid_filename', [], 'Invalid filename.'));
         }
 
         $extension = strtolower(pathinfo($clean, PATHINFO_EXTENSION));
         if ($extension === '') {
-            throw new \InvalidArgumentException('File extension is required.');
+            throw new \InvalidArgumentException($this->trans('upload.error.extension_required', [], 'File extension is required.'));
         }
 
         if (in_array($extension, self::FORBIDDEN_EXTENSIONS, true)) {
-            throw new \InvalidArgumentException(sprintf('File extension ".%s" is strictly forbidden.', $extension));
+            throw new \InvalidArgumentException($this->trans('upload.error.extension_forbidden', ['%extension%' => $extension], sprintf('File extension ".%s" is strictly forbidden.', $extension)));
         }
 
         if (!in_array($extension, self::ALLOWED_EXTENSIONS, true)) {
-            throw new \InvalidArgumentException(sprintf('File type ".%s" is not allowed.', $extension));
+            throw new \InvalidArgumentException($this->trans('upload.error.extension_not_allowed', ['%extension%' => $extension], sprintf('File type ".%s" is not allowed.', $extension)));
         }
 
         return $clean;
@@ -89,16 +105,16 @@ class UploadSecurityValidator
         }
 
         if (strlen($mime) > 255 || preg_match('/[\x00-\x1F\x7F]/', $mime)) {
-            throw new \InvalidArgumentException('MIME type contains invalid control characters or exceeds 255 characters.');
+            throw new \InvalidArgumentException($this->trans('upload.error.mime_control_chars', [], 'MIME type contains invalid control characters or exceeds 255 characters.'));
         }
 
         if (!preg_match('~^[a-zA-Z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+(?:;\s*[a-zA-Z0-9!#$&^_.+-]+=[a-zA-Z0-9!#$&^_.+-]+)*$~', $mime)) {
-            throw new \InvalidArgumentException(sprintf('Invalid MIME type format: "%s".', $mime));
+            throw new \InvalidArgumentException($this->trans('upload.error.mime_invalid_format', ['%mime%' => $mime], sprintf('Invalid MIME type format: "%s".', $mime)));
         }
 
         $baseMime = strtolower(explode(';', $mime)[0]);
         if (in_array($baseMime, self::DANGEROUS_MIMES, true)) {
-            throw new \InvalidArgumentException(sprintf('File MIME type "%s" is strictly forbidden.', $baseMime));
+            throw new \InvalidArgumentException($this->trans('upload.error.mime_forbidden', ['%mime%' => $baseMime], sprintf('File MIME type "%s" is strictly forbidden.', $baseMime)));
         }
 
         return $mime;
@@ -110,7 +126,7 @@ class UploadSecurityValidator
     public function validateFileContent(string $filePath, string $extension): string
     {
         if (!file_exists($filePath) || !is_readable($filePath)) {
-            throw new \InvalidArgumentException('Uploaded file cannot be read on disk.');
+            throw new \InvalidArgumentException($this->trans('upload.error.cannot_read', [], 'Uploaded file cannot be read on disk.'));
         }
 
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
@@ -123,7 +139,7 @@ class UploadSecurityValidator
 
         // 1. Refuser formellement les types MIME dangereux / exécutables
         if (in_array(strtolower($mime), self::DANGEROUS_MIMES, true)) {
-            throw new \InvalidArgumentException(sprintf('File MIME type "%s" is forbidden.', $mime));
+            throw new \InvalidArgumentException($this->trans('upload.error.mime_not_allowed', ['%mime%' => $mime], sprintf('File MIME type "%s" is forbidden.', $mime)));
         }
 
         // 2. Détection polyglotte / injection PHP dans le fichier
@@ -140,7 +156,7 @@ class UploadSecurityValidator
                     str_contains($lowerSample, '<script language="php"') ||
                     str_contains($lowerSample, '<script language=\'php\'')
                 ) {
-                    throw new \InvalidArgumentException('File contains dangerous PHP executable code.');
+                    throw new \InvalidArgumentException($this->trans('upload.error.php_code_detected', [], 'File contains dangerous PHP executable code.'));
                 }
             }
         }
@@ -154,23 +170,23 @@ class UploadSecurityValidator
 
         if (in_array($extension, ['jpg', 'jpeg'], true)) {
             if (strlen($magic) < 3 || substr($magic, 0, 3) !== "\xFF\xD8\xFF") {
-                throw new \InvalidArgumentException('Corrupted or invalid JPEG image header.');
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_jpeg', [], 'Corrupted or invalid JPEG image header.'));
             }
         } elseif ($extension === 'png') {
             if (strlen($magic) < 8 || substr($magic, 0, 8) !== "\x89PNG\r\n\x1a\n") {
-                throw new \InvalidArgumentException('Corrupted or invalid PNG image header.');
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_png', [], 'Corrupted or invalid PNG image header.'));
             }
         } elseif ($extension === 'gif') {
             if (strlen($magic) < 6 || (!str_starts_with($magic, 'GIF87a') && !str_starts_with($magic, 'GIF89a'))) {
-                throw new \InvalidArgumentException('Corrupted or invalid GIF image header.');
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_gif', [], 'Corrupted or invalid GIF image header.'));
             }
         } elseif ($extension === 'pdf') {
             if (strlen($magic) < 4 || substr($magic, 0, 4) !== '%PDF') {
-                throw new \InvalidArgumentException('Corrupted or invalid PDF header.');
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_pdf', [], 'Corrupted or invalid PDF header.'));
             }
         } elseif ($extension === 'webp') {
             if (strlen($magic) < 12 || substr($magic, 0, 4) !== 'RIFF' || substr($magic, 8, 4) !== 'WEBP') {
-                throw new \InvalidArgumentException('Corrupted or invalid WebP image header.');
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_webp', [], 'Corrupted or invalid WebP image header.'));
             }
         }
 
@@ -180,30 +196,30 @@ class UploadSecurityValidator
             if ($content !== false) {
                 // Détection XXE / DTD injection (DOCTYPE ou ENTITY)
                 if (preg_match('/<!(?:DOCTYPE|ENTITY)\b/i', $content)) {
-                    throw new \InvalidArgumentException('XML/SVG file containing DOCTYPE or ENTITY definitions is strictly forbidden.');
+                    throw new \InvalidArgumentException($this->trans('upload.error.xml_doctype_forbidden', [], 'XML/SVG file containing DOCTYPE or ENTITY definitions is strictly forbidden.'));
                 }
 
                 if ($extension === 'svg') {
                     $lower = strtolower($content);
                     // 4a. Balises actives dangereuses
                     if (preg_match('/<\s*(?:script|foreignobject|iframe|object|embed|applet|meta|form|input)\b/i', $content)) {
-                        throw new \InvalidArgumentException('SVG file contains dangerous active script pattern: <script>');
+                        throw new \InvalidArgumentException($this->trans('upload.error.svg_script_detected', [], 'SVG file contains dangerous active script pattern: <script>'));
                     }
                     // 4b. Gestionnaires d'événements inline (onload, onclick, onmouseover, onfocus, etc.)
                     if (preg_match('/\bon[a-z0-9_-]+\s*=/i', $content)) {
-                        throw new \InvalidArgumentException('SVG file contains dangerous inline event handler attributes.');
+                        throw new \InvalidArgumentException($this->trans('upload.error.svg_event_handlers', [], 'SVG file contains dangerous inline event handler attributes.'));
                     }
                     // 4c. URLs actives ou data:text/html dans href ou xlink:href
                     if (preg_match('/(?:href|xlink:href)\s*=\s*["\']?\s*(?:javascript:|data:\s*text\/html)/i', $content)) {
-                        throw new \InvalidArgumentException('SVG file contains dangerous script or data URI in href attribute.');
+                        throw new \InvalidArgumentException($this->trans('upload.error.svg_href_script', [], 'SVG file contains dangerous script or data URI in href attribute.'));
                     }
                     // 4d. Animations injectant javascript dans les attributs (animate/set)
                     if (preg_match('/<\s*(?:animate|set)\b[^>]*\bvalues?\s*=\s*["\']?[^"\'>]*javascript:/i', $content)) {
-                        throw new \InvalidArgumentException('SVG file contains dangerous script animation pattern.');
+                        throw new \InvalidArgumentException($this->trans('upload.error.svg_animation_script', [], 'SVG file contains dangerous script animation pattern.'));
                     }
                     // 4e. Recherche globale javascript: ou XML namespaces frauduleux (ex: xmlns:script)
                     if (str_contains($lower, 'xmlns:script') || str_contains($lower, 'javascript:')) {
-                        throw new \InvalidArgumentException('SVG file contains forbidden script pattern or namespace.');
+                        throw new \InvalidArgumentException($this->trans('upload.error.svg_forbidden_pattern', [], 'SVG file contains forbidden script pattern or namespace.'));
                     }
                 }
             }
@@ -218,7 +234,7 @@ class UploadSecurityValidator
     public function validateSizeAndQuota(Project $project, int $fileSize): void
     {
         if ($fileSize <= 0) {
-            throw new \InvalidArgumentException('File size must be greater than 0.');
+            throw new \InvalidArgumentException($this->trans('upload.error.size_zero', [], 'File size must be greater than 0.'));
         }
 
         // Taille maximale par fichier (défaut 100 Mo)
@@ -229,7 +245,7 @@ class UploadSecurityValidator
         $maxBytes = $maxMb * 1024 * 1024;
 
         if ($fileSize > $maxBytes) {
-            throw new \InvalidArgumentException(sprintf('File size (%d bytes) exceeds maximum allowed limit (%d MB).', $fileSize, $maxMb));
+            throw new \InvalidArgumentException($this->trans('upload.error.size_exceeded', ['%size%' => (string) $fileSize, '%max%' => (string) $maxMb], sprintf('File size (%d bytes) exceeds maximum allowed limit (%d MB).', $fileSize, $maxMb)));
         }
 
         // Quota global de stockage du projet (en Mo)
@@ -245,10 +261,11 @@ class UploadSecurityValidator
             $currentUsedBytes = $this->mediaRepository->getTotalSizeByProject($project);
 
             if (($currentUsedBytes + $fileSize) > $quotaBytes) {
-                throw new \InvalidArgumentException(sprintf(
-                    'Project storage quota exceeded (%d MB used / %d MB limit).',
-                    (int) ceil(($currentUsedBytes + $fileSize) / (1024 * 1024)),
-                    $quotaMb
+                $usedMb = (int) ceil(($currentUsedBytes + $fileSize) / (1024 * 1024));
+                throw new \InvalidArgumentException($this->trans(
+                    'upload.error.quota_exceeded',
+                    ['%used%' => (string) $usedMb, '%limit%' => (string) $quotaMb],
+                    sprintf('Project storage quota exceeded (%d MB used / %d MB limit).', $usedMb, $quotaMb)
                 ));
             }
         }

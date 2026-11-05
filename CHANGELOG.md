@@ -7,6 +7,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.141] — 2026-11-05
+
+### Security & i18n Hardening — UploadSecurityValidator & SsrfProtectionService strict i18n (Cycle #77)
+- **UploadSecurityValidator — strict i18n compliance & translator injection**:
+  - Injected `TranslatorInterface $translator = null` with backward-compatible fallback resolver.
+  - Replaced 25 hardcoded exception error messages (null byte detection, invalid filename, required/forbidden extensions, MIME control characters, polyglot PHP executable code detection, corrupted JPEG/PNG/GIF/PDF/WebP headers, SVG/XML XXE & active script attacks, file size limits, project storage quotas) with `$this->trans()`.
+  - Added 25 translation keys under `upload.error.*` across all 4 language dictionaries (`messages.{en,fr,es,ar}.php`).
+- **SsrfProtectionService — strict i18n compliance & translator injection**:
+  - Injected `TranslatorInterface $translator = null` with fallback resolver.
+  - Replaced 15 hardcoded exception messages across host assertion, URL format validation, protocol enforcement, credentials restriction, port whitelisting, evasion detection, and DNS resolution with `$this->trans()`.
+  - Added 15 translation keys under `ssrf.*` across all 4 language dictionaries (`messages.{en,fr,es,ar}.php`).
+- **HealthController & System Info version synchronization**:
+  - Synchronized `HealthController::VERSION` with `1.26.141`, ensuring consistency with `VERSION` and `composer.json`.
+- **Unit & Security Tests**:
+  - Created `Cycle77UploadAndSsrfI18nTest` covering localized error handling and dictionary completeness across en, fr, es, ar.
+  - Full PHPUnit suite passes with 0 failures, 0 errors.
+
+---
+
 ## [1.26.140] — 2026-11-05
 
 ### Security & i18n Hardening — SocialLoginService & StudioController strict i18n (Cycle #76)

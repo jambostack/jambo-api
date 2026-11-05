@@ -3,6 +3,7 @@
 namespace App\Service\Security;
 
 use Symfony\Contracts\HttpClient\ResponseInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Service de sécurité anti-SSRF (Server-Side Request Forgery) et de durcissement
@@ -20,6 +21,23 @@ use Symfony\Contracts\HttpClient\ResponseInterface;
  */
 class SsrfProtectionService
 {
+    public function __construct(
+        private readonly ?TranslatorInterface $translator = null,
+    ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($id, $parameters, 'messages');
+            if ($translated !== $id) {
+                return $translated;
+            }
+        }
+        if ($default !== null) {
+            return strtr($default, $parameters);
+        }
+        return $id;
+    }
     /** Ports web standards et sécurisés autorisés pour les webhooks et appels sortants. */
     public const ALLOWED_WEB_PORTS = [80, 443, 8000, 8080, 8443];
 
@@ -126,24 +144,24 @@ class SsrfProtectionService
     public function assertSafeHost(string $host): array
     {
         if (preg_match('/[\r\n\x00-\x1F\x7F]/', $host)) {
-            throw new \InvalidArgumentException('Host contains invalid control or newline characters');
+            throw new \InvalidArgumentException($this->trans('ssrf.host_control_chars', [], 'Host contains invalid control or newline characters'));
         }
 
         $cleanHost = strtolower(trim($host, " \t[]"));
         if ($cleanHost === '') {
-            throw new \InvalidArgumentException('Host cannot be empty');
+            throw new \InvalidArgumentException($this->trans('ssrf.host_empty', [], 'Host cannot be empty'));
         }
 
         if (strlen($cleanHost) > 255) {
-            throw new \InvalidArgumentException('Host exceeds maximum length of 255 characters');
+            throw new \InvalidArgumentException($this->trans('ssrf.host_too_long', [], 'Host exceeds maximum length of 255 characters'));
         }
 
         if ($this->isEvasiveIpNotation($cleanHost)) {
-            throw new \InvalidArgumentException('Accès aux adresses privées ou réservées interdit (SSRF protection)');
+            throw new \InvalidArgumentException($this->trans('ssrf.private_address_forbidden', [], 'Accès aux adresses privées ou réservées interdit (SSRF protection)'));
         }
 
         if ($this->isBlockedHostname($cleanHost)) {
-            throw new \InvalidArgumentException('Accès aux adresses privées ou réservées interdit (SSRF protection)');
+            throw new \InvalidArgumentException($this->trans('ssrf.private_address_forbidden', [], 'Accès aux adresses privées ou réservées interdit (SSRF protection)'));
         }
 
         return $this->resolveAndValidateHost($cleanHost);
@@ -159,63 +177,63 @@ class SsrfProtectionService
     public function assertSafeUrl(string $url, bool $requireHttps = false): array
     {
         if (trim($url) === '') {
-            throw new \InvalidArgumentException('URL cannot be empty');
+            throw new \InvalidArgumentException($this->trans('ssrf.url_empty', [], 'URL cannot be empty'));
         }
 
         if (!filter_var($url, FILTER_VALIDATE_URL)) {
-            throw new \InvalidArgumentException('Invalid URL format');
+            throw new \InvalidArgumentException($this->trans('ssrf.url_invalid_format', [], 'Invalid URL format'));
         }
 
         $parts = parse_url($url);
         if ($parts === false || !is_array($parts)) {
-            throw new \InvalidArgumentException('Malformed URL');
+            throw new \InvalidArgumentException($this->trans('ssrf.url_malformed', [], 'Malformed URL'));
         }
 
         $scheme = strtolower($parts['scheme'] ?? '');
         if ($requireHttps && $scheme !== 'https') {
-            throw new \InvalidArgumentException('Protocole HTTPS obligatoire');
+            throw new \InvalidArgumentException($this->trans('ssrf.https_required', [], 'Protocole HTTPS obligatoire'));
         }
 
         if (!in_array($scheme, ['http', 'https'], true)) {
-            throw new \InvalidArgumentException('Only http and https schemes are allowed');
+            throw new \InvalidArgumentException($this->trans('ssrf.allowed_schemes', [], 'Only http and https schemes are allowed'));
         }
 
         // Interdiction des informations d'authentification dans l'URL (user:pass@host)
         if (isset($parts['user']) || isset($parts['pass'])) {
-            throw new \InvalidArgumentException('Credentials in URL are strictly forbidden');
+            throw new \InvalidArgumentException($this->trans('ssrf.credentials_forbidden', [], 'Credentials in URL are strictly forbidden'));
         }
 
         $rawHost = $parts['host'] ?? '';
         if (empty($rawHost)) {
-            throw new \InvalidArgumentException('Missing host in URL');
+            throw new \InvalidArgumentException($this->trans('ssrf.missing_host', [], 'Missing host in URL'));
         }
 
         // Nettoyage de l'hôte (suppression des crochets IPv6 éventuels et mise en minuscules)
         $cleanHost = strtolower(trim($rawHost, " \t\n\r\0\x0B[]"));
         if ($cleanHost === '') {
-            throw new \InvalidArgumentException('Invalid host in URL');
+            throw new \InvalidArgumentException($this->trans('ssrf.invalid_host', [], 'Invalid host in URL'));
         }
 
         // Validation du port
         $port = $parts['port'] ?? ($scheme === 'https' ? 443 : 80);
         if (!in_array($port, self::ALLOWED_WEB_PORTS, true)) {
-            throw new \InvalidArgumentException(sprintf('Port %d is not allowed for outbound requests', $port));
+            throw new \InvalidArgumentException($this->trans('ssrf.forbidden_port', ['%port%' => (string) $port], sprintf('Port %d is not allowed for outbound requests', $port)));
         }
 
         // 1. Détection des évasions d'encodage (décimal integer, hex, octal, shorthand)
         if ($this->isEvasiveIpNotation($cleanHost)) {
-            throw new \InvalidArgumentException('Accès aux adresses privées ou réservées interdit (SSRF protection)');
+            throw new \InvalidArgumentException($this->trans('ssrf.private_address_forbidden', [], 'Accès aux adresses privées ou réservées interdit (SSRF protection)'));
         }
 
         // 2. Vérification des noms d'hôtes locaux/réservés
         if ($this->isBlockedHostname($cleanHost)) {
-            throw new \InvalidArgumentException('Accès aux adresses privées ou réservées interdit (SSRF protection)');
+            throw new \InvalidArgumentException($this->trans('ssrf.private_address_forbidden', [], 'Accès aux adresses privées ou réservées interdit (SSRF protection)'));
         }
 
         // 3. Résolution et validation des adresses IP
         $resolvedIps = $this->resolveAndValidateHost($cleanHost);
         if (empty($resolvedIps)) {
-            throw new \InvalidArgumentException('Host could not be resolved or resolved to invalid IP');
+            throw new \InvalidArgumentException($this->trans('ssrf.unresolved_host', [], 'Host could not be resolved or resolved to invalid IP'));
         }
 
         $pinnedIp = $resolvedIps[0];
@@ -334,13 +352,13 @@ class SsrfProtectionService
         }
 
         if (empty($resolvedIps)) {
-            throw new \InvalidArgumentException('Résolution DNS impossible pour l\'hôte');
+            throw new \InvalidArgumentException($this->trans('ssrf.dns_resolution_failed', [], 'Résolution DNS impossible pour l\'hôte'));
         }
 
         // Vérification de CHAQUE adresse résolue
         foreach ($resolvedIps as $ip) {
             if ($this->isPrivateOrReservedIp($ip)) {
-                throw new \InvalidArgumentException('Accès aux adresses privées ou réservées interdit (SSRF protection)');
+                throw new \InvalidArgumentException($this->trans('ssrf.private_address_forbidden', [], 'Accès aux adresses privées ou réservées interdit (SSRF protection)'));
             }
         }
 
