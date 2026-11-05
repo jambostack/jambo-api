@@ -3327,4 +3327,13 @@ return [
     'export.media.size_exceeded' => 'Cumulative media export size exceeds limit (%max% MB).',
     'export.archive.too_many_files' => 'Too many files to archive in export (max %max%).',
     'export.archive.size_exceeded' => 'Total uncompressed export archive size exceeds limit.',
+    'user.admin.name_cannot_be_empty' => 'User name cannot be empty.',
+    'user.admin.name_control_chars' => 'User name contains invalid control characters.',
+    'user.admin.email_control_chars' => 'Email address contains invalid control characters.',
+    'role.admin.name_control_chars' => 'Role name contains invalid control characters.',
+    'role.admin.label_control_chars' => 'Role label contains invalid control characters.',
+    'role.admin.permissions_limit_exceeded' => 'Role permissions limit exceeded (maximum 200 permissions).',
+    'permission.admin.name_control_chars' => 'Permission name contains invalid control characters.',
+    'permission.admin.label_control_chars' => 'Permission label contains invalid control characters.',
+    'permission.admin.group_control_chars' => 'Permission group contains invalid control characters.',
 ];

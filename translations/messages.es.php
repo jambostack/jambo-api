@@ -3327,4 +3327,13 @@ return [
     'export.media.size_exceeded' => 'El tamaño acumulado de medios exportados supera el límite (%max% MB).',
     'export.archive.too_many_files' => 'Demasiados archivos para archivar en la exportación (máx. %max%).',
     'export.archive.size_exceeded' => 'El tamaño total descomprimido del archivo de exportación supera el límite.',
+    'user.admin.name_cannot_be_empty' => 'El nombre de usuario no puede estar vacío.',
+    'user.admin.name_control_chars' => 'El nombre de usuario contiene caracteres de control no válidos.',
+    'user.admin.email_control_chars' => 'La dirección de correo contiene caracteres de control no válidos.',
+    'role.admin.name_control_chars' => 'El nombre del rol contiene caracteres de control no válidos.',
+    'role.admin.label_control_chars' => 'La etiqueta del rol contiene caracteres de control no válidos.',
+    'role.admin.permissions_limit_exceeded' => 'Límite de permisos por rol excedido (máximo 200 permisos).',
+    'permission.admin.name_control_chars' => 'El nombre del permiso contiene caracteres de control no válidos.',
+    'permission.admin.label_control_chars' => 'La etiqueta del permiso contiene caracteres de control no válidos.',
+    'permission.admin.group_control_chars' => 'El grupo de permisos contiene caracteres de control no válidos.',
 ];

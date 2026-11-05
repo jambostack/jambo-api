@@ -3329,4 +3329,13 @@ return [
     'export.media.size_exceeded' => 'يتجاوز الحجم الإجمالي لملفات الوسائط المصدرة الحد الأقصى (%max% ميغابايت).',
     'export.archive.too_many_files' => 'عدد كبير جداً من الملفات للأرشفة في التصدير (الحد الأقصى %max%).',
     'export.archive.size_exceeded' => 'يتجاوز الحجم الإجمالي غير المضغوط لأرشيف التصدير الحد الأقصى.',
+    'user.admin.name_cannot_be_empty' => 'لا يمكن أن يكون اسم المستخدم فارغاً.',
+    'user.admin.name_control_chars' => 'يحتوي اسم المستخدم على أحرف تحكم غير صالحة.',
+    'user.admin.email_control_chars' => 'يحتوي عنوان البريد الإلكتروني على أحرف تحكم غير صالحة.',
+    'role.admin.name_control_chars' => 'يحتوي اسم الدور على أحرف تحكم غير صالحة.',
+    'role.admin.label_control_chars' => 'تحتوي تسمية الدور على أحرف تحكم غير صالحة.',
+    'role.admin.permissions_limit_exceeded' => 'تم تجاوز الحد الأقصى لصلاحيات الدور (بحد أقصى 200 صلاحية).',
+    'permission.admin.name_control_chars' => 'يحتوي اسم الصلاحية على أحرف تحكم غير صالحة.',
+    'permission.admin.label_control_chars' => 'تحتوي تسمية الصلاحية على أحرف تحكم غير صالحة.',
+    'permission.admin.group_control_chars' => 'تحتوي مجموعة الصلاحيات على أحرف تحكم غير صالحة.',
 ];

@@ -3345,4 +3345,13 @@ return [
     'export.media.size_exceeded' => 'La taille cumulative des médias exportés dépasse la limite (%max% Mo).',
     'export.archive.too_many_files' => 'Trop de fichiers à archiver dans l\'exportation (max %max%).',
     'export.archive.size_exceeded' => 'La taille totale décompressée de l\'archive d\'exportation dépasse la limite.',
+    'user.admin.name_cannot_be_empty' => 'Le nom d\'utilisateur ne peut pas être vide.',
+    'user.admin.name_control_chars' => 'Le nom d\'utilisateur contient des caractères de contrôle non autorisés.',
+    'user.admin.email_control_chars' => 'L\'adresse e-mail contient des caractères de contrôle non autorisés.',
+    'role.admin.name_control_chars' => 'Le nom du rôle contient des caractères de contrôle non autorisés.',
+    'role.admin.label_control_chars' => 'Le libellé du rôle contient des caractères de contrôle non autorisés.',
+    'role.admin.permissions_limit_exceeded' => 'Limite de permissions par rôle dépassée (200 permissions maximum).',
+    'permission.admin.name_control_chars' => 'Le nom de la permission contient des caractères de contrôle non autorisés.',
+    'permission.admin.label_control_chars' => 'Le libellé de la permission contient des caractères de contrôle non autorisés.',
+    'permission.admin.group_control_chars' => 'Le groupe de permissions contient des caractères de contrôle non autorisés.',
 ];

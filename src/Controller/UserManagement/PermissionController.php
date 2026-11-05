@@ -22,6 +22,13 @@ class PermissionController extends AbstractController
     public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
     public const MAX_BULK_IDS = 100;
 
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate',
+        'Pragma'                 => 'no-cache',
+    ];
+
     public const PROTECTED_PERMISSIONS = [
         'users.manage',
         'roles.manage',
@@ -46,16 +53,21 @@ class PermissionController extends AbstractController
         private AuditService $auditService,
     ) {}
 
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(Request $request): JsonResponse
     {
-        $search    = (string) $request->query->get('search', '');
+        $search    = mb_substr(trim((string) $request->query->get('search', '')), 0, 100);
         $page      = max(1, $request->query->getInt('page', 1));
         $perPage   = min(100, max(1, $request->query->getInt('per_page', 20)));
         $sortField = $request->query->get('sort', 'name');
         $direction = strtoupper($request->query->get('direction', 'asc')) === 'DESC' ? 'DESC' : 'ASC';
 
-        $filterName = (string) $request->query->get('filter_name', '');
+        $filterName = mb_substr(trim((string) $request->query->get('filter_name', '')), 0, 100);
 
         $allowedSorts = ['name' => 'p.name', 'group' => 'p.group', 'label' => 'p.label'];
         $orderBy = $allowedSorts[$sortField] ?? 'p.name';
@@ -83,7 +95,7 @@ class PermissionController extends AbstractController
         $from     = $total > 0 ? ($page - 1) * $perPage + 1 : 0;
         $to       = min($page * $perPage, $total);
 
-        return $this->json([
+        return $this->secureJson([
             'data'         => array_map(fn ($p) => $this->serialize($p), $permissions),
             'total'        => $total,
             'current_page' => $page,
@@ -100,35 +112,45 @@ class PermissionController extends AbstractController
     {
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.invalid_json')], 400);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.invalid_json')], 400);
         }
         $ids      = $data['ids'] ?? [];
         $password = (string) ($data['password'] ?? '');
 
         if (empty($ids) || !is_array($ids)) {
-            return $this->json(['errors' => ['ids' => [$this->translator->trans('permission.admin.no_permissions_selected')]]], 422);
+            return $this->secureJson(['errors' => ['ids' => [$this->translator->trans('permission.admin.no_permissions_selected')]]], 422);
         }
 
         if (count($ids) > self::MAX_BULK_IDS) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.bulk_limit_exceeded', ['%max%' => self::MAX_BULK_IDS])], 422);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.bulk_limit_exceeded', ['%max%' => self::MAX_BULK_IDS])], 422);
         }
 
         foreach ($ids as $id) {
             if (!is_numeric($id) || (int) $id <= 0) {
-                return $this->json(['errors' => ['ids' => [$this->translator->trans('permission.admin.invalid_id')]]], 422);
+                return $this->secureJson(['errors' => ['ids' => [$this->translator->trans('permission.admin.invalid_id')]]], 422);
             }
         }
 
         /** @var User $currentUser */
         $currentUser = $this->getUser();
         if (!$this->hasher->isPasswordValid($currentUser, $password)) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.invalid_password')], 403);
+            $this->auditService->log(
+                toolName: 'permission_bulk_delete_failed_auth',
+                project: null,
+                input: ['attempted_by' => $currentUser->getUserIdentifier()],
+                output: ['error' => 'invalid_password'],
+                status: 'failure',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.invalid_password')], 403);
         }
 
         $deleted = 0;
@@ -166,7 +188,7 @@ class PermissionController extends AbstractController
             $this->auditService->flush();
         }
 
-        return $this->json(['message' => $this->translator->trans('permission.admin.deleted_success', ['%count%' => $deleted])]);
+        return $this->secureJson(['message' => $this->translator->trans('permission.admin.deleted_success', ['%count%' => $deleted])]);
     }
 
     #[Route('/{id}', name: 'show', methods: ['GET'])]
@@ -174,10 +196,10 @@ class PermissionController extends AbstractController
     {
         $permission = $this->permissionRepository->find($id);
         if ($permission === null) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.not_found')], 404);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.not_found')], 404);
         }
 
-        return $this->json($this->serialize($permission));
+        return $this->secureJson($this->serialize($permission));
     }
 
     #[Route('', name: 'create', methods: ['POST'])]
@@ -186,39 +208,51 @@ class PermissionController extends AbstractController
     {
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.invalid_json')], 400);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.invalid_json')], 400);
         }
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
-            return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.name_required')]], 422);
+            return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_required')]], 422);
         }
 
         if (!preg_match('/^[a-z0-9_]+(\.[a-z0-9_]+)*$/', $name)) {
-            return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.invalid_name_format')]], 422);
+            return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.invalid_name_format')]], 422);
+        }
+
+        if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
+            return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_control_chars')]], 422);
         }
 
         $existing = $this->permissionRepository->findOneBy(['name' => $name]);
         if ($existing !== null) {
-            return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.name_exists')]], 422);
+            return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_exists')]], 422);
         }
 
         $permission = new Permission();
         $permission->name  = $name;
         $label = trim((string) ($data['label'] ?? $name)) ?: $name;
         if (mb_strlen($label) > 255) {
-            return $this->json(['errors' => ['label' => $this->translator->trans('permission.admin.label_too_long')]], 422);
+            return $this->secureJson(['errors' => ['label' => $this->translator->trans('permission.admin.label_too_long')]], 422);
         }
+        if (preg_match('/[\x00-\x1F\x7F]/', $label)) {
+            return $this->secureJson(['errors' => ['label' => $this->translator->trans('permission.admin.label_control_chars')]], 422);
+        }
+
         $group = trim((string) ($data['group'] ?? 'custom')) ?: 'custom';
         if (mb_strlen($group) > 100) {
-            return $this->json(['errors' => ['group' => $this->translator->trans('permission.admin.group_too_long')]], 422);
+            return $this->secureJson(['errors' => ['group' => $this->translator->trans('permission.admin.group_too_long')]], 422);
         }
+        if (preg_match('/[\x00-\x1F\x7F]/', $group)) {
+            return $this->secureJson(['errors' => ['group' => $this->translator->trans('permission.admin.group_control_chars')]], 422);
+        }
+
         $permission->label = $label;
         $permission->group = $group;
 
@@ -238,7 +272,7 @@ class PermissionController extends AbstractController
         );
         $this->auditService->flush();
 
-        return $this->json(array_merge($this->serialize($permission), [
+        return $this->secureJson(array_merge($this->serialize($permission), [
             'message' => $this->translator->trans('permission.admin.created_success'),
         ]), 201);
     }
@@ -249,35 +283,38 @@ class PermissionController extends AbstractController
     {
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
         }
 
         $permission = $this->permissionRepository->find($id);
         if ($permission === null) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.not_found')], 404);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.not_found')], 404);
         }
 
         if (in_array($permission->name, self::PROTECTED_PERMISSIONS, true)) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.system_permission_protected')], 422);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.system_permission_protected')], 422);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.invalid_json')], 400);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.invalid_json')], 400);
         }
 
         if (isset($data['name'])) {
             $newName = trim((string) $data['name']);
             if ($newName === '') {
-                return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.name_required')]], 422);
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_required')]], 422);
             }
             if (!preg_match('/^[a-z0-9_]+(\.[a-z0-9_]+)*$/', $newName)) {
-                return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.invalid_name_format')]], 422);
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.invalid_name_format')]], 422);
+            }
+            if (preg_match('/[\x00-\x1F\x7F]/', $newName)) {
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_control_chars')]], 422);
             }
             $existing = $this->permissionRepository->findOneBy(['name' => $newName]);
             if ($existing !== null && $existing->id !== $permission->id) {
-                return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.name_exists')]], 422);
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_exists')]], 422);
             }
             $permission->name = $newName;
         }
@@ -285,14 +322,20 @@ class PermissionController extends AbstractController
         if (isset($data['label'])) {
             $newLabel = trim((string) $data['label']) ?: $permission->name;
             if (mb_strlen($newLabel) > 255) {
-                return $this->json(['errors' => ['label' => $this->translator->trans('permission.admin.label_too_long')]], 422);
+                return $this->secureJson(['errors' => ['label' => $this->translator->trans('permission.admin.label_too_long')]], 422);
+            }
+            if (preg_match('/[\x00-\x1F\x7F]/', $newLabel)) {
+                return $this->secureJson(['errors' => ['label' => $this->translator->trans('permission.admin.label_control_chars')]], 422);
             }
             $permission->label = $newLabel;
         }
         if (isset($data['group'])) {
             $newGroup = trim((string) $data['group']) ?: 'custom';
             if (mb_strlen($newGroup) > 100) {
-                return $this->json(['errors' => ['group' => $this->translator->trans('permission.admin.group_too_long')]], 422);
+                return $this->secureJson(['errors' => ['group' => $this->translator->trans('permission.admin.group_too_long')]], 422);
+            }
+            if (preg_match('/[\x00-\x1F\x7F]/', $newGroup)) {
+                return $this->secureJson(['errors' => ['group' => $this->translator->trans('permission.admin.group_control_chars')]], 422);
             }
             $permission->group = $newGroup;
         }
@@ -312,7 +355,7 @@ class PermissionController extends AbstractController
         );
         $this->auditService->flush();
 
-        return $this->json(array_merge($this->serialize($permission), [
+        return $this->secureJson(array_merge($this->serialize($permission), [
             'message' => $this->translator->trans('permission.admin.updated_success'),
         ]));
     }
@@ -323,11 +366,11 @@ class PermissionController extends AbstractController
     {
         $permission = $this->permissionRepository->find($id);
         if ($permission === null) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.not_found')], 404);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.not_found')], 404);
         }
 
         if (in_array($permission->name, self::PROTECTED_PERMISSIONS, true)) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.system_permission_protected')], 422);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.system_permission_protected')], 422);
         }
 
         $isAssigned = (int) $this->em->createQuery(
@@ -335,7 +378,7 @@ class PermissionController extends AbstractController
         )->setParameter('pid', $permission->id)->getSingleScalarResult() > 0;
 
         if ($isAssigned) {
-            return $this->json(['error' => $this->translator->trans('permission.admin.cannot_delete_assigned')], 422);
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.cannot_delete_assigned')], 422);
         }
 
         /** @var User $currentUser */
@@ -357,7 +400,7 @@ class PermissionController extends AbstractController
         );
         $this->auditService->flush();
 
-        return $this->json(['message' => $this->translator->trans('permission.admin.single_deleted_success')]);
+        return $this->secureJson(['message' => $this->translator->trans('permission.admin.single_deleted_success')]);
     }
 
     private function serialize(Permission $p): array

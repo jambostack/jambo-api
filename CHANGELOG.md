@@ -7,6 +7,36 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.131] — 2026-11-05
+
+### Security Hardening on User Management (Users, Roles, Permissions) & Lock DSN Fallback (Cycle #68)
+- **Lock DSN & Server Environment Fallback**:
+  - `config/packages/lock.yaml`: Added parameter fallback default `env(LOCK_DSN): 'flock'` to prevent missing environment variable runtime failures (`EnvNotFoundException`) during container compilation or deployment.
+  - `.env.example`: Documented `LOCK_DSN=flock`.
+- **User Management Security Hardening (Phase 83)**:
+  - `UserController`:
+    - Enforced strict HTTP security response headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Cache-Control: no-store, no-cache, must-revalidate`, `Pragma: no-cache`) across all endpoints via `secureJson`.
+    - Sanitized query parameter inputs on search (`$search`), filter name (`$filterName`), and filter email (`$filterEmail`), capping search strings to 100 characters max.
+    - Hardened user update: enforced empty name rejection (`user.admin.name_cannot_be_empty`), length limits (max 255 chars), and control character / null byte rejection (`[\x00-\x1F\x7F]`).
+    - Enforced control character / null byte rejection on user creation and email update.
+    - Added failed authentication audit logging (`user_bulk_delete_failed_auth`) during bulk delete password confirmation.
+  - `RoleController`:
+    - Enforced strict HTTP security response headers across all role endpoints.
+    - Sanitized search query parameters to 100 characters max.
+    - Enforced control character / null byte rejection across role names and labels (`[\x00-\x1F\x7F]`).
+    - Bounded assigned permissions array to a maximum limit of 200 permissions per role (`MAX_PERMISSIONS_PER_ROLE = 200`) to prevent memory exhaustion and DoS.
+    - Added failed authentication audit logging (`role_bulk_delete_failed_auth`) during bulk delete.
+  - `PermissionController`:
+    - Enforced strict HTTP security response headers across all permission endpoints.
+    - Sanitized search query parameters to 100 characters max.
+    - Enforced control character / null byte rejection across permission names, labels, and groups (`[\x00-\x1F\x7F]`).
+    - Added failed authentication audit logging (`permission_bulk_delete_failed_auth`) during bulk delete.
+- **Multilingual Parity (Strict i18n Rule)**:
+  - Added 9 new translation keys across English (`messages.en.php`), French (`messages.fr.php`), Spanish (`messages.es.php`), and Arabic (`messages.ar.php`).
+- **Unit Testing**:
+  - Added `tests/Controller/UserManagement/Cycle68UserManagementHardeningTest.php` (6 tests, 15 assertions).
+  - 100% passing rate across full User Management test suites (29 tests, 589 assertions).
+
 ## [1.26.130] — 2026-11-05
 
 ### Security Hardening on Realtime, SEO, Redirects, Export/Import & Strict i18n (Cycle #67)
