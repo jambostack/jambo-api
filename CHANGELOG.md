@@ -7,6 +7,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.126] — 2026-11-05
+
+### Security Hardening on Forms, Public Submissions, Direct Upload & TUS (Cycle #63)
+- **Public Form Submissions & Attachments Security (`FormPublicController` & `SubmitHandler`)**:
+  - Implemented secure multipart attachment processing in `SubmitHandler`: strictly bounded attachment counts (max 5-10), maximum single file size (max 10-25 MB), and total submission attachment quota limit (50 MB).
+  - Integrated `UploadSecurityValidator` for all uploaded form attachments: sanitizes filenames against path traversal / null bytes, enforces extension allowlist / forbidden list (`.php`, `.exe`, `.sh`, `.bat`, etc.), inspects magic bytes / MIME types, enforces anti-XXE and anti-XSS for SVG/XML, and checks project storage quotas.
+  - Stored form attachments in segmented project directories (`public/uploads/forms/{projectUuid}/`) with cryptographically secure unguessable tokens (`bin2hex(random_bytes(16))`).
+  - Added recursive payload safety verification (`validatePayloadSafety`): limits nesting depth to 3 levels, validates field names against strict regex (`/^[a-zA-Z0-9_\-\.]{1,64}$/`), rejects null bytes and invalid UTF-8 byte sequences, and enforces 64 KB value bounds.
+  - Added form lifecycle & capacity guards: enforces active status check (`settings['active']`), expiration deadline (`settings['closes_at']`), and maximum submission limits (`settings['max_submissions']`).
+- **Admin Form Management Hardening (`Admin/FormController`)**:
+  - Enforced duplicate field name prevention in form schemas (`DUPLICATE_FIELD_NAME`), avoiding data collisions and ambiguous validation rules.
+  - Hardened notification email settings against CRLF injection and email spoofing, validating email formatting via `filter_var` and rejecting `\r` / `\n` characters.
+  - Added streaming ceiling protection in CSV exports (capped at 50,000 records) to prevent memory and CPU exhaustion attacks.
+- **Direct Upload S3 Quota Protection (`DirectUploadController` & `DirectUploadService`)**:
+  - Enforced server-side S3 object size verification in `completeUpload()` via `HeadObject`: checks the actual object size on S3 and rejects client-side quota manipulation if size exceeds `intent->maxBytes` or project quota limits.
+  - Added `file_size` fallback and strictly validated non-negative byte bounds during intent creation.
+- **Resumable TUS Upload Protocol Hardening (`TusController`)**:
+  - Enforced mandatory sanitized filename in `Upload-Metadata` during upload creation (`MISSING_FILENAME`), preventing incomplete metadata processing.
+  - Validated declared upload length against project-level `upload_max_file_size_mb` limits.
+  - Replaced predictable `uniqid()` identifiers with cryptographically secure random tokens (`bin2hex(random_bytes(16))`) during upload finalization.
+- **Multilingual Synchronization & Unit Testing**:
+  - Added full translation parity for 19 new security error keys across `en`, `fr`, `es`, and `ar`.
+  - Added dedicated test suites: `FormPublicControllerHardeningTest`, `FormControllerDuplicateFieldTest`, `TusControllerHardeningTest`, and `DirectUploadQuotaProtectionTest`.
+
 ## [1.26.125] — 2026-11-05
 
 ### Security Hardening on Authenticators, Exception Subscribers & Memory Guards (Cycle #62)

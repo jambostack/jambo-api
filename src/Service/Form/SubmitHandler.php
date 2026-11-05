@@ -4,7 +4,10 @@ namespace App\Service\Form;
 
 use App\Entity\Form;
 use App\Entity\FormSubmission;
+use App\Service\UploadSecurityValidator;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\ConstraintViolationList;
@@ -18,6 +21,9 @@ class SubmitHandler
         private readonly AntiSpamService $antiSpamService,
         private readonly ValidatorInterface $validator,
         private readonly EntityManagerInterface $em,
+        private readonly ?UploadSecurityValidator $uploadValidator = null,
+        #[Autowire(param: 'kernel.project_dir')]
+        private readonly ?string $projectDir = null,
     ) {}
 
     /**
@@ -32,6 +38,9 @@ class SubmitHandler
      */
     public function handle(Form $form, array $data, Request $request): FormSubmission
     {
+        // 0. Traitement sécurisé des pièces jointes et fichiers téléversés
+        $data = $this->processUploadedFiles($form, $data, $request);
+
         // 1. Resolve conditional visibility: skip validation for hidden fields
         $visibleFields = $this->formBuilder->resolveConditions($form->fields, $data);
         $visibleFieldNames = array_flip($visibleFields);
@@ -176,5 +185,121 @@ class SubmitHandler
             // ContentEntry creation from form data would be handled
             // by a dedicated service/event subscriber.
         }
+    }
+
+    /**
+     * Traite et assainit les fichiers joints envoyés dans la requête multipart.
+     *
+     * @param Form    $form
+     * @param array   $data
+     * @param Request $request
+     * @return array
+     *
+     * @throws \InvalidArgumentException si les quotas ou types MIME ne sont pas respectés
+     */
+    private function processUploadedFiles(Form $form, array $data, Request $request): array
+    {
+        if ($request->files->count() === 0) {
+            return $data;
+        }
+
+        $allUploadedFiles = [];
+        foreach ($request->files->all() as $fieldName => $fileOrFiles) {
+            if (is_array($fileOrFiles)) {
+                foreach ($fileOrFiles as $file) {
+                    if ($file instanceof UploadedFile) {
+                        $allUploadedFiles[] = ['field' => (string) $fieldName, 'file' => $file, 'multiple' => true];
+                    }
+                }
+            } elseif ($fileOrFiles instanceof UploadedFile) {
+                $allUploadedFiles[] = ['field' => (string) $fieldName, 'file' => $fileOrFiles, 'multiple' => false];
+            }
+        }
+
+        if (empty($allUploadedFiles)) {
+            return $data;
+        }
+
+        $maxAttachments = min(10, max(1, (int) ($form->settings['max_attachments'] ?? 5)));
+        if (count($allUploadedFiles) > $maxAttachments) {
+            throw new \InvalidArgumentException(sprintf('form.too_many_attachments|%d', $maxAttachments));
+        }
+
+        $maxFileSizeMb = min(25, max(1, (int) ($form->settings['max_file_size_mb'] ?? 10)));
+        $maxSizeBytes = $maxFileSizeMb * 1024 * 1024;
+        $maxTotalBytes = min(50 * 1024 * 1024, $maxSizeBytes * $maxAttachments);
+
+        $totalBytes = 0;
+        foreach ($allUploadedFiles as $item) {
+            /** @var UploadedFile $file */
+            $file = $item['file'];
+            if (!$file->isValid()) {
+                throw new \InvalidArgumentException(sprintf('form.attachment_upload_error|%s', $file->getClientOriginalName()));
+            }
+            $size = $file->getSize();
+            if ($size <= 0 || $size > $maxSizeBytes) {
+                throw new \InvalidArgumentException(sprintf('form.attachment_too_large|%s|%d', $file->getClientOriginalName(), $maxFileSizeMb));
+            }
+            $totalBytes += $size;
+        }
+
+        if ($totalBytes > $maxTotalBytes) {
+            throw new \InvalidArgumentException(sprintf('form.attachments_total_too_large|%d', (int) ceil($maxTotalBytes / (1024 * 1024))));
+        }
+
+        $projectUuid = $form->project?->uuid?->toRfc4122() ?? 'global';
+        $baseDir = $this->projectDir ?? sys_get_temp_dir();
+        $targetDir = $baseDir . '/public/uploads/forms/' . $projectUuid;
+        if (!is_dir($targetDir)) {
+            @mkdir($targetDir, 0755, true);
+        }
+
+        $filesByField = [];
+        foreach ($allUploadedFiles as $item) {
+            /** @var UploadedFile $file */
+            $file = $item['file'];
+            $fieldName = (string) $item['field'];
+
+            $cleanName = $this->uploadValidator !== null
+                ? $this->uploadValidator->sanitizeAndValidateFilename($file->getClientOriginalName())
+                : basename($file->getClientOriginalName());
+
+            $ext = strtolower(pathinfo($cleanName, PATHINFO_EXTENSION));
+
+            $mime = 'application/octet-stream';
+            if ($this->uploadValidator !== null) {
+                try {
+                    $mime = $this->uploadValidator->validateFileContent($file->getPathname(), $ext);
+                    if ($form->project !== null) {
+                        $this->uploadValidator->validateSizeAndQuota($form->project, $file->getSize());
+                    }
+                } catch (\InvalidArgumentException $e) {
+                    throw new \InvalidArgumentException(sprintf('form.attachment_invalid|%s', $cleanName));
+                }
+            }
+
+            $safeFilename = bin2hex(random_bytes(16)) . '.' . $ext;
+            $file->move($targetDir, $safeFilename);
+
+            $fileDescriptor = [
+                'original_name' => $cleanName,
+                'filename'      => $safeFilename,
+                'path'          => '/uploads/forms/' . $projectUuid . '/' . $safeFilename,
+                'mime_type'     => $mime,
+                'size'          => $file->getSize(),
+            ];
+
+            if ($item['multiple']) {
+                $filesByField[$fieldName][] = $fileDescriptor;
+            } else {
+                $filesByField[$fieldName] = $fileDescriptor;
+            }
+        }
+
+        foreach ($filesByField as $fieldName => $descriptor) {
+            $data[$fieldName] = $descriptor;
+        }
+
+        return $data;
     }
 }

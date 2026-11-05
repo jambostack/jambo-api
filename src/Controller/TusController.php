@@ -149,17 +149,28 @@ class TusController extends AbstractController
             return $this->errorResponse($this->trans('tus.upload_length_exceeds_max', ['%max%' => '100MB'], 'Upload-Length exceeds maximum allowed size (100MB)'), 'UPLOAD_LENGTH_EXCEEDS_MAX', 413);
         }
 
+        $projectMaxMb = (int) ($project->settings['upload_max_file_size_mb'] ?? 0);
+        if ($projectMaxMb > 0 && $uploadLength > ($projectMaxMb * 1024 * 1024)) {
+            return $this->errorResponse(
+                $this->trans('tus.upload_length_exceeds_project_limit', ['%max%' => (string) $projectMaxMb], sprintf('Upload length exceeds project maximum file size limit (%d MB).', $projectMaxMb)),
+                'UPLOAD_LENGTH_EXCEEDS_PROJECT_LIMIT',
+                413
+            );
+        }
+
         // Parser Upload-Metadata : format "filename BASE64,filetype BASE64[,folder_id BASE64]"
         $metadata = $this->parseMetadata((string) $request->headers->get('Upload-Metadata', ''));
+
+        if (empty($metadata['filename'])) {
+            return $this->errorResponse($this->trans('tus.missing_filename', [], 'Upload metadata must include a valid non-empty filename.'), 'MISSING_FILENAME', 400);
+        }
 
         if (isset($metadata['filename']) && preg_match('/[\x00-\x1F\x7F]/', (string) $metadata['filename'])) {
             return $this->errorResponse($this->trans('tus.filename_control_chars', [], 'Uploaded filename contains invalid control characters.'), 'FILENAME_CONTROL_CHARS', 400);
         }
 
         try {
-            if (isset($metadata['filename'])) {
-                $this->uploadValidator->sanitizeAndValidateFilename($metadata['filename']);
-            }
+            $this->uploadValidator->sanitizeAndValidateFilename($metadata['filename']);
             if (isset($metadata['filetype']) && $metadata['filetype'] !== '') {
                 $this->uploadValidator->validateMimeType((string) $metadata['filetype']);
             }
@@ -395,8 +406,8 @@ class TusController extends AbstractController
             // Marquer en cours de finalisation
             $this->tusServer->markFinalizing($projectUuid, $uploadId);
 
-            // Générer un nom unique (comme Vich UniqidNamer)
-            $uniqueName = uniqid() . '.' . $ext;
+            // Générer un nom unique cryptographiquement sécurisé
+            $uniqueName = bin2hex(random_bytes(16)) . '.' . $ext;
 
             // Destination finale dans public/uploads/media/{canonicalUuid}/
             $canonicalProjectUuid = $project->uuid?->toRfc4122() ?? $projectUuid;

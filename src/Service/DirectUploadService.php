@@ -44,7 +44,9 @@ class DirectUploadService
         if ($this->uploadValidator !== null) {
             $mimeType = $this->uploadValidator->validateMimeType($mimeType);
         }
-        $maxBytes = isset($data['max_bytes']) ? (int) $data['max_bytes'] : null;
+        $maxBytes = isset($data['max_bytes'])
+            ? (int) $data['max_bytes']
+            : (isset($data['file_size']) ? (int) $data['file_size'] : null);
         if ($maxBytes !== null && $maxBytes > 0 && $this->uploadValidator !== null) {
             $this->uploadValidator->validateSizeAndQuota($project, $maxBytes);
         }
@@ -203,21 +205,25 @@ class DirectUploadService
             ]);
         }
 
-        // Si la taille n'est pas passée, on interroge l'objet sur S3 via HeadObject
-        if ($fileSize === null) {
-            try {
-                $head = $s3Client->headObject([
-                    'Bucket' => $profile->s3Bucket,
-                    'Key'    => $intent->storageKey,
-                ]);
-                $fileSize = (int) ($head['ContentLength'] ?? 0);
-            } catch (\Throwable) {
-                $fileSize = $intent->maxBytes ?? 0;
-            }
+        // Interroger l'objet sur S3 pour obtenir sa taille réelle et contrer toute fraude de quota
+        try {
+            $head = $s3Client->headObject([
+                'Bucket' => $profile->s3Bucket,
+                'Key'    => $intent->storageKey,
+            ]);
+            $actualS3Size = (int) ($head['ContentLength'] ?? 0);
+        } catch (\Throwable) {
+            $actualS3Size = $fileSize ?? $intent->maxBytes ?? 0;
         }
 
-        if ($fileSize !== null && $fileSize > 0 && $this->uploadValidator !== null) {
-            $this->uploadValidator->validateSizeAndQuota($intent->project, $fileSize);
+        if ($intent->maxBytes !== null && $intent->maxBytes > 0 && $actualS3Size > $intent->maxBytes) {
+            throw new \InvalidArgumentException('Uploaded object on storage exceeds declared maximum size limit.');
+        }
+
+        $effectiveSize = $actualS3Size > 0 ? $actualS3Size : ($fileSize ?? 0);
+
+        if ($effectiveSize > 0 && $this->uploadValidator !== null) {
+            $this->uploadValidator->validateSizeAndQuota($intent->project, $effectiveSize);
         }
 
         $media = new Media();
@@ -226,7 +232,7 @@ class DirectUploadService
         $media->fileName = $intent->storageKey;
         $media->originalName = $intent->originalFilename;
         $media->mimeType = $intent->clientMimeType;
-        $media->fileSize = $fileSize;
+        $media->fileSize = $effectiveSize;
         $media->createdBy = $user;
 
         $intent->status = AssetUploadIntent::STATUS_COMPLETED;

@@ -401,8 +401,13 @@ class FormController extends AbstractController
 
             $page = 1;
             $perPage = 100;
+            $maxExportRecords = 50000;
+            $exportedCount = 0;
 
             while (true) {
+                if ($exportedCount >= $maxExportRecords) {
+                    break;
+                }
                 $submissions = $this->submissionRepo->findPaginatedByForm($form, $page, $perPage, $spamFilter);
                 if (empty($submissions)) {
                     break;
@@ -424,6 +429,7 @@ class FormController extends AbstractController
                     ];
 
                     fputcsv($output, $sanitizer->sanitizeRow($row), ',', '"', "\\");
+                    $exportedCount++;
                 }
 
                 flush();
@@ -599,15 +605,26 @@ class FormController extends AbstractController
     }
 
     /**
-     * Validates field definitions for identifier safety and anti-XSS.
+     * Validates field definitions for identifier safety, anti-XSS and duplicate detection.
      */
     private function validateFieldsSecurity(array $fields): ?JsonResponse
     {
+        $seen = [];
         foreach ($fields as $fieldDef) {
             if (!is_array($fieldDef)) {
                 continue;
             }
             $fieldName = $fieldDef['name'] ?? $fieldDef['id'] ?? null;
+            if ($fieldName !== null) {
+                $lower = strtolower((string) $fieldName);
+                if (isset($seen[$lower])) {
+                    return $this->secureJson([
+                        'error' => $this->trans('form.admin.duplicate_field_name', ['%name%' => (string) $fieldName], sprintf('Duplicate field name "%s" detected in form definition.', $fieldName)),
+                        'code' => 'DUPLICATE_FIELD_NAME',
+                    ], 422);
+                }
+                $seen[$lower] = true;
+            }
             if ($fieldName !== null && !preg_match('/^[a-zA-Z0-9_\-\.]{1,64}$/', (string) $fieldName)) {
                 return $this->secureJson([
                     'error' => $this->trans(
@@ -634,6 +651,23 @@ class FormController extends AbstractController
     {
         if (strlen(json_encode($settings)) > 65536) {
             return $this->secureJson(['error' => $this->trans('form.admin.settings_invalid', [], 'Form settings must be an array and not exceed 64KB.'), 'code' => 'SETTINGS_INVALID'], 422);
+        }
+
+        // Validate notification emails against CRLF injection and invalid format
+        if (!empty($settings['notifications']['email']['to'])) {
+            $toEmails = is_array($settings['notifications']['email']['to'])
+                ? $settings['notifications']['email']['to']
+                : [$settings['notifications']['email']['to']];
+
+            foreach ($toEmails as $email) {
+                $emailStr = trim((string) $email);
+                if ($emailStr !== '' && (!filter_var($emailStr, FILTER_VALIDATE_EMAIL) || preg_match('/[\r\n]/', $emailStr))) {
+                    return $this->secureJson([
+                        'error' => $this->trans('form.admin.invalid_notification_email', ['%email%' => $emailStr], sprintf('Invalid notification email address "%s".', $emailStr)),
+                        'code' => 'INVALID_NOTIFICATION_EMAIL',
+                    ], 422);
+                }
+            }
         }
 
         // If redirectUrl or webhookUrl is configured, check for safe URL and anti-SSRF first

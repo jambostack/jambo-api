@@ -129,6 +129,17 @@ class DirectUploadController extends AbstractController
             ], 422);
         }
 
+        $maxBytes = isset($payload['max_bytes'])
+            ? (int) $payload['max_bytes']
+            : (isset($payload['file_size']) ? (int) $payload['file_size'] : null);
+
+        if ($maxBytes !== null && $maxBytes <= 0) {
+            return $this->jsonResponse([
+                'error' => $this->trans('direct_upload.invalid_file_size', [], 'File size cannot be negative.'),
+                'code' => 'INVALID_FILE_SIZE',
+            ], 422);
+        }
+
         try {
             // Nettoyage opportuniste des intentions orphelines expirées pour ce projet
             try {
