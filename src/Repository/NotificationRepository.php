@@ -138,6 +138,125 @@ class NotificationRepository extends ServiceEntityRepository
         return (int) $qb->getQuery()->execute();
     }
 
+    public function countByRecipient(User $user): int
+    {
+        return (int) $this->createQueryBuilder('n')
+            ->select('COUNT(n.id)')
+            ->where('n.recipient = :user')
+            ->setParameter('user', $user)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * Marque un lot d'identifiants de notifications comme lues pour un utilisateur donné.
+     *
+     * @param int[] $ids
+     */
+    public function markBatchAsRead(User $user, array $ids): int
+    {
+        if (empty($ids)) {
+            return 0;
+        }
+
+        return (int) $this->createQueryBuilder('n')->update()
+            ->set('n.readAt', ':now')
+            ->setParameter('now', new \DateTimeImmutable())
+            ->where('n.recipient = :user')
+            ->andWhere('n.id IN (:ids)')
+            ->andWhere('n.readAt IS NULL')
+            ->setParameter('user', $user)
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute();
+    }
+
+    /**
+     * Supprime un lot de notifications appartenant à l'utilisateur.
+     *
+     * @param int[] $ids
+     */
+    public function deleteBatch(User $user, array $ids): int
+    {
+        if (empty($ids)) {
+            return 0;
+        }
+
+        return (int) $this->createQueryBuilder('n')->delete()
+            ->where('n.recipient = :user')
+            ->andWhere('n.id IN (:ids)')
+            ->setParameter('user', $user)
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute();
+    }
+
+    /**
+     * Supprime les notifications lues créées avant un seuil temporel pour un utilisateur précis.
+     */
+    public function pruneReadOlderThanForUser(User $user, \DateTimeImmutable $threshold, ?Project $project = null): int
+    {
+        $qb = $this->createQueryBuilder('n')
+            ->delete()
+            ->where('n.recipient = :user')
+            ->andWhere('n.readAt IS NOT NULL')
+            ->andWhere('n.createdAt < :threshold')
+            ->setParameter('user', $user)
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $projectUuid = $project->uuid?->toRfc4122() ?? '';
+            $projectId = $project->id ? (string) $project->id : '';
+            $this->applyProjectFilter($qb, $projectUuid, $projectId);
+        }
+
+        return (int) $qb->getQuery()->execute();
+    }
+
+    /**
+     * Émonde les notifications les plus anciennes d'un utilisateur au-delà du quota maximum autorisé.
+     */
+    public function pruneOldestForUser(User $user, int $keepCount = 1000): int
+    {
+        $total = $this->countByRecipient($user);
+        if ($total <= $keepCount) {
+            return 0;
+        }
+
+        $excess = $total - $keepCount;
+
+        // On supprime d'abord les notifications déjà lues les plus anciennes
+        $oldestReadIds = $this->createQueryBuilder('n')
+            ->select('n.id')
+            ->where('n.recipient = :user')
+            ->andWhere('n.readAt IS NOT NULL')
+            ->setParameter('user', $user)
+            ->orderBy('n.createdAt', 'ASC')
+            ->setMaxResults($excess)
+            ->getQuery()
+            ->getSingleColumnResult();
+
+        if (!empty($oldestReadIds)) {
+            return $this->deleteBatch($user, $oldestReadIds);
+        }
+
+        // Si l'utilisateur n'a aucune notification lue, on supprime les plus anciennes non lues
+        $oldestIds = $this->createQueryBuilder('n')
+            ->select('n.id')
+            ->where('n.recipient = :user')
+            ->setParameter('user', $user)
+            ->orderBy('n.createdAt', 'ASC')
+            ->setMaxResults($excess)
+            ->getQuery()
+            ->getSingleColumnResult();
+
+        if (!empty($oldestIds)) {
+            return $this->deleteBatch($user, $oldestIds);
+        }
+
+        return 0;
+    }
+
     private function applyProjectFilter(\Doctrine\ORM\QueryBuilder $qb, string $projectUuid, string $projectId): void
     {
         if ($projectUuid !== '' && $projectId !== '') {

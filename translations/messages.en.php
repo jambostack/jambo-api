@@ -3686,4 +3686,23 @@ return [
     'column_setting.invalid_column_id' => 'Invalid column identifier format.',
     'column_setting.prototype_pollution' => 'Forbidden property detected in column settings payload.',
     'column_setting.reset_success' => 'Column settings successfully reset to default.',
+
+    // ─── Cycle 90: Comment Quotas, Nesting Security & Notification Volume Hardening ───
+    'comment.entry_quota_exceeded' => 'Maximum comments quota reached for this content entry.',
+    'comment.project_quota_exceeded' => 'Maximum comments quota reached for this project tier.',
+    'comment.parent_entry_mismatch' => 'Parent comment does not belong to this content entry.',
+    'comment.invalid_parent_cycle' => 'Circular comment parent reference detected.',
+    'comment.max_depth_exceeded' => 'Maximum comment reply nesting depth reached.',
+    'comment.body_invalid_characters' => 'Comment body contains forbidden or harmful content.',
+    'notification.default_title' => 'Notification',
+    'notification.invalid_json' => 'Invalid JSON payload.',
+    'notification.payload_too_large' => 'Notification request payload too large.',
+    'notification.batch_empty' => 'Notification batch identifiers list cannot be empty.',
+    'notification.batch_too_large' => 'Notification batch size exceeds maximum allowed limit.',
+    'notification.invalid_id_list' => 'Invalid notification identifiers provided.',
+    'notification.pruned_success' => 'Old notifications successfully pruned.',
+    'notification.batch_read_success' => 'Notifications marked as read.',
+    'notification.batch_delete_success' => 'Notifications successfully deleted.',
+    'notification.quota_exceeded' => 'User notification storage quota exceeded.',
+    'notification.invalid_days' => 'Retention period in days must be an integer between 1 and 365.',
 ];

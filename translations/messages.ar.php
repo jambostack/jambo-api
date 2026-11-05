@@ -3688,4 +3688,23 @@ return [
     'column_setting.invalid_column_id' => 'تنسيق معرف العمود غير صالح.',
     'column_setting.prototype_pollution' => 'تم اكتشاف خاصية محظورة في حمولة إعدادات الأعمدة.',
     'column_setting.reset_success' => 'تمت إعادة تعيين إعدادات الأعمدة بنجاح إلى الإعدادات الافتراضية.',
+
+    // ─── Cycle 90: Comment Quotas, Nesting Security & Notification Volume Hardening ───
+    'comment.entry_quota_exceeded' => 'تم الوصول إلى الحد الأقصى لحصة التعليقات لهذا الإدخال.',
+    'comment.project_quota_exceeded' => 'تم الوصول إلى الحد الأقصى لحصة التعليقات لخطة المشروع.',
+    'comment.parent_entry_mismatch' => 'التعليق الأصل لا ينتمي إلى إدخال المحتوى هذا.',
+    'comment.invalid_parent_cycle' => 'تم اكتشاف مرجع دائري في التسلسل الهرمي للتعليق.',
+    'comment.max_depth_exceeded' => 'تم تجاوز الحد الأقصى لعمق تداخل ردود التعليقات.',
+    'comment.body_invalid_characters' => 'يحتوي نص التعليق على محتوى محظور أو ضار.',
+    'notification.default_title' => 'إشعار',
+    'notification.invalid_json' => 'حمولة JSON غير صالحة.',
+    'notification.payload_too_large' => 'حمولة طلب الإشعار كبيرة جداً.',
+    'notification.batch_empty' => 'لا يمكن أن تكون قائمة معرّفات دفعة الإشعارات فارغة.',
+    'notification.batch_too_large' => 'حجم دفعة الإشعارات يتجاوز الحد الأقصى المسموح به.',
+    'notification.invalid_id_list' => 'معرّفات الإشعارات المقدمة غير صالحة.',
+    'notification.pruned_success' => 'تم حذف الإشعارات القديمة بنجاح.',
+    'notification.batch_read_success' => 'تم تحديد الإشعارات كمقروءة.',
+    'notification.batch_delete_success' => 'تم حذف الإشعارات بنجاح.',
+    'notification.quota_exceeded' => 'تم تجاوز حصة تخزين إشعارات المستخدم.',
+    'notification.invalid_days' => 'يجب أن تكون فترة الاحتفاظ بالأيام رقماً صحيحاً بين 1 و 365.',
 ];

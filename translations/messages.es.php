@@ -3686,4 +3686,23 @@ return [
     'column_setting.invalid_column_id' => 'Formato de identificador de columna no válido.',
     'column_setting.prototype_pollution' => 'Propiedad prohibida detectada en los ajustes de columna.',
     'column_setting.reset_success' => 'Ajustes de columnas restablecidos con éxito por defecto.',
+
+    // ─── Cycle 90: Comment Quotas, Nesting Security & Notification Volume Hardening ───
+    'comment.entry_quota_exceeded' => 'Se ha alcanzado la cuota máxima de comentarios para esta entrada.',
+    'comment.project_quota_exceeded' => 'Se ha alcanzado la cuota máxima de comentarios para el plan del proyecto.',
+    'comment.parent_entry_mismatch' => 'El comentario principal no pertenece a esta entrada de contenido.',
+    'comment.invalid_parent_cycle' => 'Se ha detectado una referencia circular en la jerarquía del comentario.',
+    'comment.max_depth_exceeded' => 'Se ha superado el nivel máximo de anidamiento de respuestas.',
+    'comment.body_invalid_characters' => 'El contenido del comentario contiene caracteres o elementos no permitidos.',
+    'notification.default_title' => 'Notificación',
+    'notification.invalid_json' => 'Cuerpo JSON no válido.',
+    'notification.payload_too_large' => 'La carga útil de la solicitud de notificación es demasiado grande.',
+    'notification.batch_empty' => 'La lista de identificadores del lote de notificaciones no puede estar vacía.',
+    'notification.batch_too_large' => 'El tamaño del lote de notificaciones supera el límite permitido.',
+    'notification.invalid_id_list' => 'Identificadores de notificación proporcionados no válidos.',
+    'notification.pruned_success' => 'Notificaciones antiguas purgadas con éxito.',
+    'notification.batch_read_success' => 'Notificaciones marcadas como leídas.',
+    'notification.batch_delete_success' => 'Notificaciones eliminadas con éxito.',
+    'notification.quota_exceeded' => 'Se ha superado la cuota de almacenamiento de notificaciones del usuario.',
+    'notification.invalid_days' => 'El periodo de retención en días debe ser un entero entre 1 y 365.',
 ];

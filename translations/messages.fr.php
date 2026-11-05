@@ -3704,4 +3704,23 @@ return [
     'column_setting.invalid_column_id' => 'Format d\'identifiant de colonne invalide.',
     'column_setting.prototype_pollution' => 'Propriété interdite détectée dans la charge utile des réglages de colonnes.',
     'column_setting.reset_success' => 'Réglages de colonnes réinitialisés avec succès par défaut.',
+
+    // ─── Cycle 90: Comment Quotas, Nesting Security & Notification Volume Hardening ───
+    'comment.entry_quota_exceeded' => 'Quota maximal de commentaires atteint pour cette entrée de contenu.',
+    'comment.project_quota_exceeded' => 'Quota maximal de commentaires atteint pour le forfait de ce projet.',
+    'comment.parent_entry_mismatch' => 'Le commentaire parent n\'appartient pas à cette entrée de contenu.',
+    'comment.invalid_parent_cycle' => 'Référence circulaire détectée dans la hiérarchie du commentaire parent.',
+    'comment.max_depth_exceeded' => 'Profondeur maximale d\'imbrication des réponses de commentaire atteinte.',
+    'comment.body_invalid_characters' => 'Le corps du commentaire contient du contenu interdit ou nuisible.',
+    'notification.default_title' => 'Notification',
+    'notification.invalid_json' => 'Charge utile JSON invalide.',
+    'notification.payload_too_large' => 'Charge utile de requête de notification trop volumineuse.',
+    'notification.batch_empty' => 'La liste d\'identifiants du lot de notifications ne peut pas être vide.',
+    'notification.batch_too_large' => 'La taille du lot de notifications dépasse la limite maximale autorisée.',
+    'notification.invalid_id_list' => 'Identifiants de notifications fournis invalides.',
+    'notification.pruned_success' => 'Anciennes notifications purgées avec succès.',
+    'notification.batch_read_success' => 'Notifications marquées comme lues.',
+    'notification.batch_delete_success' => 'Notifications supprimées avec succès.',
+    'notification.quota_exceeded' => 'Quota de stockage des notifications de l\'utilisateur dépassé.',
+    'notification.invalid_days' => 'La période de rétention en jours doit être un entier compris entre 1 et 365.',
 ];

@@ -7,6 +7,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.157] — 2026-11-05
+
+### Comment Quotas, Nesting Security & Notification Volume Hardening (Cycle #90)
+- **Comment Quotas & Anti-XSS Sanitization (`CommentController` & `CommentRepository`)**:
+  - Implemented multi-tenant project comment quotas based on tenant tier: `free` (250), `starter` (1,000), `pro` (5,000), `enterprise` (25,000) with custom override support (`max_comments`).
+  - Added entry-level comment quotas: `free` (100), `starter` (250), `pro` (1,000), `enterprise` (5,000) with custom override support (`max_comments_per_entry`).
+  - Strict anti-XSS comment body sanitation: eradicated `<script>`, `<iframe>`, `<object>`, `<embed>`, `<svg>`, `<form>`, `<style>` blocks and their inner contents, removed inline event handlers (`onload`, `onerror`, `onclick`), neutralized malicious URI schemes (`javascript:`, `data:`, `vbscript:`, `file:`) in HTML and Markdown links, enforced safe `<a>` tags with `noopener noreferrer nofollow`, and collapsed newline/quote bombing attacks.
+  - Nesting depth control & cycle prevention: bounded comment reply nesting to `MAX_NESTING_DEPTH = 3`, validated parent entry ownership, and detected circular parent hierarchies returning explicit 422 errors.
+  - Added `countByProject(Project $project)` method to `CommentRepository`.
+- **Notification Volume Control, Pruning & Bounded Batch Operations (`NotificationController`, `NotificationService`, `NotificationRepository`)**:
+  - Enforced per-user storage quotas (`MAX_USER_NOTIFICATIONS = 1000`, `MAX_USER_UNREAD_NOTIFICATIONS = 500`) with automatic oldest-read pruning upon new notification creation.
+  - Added secure bounded batch operations: `POST /api/notifications/batch-read` and `POST /api/notifications/batch-delete` bounded to `BATCH_MAX_IDS = 100` and `MAX_PAYLOAD_BYTES = 64KB`.
+  - Added `POST /api/notifications/prune` endpoint enabling users to purge read notifications older than `days` (bounded between 1 and 365 days).
+  - Implemented strict payload sanitization in `NotificationService`: titles stripped of all HTML and control characters, bodies sanitized and stripped of script blocks and event handlers, links strictly validated against forbidden schemes.
+  - Added `countByRecipient`, `markBatchAsRead`, `deleteBatch`, `pruneReadOlderThanForUser`, and `pruneOldestForUser` in `NotificationRepository`.
+- **Strict 100% I18n Compliance**:
+  - Added 17 new translation keys across all 4 locales (`en`, `fr`, `es`, `ar`), maintaining exact parity (3,395 keys per locale).
+- **Test Suite Verification**:
+  - Added `Cycle90CommentAndNotificationHardeningTest` covering all comment quota verifications, XSS and Markdown sanitization, nesting depth enforcement, circular hierarchy detection, entry ownership checks, notification batch actions, pruning, quota auto-pruning, and I18n parity (17 tests, 147 assertions, 100% pass).
+
 ## [1.26.156] — 2026-11-05
 
 ### Plugin Quotas, Sandboxing Security & Table Column Settings Hardening (Cycle #89)

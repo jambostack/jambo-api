@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Project;
+use App\Entity\User;
 use App\Repository\NotificationRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
@@ -18,6 +19,10 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class NotificationController extends AbstractController
 {
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+    public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    public const BATCH_MAX_IDS = 100;
+    public const MAX_USER_NOTIFICATIONS = 1000;
+    public const MAX_USER_UNREAD_NOTIFICATIONS = 500;
 
     private const SECURITY_HEADERS = [
         'Cache-Control'          => 'no-store, no-cache, must-revalidate, private',
@@ -74,9 +79,17 @@ class NotificationController extends AbstractController
             $unreadCount = $this->notificationRepository->countUnreadByUser($user);
         }
 
+        $totalUserNotifications = $this->notificationRepository->countByRecipient($user);
+
         return $this->secureJson([
             'data' => array_map(fn ($n) => $this->serializeNotification($n), $notifications),
-            'meta' => ['unread_count' => $unreadCount],
+            'meta' => [
+                'unread_count' => $unreadCount,
+                'total_user_notifications' => $totalUserNotifications,
+                'max_user_notifications' => self::MAX_USER_NOTIFICATIONS,
+                'page' => $page,
+                'per_page' => $perPage,
+            ],
         ]);
     }
 
@@ -159,6 +172,125 @@ class NotificationController extends AbstractController
         return $this->secureJson(['unread_count' => 0]);
     }
 
+    #[Route('/batch-read', name: 'batch_read', methods: ['POST'])]
+    public function batchRead(Request $request): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        $user = $this->getAuthUser();
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        $ids = $this->extractAndValidateBatchIds($request);
+        if ($ids instanceof JsonResponse) {
+            return $ids;
+        }
+
+        $updatedCount = $this->notificationRepository->markBatchAsRead($user, $ids);
+        $unreadCount = $this->notificationRepository->countUnreadByUser($user);
+
+        return $this->secureJson([
+            'success' => true,
+            'updated' => $updatedCount,
+            'unread_count' => $unreadCount,
+            'message' => $this->trans('notification.batch_read_success', [], 'Notifications marked as read.'),
+        ]);
+    }
+
+    #[Route('/batch-delete', name: 'batch_delete', methods: ['POST'])]
+    public function batchDelete(Request $request): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        $user = $this->getAuthUser();
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        $ids = $this->extractAndValidateBatchIds($request);
+        if ($ids instanceof JsonResponse) {
+            return $ids;
+        }
+
+        $deletedCount = $this->notificationRepository->deleteBatch($user, $ids);
+
+        return $this->secureJson([
+            'success' => true,
+            'deleted' => $deletedCount,
+            'message' => $this->trans('notification.batch_delete_success', [], 'Notifications successfully deleted.'),
+        ]);
+    }
+
+    #[Route('/prune', name: 'prune', methods: ['POST'])]
+    public function prune(Request $request): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        $user = $this->getAuthUser();
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('notification.payload_too_large', [], 'Notification request payload too large.'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
+        $days = 30;
+        if ($request->getContent() !== '') {
+            try {
+                $payload = $request->toArray();
+                if (isset($payload['days'])) {
+                    if (!is_numeric($payload['days'])) {
+                        return $this->secureJson([
+                            'error' => $this->trans('notification.invalid_days', [], 'Retention period in days must be an integer between 1 and 365.'),
+                            'code' => 'INVALID_DAYS',
+                        ], 422);
+                    }
+                    $days = (int) $payload['days'];
+                }
+            } catch (\Throwable) {
+                return $this->secureJson([
+                    'error' => $this->trans('notification.invalid_json', [], 'Invalid JSON payload.'),
+                    'code' => 'INVALID_JSON',
+                ], 400);
+            }
+        } elseif ($request->query->has('days')) {
+            $days = $request->query->getInt('days', 30);
+        }
+
+        if ($days < 1 || $days > 365) {
+            return $this->secureJson([
+                'error' => $this->trans('notification.invalid_days', [], 'Retention period in days must be an integer between 1 and 365.'),
+                'code' => 'INVALID_DAYS',
+            ], 422);
+        }
+
+        $projectFilter = $this->resolveProjectFilter($request, $user);
+        if ($projectFilter instanceof JsonResponse) {
+            return $projectFilter;
+        }
+
+        $threshold = new \DateTimeImmutable(sprintf('-%d days', $days));
+        $prunedCount = $this->notificationRepository->pruneReadOlderThanForUser($user, $threshold, $projectFilter);
+
+        return $this->secureJson([
+            'success' => true,
+            'pruned' => $prunedCount,
+            'days' => $days,
+            'message' => $this->trans('notification.pruned_success', [], 'Old notifications successfully pruned.'),
+        ]);
+    }
+
     #[Route('/unread-count', name: 'unread_count', methods: ['GET'])]
     public function unreadCount(Request $request): JsonResponse
     {
@@ -183,7 +315,66 @@ class NotificationController extends AbstractController
         return $this->secureJson(['count' => $count]);
     }
 
-    private function resolveProjectFilter(Request $request, \App\Entity\User $user): Project|JsonResponse|null
+    /**
+     * Extrait et valide strictement une liste bornée d'identifiants de notifications.
+     *
+     * @return int[]|JsonResponse
+     */
+    private function extractAndValidateBatchIds(Request $request): array|JsonResponse
+    {
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('notification.payload_too_large', [], 'Notification request payload too large.'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
+        try {
+            $data = $request->toArray();
+        } catch (\Throwable) {
+            return $this->secureJson([
+                'error' => $this->trans('notification.invalid_json', [], 'Invalid JSON payload.'),
+                'code' => 'INVALID_JSON',
+            ], 400);
+        }
+
+        $rawIds = $data['ids'] ?? null;
+        if (!is_array($rawIds) || empty($rawIds)) {
+            return $this->secureJson([
+                'error' => $this->trans('notification.batch_empty', [], 'Notification batch identifiers list cannot be empty.'),
+                'code' => 'BATCH_EMPTY',
+            ], 422);
+        }
+
+        if (count($rawIds) > self::BATCH_MAX_IDS) {
+            return $this->secureJson([
+                'error' => $this->trans('notification.batch_too_large', ['%max%' => (string) self::BATCH_MAX_IDS], sprintf('Notification batch size exceeds maximum allowed limit (%d).', self::BATCH_MAX_IDS)),
+                'code' => 'BATCH_TOO_LARGE',
+            ], 422);
+        }
+
+        $validIds = [];
+        foreach ($rawIds as $id) {
+            if (!is_int($id) && (!is_string($id) || !ctype_digit($id))) {
+                return $this->secureJson([
+                    'error' => $this->trans('notification.invalid_id_list', [], 'Invalid notification identifiers provided.'),
+                    'code' => 'INVALID_ID_LIST',
+                ], 422);
+            }
+            $intId = (int) $id;
+            if ($intId <= 0) {
+                return $this->secureJson([
+                    'error' => $this->trans('notification.invalid_id_list', [], 'Invalid notification identifiers provided.'),
+                    'code' => 'INVALID_ID_LIST',
+                ], 422);
+            }
+            $validIds[] = $intId;
+        }
+
+        return array_values(array_unique($validIds));
+    }
+
+    private function resolveProjectFilter(Request $request, User $user): Project|JsonResponse|null
     {
         $projectParam = $request->query->get('project') ?? $request->query->get('project_uuid');
         if (empty($projectParam) || !is_string($projectParam)) {
@@ -248,10 +439,10 @@ class NotificationController extends AbstractController
         return null;
     }
 
-    private function getAuthUser(): \App\Entity\User|JsonResponse
+    private function getAuthUser(): User|JsonResponse
     {
         $user = $this->getUser();
-        if (!$user instanceof \App\Entity\User) {
+        if (!$user instanceof User) {
             return $this->secureJson([
                 'error' => $this->trans('notification.auth_required', [], 'Authentication required.'),
                 'code' => 'AUTH_REQUIRED',
@@ -266,6 +457,9 @@ class NotificationController extends AbstractController
             return null;
         }
         $trimmed = trim($link);
+        if (preg_match('/^(javascript|data|vbscript|file):/i', $trimmed)) {
+            return null;
+        }
         if (str_starts_with($trimmed, '/') || str_starts_with($trimmed, 'https://') || str_starts_with($trimmed, 'http://')) {
             return $trimmed;
         }
@@ -274,11 +468,14 @@ class NotificationController extends AbstractController
 
     private function serializeNotification($n): array
     {
+        $cleanTitle = strip_tags((string) $n->title);
+        $cleanBody = $n->body !== null ? strip_tags((string) $n->body, ['b', 'strong', 'i', 'em', 'code', 'p', 'br', 'a']) : null;
+
         return [
             'id' => $n->id,
             'type' => $n->type,
-            'title' => $n->title,
-            'body' => $n->body,
+            'title' => $cleanTitle,
+            'body' => $cleanBody,
             'link' => $this->sanitizeLink($n->link),
             'read_at' => $n->readAt?->format('c'),
             'created_at' => $n->createdAt->format('c'),

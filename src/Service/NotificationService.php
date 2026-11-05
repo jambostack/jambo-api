@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\Notification;
 use App\Entity\Project;
 use App\Entity\User;
+use App\Repository\NotificationRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -19,11 +20,16 @@ class NotificationService
     public const TYPE_ASSIGNMENT = 'assignment';
     public const TYPE_STATUS_CHANGE = 'status_change';
     public const TYPE_AUTOMATION = 'automation';
+    public const TYPE_SYSTEM = 'system';
+
+    public const MAX_USER_NOTIFICATIONS = 1000;
+    public const MAX_USER_UNREAD_NOTIFICATIONS = 500;
 
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ?TranslatorInterface $translator = null,
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly ?NotificationRepository $notificationRepository = null,
     ) {}
 
     /**
@@ -38,11 +44,22 @@ class NotificationService
         ?Project $project = null,
         bool $flush = true,
     ): Notification {
+        // Enforce per-user notification volume quotas and prune oldest when exceeded
+        if ($this->notificationRepository !== null) {
+            $currentCount = $this->notificationRepository->countByRecipient($recipient);
+            if ($currentCount >= self::MAX_USER_NOTIFICATIONS) {
+                $this->notificationRepository->pruneOldestForUser($recipient, self::MAX_USER_NOTIFICATIONS - 1);
+            }
+        }
+
+        $cleanTitle = $this->sanitizeTitle($title);
+        $cleanBody = $body !== null ? $this->sanitizeBody($body) : null;
+
         $notification = new Notification();
         $notification->recipient = $recipient;
         $notification->type = $this->sanitizeType($type);
-        $notification->title = $this->truncate($title, 255);
-        $notification->body = $body !== null ? $this->truncate($body, 2000) : null;
+        $notification->title = $cleanTitle !== '' ? $cleanTitle : $this->trans('notification.default_title', [], $recipient->locale ?? 'en', 'Notification');
+        $notification->body = $cleanBody;
         $notification->link = $this->sanitizeLink($link, $project);
 
         $this->em->persist($notification);
@@ -257,9 +274,40 @@ class NotificationService
             self::TYPE_ASSIGNMENT,
             self::TYPE_STATUS_CHANGE,
             self::TYPE_AUTOMATION,
+            self::TYPE_SYSTEM,
         ];
 
         return in_array($type, $validTypes, true) ? $type : self::TYPE_COMMENT;
+    }
+
+    private function sanitizeTitle(string $title): string
+    {
+        // Strip control characters
+        $clean = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $title) ?? '';
+        // Strip dangerous tags with their contents first
+        $clean = preg_replace('/<\s*(script|style|iframe|object|embed|svg|math|form)[^>]*>.*?<\s*\/\s*\1\s*>/is', '', $clean) ?? '';
+        $clean = preg_replace('/<\s*(script|style|iframe|object|embed|svg|math|form)[^>]*\/?\s*>/is', '', $clean) ?? '';
+        // Strip any remaining HTML tags from titles
+        $clean = strip_tags($clean);
+        return $this->truncate(trim($clean), 255);
+    }
+
+    private function sanitizeBody(string $body): string
+    {
+        // Strip control characters
+        $clean = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $body) ?? '';
+        // Strip dangerous tags and inline scripts
+        $clean = preg_replace('/<\s*(script|style|iframe|object|embed|svg|math|form)[^>]*>.*?<\s*\/\s*\1\s*>/is', '', $clean) ?? '';
+        $clean = preg_replace('/<\s*(script|style|iframe|object|embed|svg|math|form)[^>]*\/?\s*>/is', '', $clean) ?? '';
+        // Strip event handlers
+        $clean = preg_replace('/\s+\bon[a-zA-Z]+\s*=\s*(["\'][^"\']*["\']|[^\s>]+)/i', '', $clean) ?? '';
+        $clean = preg_replace('/\bon[a-zA-Z]+\s*=\s*(["\'][^"\']*["\']|[^\s>]+)/i', '', $clean) ?? '';
+        $clean = preg_replace('/<([a-zA-Z0-9]+)\s+>/', '<$1>', $clean) ?? '';
+        // Strip dangerous protocols
+        $clean = preg_replace('/(href|src)\s*=\s*(["\'])\s*(javascript|data|vbscript|file):[^\2]*?\2/i', '', $clean) ?? '';
+        // Allow only safe formatting tags or strip all tags
+        $clean = strip_tags($clean, ['b', 'strong', 'i', 'em', 'code', 'p', 'br', 'a']);
+        return $this->truncate(trim($clean), 2000);
     }
 
     private function sanitizeLink(?string $link, ?Project $project = null): string
