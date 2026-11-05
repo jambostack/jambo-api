@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\Notification;
+use App\Entity\Project;
 use App\Entity\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -33,17 +34,19 @@ class NotificationRepository extends ServiceEntityRepository
     }
 
     /** @return Notification[] */
-    public function findByRecipientAndProjectPaginated(User $user, \App\Entity\Project $project, int $page = 1, int $perPage = 20, bool $unreadOnly = false): array
+    public function findByRecipientAndProjectPaginated(User $user, Project $project, int $page = 1, int $perPage = 20, bool $unreadOnly = false): array
     {
         $projectUuid = $project->uuid?->toRfc4122() ?? '';
+        $projectId = $project->id ? (string) $project->id : '';
+
         $qb = $this->createQueryBuilder('n')
             ->where('n.recipient = :user')
-            ->andWhere('n.link LIKE :projectPattern')
             ->setParameter('user', $user)
-            ->setParameter('projectPattern', '%' . $projectUuid . '%')
             ->orderBy('n.createdAt', 'DESC')
             ->setFirstResult(($page - 1) * $perPage)
             ->setMaxResults($perPage);
+
+        $this->applyProjectFilter($qb, $projectUuid, $projectId);
 
         if ($unreadOnly) {
             $qb->andWhere('n.readAt IS NULL');
@@ -52,31 +55,37 @@ class NotificationRepository extends ServiceEntityRepository
         return $qb->getQuery()->getResult();
     }
 
-    public function countUnreadByUserAndProject(User $user, \App\Entity\Project $project): int
+    public function countUnreadByUserAndProject(User $user, Project $project): int
     {
         $projectUuid = $project->uuid?->toRfc4122() ?? '';
-        return (int) $this->createQueryBuilder('n')
+        $projectId = $project->id ? (string) $project->id : '';
+
+        $qb = $this->createQueryBuilder('n')
             ->select('COUNT(n.id)')
             ->where('n.recipient = :user')
             ->andWhere('n.readAt IS NULL')
-            ->andWhere('n.link LIKE :projectPattern')
-            ->setParameter('user', $user)
-            ->setParameter('projectPattern', '%' . $projectUuid . '%')
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('user', $user);
+
+        $this->applyProjectFilter($qb, $projectUuid, $projectId);
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
-    public function markAllAsReadForProject(User $user, \App\Entity\Project $project): void
+    public function markAllAsReadForProject(User $user, Project $project): void
     {
         $projectUuid = $project->uuid?->toRfc4122() ?? '';
-        $this->createQueryBuilder('n')->update()
-            ->set('n.readAt', ':now')->setParameter('now', new \DateTimeImmutable())
+        $projectId = $project->id ? (string) $project->id : '';
+
+        $qb = $this->createQueryBuilder('n')->update()
+            ->set('n.readAt', ':now')
+            ->setParameter('now', new \DateTimeImmutable())
             ->where('n.recipient = :user')
-            ->andWhere('n.link LIKE :projectPattern')
             ->andWhere('n.readAt IS NULL')
-            ->setParameter('user', $user)
-            ->setParameter('projectPattern', '%' . $projectUuid . '%')
-            ->getQuery()->execute();
+            ->setParameter('user', $user);
+
+        $this->applyProjectFilter($qb, $projectUuid, $projectId);
+
+        $qb->getQuery()->execute();
     }
 
     public function markAllAsRead(User $user): void
@@ -86,4 +95,48 @@ class NotificationRepository extends ServiceEntityRepository
             ->where('n.recipient = :user')->andWhere('n.readAt IS NULL')
             ->setParameter('user', $user)->getQuery()->execute();
     }
+
+    /**
+     * Compte les notifications lues créées avant une certaine date.
+     */
+    public function countReadOlderThan(\DateTimeImmutable $threshold): int
+    {
+        return (int) $this->createQueryBuilder('n')
+            ->select('COUNT(n.id)')
+            ->where('n.readAt IS NOT NULL')
+            ->andWhere('n.createdAt < :threshold')
+            ->setParameter('threshold', $threshold)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * Supprime les notifications lues créées avant une certaine date pour libérer l'espace.
+     */
+    public function deleteReadOlderThan(\DateTimeImmutable $threshold): int
+    {
+        return (int) $this->createQueryBuilder('n')
+            ->delete()
+            ->where('n.readAt IS NOT NULL')
+            ->andWhere('n.createdAt < :threshold')
+            ->setParameter('threshold', $threshold)
+            ->getQuery()
+            ->execute();
+    }
+
+    private function applyProjectFilter(\Doctrine\ORM\QueryBuilder $qb, string $projectUuid, string $projectId): void
+    {
+        if ($projectUuid !== '' && $projectId !== '') {
+            $qb->andWhere('(n.link LIKE :projectUuidPattern OR n.link LIKE :projectIdPattern)')
+                ->setParameter('projectUuidPattern', '%' . $projectUuid . '%')
+                ->setParameter('projectIdPattern', '%/projects/' . $projectId . '/%');
+        } elseif ($projectUuid !== '') {
+            $qb->andWhere('n.link LIKE :projectUuidPattern')
+                ->setParameter('projectUuidPattern', '%' . $projectUuid . '%');
+        } elseif ($projectId !== '') {
+            $qb->andWhere('n.link LIKE :projectIdPattern')
+                ->setParameter('projectIdPattern', '%/projects/' . $projectId . '/%');
+        }
+    }
 }
+

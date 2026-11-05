@@ -7,6 +7,48 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.145] — 2026-11-05
+
+### Security, Multi-tenant Isolation & I18n Hardening — Audit Logs & Notifications Integrity (Cycle #81)
+- **AuditService — Recursive Input & Output Sanitization (CWE-532 protection)**:
+  - Extended recursive sanitization to both `$input` AND `$output` fields before persistence.
+  - Implemented token/secret auto-redaction: Bearer headers (`Bearer [REDACTED]`), JWT tokens (`[REDACTED_JWT]`), PEM private keys (`[REDACTED_PRIVATE_KEY]`), API key patterns (`[REDACTED_SECRET]`).
+  - Added safe buffer lifecycle methods: `hasPending(): bool`, `clearPending(): void`, and error-tolerant `flush()`.
+  - Added safe partial JSON encoding and large payload truncation guards (`_truncated`, `preview`).
+- **NotificationService — Centralized & Localized Notification Management**:
+  - Created `App\Service\NotificationService` with strict multi-tenant project UUID URL builder (`/projects/{uuid}/collections/{colId}/content/{entryId}`).
+  - Built localized notification dispatching according to recipient preference (`$recipient->locale ?? 'en'`) with `TranslatorInterface`.
+  - Implemented dangerous scheme blocking (`javascript:`, `data:`, `vbscript:`, `file:`).
+  - Built specialized notification helpers: `notifyStatusChange`, `notifyComment`, `notifyMention`, `notifyAutomation`.
+  - Enforced anti-self-notification guard (`$recipient->id !== $author->id`).
+  - Added strict title (255 chars) and body (2000 chars) length truncation guards.
+- **NotificationSubscriber & SendNotificationHandler**:
+  - Refactored `NotificationSubscriber` to eliminate hardcoded French notification strings and use `NotificationService`.
+  - Hardened `SendNotificationHandler`: added automated recipient resolution (config recipient, context user, project owner fallback), project UUID context injection, and i18n label/description metadata.
+- **NotificationRepository & AuditRetentionService**:
+  - Enhanced `NotificationRepository` project filtering with dual matching (RFC4122 UUID + legacy integer ID pattern).
+  - Added `countReadOlderThan` and `deleteReadOlderThan` to purge stale read notifications.
+  - Integrated notification retention into `AuditRetentionService` (`DEFAULT_NOTIFICATION_DAYS = 60`).
+  - Updated `PurgeAuditLogsCommand` with full `CliSecurityTrait` localization.
+- **i18n Dictionaries**:
+  - Added 15 complete translation keys across `translations/messages.{en,fr,es,ar}.php`.
+- **Test Suite**:
+  - Added `Cycle81AuditAndNotificationIntegrityTest.php` with 10 tests and 62 assertions.
+
+## [1.26.144] — 2026-11-05
+
+### Security & Multi-tenant Isolation Hardening — Outbound Webhooks & HTTP Flows (Cycle #80)
+- **CallWebhookHandler & HttpRequestHandler — Multi-tenant Isolation & Anti-Spoofing**:
+  - Enforced mandatory `projectUuid` context verification.
+  - Injected trusted tenant headers: `X-JamboApi-Project`, `X-JamboApi-Automation-Id`, `X-JamboApi-Run-Id`.
+  - Added encrypted secret resolution support (`enc:...`) via `WebhookSecretService`.
+  - Integrated SSRF protection and request payload size limiting (2MB).
+- **SendWebhookMessage & Handler**:
+  - Added strict tenant boundary verification between message project and target webhook project.
+- **i18n Dictionaries & Test Suite**:
+  - Added 23 translation keys in `translations/messages.{en,fr,es,ar}.php`.
+  - Added `Cycle80WebhooksIsolationI18nTest.php` (15 tests, 264 assertions).
+
 ## [1.26.143] — 2026-11-05
 
 ### Security & Multi-tenant Isolation Hardening — Automation Async Flows, Handlers & Scheduler i18n (Cycle #79)

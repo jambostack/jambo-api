@@ -3537,4 +3537,21 @@ return [
     'webhook.json_encode_error' => 'خطأ في ترميز JSON: %error%',
     'webhook.secret_decrypt_error' => 'فشل فك تشفير سر خطاف الويب: %error%',
     'webhook.ssrf_blocked' => 'تم حظر الطلب الصادر إلى عنوان IP خاص/داخلي: %reason%',
+
+    // ─── Cycle 81: Audit Logs & Notifications Integrity & I18n ───
+    'notification.status_change_title' => 'تم تغيير الحالة إلى "%status%"',
+    'notification.status_change_body' => 'الإدخال "%locale%" أصبح الآن بالحالة "%status%".',
+    'notification.comment_assigned_title' => '%author% علّق على إدخال مُعيّن',
+    'notification.comment_assigned_body' => '%author% علّق على الإدخال المخصص لك: "%excerpt%"',
+    'notification.comment_created_title' => '%author% علّق على إدخالك',
+    'notification.comment_created_body' => '%author% علّق: "%excerpt%"',
+    'notification.mention_title' => '%author% قام بالإشارة إليك',
+    'notification.mention_body' => '%author% أشار إليك في تعليق: "%excerpt%"',
+    'notification.automation_title' => 'إشعار التشغيل الآلي',
+    'notification.automation_body' => 'إشعار تم إنشاؤه بواسطة مسار أتمتة.',
+    'notification.flow_missing_recipient' => 'المستلم مطلوب لإرسال الإشعار.',
+    'flow.action.send_notification.label' => 'إرسال إشعار',
+    'flow.action.send_notification.description' => 'ينشئ إشعارًا داخليًا في النظام',
+    'audit.retention_purged' => 'اكتمل تنظيف سجلات التدقيق والاحتفاظ بنجاح.',
+    'audit.purge_dry_run' => '[تشغيل تجريبي] سجلات مؤهلة للحذف',
 ];

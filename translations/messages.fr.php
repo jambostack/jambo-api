@@ -3553,4 +3553,21 @@ return [
     'webhook.json_encode_error' => 'Erreur d\'encodage JSON : %error%',
     'webhook.secret_decrypt_error' => 'Échec du déchiffrement du secret du webhook : %error%',
     'webhook.ssrf_blocked' => 'Requête sortante bloquée vers une adresse IP privée/interne : %reason%',
+
+    // ─── Cycle 81: Audit Logs & Notifications Integrity & I18n ───
+    'notification.status_change_title' => 'Statut changé en « %status% »',
+    'notification.status_change_body' => 'L\'entrée « %locale% » est maintenant en statut « %status% ».',
+    'notification.comment_assigned_title' => '%author% a commenté une entrée assignée',
+    'notification.comment_assigned_body' => '%author% a commenté une entrée qui vous est assignée : « %excerpt% »',
+    'notification.comment_created_title' => '%author% a commenté votre entrée',
+    'notification.comment_created_body' => '%author% a commenté : « %excerpt% »',
+    'notification.mention_title' => '%author% vous a mentionné',
+    'notification.mention_body' => '%author% vous a mentionné dans un commentaire : « %excerpt% »',
+    'notification.automation_title' => 'Notification d\'automatisation',
+    'notification.automation_body' => 'Notification générée par un flux d\'automatisation.',
+    'notification.flow_missing_recipient' => 'Un destinataire est requis pour envoyer une notification.',
+    'flow.action.send_notification.label' => 'Envoyer une notification',
+    'flow.action.send_notification.description' => 'Crée une notification interne dans le système',
+    'audit.retention_purged' => 'Nettoyage et purge des journaux d\'audit et de rétention terminés avec succès.',
+    'audit.purge_dry_run' => '[SIMULATION] Enregistrements éligibles à la purge',
 ];

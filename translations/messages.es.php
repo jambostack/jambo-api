@@ -3535,4 +3535,21 @@ return [
     'webhook.json_encode_error' => 'Error de codificación JSON: %error%',
     'webhook.secret_decrypt_error' => 'Error al descifrar el secreto del webhook: %error%',
     'webhook.ssrf_blocked' => 'Solicitud saliente bloqueada a IP privada/interna: %reason%',
+
+    // ─── Cycle 81: Audit Logs & Notifications Integrity & I18n ───
+    'notification.status_change_title' => 'Estado cambiado a "%status%"',
+    'notification.status_change_body' => 'La entrada "%locale%" ahora está en estado "%status%".',
+    'notification.comment_assigned_title' => '%author% comentó en una entrada asignada',
+    'notification.comment_assigned_body' => '%author% comentó en su entrada asignada: "%excerpt%"',
+    'notification.comment_created_title' => '%author% comentó en tu entrada',
+    'notification.comment_created_body' => '%author% comentó: "%excerpt%"',
+    'notification.mention_title' => '%author% te ha mencionado',
+    'notification.mention_body' => '%author% te mencionó en un comentario: "%excerpt%"',
+    'notification.automation_title' => 'Notificación de automatización',
+    'notification.automation_body' => 'Notificación generada por un flujo de automatización.',
+    'notification.flow_missing_recipient' => 'Se requiere un destinatario para enviar una notificación.',
+    'flow.action.send_notification.label' => 'Enviar una notificación',
+    'flow.action.send_notification.description' => 'Crea una notificación interna en el sistema',
+    'audit.retention_purged' => 'Limpieza y retención de registros de auditoría completada con éxito.',
+    'audit.purge_dry_run' => '[SIMULACIÓN] Registros aptos para purga',
 ];
