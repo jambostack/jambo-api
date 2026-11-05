@@ -13,14 +13,20 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Uid\Uuid;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'jambo:sync-schema', description: 'Synchronise le schéma entre deux projets')]
 class SyncSchemaCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private EntityManagerInterface $em,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void
@@ -34,15 +40,25 @@ class SyncSchemaCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
-        $sourceUuid = $input->getArgument('source_uuid');
-        $targetUuid = $input->getArgument('target_uuid');
-        $dryRun = $input->getOption('dry-run');
+        $sourceUuid = (string) $input->getArgument('source_uuid');
+        $targetUuid = (string) $input->getArgument('target_uuid');
+        $dryRun = (bool) $input->getOption('dry-run');
+
+        if (!Uuid::isValid($sourceUuid) || !Uuid::isValid($targetUuid)) {
+            $io->error($this->trans('cli.invalid_path', [], null, null, 'UUID source ou cible invalide.'));
+            return Command::FAILURE;
+        }
+
+        if ($sourceUuid === $targetUuid) {
+            $io->error($this->trans('cli.distinct_source_target', [], null, null, 'Le projet source et le projet cible doivent être distincts.'));
+            return Command::FAILURE;
+        }
 
         $source = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $sourceUuid]);
         $target = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $targetUuid]);
 
         if (!$source || !$target) {
-            $io->error('Projet source ou cible introuvable');
+            $io->error($this->trans('cli.project_not_found', ['%ident%' => !$source ? $sourceUuid : $targetUuid], null, null, 'Projet source ou cible introuvable'));
 
             return Command::FAILURE;
         }

@@ -17,6 +17,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Uid\Uuid;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(
     name: 'jambo:template:import',
@@ -24,6 +25,8 @@ use Symfony\Component\Uid\Uuid;
 )]
 class TemplateImportCommand extends Command
 {
+    use CliSecurityTrait;
+
     private const STARTERS = [
         'blog' => [
             'name' => 'Starter Blog & Editorial (Next.js / Astro)',
@@ -96,8 +99,10 @@ class TemplateImportCommand extends Command
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ProjectRepository $projectRepository,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void

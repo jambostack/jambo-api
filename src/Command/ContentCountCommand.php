@@ -9,20 +9,31 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'jambo:content:count', description: 'Compter les entrées par collection')]
 class ContentCountCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private ProjectRepository $projects,
         private CollectionRepository $collections,
         private EntityManagerInterface $em,
-    ) { parent::__construct(); }
+        ?TranslatorInterface $translator = null,
+    ) {
+        parent::__construct();
+        $this->setTranslator($translator);
+    }
     protected function configure(): void { $this->addArgument('project-uuid', InputArgument::REQUIRED, 'UUID du projet'); }
     protected function execute(InputInterface $i, OutputInterface $o): int {
         $io = new SymfonyStyle($i, $o);
-        $project = $this->projects->findOneBy(['uuid' => $i->getArgument('project-uuid')]);
-        if (!$project) { $io->error('Projet introuvable'); return Command::FAILURE; }
+        $projectUuid = (string) $i->getArgument('project-uuid');
+        $project = $this->projects->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            $io->error($this->trans('cli.project_not_found', ['%ident%' => $projectUuid], null, null, 'Projet introuvable'));
+            return Command::FAILURE;
+        }
         $cols = $this->collections->findByProjectPaginated($project, 1, 100);
         $rows = [];
         $total = 0;

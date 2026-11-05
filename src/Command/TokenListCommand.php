@@ -7,11 +7,20 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'jambo:token:list', description: 'Lister les tokens API')]
 class TokenListCommand extends Command
 {
-    public function __construct(private ApiTokenRepository $apiTokens) { parent::__construct(); }
+    use CliSecurityTrait;
+
+    public function __construct(
+        private ApiTokenRepository $apiTokens,
+        ?TranslatorInterface $translator = null,
+    ) {
+        parent::__construct();
+        $this->setTranslator($translator);
+    }
     protected function execute(InputInterface $i, OutputInterface $o): int
     {
         $io = new SymfonyStyle($i, $o);

@@ -10,6 +10,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(
     name: 'app:export-project-template',
@@ -17,10 +18,14 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class ExportProjectTemplateCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private ProjectTemplateBuilder $builder,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void
@@ -35,18 +40,18 @@ class ExportProjectTemplateCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
 
-        $uuid        = $input->getArgument('project-uuid');
+        $uuid        = (string) $input->getArgument('project-uuid');
         $name        = $input->getOption('name');
         $description = $input->getOption('description');
 
         $template = $this->builder->exportFromProject($uuid, $name, $description);
 
         if ($template === null) {
-            $io->error(sprintf('Project with UUID "%s" not found.', $uuid));
+            $io->error($this->trans('cli.project_not_found', ['%ident%' => $uuid], null, null, sprintf('Project with UUID "%s" not found.', $uuid)));
             return Command::FAILURE;
         }
 
-        $io->success(sprintf('Template "%s" (ID: %d) created successfully.', $template->name, $template->id));
+        $io->success($this->trans('cli.template_created', ['%name%' => $template->name, '%id%' => (string)$template->id], null, null, sprintf('Template "%s" (ID: %d) created successfully.', $template->name, $template->id)));
 
         return Command::SUCCESS;
     }

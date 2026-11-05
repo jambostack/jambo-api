@@ -1,6 +1,6 @@
 {
     "name": "jambostack/jambo-api",
-    "version": "1.26.123",
+    "version": "1.26.124",
     "description": "Jambo API — Headless CMS open-source. Backend API REST + GraphQL pour le JamboStack.",
     "type": "project",
     "license": "AGPL-3.0-or-later",
@@ -50,6 +50,7 @@
         "symfony/framework-bundle": "8.0.*",
         "symfony/http-client": "8.0.*",
         "symfony/intl": "8.0.*",
+        "symfony/lock": "8.0.*",
         "symfony/mailer": "8.0.*",
         "symfony/mercure-bundle": "^0.4.2",
         "symfony/mime": "8.0.*",

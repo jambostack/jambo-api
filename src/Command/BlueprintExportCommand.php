@@ -13,6 +13,7 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(
     name: 'jambo:blueprint:export',
@@ -20,11 +21,15 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class BlueprintExportCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ProjectRepository $projectRepository,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void
@@ -96,6 +101,12 @@ class BlueprintExportCommand extends Command
         $json = json_encode($blueprint, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         if ($outputFile) {
+            try {
+                $this->assertSafePath($outputFile);
+            } catch (\InvalidArgumentException $e) {
+                $io->error($this->trans('cli.invalid_path', [], null, null, $e->getMessage()));
+                return Command::FAILURE;
+            }
             file_put_contents($outputFile, $json);
             $io->success(sprintf('Blueprint exporté avec succès dans "%s" (%d collections)', $outputFile, count($collections)));
         } else {

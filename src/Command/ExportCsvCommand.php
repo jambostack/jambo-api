@@ -13,10 +13,13 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'jambo:export:csv', description: 'Exporter une collection en CSV')]
 class ExportCsvCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private ProjectRepository $projects,
         private CollectionRepository $collections,
@@ -24,7 +27,11 @@ class ExportCsvCommand extends Command
         private FieldRepository $fields,
         private CsvSanitizer $csvSanitizer,
         private ?EntityManagerInterface $em = null,
-    ) { parent::__construct(); }
+        ?TranslatorInterface $translator = null,
+    ) {
+        parent::__construct();
+        $this->setTranslator($translator);
+    }
 
     protected function configure(): void {
         $this->addArgument('project-uuid', InputArgument::REQUIRED)
@@ -42,7 +49,14 @@ class ExportCsvCommand extends Command
         $collFields = $this->fields->findBy(['collection' => $coll, 'deletedAt' => null]);
         $fieldSlugs = array_map(fn ($f) => $f->slug, $collFields);
 
-        $outputPath = $i->getArgument('output');
+        $outputPath = (string) $i->getArgument('output');
+        try {
+            $this->assertSafePath($outputPath);
+        } catch (\InvalidArgumentException $e) {
+            $io->error($this->trans('cli.invalid_path', [], null, null, $e->getMessage()));
+            return Command::FAILURE;
+        }
+
         $fh = fopen($outputPath, 'w');
         if ($fh === false) {
             $io->error("Impossible d'ouvrir le fichier de sortie: {$outputPath}");

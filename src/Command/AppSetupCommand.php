@@ -12,6 +12,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(
     name: 'app:setup',
@@ -19,6 +20,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 )]
 class AppSetupCommand extends Command
 {
+    use CliSecurityTrait;
+
     private const PERMISSIONS = [
         ['name' => 'project.manage',    'label' => 'Gérer le projet',         'group' => 'project'],
         ['name' => 'project.create',    'label' => 'Créer un projet',         'group' => 'project'],
@@ -38,16 +41,19 @@ class AppSetupCommand extends Command
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly UserPasswordHasherInterface $hasher,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void
     {
         $this
-            ->addOption('email',    null, InputOption::VALUE_OPTIONAL, 'Admin email',    'admin@jambostack.site')
-            ->addOption('password', null, InputOption::VALUE_OPTIONAL, 'Admin password', 'admin1234')
-            ->addOption('name',     null, InputOption::VALUE_OPTIONAL, 'Admin name',     'Admin');
+            ->addOption('email',         null, InputOption::VALUE_OPTIONAL, 'Admin email', 'admin@jambostack.site')
+            ->addOption('password',      null, InputOption::VALUE_OPTIONAL, 'Admin password (prompted or generated if omitted)')
+            ->addOption('name',          null, InputOption::VALUE_OPTIONAL, 'Admin name',  'Admin')
+            ->addOption('show-password', null, InputOption::VALUE_NONE,     'Display password in output');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -75,27 +81,59 @@ class AppSetupCommand extends Command
         $io->success(sprintf('%d permission(s) created (skipped existing).', $created));
 
         // ── Admin user ─────────────────────────────────────────────────────────
-        $email = $input->getOption('email');
+        $email = (string) $input->getOption('email');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $io->error($this->trans('cli.invalid_email', ['%email%' => $email], null, null, "Invalid email address '$email'."));
+            return Command::FAILURE;
+        }
+
         $userRepo = $this->em->getRepository(User::class);
 
         if ($userRepo->findOneBy(['email' => $email])) {
-            $io->warning(sprintf('Admin user "%s" already exists — skipped.', $email));
+            $io->warning($this->trans('cli.admin_exists', ['%email%' => $email], null, null, sprintf('Admin user "%s" already exists — skipped.', $email)));
         } else {
+            $password = $input->getOption('password');
+            $isGenerated = false;
+
+            if ($password === null || $password === '') {
+                if ($input->isInteractive()) {
+                    $password = (string) $io->askHidden('Enter admin password');
+                } else {
+                    $password = $this->generateSecurePassword(16);
+                    $isGenerated = true;
+                }
+            }
+
+            if (!$this->validatePasswordComplexity($password) && !$isGenerated) {
+                $io->error($this->trans('cli.invalid_password', [], null, null, 'Password must be at least 8 characters and include uppercase, lowercase, and digits.'));
+                return Command::FAILURE;
+            }
+
             $admin = new User();
             $admin->email    = $email;
-            $admin->name     = $input->getOption('name');
+            $admin->name     = (string) ($input->getOption('name') ?: 'Admin');
             $admin->roles    = ['ROLE_SUPER_ADMIN'];
-            $admin->password = $this->hasher->hashPassword($admin, $input->getOption('password'));
+            $admin->password = $this->hasher->hashPassword($admin, $password);
 
             $this->em->persist($admin);
             $this->em->flush();
 
-            $io->success(sprintf('Admin user created: %s', $email));
+            $io->success($this->trans('cli.admin_created', ['%email%' => $email], null, null, sprintf('Admin user created: %s', $email)));
+
+            $passwordDisplay = ($isGenerated || $input->getOption('show-password'))
+                ? $password
+                : '[REDACTED (use --show-password to reveal)]';
+
             $io->definitionList(
                 ['Email'    => $email],
-                ['Password' => $input->getOption('password')],
+                ['Password' => $passwordDisplay],
             );
-            $io->caution('Change this password immediately after your first login.');
+
+            if ($isGenerated) {
+                $io->caution($this->trans('cli.password_save_warning', [], null, null, 'Save this generated password immediately. It will not be shown again.'));
+            } else {
+                $io->caution($this->trans('cli.password_change_notice', [], null, null, 'Change this password immediately after your first login.'));
+            }
         }
 
         return Command::SUCCESS;

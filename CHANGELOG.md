@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.124] — 2026-11-05
+
+### Security Hardening on Symfony CLI Console Commands & Concurrency (Cycle #61 & #62)
+- **Universal CLI Security & Localized Helper Trait (`CliSecurityTrait`)**:
+  - Implemented `CliSecurityTrait` across all Symfony Console commands providing standardized `assertSafePath` (blocking directory traversal `../..`, null-byte attacks, and restricted root files such as `.env`, `.git`, `composer.*`, `config/*`), `validatePasswordComplexity`, and `generateSecurePassword` guaranteeing uppercase, lowercase, digit, and symbol constraints.
+  - Added strict interactive confirmation helper (`confirmOrAbort`) safeguarding destructive commands from non-interactive automated executions without explicit `--force` flag.
+  - Integrated `TranslatorInterface` with fallback localization across all commands, ensuring zero hardcoded user-facing strings adhering strictly to the multilingual policy.
+- **Process Concurrency Protection & Background Task Locking (`symfony/lock`)**:
+  - Added `symfony/lock` dependency with `LockableTrait` concurrency guards on scheduled runners (`automation:run-scheduled`, `publish:scheduled`, `app:media:prune-cache`, and `app:purge-audit-logs`), preventing overlapping execution and race conditions during high-frequency cron invocations.
+- **Credential Protection & Sensitive Data Redaction**:
+  - Hardened password input handling in `app:setup` and `jambo:enduser:create` via `askHidden()` in interactive mode and cryptographically secure generation in headless mode with sensitive credential redaction in stdout output unless `--show-password` is explicitly specified.
+- **Input Validation & Target Isolation**:
+  - Hardened CSV imports and exports with MIME/path validation, delimiter character enforcement, and bounded file upload limits.
+  - Strictly enforced distinct source and target project UUID isolation in `jambo:sync-schema`.
+  - Added comprehensive unit test coverage (`CliSecurityHardeningTest`) for path safety, password entropy, concurrency, and error handling.
+  - Synchronized complete dictionary translations across `en`, `fr`, `es`, and `ar`.
+
 ## [1.26.123] — 2026-11-05
 
 ### Security Hardening on GraphQL Engine, Quotas & Resolvers (Cycle #60)

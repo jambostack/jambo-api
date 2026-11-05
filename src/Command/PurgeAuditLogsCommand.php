@@ -5,10 +5,12 @@ namespace App\Command;
 use App\Service\AuditRetentionService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Command\LockableTrait;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(
     name: 'app:purge-audit-logs',
@@ -16,10 +18,15 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class PurgeAuditLogsCommand extends Command
 {
+    use LockableTrait;
+    use CliSecurityTrait;
+
     public function __construct(
         private readonly AuditRetentionService $retentionService,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void
@@ -65,31 +72,40 @@ class PurgeAuditLogsCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
 
-        $auditDays      = max(1, (int) $input->getOption('audit-days'));
-        $webhookDays    = max(1, (int) $input->getOption('webhook-days'));
-        $emailDays      = max(1, (int) $input->getOption('email-days'));
-        $automationDays = max(1, (int) $input->getOption('automation-days'));
-        $dryRun         = (bool) $input->getOption('dry-run');
+        if (!$this->lock()) {
+            $io->comment($this->trans('cli.command_already_running', [], null, null, 'Command is already running in another process.'));
+            return Command::SUCCESS;
+        }
 
-        $result = $this->retentionService->purgeLogs(
-            auditDays: $auditDays,
-            webhookDays: $webhookDays,
-            emailDays: $emailDays,
-            automationDays: $automationDays,
-            dryRun: $dryRun
-        );
+        try {
+            $auditDays      = max(1, (int) $input->getOption('audit-days'));
+            $webhookDays    = max(1, (int) $input->getOption('webhook-days'));
+            $emailDays      = max(1, (int) $input->getOption('email-days'));
+            $automationDays = max(1, (int) $input->getOption('automation-days'));
+            $dryRun         = (bool) $input->getOption('dry-run');
 
-        $prefix = $dryRun ? '[DRY RUN] Records eligible for purge' : 'Audit and log retention cleanup completed';
+            $result = $this->retentionService->purgeLogs(
+                auditDays: $auditDays,
+                webhookDays: $webhookDays,
+                emailDays: $emailDays,
+                automationDays: $automationDays,
+                dryRun: $dryRun
+            );
 
-        $io->success([
-            $prefix . ':',
-            sprintf('- Audit logs older than %d days: %d', $auditDays, $result['audit']),
-            sprintf('- Webhook logs older than %d days: %d', $webhookDays, $result['webhook']),
-            sprintf('- Email logs older than %d days: %d', $emailDays, $result['email']),
-            sprintf('- Automation runs older than %d days: %d', $automationDays, $result['automation']),
-            sprintf('- Total: %d records %s', $result['total'], $dryRun ? 'identified' : 'purged'),
-        ]);
+            $prefix = $dryRun ? '[DRY RUN] Records eligible for purge' : 'Audit and log retention cleanup completed';
 
-        return Command::SUCCESS;
+            $io->success([
+                $prefix . ':',
+                sprintf('- Audit logs older than %d days: %d', $auditDays, $result['audit']),
+                sprintf('- Webhook logs older than %d days: %d', $webhookDays, $result['webhook']),
+                sprintf('- Email logs older than %d days: %d', $emailDays, $result['email']),
+                sprintf('- Automation runs older than %d days: %d', $automationDays, $result['automation']),
+                sprintf('- Total: %d records %s', $result['total'], $dryRun ? 'identified' : 'purged'),
+            ]);
+
+            return Command::SUCCESS;
+        } finally {
+            $this->release();
+        }
     }
 }

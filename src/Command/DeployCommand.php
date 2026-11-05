@@ -12,15 +12,21 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Uid\Uuid;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'jambo:deploy', description: 'Exporte un projet pour déploiement')]
 class DeployCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private EntityManagerInterface $em,
         private ProjectExporter $exporter,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void
@@ -34,13 +40,25 @@ class DeployCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
-        $uuid = $input->getArgument('project_uuid');
-        $outDir = $input->getOption('output');
-        $includeMedia = $input->getOption('include-media');
+        $uuid = (string) $input->getArgument('project_uuid');
+        $outDir = (string) $input->getOption('output');
+        $includeMedia = (bool) $input->getOption('include-media');
+
+        try {
+            $this->assertSafePath($outDir);
+        } catch (\InvalidArgumentException $e) {
+            $io->error($this->trans('cli.invalid_path', [], null, null, $e->getMessage()));
+            return Command::FAILURE;
+        }
+
+        if (!Uuid::isValid($uuid)) {
+            $io->error($this->trans('cli.project_not_found', ['%ident%' => $uuid], null, null, "Projet $uuid introuvable"));
+            return Command::FAILURE;
+        }
 
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         if (!$project) {
-            $io->error("Projet $uuid introuvable");
+            $io->error($this->trans('cli.project_not_found', ['%ident%' => $uuid], null, null, "Projet $uuid introuvable"));
 
             return Command::FAILURE;
         }

@@ -13,14 +13,19 @@ use App\Repository\ShareRepository;
 use App\Service\DirectUploadService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Command\LockableTrait;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'app:purge-expired-tokens', description: 'Purge all expired and revoked security tokens and inactive sessions')]
 class PurgeExpiredTokensCommand extends Command
 {
+    use LockableTrait;
+    use CliSecurityTrait;
+
     public function __construct(
         private readonly PasswordResetTokenRepository $resetTokenRepository,
         private readonly PersonalAccessTokenRepository $patRepository,
@@ -31,8 +36,10 @@ class PurgeExpiredTokensCommand extends Command
         private readonly ?ShareRepository $shareRepository = null,
         private readonly ?AssetUploadIntentRepository $intentRepository = null,
         private readonly ?DirectUploadService $directUploadService = null,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void
@@ -56,7 +63,14 @@ class PurgeExpiredTokensCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
-        $sessionDays = max(1, (int) $input->getOption('session-days'));
+
+        if (!$this->lock()) {
+            $io->comment($this->trans('cli.command_already_running', [], null, null, 'Command is already running in another process.'));
+            return Command::SUCCESS;
+        }
+
+        try {
+            $sessionDays = max(1, (int) $input->getOption('session-days'));
         $threshold = (new \DateTimeImmutable())->modify("-{$sessionDays} days");
         $isDryRun = (bool) $input->getOption('dry-run');
 
@@ -122,5 +136,8 @@ class PurgeExpiredTokensCommand extends Command
         $io->success($messages);
 
         return Command::SUCCESS;
+        } finally {
+            $this->release();
+        }
     }
 }

@@ -9,25 +9,40 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'jambo:field:list', description: 'Lister les champs d\'une collection')]
 class FieldListCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private ProjectRepository $projects,
         private CollectionRepository $collections,
         private FieldRepository $fields,
-    ) { parent::__construct(); }
+        ?TranslatorInterface $translator = null,
+    ) {
+        parent::__construct();
+        $this->setTranslator($translator);
+    }
     protected function configure(): void {
         $this->addArgument('project-uuid', InputArgument::REQUIRED)
             ->addArgument('collection-slug', InputArgument::REQUIRED);
     }
     protected function execute(InputInterface $i, OutputInterface $o): int {
         $io = new SymfonyStyle($i, $o);
-        $project = $this->projects->findOneBy(['uuid' => $i->getArgument('project-uuid')]);
-        if (!$project) { $io->error('Projet introuvable'); return Command::FAILURE; }
-        $coll = $this->collections->findOneByProjectAndSlug($project, $i->getArgument('collection-slug'));
-        if (!$coll) { $io->error('Collection introuvable'); return Command::FAILURE; }
+        $projectUuid = (string) $i->getArgument('project-uuid');
+        $project = $this->projects->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            $io->error($this->trans('cli.project_not_found', ['%ident%' => $projectUuid], null, null, 'Projet introuvable'));
+            return Command::FAILURE;
+        }
+        $collectionSlug = (string) $i->getArgument('collection-slug');
+        $coll = $this->collections->findOneByProjectAndSlug($project, $collectionSlug);
+        if (!$coll) {
+            $io->error($this->trans('cli.collection_not_found', ['%slug%' => $collectionSlug], null, null, 'Collection introuvable'));
+            return Command::FAILURE;
+        }
         $ff = $this->fields->findBy(['collection' => $coll, 'deletedAt' => null], ['order' => 'ASC']);
         $rows = [];
         foreach ($ff as $f) $rows[] = [$f->id, $f->name, $f->slug, $f->type, $f->isRequired ? 'Oui' : 'Non'];

@@ -12,15 +12,22 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'jambo:content:purge', description: 'Supprimer TOUTES les entrées d\'une collection (soft/hard delete)')]
 class ContentPurgeCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private ProjectRepository $projects,
         private CollectionRepository $collections,
         private EntityManagerInterface $em,
-    ) { parent::__construct(); }
+        ?TranslatorInterface $translator = null,
+    ) {
+        parent::__construct();
+        $this->setTranslator($translator);
+    }
 
     protected function configure(): void
     {
@@ -83,13 +90,15 @@ class ContentPurgeCommand extends Command
 
     private function findProject(string $input): ?\App\Entity\Project
     {
+        $input = trim(substr($input, 0, 64));
         if (strlen($input) >= 6) {
             $conn = $this->em->getConnection();
             $isSqlite = $conn->getDatabasePlatform() instanceof \Doctrine\DBAL\Platforms\SqlitePlatform;
             $castExpr = $isSqlite ? "hex(uuid)" : "CAST(uuid AS TEXT)";
+            $escaped = addcslashes(strtolower($input), '%_');
             $rows = $conn->fetchAllAssociative(
                 "SELECT id FROM project WHERE $castExpr LIKE :p LIMIT 2",
-                ['p' => strtolower($input) . '%']
+                ['p' => $escaped . '%']
             );
             if (count($rows) === 1) return $this->projects->find($rows[0]['id']);
             if (count($rows) > 1) throw new \RuntimeException("Plusieurs projets avec le préfixe '$input'.");

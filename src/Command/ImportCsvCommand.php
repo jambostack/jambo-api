@@ -15,17 +15,24 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\String\Slugger\SluggerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'jambo:import:csv', description: 'Importer un fichier CSV dans une collection')]
 class ImportCsvCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private ProjectRepository $projects,
         private CollectionRepository $collections,
         private FieldRepository $fields,
         private EntityManagerInterface $em,
         private SluggerInterface $slugger,
-    ) { parent::__construct(); }
+        ?TranslatorInterface $translator = null,
+    ) {
+        parent::__construct();
+        $this->setTranslator($translator);
+    }
 
     protected function configure(): void
     {
@@ -40,13 +47,27 @@ class ImportCsvCommand extends Command
     protected function execute(InputInterface $i, OutputInterface $o): int
     {
         $io = new SymfonyStyle($i, $o);
-        $path = $i->getArgument('csv-file');
-        if (!file_exists($path)) { $io->error("Fichier introuvable : $path"); return Command::FAILURE; }
+        $path = (string) $i->getArgument('csv-file');
+        if (!is_file($path) || !is_readable($path)) {
+            $io->error($this->trans('cli.invalid_file', ['%path%' => $path], null, null, "Fichier introuvable : $path"));
+            return Command::FAILURE;
+        }
+
+        if (filesize($path) > 50 * 1024 * 1024) {
+            $io->error($this->trans('cli.file_too_large', ['%max%' => '50'], null, null, 'Le fichier dépasse la taille maximale autorisée (50 Mo).'));
+            return Command::FAILURE;
+        }
+
+        $delimiter = (string) $i->getOption('delimiter');
+        if (strlen($delimiter) !== 1) {
+            $io->error($this->trans('cli.csv_delimiter_single_char', [], null, null, 'Le délimiteur CSV doit être un caractère unique.'));
+            return Command::FAILURE;
+        }
 
         $project = $this->projects->findOneBy(['uuid' => $i->getArgument('project-uuid')]);
-        if (!$project) { $io->error('Projet introuvable'); return Command::FAILURE; }
+        if (!$project) { $io->error($this->trans('cli.project_not_found', ['%ident%' => (string)$i->getArgument('project-uuid')], null, null, 'Projet introuvable')); return Command::FAILURE; }
         $collection = $this->collections->findOneByProjectAndSlug($project, $i->getArgument('collection-slug'));
-        if (!$collection) { $io->error('Collection introuvable'); return Command::FAILURE; }
+        if (!$collection) { $io->error($this->trans('cli.collection_not_found', ['%slug%' => (string)$i->getArgument('collection-slug')], null, null, 'Collection introuvable')); return Command::FAILURE; }
 
         $collFields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
         $fieldMap = [];
@@ -54,9 +75,9 @@ class ImportCsvCommand extends Command
 
         // Read CSV
         $fh = fopen($path, 'r');
-        if (!$fh) { $io->error("Impossible d'ouvrir $path"); return Command::FAILURE; }
+        if (!$fh) { $io->error($this->trans('cli.csv_cannot_open', ['%path%' => $path], null, null, "Impossible d'ouvrir $path")); return Command::FAILURE; }
         $headers = fgetcsv($fh, 0, $i->getOption('delimiter'));
-        if (!$headers) { $io->error('CSV vide ou invalide'); return Command::FAILURE; }
+        if (!$headers) { $io->error($this->trans('cli.csv_empty_or_invalid', [], null, null, 'CSV vide ou invalide')); return Command::FAILURE; }
 
         $created = 0; $errors = [];
         $locale = $i->getOption('locale');
@@ -98,7 +119,7 @@ class ImportCsvCommand extends Command
                 $project = $this->projects->findOneBy(['uuid' => $i->getArgument('project-uuid')]);
                 $collection = $this->collections->findOneByProjectAndSlug($project, $i->getArgument('collection-slug'));
                 if (!$project || !$collection) {
-                    $io->error('Impossible de recharger le projet/collection après erreur');
+                    $io->error($this->trans('cli.csv_reload_failed', [], null, null, 'Impossible de recharger le projet/collection après erreur'));
                     return Command::FAILURE;
                 }
                 $collFields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);

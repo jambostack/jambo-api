@@ -6,57 +6,73 @@ use App\Repository\AutomationRepository;
 use App\Service\Automation\AutomationEngine;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Command\LockableTrait;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand('automation:run-scheduled', 'Exécute les automatisations planifiées dont le cron matche')]
 class AutomationRunScheduledCommand extends Command
 {
+    use LockableTrait;
+    use CliSecurityTrait;
+
     public function __construct(
         private readonly AutomationRepository $automationRepo,
         private readonly AutomationEngine $engine,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $automations = $this->automationRepo->findActiveScheduled();
-        $now = new \DateTimeImmutable();
-        $executed = 0;
-
-        foreach ($automations as $automation) {
-            $graph = $automation->flowGraph;
-            if (!$graph || empty($graph['nodes'])) continue;
-
-            // Cherche le trigger dans tous les nœuds (pas seulement nodes[0])
-            $triggerInfo = AutomationRepository::findTriggerNode($graph);
-            $triggerNode = $triggerInfo['node'];
-
-            if (!$triggerNode) continue;
-
-            $schedule = $triggerNode['data']['config']['schedule'] ?? null;
-            if ($schedule === null || $schedule === '') continue;
-
-            try {
-                if ($this->cronMatches($schedule, $now)) {
-                    $payload = [
-                        'trigger'      => 'schedule.cron',
-                        'project_uuid' => $automation->project?->uuid?->toRfc4122(),
-                        'timestamp'    => time(),
-                        'schedule'     => $schedule,
-                    ];
-
-                    $this->engine->execute($automation, $payload);
-                    $executed++;
-                }
-            } catch (\Throwable $e) {
-                $output->writeln("<error>Automation #{$automation->id}: {$e->getMessage()}</error>");
-            }
+        if (!$this->lock()) {
+            $output->writeln('<comment>' . $this->trans('cli.command_already_running', [], null, null, 'Command is already running in another process.') . '</comment>');
+            return Command::SUCCESS;
         }
 
-        $output->writeln("<info>$executed automatisation(s) exécutée(s)</info>");
-        return Command::SUCCESS;
+        try {
+            $automations = $this->automationRepo->findActiveScheduled();
+            $now = new \DateTimeImmutable();
+            $executed = 0;
+
+            foreach ($automations as $automation) {
+                $graph = $automation->flowGraph;
+                if (!$graph || empty($graph['nodes'])) continue;
+
+                // Cherche le trigger dans tous les nœuds (pas seulement nodes[0])
+                $triggerInfo = AutomationRepository::findTriggerNode($graph);
+                $triggerNode = $triggerInfo['node'];
+
+                if (!$triggerNode) continue;
+
+                $schedule = $triggerNode['data']['config']['schedule'] ?? null;
+                if ($schedule === null || $schedule === '') continue;
+
+                try {
+                    if ($this->cronMatches($schedule, $now)) {
+                        $payload = [
+                            'trigger'      => 'schedule.cron',
+                            'project_uuid' => $automation->project?->uuid?->toRfc4122(),
+                            'timestamp'    => time(),
+                            'schedule'     => $schedule,
+                        ];
+
+                        $this->engine->execute($automation, $payload);
+                        $executed++;
+                    }
+                } catch (\Throwable $e) {
+                    $output->writeln("<error>Automation #{$automation->id}: {$e->getMessage()}</error>");
+                }
+            }
+
+            $output->writeln("<info>$executed automatisation(s) exécutée(s)</info>");
+            return Command::SUCCESS;
+        } finally {
+            $this->release();
+        }
     }
 
     /**

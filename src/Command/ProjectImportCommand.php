@@ -15,6 +15,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(
     name: 'project:import',
@@ -22,13 +23,19 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class ProjectImportCommand extends Command
 {
+    use CliSecurityTrait;
+
+    private const ALLOWED_STRATEGIES = ['overwrite', 'skip', 'new-uuids'];
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private ProjectImporter $importer,
         private ConflictResolver $conflictResolver,
         private EntityManagerInterface $em,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void
@@ -44,15 +51,26 @@ class ProjectImportCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
-        $filePath = $input->getArgument('file');
+        $filePath = (string) $input->getArgument('file');
 
-        if (!file_exists($filePath)) {
-            $io->error("File not found: $filePath");
+        if (!is_file($filePath) || !is_readable($filePath)) {
+            $io->error($this->trans('cli.invalid_file', ['%path%' => $filePath], null, null, "File not found: $filePath"));
+            return Command::FAILURE;
+        }
+
+        if (filesize($filePath) > 100 * 1024 * 1024) {
+            $io->error($this->trans('cli.file_too_large', ['%max%' => '100'], null, null, 'File exceeds maximum allowed size (100 MB).'));
+            return Command::FAILURE;
+        }
+
+        $strategy = (string) ($input->getOption('strategy') ?? 'skip');
+        if (!in_array($strategy, self::ALLOWED_STRATEGIES, true)) {
+            $io->error($this->trans('cli.invalid_strategy', ['%strategy%' => $strategy, '%allowed%' => implode(', ', self::ALLOWED_STRATEGIES)], null, null, sprintf('Invalid strategy "%s". Allowed: %s', $strategy, implode(', ', self::ALLOWED_STRATEGIES))));
             return Command::FAILURE;
         }
 
         $options = new ImportOptions();
-        $options->strategy = $input->getOption('strategy') ?? 'skip';
+        $options->strategy = $strategy;
 
         $targetUuid = $input->getOption('target-project');
 

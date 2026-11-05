@@ -44,10 +44,16 @@ class FixCorruptedUtf8Command extends Command
         $limit  = (int) $input->getOption('limit');
 
         // Probleme : U+FFFD en UTF-8 = 0xEF 0xBF 0xBD
-        $corruptedRows = $this->connection->fetchAllAssociative(
-            "SELECT id, text_value FROM content_field_value WHERE text_value LIKE CONCAT('%', CHAR(0xEFBFBD USING utf8mb4), '%') ORDER BY id" .
-            ($limit > 0 ? " LIMIT $limit" : "")
-        );
+        $isSqlite = $this->connection->getDatabasePlatform() instanceof \Doctrine\DBAL\Platforms\SqlitePlatform;
+        if ($isSqlite) {
+            $sql = "SELECT id, text_value FROM content_field_value WHERE instr(text_value, '\u{FFFD}') > 0 ORDER BY id";
+        } else {
+            $sql = "SELECT id, text_value FROM content_field_value WHERE text_value LIKE CONCAT('%', CHAR(0xEFBFBD USING utf8mb4), '%') ORDER BY id";
+        }
+        if ($limit > 0) {
+            $sql .= " LIMIT " . max(1, (int) $limit);
+        }
+        $corruptedRows = $this->connection->fetchAllAssociative($sql);
 
         $totalRows   = count($corruptedRows);
         $fixedRows   = 0;

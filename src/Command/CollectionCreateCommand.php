@@ -12,15 +12,22 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\String\Slugger\SluggerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'jambo:collection:create', description: 'Créer une collection dans un projet')]
 class CollectionCreateCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private ProjectRepository $projects,
         private EntityManagerInterface $em,
         private SluggerInterface $slugger,
-    ) { parent::__construct(); }
+        ?TranslatorInterface $translator = null,
+    ) {
+        parent::__construct();
+        $this->setTranslator($translator);
+    }
 
     protected function configure(): void
     {
@@ -33,15 +40,32 @@ class CollectionCreateCommand extends Command
     protected function execute(InputInterface $i, OutputInterface $o): int
     {
         $io = new SymfonyStyle($i, $o);
-        $project = $this->projects->findOneBy(['uuid' => $i->getArgument('project-uuid')]);
-        if (!$project) { $io->error('Projet introuvable'); return Command::FAILURE; }
+        $projectUuid = (string) $i->getArgument('project-uuid');
+        $project = $this->projects->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            $io->error($this->trans('cli.project_not_found', ['%ident%' => $projectUuid], null, null, 'Projet introuvable'));
+            return Command::FAILURE;
+        }
 
-        $slug = $i->getOption('slug') ?: (string)$this->slugger->slug($i->getArgument('name'))->lower();
+        $name = (string) $i->getArgument('name');
+        $rawSlug = $i->getOption('slug') ?: (string) $this->slugger->slug($name)->lower();
+        $slug = substr(preg_replace('/[^a-z0-9_-]/i', '-', strtolower($rawSlug)), 0, 100);
+
+        $existing = $this->em->getRepository(Collection::class)->findOneBy([
+            'project' => $project,
+            'slug' => $slug,
+            'deletedAt' => null,
+        ]);
+        if ($existing) {
+            $io->error($this->trans('cli.collection_already_exists', ['%slug%' => $slug], null, null, "Une collection avec le slug '$slug' existe déjà dans ce projet."));
+            return Command::FAILURE;
+        }
+
         $coll = new Collection();
-        $coll->name = $i->getArgument('name');
+        $coll->name = substr($name, 0, 100);
         $coll->slug = $slug;
         $coll->project = $project;
-        $coll->isSingleton = $i->getOption('singleton');
+        $coll->isSingleton = (bool) $i->getOption('singleton');
         $this->em->persist($coll);
         $this->em->flush();
 

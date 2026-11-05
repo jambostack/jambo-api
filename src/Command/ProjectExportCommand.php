@@ -12,6 +12,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(
     name: 'project:export',
@@ -20,11 +21,15 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class ProjectExportCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private ProjectExporter $exporter,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void
@@ -55,6 +60,13 @@ class ProjectExportCommand extends Command
 
         $outputPath = $input->getOption('output')
             ?? sprintf('export-%s-%s.zip', preg_replace('/[^a-zA-Z0-9_-]/', '-', $project->name), date('Y-m-d-His'));
+
+        try {
+            $this->assertSafePath($outputPath);
+        } catch (\InvalidArgumentException $e) {
+            $io->error($this->trans('cli.invalid_path', [], null, null, $e->getMessage()));
+            return Command::FAILURE;
+        }
 
         $io->section("Exporting project: {$project->name}");
         $io->listing($options->getEnabledOptions());

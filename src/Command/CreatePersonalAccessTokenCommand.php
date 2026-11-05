@@ -14,6 +14,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(
     name: 'jambo:pat:create',
@@ -22,12 +23,16 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 )]
 class CreatePersonalAccessTokenCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private UserRepository $users,
         private EntityManagerInterface $em,
         private ParameterBagInterface $params,
+        ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
+        $this->setTranslator($translator);
     }
 
     protected function configure(): void
@@ -36,14 +41,15 @@ class CreatePersonalAccessTokenCommand extends Command
             ->addArgument('email', InputArgument::OPTIONAL, 'Email of the user (default: first user found)')
             ->addOption('name', null, InputOption::VALUE_REQUIRED, 'Token name', 'CLI Admin PAT')
             ->addOption('scopes', null, InputOption::VALUE_REQUIRED, 'Comma-separated scopes', 'schema:write,projects:write,content:read,content:write')
-            ->addOption('expires-in', null, InputOption::VALUE_REQUIRED, 'Expiry string relative to now (e.g. "+30 days", "never")', 'never');
+            ->addOption('expires-in', null, InputOption::VALUE_REQUIRED, 'Expiry string relative to now (e.g. "+30 days", "never")', 'never')
+            ->addOption('json', null, InputOption::VALUE_NONE, 'Output result as JSON for automation scripts');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
         $email = $input->getArgument('email');
-        $name = $input->getOption('name');
+        $name = substr(trim((string) $input->getOption('name')), 0, 100);
 
         if ($email) {
             $user = $this->users->findOneBy(['email' => $email]);
@@ -67,7 +73,13 @@ class CreatePersonalAccessTokenCommand extends Command
             }
         }
 
-        $scopes = array_filter(array_map('trim', explode(',', (string) $input->getOption('scopes'))));
+        $rawScopes = array_filter(array_map('trim', explode(',', (string) $input->getOption('scopes'))));
+        $scopes = [];
+        foreach (array_slice($rawScopes, 0, 20) as $s) {
+            if (preg_match('/^[a-zA-Z0-9_\-:]+$/', $s)) {
+                $scopes[] = $s;
+            }
+        }
         if ($scopes === []) {
             $scopes = ['schema:write'];
         }
@@ -76,7 +88,7 @@ class CreatePersonalAccessTokenCommand extends Command
         $secret = (string) $this->params->get('kernel.secret');
 
         $token = new PersonalAccessToken();
-        $token->name = (string) $name;
+        $token->name = $name;
         $token->user = $user;
         $token->scopes = $scopes;
         $token->expiresAt = $expiresAt;
@@ -85,6 +97,18 @@ class CreatePersonalAccessTokenCommand extends Command
 
         $this->em->persist($token);
         $this->em->flush();
+
+        if ($input->getOption('json')) {
+            $output->writeln((string) json_encode([
+                'success'   => true,
+                'token'     => $plain,
+                'name'      => $name,
+                'user'      => $user->email,
+                'scopes'    => $token->scopes,
+                'expiresAt' => $expiresAt ? $expiresAt->format(\DateTimeInterface::ATOM) : null,
+            ], JSON_UNESCAPED_SLASHES));
+            return Command::SUCCESS;
+        }
 
         $io->success("Personal Access Token created successfully!");
         $io->writeln(" Plain Token: <comment>$plain</comment>");

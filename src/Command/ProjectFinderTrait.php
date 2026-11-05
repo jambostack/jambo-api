@@ -13,12 +13,14 @@ trait ProjectFinderTrait
     private function findProject(string $input): ?Project
     {
         $repo = $this->projects; // doit être injecté dans la commande
+        $input = trim(substr($input, 0, 64));
 
         // Partial UUID lookup (6+ chars)
         if (strlen($input) >= 6) {
+            $escaped = addcslashes($input, '%_');
             $results = $repo->createQueryBuilder('p')
                 ->where('p.uuid LIKE :uuid')
-                ->setParameter('uuid', $input . '%')
+                ->setParameter('uuid', $escaped . '%')
                 ->setMaxResults(2)
                 ->getQuery()
                 ->getResult();

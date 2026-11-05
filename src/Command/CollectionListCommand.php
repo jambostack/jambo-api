@@ -9,19 +9,30 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'jambo:collection:list', description: 'Lister les collections d\'un projet')]
 class CollectionListCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private ProjectRepository $projects,
         private EntityManagerInterface $em,
-    ) { parent::__construct(); }
+        ?TranslatorInterface $translator = null,
+    ) {
+        parent::__construct();
+        $this->setTranslator($translator);
+    }
     protected function configure(): void { $this->addArgument('project-uuid', InputArgument::REQUIRED); }
     protected function execute(InputInterface $i, OutputInterface $o): int {
         $io = new SymfonyStyle($i, $o);
-        $project = $this->projects->findOneBy(['uuid' => $i->getArgument('project-uuid')]);
-        if (!$project) { $io->error('Projet introuvable'); return Command::FAILURE; }
+        $projectUuid = (string) $i->getArgument('project-uuid');
+        $project = $this->projects->findOneBy(['uuid' => $projectUuid]);
+        if (!$project) {
+            $io->error($this->trans('cli.project_not_found', ['%ident%' => $projectUuid], null, null, 'Projet introuvable'));
+            return Command::FAILURE;
+        }
         $cols = $this->em->getRepository(\App\Entity\Collection::class)->findBy(['project' => $project, 'deletedAt' => null]);
         $rows = [];
         foreach ($cols as $c) $rows[] = [$c->id, $c->name, $c->slug, $c->isSingleton ? 'Oui' : 'Non'];
