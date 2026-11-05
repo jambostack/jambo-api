@@ -7,6 +7,37 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.102] — 2026-11-05
+
+### Realtime SSE/Mercure Multi-Tenant Isolation, Plugin Manifest RBAC & Backup Manager Hardening
+- **RealtimeController & MercureTopicSecurityService**:
+  - Enforced strict multi-tenant topic boundaries preventing cross-tenant eavesdropping and topic injection attacks.
+  - Implemented topic structure validation enforcing sanitized regex prefix `projects/{projectUuid}`.
+  - Restricted wildcard and control characters (`..`, `\0`, `\\`, `*`, `?`, `#`, `+`, `//`) in SSE subscriptions.
+  - Added role-based publishing authorization: only project managers, editors, admins, and super admins can publish realtime events.
+  - Added strict payload size boundary (64KB max) and JSON structure verification on `/realtime/publish`.
+  - Added short-polling fallback path traversal guard on var/realtime event streams.
+- **PluginController & PluginManager**:
+  - Super admin / Admin RBAC enforcement on all plugin management endpoints (`/api/admin/plugins`).
+  - Manifest payload limit (64KB max) and SemVer regex validation (`^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9\.\-_]{1,50})?$`).
+  - Permission and hook whitelisting preventing arbitrary code execution hooks.
+  - Directory traversal prevention on plugin IDs and entrypoints (`..`, `/`, `\`, null bytes).
+  - Rate limiting integration and audit logging for plugin lifecycle (registration, toggle, deletion).
+- **BackupController & BackupManager**:
+  - Super admin RBAC exclusivity for database backup creation, restoration, download, and deletion (`/api/admin/backups`).
+  - Strict filename sanitization (`/^backup-[a-zA-Z0-9_\-]{8,64}\.(sql|sql\.gz|zip)$/`) and directory traversal confinement.
+  - Backup file size limit enforcement (250MB max) and SQL statement safety scanner blocking dangerous statements (`INTO OUTFILE`, `LOAD DATA LOCAL`, `GRANT ALL`, `LOAD_FILE`, etc.).
+  - Mandatory confirmation flag (`confirm=true`) for restore operations.
+  - Rate limiting integration and audit trail logging on all backup actions.
+- **100% Strict I18N Parity**:
+  - Added 47 new translation keys across English, French, Spanish, and Arabic dictionaries (`messages.{en,fr,es,ar}.php`):
+    - `realtime.*`: topic formatting, bounds, cross-tenant denial, publishing authorization, payload size
+    - `plugin.*`: manifest validation, SemVer, permissions, hooks, entrypoint traversal, rate limits, lifecycle
+    - `backup.*`: privileges, label limits, traversal, size limits, SQL safety scanner, restoration confirmation, failure handling
+  - Exact parity maintained across all locales (2,602 keys per language, 0 missing).
+- **Test Coverage**:
+  - Added comprehensive `Cycle46HardeningTest` with 14 unit tests and 64 assertions verifying realtime topic isolation, publishing RBAC, plugin validation, SQL safety scanning, rate limiting, and HTTP response security headers.
+
 ## [1.26.101] — 2026-11-05
 
 ### Deployment Webhooks, Public Share Anti-Enumeration & Collection Template RBAC Hardening
