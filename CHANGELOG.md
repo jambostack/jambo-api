@@ -7,6 +7,29 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.158] — 2026-11-05
+
+### Webhook SSRF, Flow Recursion, Retries & Log Retention Hardening (Cycle #91)
+- **Flow Engine SSRF Prevention & Graph Validation (`FlowValidator`, `CallWebhookHandler`)**:
+  - Integrated `SsrfProtectionService` directly into `FlowValidator` to reject actions (`action.call_webhook`, `action.http_request`) targeting private RFC 1918 subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), RFC 6598 carrier-grade NAT (`100.64.0.0/10`), IPv6 ULA/link-local, cloud metadata services (`169.254.169.254`, `fd00:ec2::254`, `metadata.google.internal`), and evasive IP formats (hexadecimal, decimal integer, octal) during flow compilation and pre-flight validation.
+  - Enforced strict URL length (`MAX_URL_LENGTH = 2048`) and anti-CRLF control characters validation on action configurations.
+- **Outbound Webhooks Reliability, Timeouts & Exponential Backoff (`CallWebhookHandler`, `WebhookService`)**:
+  - Added configurable timeout support in `CallWebhookHandler`: bounded between 1.0s and 15.0s (default 5.0s) and max total duration between 2.0s and 30.0s (default 10.0s).
+  - Implemented exponential backoff retries (up to 3 retries) on transient network errors or HTTP 502/503/504 status codes. Strict non-retry policy enforced on SSRF security blocks (`\InvalidArgumentException`) and 4xx client errors.
+  - Added multi-tenant outbound webhook payload size restriction (`MAX_PAYLOAD_BYTES = 512KB`) in `WebhookService` with explicit i18n logging upon violation.
+- **Automation Recursion & Infinite Loop Prevention (`CallWebhookHandler`, `WebhookInboundController`)**:
+  - Implemented hop count tracking via platform-guaranteed header `X-JamboApi-Hop-Count` bounded to 5 hops across flow webhooks.
+  - Added loop detection in `WebhookInboundController`: requests exceeding maximum hop count are rejected with 429 (`AUTOMATION_LOOP_DETECTED`).
+  - Added direct self-trigger recursion detection in `WebhookInboundController`: inbound requests originating from the same project and same automation are rejected with 400 (`DIRECT_RECURSION_DETECTED`).
+  - Sanitized inbound payloads to prevent injection or overwriting of internal engine variables (`_node_config`, `_hop_count`, `_trigger`).
+- **Webhook Log Retention & Pruning Endpoint (`WebhookController`, `WebhookLogRepository`)**:
+  - Added `POST /api/projects/{projectUuid}/webhooks/{uuid}/logs/prune` enabling administrators to prune webhook logs older than specified retention days (bounded between 1 and 365 days) with audit logging.
+  - Fixed comment reply nesting flattening regression in `CommentController` ensuring nested comments are flattened to root parent and 404 response on project mismatch.
+- **Strict 100% I18n Compliance**:
+  - Added 11 new translation keys across all 4 locales (`en`, `fr`, `es`, `ar`), maintaining exact parity (3,406 keys per locale).
+- **Test Suite Verification**:
+  - Added `Cycle91WebhookAndFlowHardeningTest` covering SSRF static/semi-static rejection, metadata blocking, hop count recursion limits, self-recursion prevention, 503 exponential retries, payload size caps, and log pruning (8 tests, 28 assertions, 100% pass).
+
 ## [1.26.157] — 2026-11-05
 
 ### Comment Quotas, Nesting Security & Notification Volume Hardening (Cycle #90)

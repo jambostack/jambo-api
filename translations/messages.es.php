@@ -3705,4 +3705,17 @@ return [
     'notification.batch_delete_success' => 'Notificaciones eliminadas con éxito.',
     'notification.quota_exceeded' => 'Se ha superado la cuota de almacenamiento de notificaciones del usuario.',
     'notification.invalid_days' => 'El periodo de retención en días debe ser un entero entre 1 y 365.',
+
+    // ─── Cycle 91: Webhook SSRF, Flow Recursion, Retries & Log Retention Hardening ───
+    'flow.call_webhook.recursion_limit_exceeded' => 'Se superó la profundidad máxima de recursión de llamadas webhook (%max%).',
+    'flow.call_webhook.ssrf_blocked' => 'Webhook saliente bloqueado por la política de protección SSRF: %reason%',
+    'flow.call_webhook.timeout' => 'Tiempo de espera del webhook saliente agotado tras %timeout%s.',
+    'automation.admin.webhook_loop_detected' => 'Bucle de recursión de automatización detectado (recuento de saltos superior a %max%).',
+    'automation.admin.webhook_direct_recursion' => 'Bucle de recursión directa detectado: mismo proyecto y misma automatización.',
+    'webhook.payload_size_exceeded' => 'El tamaño de la carga útil del webhook saliente supera el límite de %max% bytes.',
+    'webhook.prune_success' => 'Se eliminaron %count% registro(s) de webhook anteriores a %days% día(s).',
+    'webhook.invalid_prune_days' => 'Los días de retención deben ser un número entero entre %min% y %max%.',
+    'flow.validator.ssrf_host_forbidden' => 'Nodo %node%: el host de destino \'%host%\' está bloqueado por la política anti-SSRF.',
+    'flow.validator.url_too_long' => 'Nodo %node%: la longitud de la URL supera los %max% caracteres.',
+    'flow.validator.url_control_chars' => 'Nodo %node%: la URL contiene caracteres de control prohibidos.',
 ];

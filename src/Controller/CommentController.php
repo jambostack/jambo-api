@@ -272,6 +272,7 @@ class CommentController extends AbstractController
 
             // Calcul de profondeur et détection de cycle
             $depth = 1;
+            // Calcul de profondeur, détection de cycle et aplatissement vers la racine (flattening)
             $curr = $parent;
             $visited = [];
             while ($curr !== null) {
@@ -292,7 +293,12 @@ class CommentController extends AbstractController
                 $curr = $curr->parent;
             }
 
-            $comment->parent = $parent;
+            // Flatten reply depth to root parent to prevent unbounded recursive nesting
+            $root = $parent;
+            while ($root->parent !== null) {
+                $root = $root->parent;
+            }
+            $comment->parent = $root;
         }
 
         $this->em->persist($comment);
@@ -443,6 +449,11 @@ class CommentController extends AbstractController
     #[Route('/{id}/resolve', name: 'resolve', methods: ['POST'])]
     public function resolve(string $projectUuid, string $collectionSlug, int $entryId, int $id, Request $request): JsonResponse
     {
+        $comment = $this->resolveComment($projectUuid, $collectionSlug, $entryId, $id, 'content.update');
+        if ($comment instanceof JsonResponse) {
+            return $comment;
+        }
+
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
             return $this->secureJson([
@@ -453,11 +464,6 @@ class CommentController extends AbstractController
 
         if ($rateLimitResponse = $this->checkRateLimit($request, $user)) {
             return $rateLimitResponse;
-        }
-
-        $comment = $this->resolveComment($projectUuid, $collectionSlug, $entryId, $id, 'content.update');
-        if ($comment instanceof JsonResponse) {
-            return $comment;
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {

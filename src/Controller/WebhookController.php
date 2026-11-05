@@ -545,6 +545,44 @@ class WebhookController extends AbstractController
         ]);
     }
 
+    #[Route('/{uuid}/logs/prune', name: 'logs_prune', methods: ['POST', 'DELETE'])]
+    public function pruneLogs(string $projectUuid, string $uuid, Request $request): JsonResponse
+    {
+        $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
+        if ($webhook instanceof JsonResponse) {
+            return $webhook;
+        }
+
+        $days = $request->query->getInt('days', 30);
+        if ($days < 1 || $days > 365) {
+            return $this->secureJson([
+                'error' => $this->trans('webhook.invalid_prune_days', ['%min%' => '1', '%max%' => '365'], 'Retention days must be an integer between 1 and 365.'),
+                'code' => 'INVALID_PRUNE_DAYS',
+            ], 422);
+        }
+
+        $threshold = (new \DateTimeImmutable())->modify("-{$days} days");
+        $deletedCount = $this->logRepository->deleteOlderThan($threshold, $webhook->project);
+
+        $this->auditService?->log(
+            toolName: 'webhook_logs_prune',
+            project: $webhook->project,
+            input: ['webhook_uuid' => $uuid, 'days' => $days],
+            output: ['deleted_count' => $deletedCount],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'webhook_management'
+        );
+        $this->auditService?->flush();
+
+        return $this->secureJson([
+            'success' => true,
+            'message' => $this->trans('webhook.prune_success', ['%count%' => (string) $deletedCount, '%days%' => (string) $days], sprintf('Pruned %d webhook log(s) older than %d day(s).', $deletedCount, $days)),
+            'deleted_count' => $deletedCount,
+            'retention_days' => $days,
+        ]);
+    }
+
     #[Route('/{uuid}/test', name: 'test', methods: ['POST'])]
     public function test(string $projectUuid, string $uuid): JsonResponse
     {

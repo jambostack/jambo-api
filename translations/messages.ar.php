@@ -3707,4 +3707,17 @@ return [
     'notification.batch_delete_success' => 'تم حذف الإشعارات بنجاح.',
     'notification.quota_exceeded' => 'تم تجاوز حصة تخزين إشعارات المستخدم.',
     'notification.invalid_days' => 'يجب أن تكون فترة الاحتفاظ بالأيام رقماً صحيحاً بين 1 و 365.',
+
+    // ─── Cycle 91: Webhook SSRF, Flow Recursion, Retries & Log Retention Hardening ───
+    'flow.call_webhook.recursion_limit_exceeded' => 'تم تجاوز الحد الأقصى لعمق تكرار استدعاءات خطاف الويب (%max%).',
+    'flow.call_webhook.ssrf_blocked' => 'تم حظر خطاف الويب الصادر بواسطة سياسة الحماية من SSRF: %reason%',
+    'flow.call_webhook.timeout' => 'انتهت مهلة خطاف الويب الصادر بعد %timeout% ثانية.',
+    'automation.admin.webhook_loop_detected' => 'تم اكتشاف حلقة تكرار لأتمتة خطاف الويب (تجاوز عدد القفزات %max%).',
+    'automation.admin.webhook_direct_recursion' => 'تم اكتشاف حلقة تكرار مباشرة لخطاف الويب: نفس المشروع والأتمتة.',
+    'webhook.payload_size_exceeded' => 'حجم حمولة خطاف الويب الصادر يتجاوز الحد الأقصى %max% بايت.',
+    'webhook.prune_success' => 'تم تطهير %count% سجل(سجلات) خطاف الويب الأقدم من %days% يوم(أيام).',
+    'webhook.invalid_prune_days' => 'يجب أن تكون أيام الاحتفاظ عدداً صحيحاً بين %min% و %max%.',
+    'flow.validator.ssrf_host_forbidden' => 'العقدة %node%: المضيف المستهدف \'%host%\' محظور بواسطة سياسة مكافحة SSRF.',
+    'flow.validator.url_too_long' => 'العقدة %node%: طول عنوان URL يتجاوز %max% حرفاً.',
+    'flow.validator.url_control_chars' => 'العقدة %node%: يحتوي عنوان URL على أحرف تحكم محظورة.',
 ];

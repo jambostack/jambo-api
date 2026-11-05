@@ -30,9 +30,11 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class WebhookService
 {
     public const MAX_URL_LENGTH = 2048;
+    public const MAX_PAYLOAD_BYTES = 524288; // 512 KB
     public const MAX_RESPONSE_BYTES = 2048;
     public const IDLE_TIMEOUT = 5.0;
     public const MAX_DURATION = 10.0;
+    public const MAX_RETRIES = 2;
 
     private SsrfProtectionService $ssrfProtection;
 
@@ -98,6 +100,18 @@ class WebhookService
             return $log;
         }
 
+        if (strlen($payloadJson) > self::MAX_PAYLOAD_BYTES) {
+            $log = new WebhookLog();
+            $log->webhook        = $webhook;
+            $log->event          = $event;
+            $log->requestPayload = substr($payloadJson, 0, 1024) . '... [TRUNCATED]';
+            $log->status         = 'failed';
+            $log->errorMessage   = $this->trans('webhook.payload_size_exceeded', ['%max%' => (string) self::MAX_PAYLOAD_BYTES], sprintf('Outbound webhook payload size exceeds %d bytes limit.', self::MAX_PAYLOAD_BYTES));
+            $this->em->persist($log);
+            $this->em->flush();
+            return $log;
+        }
+
         $timestamp = time();
         $deliveryId = Uuid::v4()->toRfc4122();
 
@@ -144,22 +158,46 @@ class WebhookService
             return $log;
         }
 
-        try {
-            // Configuration sécurisée : DNS pinning anti-rebinding, 0 redirection, timeouts stricts
-            $options = $this->ssrfProtection->buildSafeHttpClientOptions($webhook->url, [
-                'headers' => $headers,
-                'body'    => $payloadJson,
-            ], idleTimeout: self::IDLE_TIMEOUT, maxDuration: self::MAX_DURATION);
+        $attempt = 0;
+        $lastException = null;
 
-            $response = $this->httpClient->request('POST', $webhook->url, $options);
+        while ($attempt <= self::MAX_RETRIES) {
+            try {
+                // Configuration sécurisée : DNS pinning anti-rebinding, 0 redirection, timeouts stricts
+                $options = $this->ssrfProtection->buildSafeHttpClientOptions($webhook->url, [
+                    'headers' => $headers,
+                    'body'    => $payloadJson,
+                ], idleTimeout: self::IDLE_TIMEOUT, maxDuration: self::MAX_DURATION);
 
-            $statusCode = $response->getStatusCode();
-            $log->statusCode   = $statusCode;
-            $log->responseBody = $this->ssrfProtection->readSafeResponseBody($response, self::MAX_RESPONSE_BYTES);
-            $log->status       = ($statusCode >= 200 && $statusCode < 300) ? 'succeeded' : 'failed';
-        } catch (\Throwable $e) {
-            $log->status       = 'failed';
-            $log->errorMessage = substr($e->getMessage(), 0, 500);
+                $response = $this->httpClient->request('POST', $webhook->url, $options);
+                $statusCode = $response->getStatusCode();
+
+                if (in_array($statusCode, [502, 503, 504], true) && $attempt < self::MAX_RETRIES) {
+                    $attempt++;
+                    usleep((int) (min(500, pow(2, $attempt) * 50) * 1000));
+                    continue;
+                }
+
+                $log->statusCode   = $statusCode;
+                $log->responseBody = $this->ssrfProtection->readSafeResponseBody($response, self::MAX_RESPONSE_BYTES);
+                $log->status       = ($statusCode >= 200 && $statusCode < 300) ? 'succeeded' : 'failed';
+                break;
+            } catch (\InvalidArgumentException $e) {
+                // Bloqué par SSRF (ne jamais retenter)
+                $log->status       = 'failed';
+                $log->errorMessage = substr($e->getMessage(), 0, 500);
+                break;
+            } catch (\Throwable $e) {
+                $lastException = $e;
+                $attempt++;
+                if ($attempt <= self::MAX_RETRIES) {
+                    usleep((int) (min(500, pow(2, $attempt) * 50) * 1000));
+                    continue;
+                }
+                $log->status       = 'failed';
+                $log->errorMessage = substr($lastException->getMessage(), 0, 500);
+                break;
+            }
         }
 
         $this->em->persist($log);

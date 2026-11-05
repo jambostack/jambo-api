@@ -192,6 +192,32 @@ class WebhookInboundController extends AbstractController
             }
         }
 
+        // Détection et blocage des boucles de récursion d'automatisation
+        $hopCount = $request->headers->get('X-JamboApi-Hop-Count');
+        if ($hopCount !== null && is_numeric($hopCount) && (int) $hopCount > 5) {
+            $this->logger->warning('Webhook inbound rejected: automation loop detected (hop count limit exceeded)', [
+                'automation_uuid' => $automationUuid,
+                'hop_count' => $hopCount,
+            ]);
+            return $this->secureJson([
+                'error' => $this->trans('automation.admin.webhook_loop_detected', ['%max%' => '5'], 'Automation webhook recursion loop detected (hop count exceeded 5).'),
+                'code' => 'AUTOMATION_LOOP_DETECTED',
+            ], 429);
+        }
+
+        $sourceAutomationId = $request->headers->get('X-JamboApi-Automation-Id');
+        $sourceProjectUuid = $request->headers->get('X-JamboApi-Project');
+        if ($sourceAutomationId !== null && $sourceAutomationId === (string) $automation->id && $sourceProjectUuid !== null && $sourceProjectUuid === $automation->project?->uuid?->toRfc4122()) {
+            $this->logger->warning('Webhook inbound rejected: direct self-trigger recursion detected', [
+                'automation_uuid' => $automationUuid,
+                'automation_id' => $automation->id,
+            ]);
+            return $this->secureJson([
+                'error' => $this->trans('automation.admin.webhook_direct_recursion', [], 'Direct automation webhook recursion loop detected: same project and automation.'),
+                'code' => 'DIRECT_RECURSION_DETECTED',
+            ], 400);
+        }
+
         // Détection et blocage des attaques par rejeu (Replay prevention)
         if ($this->cache !== null && $this->isReplayedRequest($automationUuid, $request, $body)) {
             return $this->secureJson([
@@ -204,7 +230,7 @@ class WebhookInboundController extends AbstractController
         if ($body !== '') {
             $decoded = json_decode($body, true, 32);
         }
-        $payload = is_array($decoded) ? $decoded : ['raw_body' => $body];
+        $payload = is_array($decoded) ? $this->sanitizeInboundPayload($decoded) : ['raw_body' => $body];
         $payload['trigger'] = 'webhook.inbound';
         $payload['project_uuid'] = $automation->project?->uuid?->toRfc4122();
         $payload['timestamp'] = time();
@@ -585,5 +611,31 @@ class WebhookInboundController extends AbstractController
             }
         }
         return $safe;
+    }
+
+    /**
+     * Assainit le payload entrant pour empêcher l'écrasement ou l'altération
+     * des propriétés système et clés internes du moteur de flux (ex: _node_config, _hop_count).
+     */
+    private function sanitizeInboundPayload(array $data, int $depth = 0): array
+    {
+        if ($depth > 5) {
+            return [];
+        }
+
+        $clean = [];
+        foreach ($data as $k => $v) {
+            $strKey = (string) $k;
+            if (str_starts_with($strKey, '_')) {
+                continue;
+            }
+            if (is_array($v)) {
+                $clean[$strKey] = $this->sanitizeInboundPayload($v, $depth + 1);
+            } else {
+                $clean[$strKey] = $v;
+            }
+        }
+
+        return $clean;
     }
 }

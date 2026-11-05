@@ -2,12 +2,39 @@
 
 namespace App\Service\Flow;
 
+use App\Service\Security\SsrfProtectionService;
+use Symfony\Contracts\Translation\TranslatorInterface;
+
 class FlowValidator
 {
     public const MAX_NODES = 100;
     public const MAX_EDGES = 250;
     public const MAX_GRAPH_DEPTH = 50;
     public const MAX_ID_LENGTH = 64;
+    public const MAX_URL_LENGTH = 2048;
+
+    private SsrfProtectionService $ssrfProtection;
+
+    public function __construct(
+        ?SsrfProtectionService $ssrfProtection = null,
+        private readonly ?TranslatorInterface $translator = null,
+    ) {
+        $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
+    }
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($id, $parameters, 'messages');
+            if ($translated !== $id) {
+                return $translated;
+            }
+        }
+        if ($default !== null) {
+            return strtr($default, $parameters);
+        }
+        return $id;
+    }
 
     /** @return array{valid: bool, errors: string[]} */
     public function validate(array $flowGraph, NodeRegistry $registry): array
@@ -171,23 +198,28 @@ class FlowValidator
                     $errors[] = "Node {$nid}: configuration trop volumineuse (max 64 Ko)";
                 }
 
-                // Anti-SSRF préventif sur les URLs statiques d'actions HTTP / Webhook
+                // Anti-SSRF préventif sur les URLs statiques et semi-statiques d'actions HTTP / Webhook
                 if (isset($config['url']) && is_string($config['url'])) {
                     $url = trim($config['url']);
-                    if ($url !== '' && !str_contains($url, '{{')) {
-                        $parsed = parse_url($url);
-                        if ($parsed === false || !isset($parsed['scheme'], $parsed['host'])) {
-                            $errors[] = "Node {$nid}: URL invalide ('{$url}')";
-                        } elseif (!in_array(strtolower($parsed['scheme']), ['http', 'https'], true)) {
-                            $errors[] = "Node {$nid}: protocole non autorisé ('{$parsed['scheme']}'). Seuls HTTP et HTTPS sont supportés.";
+                    if ($url !== '') {
+                        if (strlen($url) > self::MAX_URL_LENGTH) {
+                            $errors[] = $this->trans('flow.validator.url_too_long', ['%node%' => $nid, '%max%' => (string) self::MAX_URL_LENGTH], "Node {$nid}: URL length exceeds " . self::MAX_URL_LENGTH . " characters");
+                        } elseif (preg_match('/[\r\n\x00-\x1F\x7F]/', $url)) {
+                            $errors[] = $this->trans('flow.validator.url_control_chars', ['%node%' => $nid], "Node {$nid}: URL contains forbidden control characters");
+                        } elseif (!str_contains($url, '{{')) {
+                            if (!$this->ssrfProtection->isSafeUrl($url, false, $reason)) {
+                                $detail = $reason ?? $this->trans('flow.validator.ssrf_host_forbidden', ['%node%' => $nid, '%host%' => $url], "Node {$nid}: URL rejected by anti-SSRF policy.");
+                                $errors[] = "Node {$nid}: " . $detail . " (anti-SSRF)";
+                            }
                         } else {
-                            $host = strtolower($parsed['host']);
-                            if (in_array($host, ['localhost', '127.0.0.1', '::1', '0.0.0.0', '169.254.169.254', 'metadata.google.internal', 'instance-data'], true)
-                                || str_ends_with($host, '.localhost')
-                                || str_ends_with($host, '.internal')
-                                || str_ends_with($host, '.local')
-                            ) {
-                                $errors[] = "Node {$nid}: hôte interdit ('{$host}') par la politique de sécurité anti-SSRF.";
+                            // Si l'URL contient un template, mais que son hôte est statique (ex: https://169.254.169.254/{{ path }})
+                            $parsed = parse_url($url);
+                            if (is_array($parsed) && isset($parsed['host']) && !str_contains($parsed['host'], '{{')) {
+                                $host = strtolower($parsed['host']);
+                                if (!$this->ssrfProtection->isSafeHost($host, $reason)) {
+                                    $detail = $reason ?? $this->trans('flow.validator.ssrf_host_forbidden', ['%node%' => $nid, '%host%' => $host], "Node {$nid}: target host '{$host}' is blocked by anti-SSRF policy.");
+                                    $errors[] = "Node {$nid}: " . $detail . " (anti-SSRF)";
+                                }
                             }
                         }
                     }
