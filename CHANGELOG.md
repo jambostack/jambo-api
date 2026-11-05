@@ -7,6 +7,34 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.162] — 2026-11-05
+
+### Schema & Template Hardening, Anti-Injection & Inter-Collection Relation Isolation (Cycle #94)
+- **Collection Template Security Hardening (`CollectionTemplateController`)**:
+  - Implemented rate limiting via `limiter.template_limiter` for create, save-from-collection, show, and delete operations.
+  - Added strict payload size limits (`MAX_PAYLOAD_BYTES = 512KB`) preventing memory exhaustion attacks.
+  - Sanitized template names and descriptions: stripped ASCII control characters (`[\x00-\x1F\x7F]`) and HTML/script tags.
+  - Duplicate field slug rejection: prevents schema collisions with `422 DUPLICATE_FIELD_SLUG`.
+  - Nested options protection: enforced maximum array depth (`MAX_OPTIONS_DEPTH = 6`) and payload size (`MAX_OPTIONS_PAYLOAD_BYTES = 32KB`).
+  - Strict field type verification against `FieldController::ALLOWED_TYPES`.
+  - Relation field option normalization: eliminated raw internal database ID leakage, enforcing portable `collection_slug` or isolated `orphan` tracking.
+- **Project Template & Builder Hardening (`ProjectTemplateBuilder`)**:
+  - Sanitized project names, collection descriptions, and field labels.
+  - Portable relation serialization: converts inter-collection foreign keys to target collection slugs during export.
+  - Defensive relation binding: remaps inter-collection relations to newly created collections post-flush in target projects.
+  - Orphan relation detection & isolation: flags relations pointing to non-existent or foreign collections with `orphan: true`, preventing cross-tenant data leakage.
+- **Project Structure Export/Import Hardening (`StructureExportHandler`, `StructureImportHandler`)**:
+  - Export handler portable normalization: exports target collection slugs and strips primary key integers.
+  - Project collection quota enforcement: validates active collections + incoming collections <= 100 (`import.structure.project_collection_quota_exceeded`).
+  - Deep options protection (`depth > 6`) and duplicate field slug rejection within collections.
+  - Orphan inter-collection relation isolation: sanitizes relations referencing collections absent from both target project and import payload.
+- **Blueprint Import Hardening (`BlueprintImportCommand`)**:
+  - Added secure multi-format support for JSON and YAML definitions using `Yaml::parse()` with `PARSE_EXCEPTION_ON_INVALID_TYPE`.
+  - Enforced project collection limit (maximum 100 collections).
+- **I18n Parity & Testing**:
+  - Added 7 new translation keys across English, French, Spanish, and Arabic (3,461 keys each, 100% symmetry).
+  - Created dedicated test suite `Cycle94TemplateExportHardeningTest` (12 tests, 106 assertions, 100% pass).
+
 ## [1.26.161] — 2026-11-05
 
 ### Search Security Hardening, Query Complexity Protection, Tier Quotas & Safe Pagination (Cycle #93)

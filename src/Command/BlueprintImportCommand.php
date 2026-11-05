@@ -14,6 +14,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Yaml\Yaml;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(
@@ -63,9 +64,30 @@ class BlueprintImportCommand extends Command
         }
 
         $content = file_get_contents($file);
-        $data = json_decode((string) $content, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data) || !isset($data['collections'])) {
-            $io->error($this->trans('cli.invalid_json', [], null, null, 'Format de blueprint invalide (clé "collections" manquante).'));
+        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        $data = null;
+
+        if (in_array($ext, ['yaml', 'yml'], true)) {
+            try {
+                $data = Yaml::parse((string) $content, Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE);
+            } catch (\Throwable $e) {
+                $io->error($this->trans('cli.invalid_yaml', ['%error%' => $e->getMessage()], null, null, 'Format YAML invalide : ' . $e->getMessage()));
+                return Command::FAILURE;
+            }
+        } else {
+            $data = json_decode((string) $content, true);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+                try {
+                    $data = Yaml::parse((string) $content, Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE);
+                } catch (\Throwable) {
+                    $io->error($this->trans('cli.invalid_json', [], null, null, 'Format de blueprint invalide (clé "collections" manquante).'));
+                    return Command::FAILURE;
+                }
+            }
+        }
+
+        if (!is_array($data) || !isset($data['collections']) || !is_array($data['collections'])) {
+            $io->error($this->trans('cli.invalid_blueprint_structure', [], null, null, 'Format de blueprint invalide (clé "collections" manquante).'));
             return Command::FAILURE;
         }
 
@@ -81,6 +103,12 @@ class BlueprintImportCommand extends Command
             $project->name = substr((string) ($input->getOption('name') ?? $data['project']['name'] ?? 'Projet Importé'), 0, 100);
             $project->description = 'Imported from blueprint';
             $this->em->persist($project);
+        }
+
+        $existingCollectionsCount = $project->collections->count();
+        if ($existingCollectionsCount + count($data['collections']) > 100) {
+            $io->error(sprintf('Le nombre total de collections dépasserait le quota maximal (100). Actuel: %d, À importer: %d', $existingCollectionsCount, count($data['collections'])));
+            return Command::FAILURE;
         }
 
         $importedCollections = 0;

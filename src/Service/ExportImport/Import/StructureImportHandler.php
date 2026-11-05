@@ -36,6 +36,20 @@ class StructureImportHandler implements ImportHandlerInterface
         return $default ?? $id;
     }
 
+    private function getArrayDepth(array $array): int
+    {
+        $maxDepth = 1;
+        foreach ($array as $value) {
+            if (is_array($value)) {
+                $depth = $this->getArrayDepth($value) + 1;
+                if ($depth > $maxDepth) {
+                    $maxDepth = $depth;
+                }
+            }
+        }
+        return $maxDepth;
+    }
+
     public static function getOptionKey(): string
     {
         return 'structure';
@@ -69,9 +83,39 @@ class StructureImportHandler implements ImportHandlerInterface
         }
 
         $existingSlugs = [];
+        $activeCollectionsCount = 0;
         foreach ($project->collections as $c) {
             $existingSlugs[$c->slug] = $c;
+            if (!method_exists($c, 'isDeleted') || !$c->isDeleted()) {
+                $activeCollectionsCount++;
+            }
         }
+
+        $newSlugsCount = 0;
+        foreach ($collections as $colData) {
+            if (is_array($colData) && !empty($colData['slug'])) {
+                $s = trim($colData['slug']);
+                if (!isset($existingSlugs[$s])) {
+                    $newSlugsCount++;
+                }
+            }
+        }
+
+        if ($activeCollectionsCount + $newSlugsCount > 100) {
+            throw new \RuntimeException($this->trans('import.structure.project_collection_quota_exceeded', [
+                '%max%'      => 100,
+                '%current%'  => $activeCollectionsCount,
+                '%incoming%' => $newSlugsCount,
+            ], sprintf('Importing collections would exceed project limit of 100 collections (current: %d, new: %d).', $activeCollectionsCount, $newSlugsCount)));
+        }
+
+        $availableCollectionSlugs = array_keys($existingSlugs);
+        foreach ($collections as $cData) {
+            if (is_array($cData) && !empty($cData['slug'])) {
+                $availableCollectionSlugs[] = trim($cData['slug']);
+            }
+        }
+        $availableCollectionSlugs = array_unique($availableCollectionSlugs);
 
         foreach ($collections as $colData) {
             if (!is_array($colData) || empty($colData['slug']) || !is_string($colData['slug'])) {
@@ -112,6 +156,7 @@ class StructureImportHandler implements ImportHandlerInterface
             $collection->isSingleton = (bool) ($colData['is_singleton'] ?? false);
             $collection->order = (int) ($colData['order'] ?? 0);
 
+            $seenFieldSlugs = [];
             foreach ($fieldsData as $i => $fieldData) {
                 if (!is_array($fieldData) || empty($fieldData['slug']) || !is_string($fieldData['slug'])) {
                     throw new \RuntimeException($this->trans('import.structure.field_missing_slug', ['%index%' => $i, '%collection%' => $colSlug], sprintf('Field at index %d in collection "%s" missing slug.', $i, $colSlug)));
@@ -120,6 +165,14 @@ class StructureImportHandler implements ImportHandlerInterface
                 if (!preg_match('/^[a-z0-9_-]+$/i', $fieldSlug) || strlen($fieldSlug) > 128) {
                     throw new \RuntimeException($this->trans('import.structure.invalid_field_slug', ['%slug%' => $fieldSlug], sprintf('Invalid field slug format: "%s".', $fieldSlug)));
                 }
+                if (isset($seenFieldSlugs[$fieldSlug])) {
+                    throw new \RuntimeException($this->trans('import.structure.duplicate_field_slug', [
+                        '%slug%'       => $fieldSlug,
+                        '%collection%' => $colSlug,
+                    ], sprintf('Duplicate field slug "%s" in collection "%s".', $fieldSlug, $colSlug)));
+                }
+                $seenFieldSlugs[$fieldSlug] = true;
+
                 $fieldType = strtolower((string) ($fieldData['type'] ?? 'text'));
                 if (!in_array($fieldType, self::ALLOWED_FIELD_TYPES, true)) {
                     throw new \RuntimeException($this->trans('import.structure.invalid_field_type', ['%type%' => $fieldType, '%field%' => $fieldSlug, '%collection%' => $colSlug], sprintf('Invalid field type "%s" for field "%s" in collection "%s".', $fieldType, $fieldSlug, $colSlug)));
@@ -128,6 +181,42 @@ class StructureImportHandler implements ImportHandlerInterface
                 $fieldOptions = is_array($fieldData['options'] ?? null) ? $fieldData['options'] : null;
                 if ($fieldOptions !== null && strlen((string) json_encode($fieldOptions)) > 32768) {
                     $fieldOptions = null;
+                }
+                if ($fieldOptions !== null && $this->getArrayDepth($fieldOptions) > 6) {
+                    throw new \RuntimeException($this->trans('import.structure.options_too_deep', [
+                        '%field%'      => $fieldSlug,
+                        '%collection%' => $colSlug,
+                    ], sprintf('Field "%s" in collection "%s" has options nested too deeply (max 6 levels).', $fieldSlug, $colSlug)));
+                }
+
+                // Normalisation et prévention des relations orphelines
+                if ($fieldType === 'relation' && is_array($fieldOptions)) {
+                    $relation = is_array($fieldOptions['relation'] ?? null) ? $fieldOptions['relation'] : [];
+                    $relType = (int) ($relation['type'] ?? $fieldOptions['relationType'] ?? 1);
+                    $targetSlug = $relation['collection_slug'] ?? $fieldOptions['targetCollection'] ?? null;
+
+                    if ($targetSlug === 'end_users') {
+                        $fieldOptions = [
+                            'targetCollection' => 'end_users',
+                            'relation' => ['type' => $relType, 'collection_slug' => 'end_users'],
+                        ];
+                    } elseif (is_string($targetSlug) && in_array($targetSlug, $availableCollectionSlugs, true)) {
+                        $fieldOptions = [
+                            'relation' => [
+                                'type' => $relType,
+                                'collection_slug' => $targetSlug,
+                            ],
+                        ];
+                    } else {
+                        // Relation inter-collection orpheline détectée (cible inexistante ou ID arbitraire)
+                        $fieldOptions = [
+                            'relation' => [
+                                'type' => $relType,
+                                'orphan' => true,
+                                'collection_slug' => null,
+                            ],
+                        ];
+                    }
                 }
 
                 $fieldName = preg_replace('/[\x00-\x1F\x7F]/', '', (string) ($fieldData['name'] ?? $fieldSlug));

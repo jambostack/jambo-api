@@ -10,8 +10,10 @@ use App\Repository\ProjectRepository;
 use App\Service\AuditService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -23,6 +25,8 @@ class CollectionTemplateController extends AbstractController
     public const MAX_NAME_LENGTH = 255;
     public const MAX_DESCRIPTION_LENGTH = 2000;
     public const MAX_OPTIONS_PAYLOAD_BYTES = 32768; // 32KB
+    public const MAX_PAYLOAD_BYTES = 524288; // 512KB
+    public const MAX_OPTIONS_DEPTH = 6;
 
     private const SECURITY_HEADERS = [
         'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
@@ -36,6 +40,8 @@ class CollectionTemplateController extends AbstractController
         private readonly ProjectRepository $projectRepository,
         private readonly EntityManagerInterface $em,
         private readonly ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.template_limiter')]
+        private readonly ?RateLimiterFactory $templateLimiter = null,
         private readonly ?AuditService $auditService = null,
     ) {}
 
@@ -50,10 +56,57 @@ class CollectionTemplateController extends AbstractController
         return $id;
     }
 
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->templateLimiter === null) {
+            return null;
+        }
+
+        $identifier = $request->getClientIp() ?: '127.0.0.1';
+        try {
+            $user = $this->getUser();
+            if ($user !== null) {
+                $identifier = $user->getUserIdentifier();
+            }
+        } catch (\Throwable) {}
+
+        if (false === $this->templateLimiter->create($identifier)->consume(1)->isAccepted()) {
+            return new JsonResponse([
+                'error' => $this->trans('template.rate_limit_exceeded', [], 'Too many template requests. Please retry later.'),
+                'code'  => 'RATE_LIMIT_EXCEEDED',
+            ], 429, self::SECURITY_HEADERS);
+        }
+
+        return null;
+    }
+
+    private function getArrayDepth(array $array): int
+    {
+        $maxDepth = 1;
+        foreach ($array as $value) {
+            if (is_array($value)) {
+                $depth = $this->getArrayDepth($value) + 1;
+                if ($depth > $maxDepth) {
+                    $maxDepth = $depth;
+                }
+            }
+        }
+        return $maxDepth;
+    }
+
+    private function sanitizeText(string $text): string
+    {
+        return trim(strip_tags(preg_replace('/[\x00-\x1F\x7F]/', '', $text)));
+    }
+
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(?Request $request = null): JsonResponse
     {
         $request ??= new Request();
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $limit = min(self::MAX_TEMPLATES_COUNT, max(1, $request->query->getInt('limit', self::MAX_TEMPLATES_COUNT)));
         $templates = $this->templateRepository->findBy([], ['createdAt' => 'DESC'], $limit);
 
@@ -63,8 +116,12 @@ class CollectionTemplateController extends AbstractController
     }
 
     #[Route('/{id}', name: 'show', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function show(int $id): JsonResponse
+    public function show(int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         if ($id <= 0) {
             return new JsonResponse(['error' => $this->trans('template.not_found', [], 'Template not found')], 404, self::SECURITY_HEADERS);
         }
@@ -80,12 +137,23 @@ class CollectionTemplateController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         if (!$this->getUser()) {
             return new JsonResponse(['error' => $this->trans('template.auth_required', [], 'Authentication required')], 401, self::SECURITY_HEADERS);
         }
 
         if (!$this->isGranted('ROLE_ADMIN') && !$this->isGranted('ROLE_SUPER_ADMIN')) {
             throw $this->createAccessDeniedException($this->trans('template.admin_required', [], 'Admin privileges required.'));
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return new JsonResponse([
+                'error' => $this->trans('template.payload_too_large', [], 'Payload too large (max 512KB).'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413, self::SECURITY_HEADERS);
         }
 
         $templateCount = $this->templateRepository->count([]);
@@ -102,18 +170,20 @@ class CollectionTemplateController extends AbstractController
             return new JsonResponse(['error' => $this->trans('template.invalid_json', [], 'Invalid JSON')], 400, self::SECURITY_HEADERS);
         }
 
-        $name = trim((string) ($data['name'] ?? ''));
-        if ($name === '') {
+        $rawName = isset($data['name']) && is_scalar($data['name']) ? $this->sanitizeText((string) $data['name']) : '';
+        if ($rawName === '') {
             return new JsonResponse(['error' => $this->trans('template.name_required', [], 'name is required')], 422, self::SECURITY_HEADERS);
         }
-        if (mb_strlen($name) > self::MAX_NAME_LENGTH) {
+        if (mb_strlen($rawName) > self::MAX_NAME_LENGTH) {
             return new JsonResponse(['error' => $this->trans('template.name_too_long', ['%max%' => self::MAX_NAME_LENGTH], 'Template name cannot exceed 255 characters.')], 422, self::SECURITY_HEADERS);
         }
+        $name = mb_substr($rawName, 0, self::MAX_NAME_LENGTH);
 
-        $rawDesc = isset($data['description']) && is_scalar($data['description']) ? trim((string) $data['description']) : null;
+        $rawDesc = isset($data['description']) && is_scalar($data['description']) ? $this->sanitizeText((string) $data['description']) : null;
         if ($rawDesc !== null && mb_strlen($rawDesc) > self::MAX_DESCRIPTION_LENGTH) {
             return new JsonResponse(['error' => $this->trans('template.description_too_long', ['%max%' => self::MAX_DESCRIPTION_LENGTH], 'Template description cannot exceed 2000 characters.')], 422, self::SECURITY_HEADERS);
         }
+        $description = $rawDesc !== null && $rawDesc !== '' ? mb_substr($rawDesc, 0, self::MAX_DESCRIPTION_LENGTH) : null;
 
         $rawFields = $data['fields'] ?? [];
         if (!is_array($rawFields)) {
@@ -125,9 +195,10 @@ class CollectionTemplateController extends AbstractController
 
         $template = new CollectionTemplate();
         $template->name        = $name;
-        $template->description = $rawDesc;
+        $template->description = $description;
         $template->isSingleton = (bool) ($data['is_singleton'] ?? false);
 
+        $seenSlugs = [];
         foreach (array_slice($rawFields, 0, self::MAX_FIELDS_PER_TEMPLATE) as $i => $f) {
             if (!is_array($f)) {
                 return new JsonResponse([
@@ -135,7 +206,7 @@ class CollectionTemplateController extends AbstractController
                     'code' => 'INVALID_FIELD_STRUCTURE',
                 ], 422, self::SECURITY_HEADERS);
             }
-            $fieldName = trim((string) ($f['name'] ?? ''));
+            $fieldName = $this->sanitizeText((string) ($f['name'] ?? ''));
             $fieldSlug = trim((string) ($f['slug'] ?? ''));
             if ($fieldName === '') {
                 return new JsonResponse([
@@ -155,6 +226,13 @@ class CollectionTemplateController extends AbstractController
                     'code' => 'INVALID_FIELD_SLUG',
                 ], 422, self::SECURITY_HEADERS);
             }
+            if (isset($seenSlugs[$fieldSlug])) {
+                return new JsonResponse([
+                    'error' => $this->trans('template.duplicate_field_slug', ['%slug%' => $fieldSlug], "Duplicate field slug: {$fieldSlug}."),
+                    'code' => 'DUPLICATE_FIELD_SLUG',
+                ], 422, self::SECURITY_HEADERS);
+            }
+            $seenSlugs[$fieldSlug] = true;
 
             $rawType = is_string($f['type'] ?? null) ? trim($f['type']) : 'text';
             if (!in_array($rawType, FieldController::ALLOWED_TYPES, true)) {
@@ -169,6 +247,12 @@ class CollectionTemplateController extends AbstractController
                 if (!is_array($f['options'])) {
                     return new JsonResponse(['error' => $this->trans('template.invalid_json', [], 'Invalid JSON'), 'code' => 'INVALID_FIELD_OPTIONS'], 422, self::SECURITY_HEADERS);
                 }
+                if ($this->getArrayDepth($f['options']) > self::MAX_OPTIONS_DEPTH) {
+                    return new JsonResponse([
+                        'error' => $this->trans('template.field_options_too_deep', [], 'Field options payload is nested too deeply (max 6 levels).'),
+                        'code' => 'OPTIONS_TOO_DEEP',
+                    ], 422, self::SECURITY_HEADERS);
+                }
                 $jsonOptions = json_encode($f['options']);
                 if (strlen((string) $jsonOptions) > self::MAX_OPTIONS_PAYLOAD_BYTES) {
                     return new JsonResponse([
@@ -177,6 +261,20 @@ class CollectionTemplateController extends AbstractController
                     ], 422, self::SECURITY_HEADERS);
                 }
                 $options = $f['options'];
+
+                // Si type relation : assainir pour éviter les IDs de BDD arbitraires orphelins
+                if ($rawType === 'relation') {
+                    $relation = is_array($options['relation'] ?? null) ? $options['relation'] : [];
+                    $relType = (int) ($relation['type'] ?? $options['relationType'] ?? 1);
+                    $target = $relation['collection_slug'] ?? $options['targetCollection'] ?? null;
+                    if ($target === 'end_users') {
+                        $options = ['targetCollection' => 'end_users', 'relation' => ['type' => $relType, 'collection_slug' => 'end_users']];
+                    } elseif (is_string($target) && preg_match('/^[a-zA-Z0-9_\-]+$/', $target)) {
+                        $options = ['relation' => ['type' => $relType, 'collection_slug' => $target]];
+                    } else {
+                        $options = ['relation' => ['type' => $relType, 'orphan' => true, 'collection_slug' => null]];
+                    }
+                }
             }
 
             $field = new CollectionTemplateField();
@@ -210,12 +308,23 @@ class CollectionTemplateController extends AbstractController
     #[Route('/from-collection/{projectUuid}/{collectionSlug}', name: 'save_from_collection', methods: ['POST'])]
     public function saveFromCollection(string $projectUuid, string $collectionSlug, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         if (!$this->getUser()) {
             return new JsonResponse(['error' => $this->trans('template.auth_required', [], 'Authentication required')], 401, self::SECURITY_HEADERS);
         }
 
         if (!$this->isGranted('ROLE_ADMIN') && !$this->isGranted('ROLE_SUPER_ADMIN')) {
             throw $this->createAccessDeniedException($this->trans('template.admin_required', [], 'Admin privileges required.'));
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return new JsonResponse([
+                'error' => $this->trans('template.payload_too_large', [], 'Payload too large (max 512KB).'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413, self::SECURITY_HEADERS);
         }
 
         $templateCount = $this->templateRepository->count([]);
@@ -259,11 +368,11 @@ class CollectionTemplateController extends AbstractController
             return new JsonResponse(['error' => $this->trans('template.invalid_json', [], 'Invalid JSON')], 400, self::SECURITY_HEADERS);
         }
 
-        $rawName = isset($data['name']) && is_scalar($data['name']) ? trim((string) $data['name']) : '';
+        $rawName = isset($data['name']) && is_scalar($data['name']) ? $this->sanitizeText((string) $data['name']) : '';
         $name = $rawName !== '' ? mb_substr($rawName, 0, self::MAX_NAME_LENGTH) : $collection->name;
 
-        $rawDesc = isset($data['description']) && is_scalar($data['description']) ? trim((string) $data['description']) : null;
-        $description = $rawDesc !== null ? mb_substr($rawDesc, 0, self::MAX_DESCRIPTION_LENGTH) : $collection->description;
+        $rawDesc = isset($data['description']) && is_scalar($data['description']) ? $this->sanitizeText((string) $data['description']) : null;
+        $description = $rawDesc !== null && $rawDesc !== '' ? mb_substr($rawDesc, 0, self::MAX_DESCRIPTION_LENGTH) : $collection->description;
 
         $template = new CollectionTemplate();
         $template->name        = $name;
@@ -275,6 +384,43 @@ class CollectionTemplateController extends AbstractController
             $options = is_array($f->options) ? $f->options : null;
             if ($options !== null && strlen((string) json_encode($options)) > self::MAX_OPTIONS_PAYLOAD_BYTES) {
                 $options = null;
+            }
+
+            if ($fieldType === 'relation' && $options !== null) {
+                $relation = is_array($options['relation'] ?? null) ? $options['relation'] : [];
+                $relType = (int) ($relation['type'] ?? $options['relationType'] ?? 1);
+                $target = $relation['collection'] ?? $options['targetCollection'] ?? null;
+
+                if ($target === 'end_users') {
+                    $options = [
+                        'targetCollection' => 'end_users',
+                        'relation' => ['type' => $relType, 'collection_slug' => 'end_users'],
+                    ];
+                } else {
+                    $targetColl = null;
+                    if (is_int($target) || (is_string($target) && ctype_digit($target))) {
+                        $targetColl = $this->collectionRepository->findOneBy(['id' => (int) $target, 'project' => $project, 'deletedAt' => null]);
+                    } elseif (is_string($target) && $target !== '') {
+                        $targetColl = $this->collectionRepository->findOneBy(['slug' => $target, 'project' => $project, 'deletedAt' => null]);
+                    }
+
+                    if ($targetColl !== null) {
+                        $options = [
+                            'relation' => [
+                                'type' => $relType,
+                                'collection_slug' => $targetColl->slug,
+                            ],
+                        ];
+                    } else {
+                        $options = [
+                            'relation' => [
+                                'type' => $relType,
+                                'orphan' => true,
+                                'collection_slug' => null,
+                            ],
+                        ];
+                    }
+                }
             }
 
             $field = new CollectionTemplateField();
@@ -306,8 +452,12 @@ class CollectionTemplateController extends AbstractController
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
-    public function delete(int $id): JsonResponse
+    public function delete(int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         $this->denyAccessUnlessGranted('ROLE_SUPER_ADMIN');
 
         if ($id <= 0) {

@@ -28,11 +28,15 @@ class StructureExportHandler implements ExportHandlerInterface
                 if (method_exists($field, 'isDeleted') && $field->isDeleted()) {
                     continue;
                 }
+                $options = $field->options;
+                if ($field->type === 'relation' && is_array($options)) {
+                    $options = $this->exportRelationOptions($options, $project);
+                }
                 $fields[] = [
                     'name'        => $field->name,
                     'slug'        => $field->slug,
                     'type'        => $field->type,
-                    'options'     => $field->options,
+                    'options'     => $options,
                     'order'       => $field->order,
                     'is_required' => $field->isRequired,
                 ];
@@ -77,6 +81,55 @@ class StructureExportHandler implements ExportHandlerInterface
                 'endUserFieldCount' => count($endUserFields),
             ],
             'files' => ['structure.json'],
+        ];
+    }
+
+    private function exportRelationOptions(array $options, Project $project): array
+    {
+        $relation = is_array($options['relation'] ?? null) ? $options['relation'] : [];
+        $relType = (int) ($relation['type'] ?? $options['relationType'] ?? 1);
+        $target = $relation['collection'] ?? $options['targetCollection'] ?? null;
+
+        if ($target === 'end_users') {
+            return [
+                'targetCollection' => 'end_users',
+                'relation' => ['type' => $relType, 'collection_slug' => 'end_users'],
+            ];
+        }
+
+        $targetColl = null;
+        if (is_int($target) || (is_string($target) && ctype_digit($target))) {
+            foreach ($project->collections as $c) {
+                if ((!method_exists($c, 'isDeleted') || !$c->isDeleted()) && $c->id === (int) $target) {
+                    $targetColl = $c;
+                    break;
+                }
+            }
+        } elseif (is_string($target) && $target !== '') {
+            foreach ($project->collections as $c) {
+                if ((!method_exists($c, 'isDeleted') || !$c->isDeleted()) && $c->slug === $target) {
+                    $targetColl = $c;
+                    break;
+                }
+            }
+        }
+
+        if ($targetColl !== null) {
+            return [
+                'relation' => [
+                    'type' => $relType,
+                    'collection_slug' => $targetColl->slug,
+                ],
+            ];
+        }
+
+        // Relation orpheline ou cible inexistante dans le projet
+        return [
+            'relation' => [
+                'type' => $relType,
+                'orphan' => true,
+                'collection_slug' => null,
+            ],
         ];
     }
 }
