@@ -25,8 +25,32 @@
         <testsuite name="security">
             <directory>tests/Security</directory>
         </testsuite>
+        <testsuite name="admin">
+            <directory>tests/Controller/Admin</directory>
+            <directory>tests/Controller/AdminApi</directory>
+        </testsuite>
+        <testsuite name="auth">
+            <directory>tests/Controller/Auth</directory>
+        </testsuite>
+        <testsuite name="api">
+            <directory>tests/Controller/Api</directory>
+        </testsuite>
+        <testsuite name="settings">
+            <directory>tests/Controller/Settings</directory>
+        </testsuite>
+        <testsuite name="realtime">
+            <file>tests/Controller/RealtimeControllerTest.php</file>
+            <file>tests/Controller/Cycle53RealtimeMercureSecurityTest.php</file>
+        </testsuite>
         <testsuite name="controller">
             <directory>tests/Controller</directory>
+            <exclude>tests/Controller/Admin</exclude>
+            <exclude>tests/Controller/AdminApi</exclude>
+            <exclude>tests/Controller/Auth</exclude>
+            <exclude>tests/Controller/Api</exclude>
+            <exclude>tests/Controller/Settings</exclude>
+            <exclude>tests/Controller/RealtimeControllerTest.php</exclude>
+            <exclude>tests/Controller/Cycle53RealtimeMercureSecurityTest.php</exclude>
         </testsuite>
         <testsuite name="graphql">
             <directory>tests/GraphQL</directory>

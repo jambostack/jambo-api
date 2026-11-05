@@ -46,19 +46,20 @@ class InstallController extends AbstractController
     }
 
     #[Route('', name: 'index', methods: ['GET'])]
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $locale = htmlspecialchars($request->getLocale(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $t = $this->translator;
         if ($this->userRepository->count([]) > 0) {
             $title = htmlspecialchars($t->trans('install.already_installed_title'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $body  = htmlspecialchars($t->trans('install.already_installed_body'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $link  = htmlspecialchars($t->trans('install.already_installed_link'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            return $this->secureHtml('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Jambo API</title></head><body style="background:#0d1117;color:#e6edf3;font-family:sans-serif;padding:40px;"><div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;max-width:600px;margin:0 auto;"><h1 style="color:#f85149;">' . $title . '</h1><p>' . $body . '</p><p><a href="/login" style="color:#58a6ff;">' . $link . '</a></p></div></body></html>', 403);
+            return $this->secureHtml('<!DOCTYPE html><html lang="' . $locale . '"><head><meta charset="UTF-8"><title>' . $title . '</title></head><body style="background:#0d1117;color:#e6edf3;font-family:sans-serif;padding:40px;"><div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;max-width:600px;margin:0 auto;"><h1 style="color:#f85149;">' . $title . '</h1><p>' . $body . '</p><p><a href="/login" style="color:#58a6ff;">' . $link . '</a></p></div></body></html>', 403);
         }
 
         $diagnostics = $this->runDiagnostics();
 
-        $html  = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>' . htmlspecialchars($t->trans('install.diagnostic_title'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</title>';
+        $html  = '<!DOCTYPE html><html lang="' . $locale . '"><head><meta charset="UTF-8"><title>' . htmlspecialchars($t->trans('install.diagnostic_title'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</title>';
         $html .= '<style>body{background:#0d1117;color:#e6edf3;font-family:sans-serif;padding:40px;line-height:1.6}';
         $html .= '.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;max-width:700px;margin:0 auto}';
         $html .= 'h1{color:#58a6ff;margin-bottom:16px}ul{list-style:none;padding:0}li{padding:8px 0;border-bottom:1px solid #30363d;display:flex;justify-content:space-between}';
@@ -139,6 +140,15 @@ class InstallController extends AbstractController
         $user->roles             = ['ROLE_SUPER_ADMIN'];
         $user->password          = $this->passwordHasher->hashPassword($user, $password);
         $user->passwordChangedAt = new \DateTimeImmutable();
+
+        $name = trim((string) ($payload['name'] ?? ''));
+        if ($name !== '') {
+            $user->name = mb_substr($name, 0, 100);
+        }
+        $locale = (string) ($payload['locale'] ?? $request->getLocale());
+        if (in_array($locale, ['en', 'fr', 'es', 'ar'], true)) {
+            $user->locale = $locale;
+        }
 
         $this->em->persist($user);
         $this->em->flush();

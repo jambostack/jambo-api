@@ -7,6 +7,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.115] — 2026-11-05
+
+### Realtime/Mercure SSE Hardening, Invitation & Install Audits, Test Matrix & Strict I18N
+- **Realtime / Mercure SSE Hardening**:
+  - Enforced `SECURITY_HEADERS` (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Cache-Control: no-store`) across `RealtimeController` and `MercureFallbackController` on poll, publish, token, and SSE streaming fallback endpoints.
+  - Multi-tenant topic scoping and strict validation preventing cross-project topic leaking and wildcard/directory-traversal subscriptions.
+- **Invitation & Install Controller Audits**:
+  - Hardened `InvitationController` and `InstallController` with `SECURITY_HEADERS`, 16 KB payload limit, rate limiting, and strict UTF-8 MIME headers.
+  - Added explicit firewall rule `- { path: ^/api/invitations, roles: PUBLIC_ACCESS }` in `config/packages/security.yaml`.
+  - Added dynamic request locale resolution and translated page title in `InstallController::index` and admin setup optional fields (`name`, `locale`).
+  - Added comprehensive `InvitationControllerTest` and expanded `InstallControllerTest` with security assertions.
+- **PHPUnit Test Matrix Segmentation**:
+  - Segmented PHPUnit suites in `phpunit.xml` / `phpunit.xml.dist` into non-overlapping domain suites (`unit`, `auth`, `admin`, `api`, `settings`, `realtime`, `graphql`, `events`, `command`, `security`, `controller`) eliminating duplicate file warnings.
+  - Added `Makefile` targets (`make test-fast`, `make test-auth`, `make test-admin`, `make test-api`, `make test-settings`, `make test-realtime`, `make test-hardening`, `make test-i18n`) for sub-second to sub-10s executions.
+- **Strict I18N & Hardening Cleanup**:
+  - Cleaned up all remaining hardcoded fallback strings in `ProjectController.php`, restoring 100% compliance with strict I18N rules and passing `Cycle32HardeningTest`.
+  - Fixed preview SSRF validation to support modern frontend dev server ports (3000, 5173).
+  - Ensured `VERSION`, `package.json`, and `HealthController::VERSION` stay strictly in sync.
+
 ## [1.26.113] — 2026-11-05
 
 ### Admin, Settings & Auth Controllers Security Hardening, RBAC & Strict I18N

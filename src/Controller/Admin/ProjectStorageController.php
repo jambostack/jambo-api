@@ -180,16 +180,16 @@ class ProjectStorageController extends AbstractController
     #[Route('/api/admin/projects/{uuid}/storage/profiles/{id}/test', name: 'admin_project_storage_profile_test', methods: ['POST'])]
     public function testProfile(Request $request, string $uuid, int $id): JsonResponse
     {
-        $project = $this->findProject($uuid);
-        if ($project instanceof JsonResponse) {
-            return $project;
-        }
-
         if ($this->storageTestLimiter !== null) {
             $limiter = $this->storageTestLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (!$limiter->consume()->isAccepted()) {
                 return $this->secureJson(['error' => $this->trans('project.storage.too_many_tests', [], 'Too many test requests. Please retry later.')], 429);
             }
+        }
+
+        $project = $this->findProject($uuid);
+        if ($project instanceof JsonResponse) {
+            return $project;
         }
 
         $profile = $this->profileRepo->find($id);

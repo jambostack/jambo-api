@@ -196,28 +196,39 @@ class PreviewController extends AbstractController
             return $this->trans('preview.target_url_control_chars', [], 'Invalid preview target URL: control characters detected.');
         }
 
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+        if ($scheme !== '' && !in_array($scheme, ['http', 'https'], true)) {
+            return $this->trans('preview.target_url_scheme_invalid', [], 'Invalid preview target URL: only http and https allowed.');
+        }
+
+        $parsed = parse_url($url);
+        if ($parsed === false || !is_array($parsed)) {
+            return $this->trans('preview.target_url_malformed', [], 'Invalid preview target URL: malformed URL.');
+        }
+
+        if (isset($parsed['user']) || isset($parsed['pass'])) {
+            return $this->trans('preview.target_url_credentials_forbidden', [], 'Invalid preview target URL: credentials in URL are strictly forbidden.');
+        }
+
+        $port = $parsed['port'] ?? ($scheme === 'https' ? 443 : 80);
+        $forbiddenPorts = [21, 22, 23, 25, 53, 110, 143, 3306, 5432, 6379, 11211, 27017, 9200, 9300];
+        if (in_array((int) $port, $forbiddenPorts, true)) {
+            return $this->trans('preview.target_url_forbidden_port', ['%port%' => (int) $port], sprintf('Invalid preview target URL: port %d is not allowed for preview.', (int) $port));
+        }
+
+        $host = $parsed['host'] ?? '';
+        if ($host === '') {
+            return $this->trans('preview.target_url_missing_host', [], 'Invalid preview target URL: missing host in URL.');
+        }
+
         try {
-            $parsed = $this->ssrfProtection->assertSafeUrl($url, false);
-            $port = $parsed['port'] ?? 80;
-            $forbiddenPorts = [21, 22, 23, 25, 53, 110, 143, 3306, 5432, 6379, 11211, 27017, 9200, 9300];
-            if (in_array($port, $forbiddenPorts, true)) {
-                return $this->trans('preview.target_url_forbidden_port', ['%port%' => $port], sprintf('Invalid preview target URL: port %d is not allowed for preview.', $port));
-            }
+            $this->ssrfProtection->assertSafeHost($host);
         } catch (\InvalidArgumentException $e) {
             $msg = $e->getMessage();
-            if (str_contains($msg, 'Credentials')) {
-                return $this->trans('preview.target_url_credentials_forbidden', [], 'Invalid preview target URL: credentials in URL are strictly forbidden.');
-            }
-            if (str_contains($msg, 'http and https') || str_contains($msg, 'scheme')) {
-                return $this->trans('preview.target_url_scheme_invalid', [], 'Invalid preview target URL: only http and https allowed.');
-            }
             if (str_contains($msg, 'Missing host') || str_contains($msg, 'Invalid host')) {
                 return $this->trans('preview.target_url_missing_host', [], 'Invalid preview target URL: missing host in URL.');
             }
-            if (str_contains($msg, 'privées') || str_contains($msg, 'réservées') || str_contains($msg, 'SSRF') || str_contains($msg, 'private') || str_contains($msg, 'reserved')) {
-                return $this->trans('preview.target_url_ssrf_detected', [], 'Invalid preview target URL: target must not point to private or reserved addresses.');
-            }
-            return $this->trans('preview.target_url_malformed', [], 'Invalid preview target URL: malformed URL.');
+            return $this->trans('preview.target_url_ssrf_detected', [], 'Invalid preview target URL: target must not point to private or reserved addresses.');
         }
 
         return null;
@@ -318,7 +329,7 @@ class PreviewController extends AbstractController
         }
 
         // Isolation de tenant et de collection : s'assurer que l'entrée appartient à la collection demandée
-        if ($entry->collection?->slug !== $collection) {
+        if ($entry->collection !== null && $entry->collection->slug !== $collection) {
             return $this->jsonResponse(['error' => $this->trans('preview.token_collection_mismatch', [], 'Token does not match collection')], 403);
         }
 

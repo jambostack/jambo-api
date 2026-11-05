@@ -22,7 +22,7 @@ PHP        := php
 PHPUNIT    := $(PHP) vendor/bin/phpunit
 FLAGS      := --no-coverage
 
-.PHONY: test-unit test-auth test-admin test-api test-realtime test-hardening \
+.PHONY: test-unit test-auth test-admin test-api test-settings test-realtime test-hardening \
         test-graphql test-events test-command test-security test-controller \
         test-all test-fast test-ci
 
@@ -43,6 +43,10 @@ test-admin:
 test-api:
 	@echo "🌐 [api] API controllers"
 	$(PHPUNIT) --testsuite api $(FLAGS)
+
+test-settings:
+	@echo "⚙️  [settings] Settings controllers"
+	$(PHPUNIT) --testsuite settings $(FLAGS)
 
 test-realtime:
 	@echo "⚡ [realtime] Realtime / Mercure SSE security"

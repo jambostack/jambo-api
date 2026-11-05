@@ -54,17 +54,17 @@ class InvitationController extends AbstractController
             if ($wantsJson) {
                 return $this->secureJson(['error' => $msg], 413);
             }
-            return new Response($msg, 413, array_merge(self::SECURITY_HEADERS, ['Content-Type' => 'text/plain']));
+            return new Response($msg, 413, array_merge(self::SECURITY_HEADERS, ['Content-Type' => 'text/plain; charset=UTF-8']));
         }
 
         if ($this->invitationLimiter !== null) {
             $limiter = $this->invitationLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (!$limiter->consume()->isAccepted()) {
-                $msg = $this->translator->trans('invitation.too_many_attempts') ?: 'Too many attempts. Please retry later.';
+                $msg = $this->translator->trans('invitation.too_many_attempts');
                 if ($wantsJson) {
                     return $this->secureJson(['error' => $msg], 429);
                 }
-                return new Response($msg, 429, array_merge(self::SECURITY_HEADERS, ['Content-Type' => 'text/plain']));
+                return new Response($msg, 429, array_merge(self::SECURITY_HEADERS, ['Content-Type' => 'text/plain; charset=UTF-8']));
             }
         }
 

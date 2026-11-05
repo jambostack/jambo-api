@@ -109,10 +109,11 @@ class ContentAiStreamControllerTest extends TestCase
 
     public function testStreamWithInvalidProjectReturns404(): void
     {
+        $nonExistentUuid = '00000000-0000-4000-8000-000000000000';
         $projectRepo = $this->createMock(ProjectRepository::class);
         $projectRepo->expects($this->once())
             ->method('findOneBy')
-            ->with(['uuid' => 'non-existent-uuid'])
+            ->with(['uuid' => $nonExistentUuid])
             ->willReturn(null);
 
         $aiService = $this->createMock(AiContentService::class);
@@ -123,7 +124,7 @@ class ContentAiStreamControllerTest extends TestCase
             'text'   => 'Some text',
         ]));
 
-        $response = $controller->streamAction($request, 'non-existent-uuid');
+        $response = $controller->streamAction($request, $nonExistentUuid);
         $this->assertEquals(404, $response->getStatusCode());
     }
 }

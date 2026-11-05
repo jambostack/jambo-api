@@ -70,6 +70,7 @@ security:
         - { path: ^/two-factor-challenge, roles: PUBLIC_ACCESS }
         - { path: ^/install, roles: PUBLIC_ACCESS }
         - { path: ^/invitation, roles: PUBLIC_ACCESS }
+        - { path: ^/api/invitations, roles: PUBLIC_ACCESS }
         - { path: ^/mcp, roles: PUBLIC_ACCESS }
         - { path: ^/public-api, roles: PUBLIC_ACCESS }
         - { path: '^/api/[\w-]{36}/auth/(register|login|forgot-password|reset-password)', roles: PUBLIC_ACCESS }

@@ -592,18 +592,18 @@ class ProjectController extends AbstractController
         if ($roleId !== null && $roleId !== '') {
             $role = $this->roleRepository->find((int) $roleId);
             if ($role === null) {
-                return $this->secureJson(['error' => $this->trans('project.role_not_found', [], 'Role not found.')], 404);
+                return $this->secureJson(['error' => $this->trans('project.role_not_found')], 404);
             }
         }
 
         if (isset($data['user_id']) && $data['user_id'] !== '' && $data['user_id'] !== null) {
             $user = $this->userRepository->find((int) $data['user_id']);
             if ($user === null) {
-                return $this->secureJson(['error' => $this->trans('project.user_not_found', [], 'User not found.')], 404);
+                return $this->secureJson(['error' => $this->trans('project.user_not_found')], 404);
             }
             $existing = $this->memberRepo->findOneBy(['project' => $project, 'user' => $user]);
             if ($existing !== null) {
-                return $this->secureJson(['error' => $this->trans('project.user_already_member', [], 'User is already a member.')], 409);
+                return $this->secureJson(['error' => $this->trans('project.user_already_member')], 409);
             }
             $member           = new ProjectMember();
             $member->project  = $project;
@@ -621,11 +621,11 @@ class ProjectController extends AbstractController
         if (!empty($data['email']) && is_string($data['email'])) {
             $email = trim($data['email']);
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                return $this->secureJson(['error' => $this->trans('project.email_invalid', [], 'Invalid email address.')], 422);
+                return $this->secureJson(['error' => $this->trans('project.email_invalid')], 422);
             }
             $existing = $this->memberRepo->findOneBy(['project' => $project, 'email' => $email]);
             if ($existing !== null) {
-                return $this->secureJson(['error' => $this->trans('project.email_already_member', [], 'This email is already a member or has a pending invitation.')], 409);
+                return $this->secureJson(['error' => $this->trans('project.email_already_member')], 409);
             }
             $token                   = bin2hex(random_bytes(32));
             $member                  = new ProjectMember();
@@ -642,14 +642,14 @@ class ProjectController extends AbstractController
             return $this->secureJson(['data' => $this->serializeMember($member)], 201);
         }
 
-        return $this->secureJson(['error' => $this->trans('project.user_id_or_email_required', [], 'user_id or email is required.')], 422);
+        return $this->secureJson(['error' => $this->trans('project.user_id_or_email_required')], 422);
     }
 
     #[Route('/{uuid}/members/{memberId}', name: 'members_remove', methods: ['DELETE'])]
     public function removeMember(string $uuid, int $memberId): JsonResponse
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $uuid)) {
-            return $this->secureJson(['error' => $this->trans('project.not_found', [], 'Project not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('project.not_found')], 404);
         }
 
         $project = $this->resolveProject($uuid);
@@ -660,22 +660,22 @@ class ProjectController extends AbstractController
         $currentUser = $this->getUser();
         if (!in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true)) {
             if ($this->currentMember === null || $this->currentMember->role?->hasPermission('project.manage') !== true) {
-                return $this->secureJson(['error' => $this->trans('project.permission_denied_members', [], 'You do not have permission to manage members.')], 403);
+                return $this->secureJson(['error' => $this->trans('project.permission_denied_members')], 403);
             }
         }
 
         $member = $this->memberRepo->findOneBy(['id' => $memberId, 'project' => $project]);
         if ($member === null) {
-            return $this->secureJson(['error' => $this->trans('project.member_not_found', [], 'Member not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('project.member_not_found')], 404);
         }
 
         if ($member->status === ProjectMemberStatus::Active && $this->memberRepo->countActiveByProject($project) <= 1) {
-            return $this->secureJson(['error' => $this->trans('project.last_active_member', [], 'Cannot remove the last active member of a project.')], 422);
+            return $this->secureJson(['error' => $this->trans('project.last_active_member')], 422);
         }
 
         $soleManage = $this->memberRepo->findSoleManagePermissionMember($project);
         if ($soleManage !== null && $soleManage->id === $member->id) {
-            return $this->secureJson(['error' => $this->trans('project.last_manage_member', [], 'Cannot remove the last member with project.manage permission.')], 422);
+            return $this->secureJson(['error' => $this->trans('project.last_manage_member')], 422);
         }
 
         $this->em->remove($member);
@@ -698,19 +698,19 @@ class ProjectController extends AbstractController
         $currentUser = $this->getUser();
         if (!in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true)) {
             if ($this->currentMember === null || $this->currentMember->role?->hasPermission('project.manage') !== true) {
-                return $this->secureJson(['error' => $this->trans('project.permission_denied_members', [], 'You do not have permission to manage members.')], 403);
+                return $this->secureJson(['error' => $this->trans('project.permission_denied_members')], 403);
             }
         }
 
         $member = $this->memberRepo->findOneBy(['id' => $memberId, 'project' => $project]);
         if ($member === null) {
-            return $this->secureJson(['error' => $this->trans('project.member_not_found', [], 'Member not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('project.member_not_found')], 404);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->secureJson(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON body.')], 400);
+            return $this->secureJson(['error' => $this->trans('project.invalid_json')], 400);
         }
         $roleId       = $data['role_id'] ?? null;
         $member->role = $roleId ? $this->roleRepository->find((int) $roleId) : null;

@@ -180,18 +180,18 @@ class ProjectMailerSettingsController extends AbstractController
     #[Route('/api/admin/projects/{uuid}/mailer/test', name: 'admin_project_mailer_test', methods: ['POST'])]
     public function test(Request $request, string $uuid): JsonResponse
     {
-        $project = $this->resolveProject($uuid);
-        if (!$project) {
-            return $this->secureJson(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
-        }
-        $this->denyAccessUnlessGranted('project.manage', $project);
-
         if ($this->mailerTestLimiter !== null) {
             $limiter = $this->mailerTestLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (!$limiter->consume()->isAccepted()) {
                 return $this->secureJson(['error' => $this->trans('project.mailer.too_many_tests', [], 'Too many test requests. Please retry later.')], 429);
             }
         }
+
+        $project = $this->resolveProject($uuid);
+        if (!$project) {
+            return $this->secureJson(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
+        }
+        $this->denyAccessUnlessGranted('project.manage', $project);
 
         $settings = $this->settingsRepository->findByProject($project);
         if ($settings === null || !$settings->enabled) {
