@@ -2573,4 +2573,30 @@ return [
     'admin_api.import.no_matching_columns'            => 'Aucune correspondance de colonne valide trouvée entre le CSV et la collection.',
     'admin_api.import.max_rows_reached'               => 'Limite maximale de %max% lignes atteinte.',
     'admin_api.import.cell_count_mismatch'            => 'Nombre de cellules incohérent avec l\'en-tête.',
+
+    // MediaFolderController
+    'media_folder.project_not_found'                  => 'Projet introuvable',
+    'media_folder.invalid_json'                       => 'Corps JSON invalide',
+    'media_folder.payload_too_large'                  => 'Charge utile trop volumineuse',
+    'media_folder.name_required'                      => 'Le nom est obligatoire',
+    'media_folder.name_empty'                         => 'Le nom ne peut pas être vide',
+    'media_folder.name_too_long'                      => 'Le nom ne peut pas dépasser 150 caractères',
+    'media_folder.name_control_characters'            => 'Le nom contient des caractères de contrôle interdits',
+    'media_folder.name_invalid_traversal'             => 'Le nom ne peut pas contenir de séquences de traversée ou de barres obliques',
+    'media_folder.parent_not_found'                   => 'Dossier parent introuvable',
+    'media_folder.invalid_parent_id'                  => 'Identifiant de dossier parent invalide',
+    'media_folder.not_found'                          => 'Dossier introuvable',
+    'media_folder.parent_id_required'                 => 'parent_id est requis',
+    'media_folder.cannot_move_into_itself'            => 'Impossible de déplacer un dossier dans lui-même',
+    'media_folder.cannot_move_into_descendants'       => 'Impossible de déplacer un dossier dans un de ses descendants',
+    'media_folder.max_depth_exceeded'                 => 'Profondeur maximale de la hiérarchie de dossiers dépassée',
+
+    // RealtimeController
+    'realtime.invalid_project_uuid'                   => 'Format UUID de projet invalide',
+    'realtime.rate_limit_exceeded'                    => 'Trop de requêtes temps réel. Veuillez réessayer ultérieurement.',
+    'realtime.project_not_found'                      => 'Projet introuvable',
+    'realtime.auth_required'                          => 'Authentification requise.',
+    'realtime.access_denied'                          => 'Accès refusé',
+    'realtime.mercure_not_configured'                 => 'Mercure non configuré sur ce serveur. Bascule sur le polling.',
+    'realtime.mercure_init_error'                     => 'Erreur d’initialisation de Mercure. Bascule sur le polling.',
 ];

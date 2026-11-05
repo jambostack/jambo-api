@@ -14,6 +14,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Endpoint temps réel.
@@ -30,7 +31,19 @@ class RealtimeController extends AbstractController
         #[Autowire(param: 'mercure_enabled')]
         private readonly bool $mercureEnabled = false,
         private readonly ?RateLimiterFactory $realtimeLimiter = null,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        if ($default !== null) {
+            return strtr($default, $parameters);
+        }
+        return $id;
+    }
 
     /**
      * Génère un token JWT pour souscrire au hub Mercure.
@@ -39,24 +52,24 @@ class RealtimeController extends AbstractController
     public function token(string $projectUuid, Request $request): JsonResponse
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
-            return $this->json(['error' => 'Invalid project UUID format'], 400);
+            return $this->json(['error' => $this->trans('realtime.invalid_project_uuid', [], 'Invalid project UUID format')], 400);
         }
 
         if ($this->realtimeLimiter !== null) {
             $identifier = ($this->getUser()?->getUserIdentifier() ?? $request->getClientIp()) ?: '127.0.0.1';
             $limiter = $this->realtimeLimiter->create($identifier);
             if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->json(['error' => 'Too many realtime requests. Try again later.'], 429);
+                return $this->json(['error' => $this->trans('realtime.rate_limit_exceeded', [], 'Too many realtime requests. Try again later.')], 429);
             }
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('realtime.project_not_found', [], 'Project not found')], 404);
         }
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('realtime.project_not_found', [], 'Project not found')], 404);
         }
         if ($error = $this->denyProjectAccess($project, $request)) {
             return $error;
@@ -70,7 +83,7 @@ class RealtimeController extends AbstractController
                     'token'   => null,
                     'hub_url' => null,
                     'topics'  => [],
-                    'message' => 'Mercure not configured on this server. Fallback to polling.',
+                    'message' => $this->trans('realtime.mercure_not_configured', [], 'Mercure not configured on this server. Fallback to polling.'),
                 ], 200);
             }
 
@@ -115,7 +128,7 @@ class RealtimeController extends AbstractController
                 'token'   => null,
                 'hub_url' => null,
                 'topics'  => [],
-                'message' => 'Mercure initialization error. Fallback to polling.',
+                'message' => $this->trans('realtime.mercure_init_error', [], 'Mercure initialization error. Fallback to polling.'),
             ], 200);
         }
     }
@@ -124,30 +137,30 @@ class RealtimeController extends AbstractController
     public function poll(string $projectUuid, Request $request): JsonResponse
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
-            return $this->json(['error' => 'Invalid project UUID format'], 400);
+            return $this->json(['error' => $this->trans('realtime.invalid_project_uuid', [], 'Invalid project UUID format')], 400);
         }
 
         if ($this->realtimeLimiter !== null) {
             $identifier = ($this->getUser()?->getUserIdentifier() ?? $request->getClientIp()) ?: '127.0.0.1';
             $limiter = $this->realtimeLimiter->create($identifier);
             if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->json(['error' => 'Too many realtime requests. Try again later.'], 429);
+                return $this->json(['error' => $this->trans('realtime.rate_limit_exceeded', [], 'Too many realtime requests. Try again later.')], 429);
             }
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('realtime.project_not_found', [], 'Project not found')], 404);
         }
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('realtime.project_not_found', [], 'Project not found')], 404);
         }
         if ($error = $this->denyProjectAccess($project, $request)) {
             return $error;
         }
 
-        $since = max(0, (int) $request->query->get('since', '0'));
+        $since = min(1000000, max(0, (int) $request->query->get('since', '0')));
         $limit = min(100, max(1, (int) $request->query->get('limit', 100)));
         $safeUuid = $project->uuid?->toRfc4122() ?? $projectUuid;
 
@@ -171,7 +184,7 @@ class RealtimeController extends AbstractController
             }
 
             // Nettoyage périodique (garder max 500 lignes)
-            if ($lastId > 500 && count($lines) > 500) {
+            if ($lastId > 500 && is_array($lines) && count($lines) > 500) {
                 $this->trimEventFile($eventFile, $lines);
             }
         }
@@ -192,19 +205,23 @@ class RealtimeController extends AbstractController
         }
         $user = $this->getUser();
         if (!$user) {
-            return $this->json(['error' => 'Authentication required'], 401);
+            return $this->json(['error' => $this->trans('realtime.auth_required', [], 'Authentication required.')], 401);
         }
         if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
             return null;
         }
         if ($this->memberRepo->findActiveByUserAndProject($user, $project) === null) {
-            return $this->json(['error' => 'Access denied'], 403);
+            return $this->json(['error' => $this->trans('realtime.access_denied', [], 'Access denied')], 403);
         }
         return null;
     }
 
     private function trimEventFile(string $path, array $lines): void
     {
+        $dir = dirname($path);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
         $keep = array_slice($lines, -200);
         // Atomicite : ecrire dans un fichier temporaire puis renommer
         $tmp = $path . '.' . bin2hex(random_bytes(4));

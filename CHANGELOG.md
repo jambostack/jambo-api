@@ -7,6 +7,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.91] — 2026-11-05
+
+### MediaFolder & Realtime Hardening, Path Traversal Defense, Depth Bounds & Strict I18N
+- **MediaFolderController Hardening**:
+  - Enforced RFC 4122 UUID validation on `projectUuid` parameters before any database queries.
+  - Added strict payload size bounding (max 16KB) on folder creation, update, and move endpoints (HTTP 413).
+  - Protected against path traversal and separator injection in folder names (`..`, `/`, `\`), rejecting malicious sequences with HTTP 422.
+  - Implemented hierarchy max depth limits (max 15 levels) and cyclic/descendant traversal loop protection.
+  - Added parent folder existence and soft-delete verification (`isDeleted()`) on creation and move requests.
+  - Injected Symfony `TranslatorInterface` with fallback defaults, replacing all hardcoded strings with 15 translation keys (`media_folder.*`).
+- **RealtimeController Hardening**:
+  - Enforced strict UUID regex validation and RateLimiter protection on poll and token endpoints.
+  - Bounded polling query parameters (`since` capped between 0 and 1,000,000, `limit` clamped between 1 and 100).
+  - Replaced all hardcoded error/status messages with 7 translation keys (`realtime.*`).
+  - Safe event file handling with atomic writes and directory creation checks.
+- **Strict I18N Parity**:
+  - Added 22 new translation keys across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+  - Maintained exact 100% dictionary key parity (2337 keys each, 0 diffs).
+- **Quality Assurance**:
+  - Added dedicated test suite `tests/Controller/Cycle36HardeningTest.php` (14 tests, 232 assertions) covering traversal attacks, depth limits, payload limits, cycle move rejection, and translation parity.
+  - 100% passing PHPUnit test suite (1184 tests, 6046 assertions).
+
 ## [1.26.90] — 2026-11-05
 
 ### AdminApi REST Hardening, UUID Bounds Enforcement, CSV Stream Protection & Strict I18N

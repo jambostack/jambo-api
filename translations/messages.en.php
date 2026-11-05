@@ -2555,4 +2555,30 @@ return [
     'admin_api.import.no_matching_columns'            => 'No valid column matches found between CSV and collection.',
     'admin_api.import.max_rows_reached'               => 'Maximum limit of %max% rows reached.',
     'admin_api.import.cell_count_mismatch'            => 'Cell count inconsistent with header.',
+
+    // MediaFolderController
+    'media_folder.project_not_found'                  => 'Project not found',
+    'media_folder.invalid_json'                       => 'Invalid JSON body',
+    'media_folder.payload_too_large'                  => 'Payload too large',
+    'media_folder.name_required'                      => 'Name is required',
+    'media_folder.name_empty'                         => 'Name cannot be empty',
+    'media_folder.name_too_long'                      => 'Name cannot exceed 150 characters',
+    'media_folder.name_control_characters'            => 'Name contains forbidden control characters',
+    'media_folder.name_invalid_traversal'             => 'Name cannot contain path traversal sequences or slashes',
+    'media_folder.parent_not_found'                   => 'Parent folder not found',
+    'media_folder.invalid_parent_id'                  => 'Invalid parent folder ID',
+    'media_folder.not_found'                          => 'Folder not found',
+    'media_folder.parent_id_required'                 => 'parent_id is required',
+    'media_folder.cannot_move_into_itself'            => 'Cannot move a folder into itself',
+    'media_folder.cannot_move_into_descendants'       => 'Cannot move a folder into one of its descendants',
+    'media_folder.max_depth_exceeded'                 => 'Maximum folder hierarchy depth exceeded',
+
+    // RealtimeController
+    'realtime.invalid_project_uuid'                   => 'Invalid project UUID format',
+    'realtime.rate_limit_exceeded'                    => 'Too many realtime requests. Try again later.',
+    'realtime.project_not_found'                      => 'Project not found',
+    'realtime.auth_required'                          => 'Authentication required.',
+    'realtime.access_denied'                          => 'Access denied',
+    'realtime.mercure_not_configured'                 => 'Mercure not configured on this server. Fallback to polling.',
+    'realtime.mercure_init_error'                     => 'Mercure initialization error. Fallback to polling.',
 ];

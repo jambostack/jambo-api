@@ -2555,4 +2555,30 @@ return [
     'admin_api.import.no_matching_columns'            => 'No se encontraron coincidencias de columnas válidas entre el CSV y la colección.',
     'admin_api.import.max_rows_reached'               => 'Se alcanzó el límite máximo de %max% filas.',
     'admin_api.import.cell_count_mismatch'            => 'Número de celdas incoherente con el encabezado.',
+
+    // MediaFolderController
+    'media_folder.project_not_found'                  => 'Proyecto no encontrado',
+    'media_folder.invalid_json'                       => 'Cuerpo JSON no válido',
+    'media_folder.payload_too_large'                  => 'Carga útil demasiado grande',
+    'media_folder.name_required'                      => 'El nombre es obligatorio',
+    'media_folder.name_empty'                         => 'El nombre no puede estar vacío',
+    'media_folder.name_too_long'                      => 'El nombre no puede superar los 150 caracteres',
+    'media_folder.name_control_characters'            => 'El nombre contiene caracteres de control prohibidos',
+    'media_folder.name_invalid_traversal'             => 'El nombre no puede contener secuencias de salto de ruta ni barras',
+    'media_folder.parent_not_found'                   => 'Carpeta principal no encontrada',
+    'media_folder.invalid_parent_id'                  => 'Identificador de carpeta principal no válido',
+    'media_folder.not_found'                          => 'Carpeta no encontrada',
+    'media_folder.parent_id_required'                 => 'parent_id es obligatorio',
+    'media_folder.cannot_move_into_itself'            => 'No se puede mover una carpeta dentro de sí misma',
+    'media_folder.cannot_move_into_descendants'       => 'No se puede mover una carpeta a uno de sus descendientes',
+    'media_folder.max_depth_exceeded'                 => 'Profundidad máxima de la jerarquía de carpetas superada',
+
+    // RealtimeController
+    'realtime.invalid_project_uuid'                   => 'Formato UUID de proyecto no válido',
+    'realtime.rate_limit_exceeded'                    => 'Demasiadas solicitudes en tiempo real. Inténtelo más tarde.',
+    'realtime.project_not_found'                      => 'Proyecto no encontrado',
+    'realtime.auth_required'                          => 'Autenticación requerida.',
+    'realtime.access_denied'                          => 'Acceso denegado',
+    'realtime.mercure_not_configured'                 => 'Mercure no configurado en este servidor. Recurriendo al sondeo.',
+    'realtime.mercure_init_error'                     => 'Error de inicialización de Mercure. Recurriendo al sondeo.',
 ];

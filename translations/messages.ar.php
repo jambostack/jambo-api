@@ -2557,4 +2557,30 @@ return [
     'admin_api.import.no_matching_columns'            => 'لم يتم العثور على تطابقات صالحة للأعمدة بين CSV والمجموعة.',
     'admin_api.import.max_rows_reached'               => 'تم الوصول إلى الحد الأقصى البالغ %max% صف.',
     'admin_api.import.cell_count_mismatch'            => 'عدد الخلايا غير متطابق مع الرأس.',
+
+    // MediaFolderController
+    'media_folder.project_not_found'                  => 'المشروع غير موجود',
+    'media_folder.invalid_json'                       => 'نص JSON غير صالح',
+    'media_folder.payload_too_large'                  => 'حمولة الطلب كبيرة جدًا',
+    'media_folder.name_required'                      => 'الاسم مطلوب',
+    'media_folder.name_empty'                         => 'لا يمكن أن يكون الاسم فارغًا',
+    'media_folder.name_too_long'                      => 'لا يمكن أن يتجاوز الاسم 150 حرفًا',
+    'media_folder.name_control_characters'            => 'يحتوي الاسم على أحرف تحكم محظورة',
+    'media_folder.name_invalid_traversal'             => 'لا يمكن أن يحتوي الاسم على تسلسلات اجتياز المسار أو خطوط مائلة',
+    'media_folder.parent_not_found'                   => 'المجلد الأصل غير موجود',
+    'media_folder.invalid_parent_id'                  => 'معرف المجلد الأصل غير صالح',
+    'media_folder.not_found'                          => 'المجلد غير موجود',
+    'media_folder.parent_id_required'                 => 'parent_id مطلوب',
+    'media_folder.cannot_move_into_itself'            => 'لا يمكن نقل المجلد إلى داخل نفسه',
+    'media_folder.cannot_move_into_descendants'       => 'لا يمكن نقل المجلد إلى أحد فروعه',
+    'media_folder.max_depth_exceeded'                 => 'تم تجاوز الحد الأقصى لعمق التسلسل الهرمي للمجلدات',
+
+    // RealtimeController
+    'realtime.invalid_project_uuid'                   => 'تنسيق UUID للمشروع غير صالح',
+    'realtime.rate_limit_exceeded'                    => 'عدد كبير جدًا من طلبات الوقت الفعلي. حاول مرة أخرى لاحقًا.',
+    'realtime.project_not_found'                      => 'المشروع غير موجود',
+    'realtime.auth_required'                          => 'المصادقة مطلوبة.',
+    'realtime.access_denied'                          => 'تم رفض الوصول',
+    'realtime.mercure_not_configured'                 => 'Mercure غير مكوّن على هذا الخادم. الرجوع إلى الاستقصاء الدوري.',
+    'realtime.mercure_init_error'                     => 'خطأ في تهيئة Mercure. الرجوع إلى الاستقصاء الدوري.',
 ];
