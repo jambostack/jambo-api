@@ -16,6 +16,7 @@ use League\OAuth2\Client\Provider\Google as GoogleProvider;
 use League\OAuth2\Client\Provider\ResourceOwnerInterface;
 use Omines\OAuth2\Client\Provider\Gitlab as GitlabProvider;
 use Symfony\Component\Uid\Uuid;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use TheNetworg\OAuth2\Client\Provider\Azure as MicrosoftProvider;
 
 class SocialLoginService
@@ -33,7 +34,27 @@ class SocialLoginService
         private EndUserRepository $endUserRepo,
         private AppSettingsRepository $appSettingsRepo,
         private WebhookSecretService $secretService,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = []): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+
+        return match ($id) {
+            'social.error.unknown_provider'        => 'Unknown OAuth provider: ' . ($parameters['%provider%'] ?? '') . '.',
+            'social.error.invalid_pkce_challenge'  => 'Invalid PKCE code_challenge format.',
+            'social.error.invalid_pkce_verifier'   => 'Invalid PKCE code_verifier format.',
+            'social.error.invalid_auth_code'       => 'Invalid authorization code format.',
+            'social.error.provider_not_configured' => 'OAuth provider "' . ($parameters['%provider%'] ?? '') . '" is not configured.',
+            'social.error.email_not_verified'      => 'The email address from ' . ($parameters['%provider%'] ?? '') . ' is not verified.',
+            'social.error.invalid_email'           => 'The ' . ($parameters['%provider%'] ?? '') . ' account did not return a valid email address.',
+            'social.error.cannot_unlink_last'      => 'Cannot unlink the last authentication method. Set a password or link another provider first.',
+            default                                => $id,
+        };
+    }
 
     // ─── Provider OAuth ────────────────────────────────────────────────────
 
@@ -113,7 +134,7 @@ class SocialLoginService
     private function buildProvider(string $provider, array $credentials): AbstractProvider
     {
         if (!isset(self::PROVIDER_CONFIG[$provider])) {
-            throw new \InvalidArgumentException("Unknown provider: $provider");
+            throw new \InvalidArgumentException($this->trans('social.error.unknown_provider', ['%provider%' => $provider]));
         }
 
         $cfg = self::PROVIDER_CONFIG[$provider];
@@ -153,11 +174,11 @@ class SocialLoginService
         string $codeChallengeMethod = 'S256',
     ): array {
         if (!isset(self::PROVIDER_CONFIG[$provider])) {
-            throw new \InvalidArgumentException("Unknown provider: $provider");
+            throw new \InvalidArgumentException($this->trans('social.error.unknown_provider', ['%provider%' => $provider]));
         }
 
         if ($codeChallenge !== null && !preg_match('/^[A-Za-z0-9\-._~]{43,128}$/', $codeChallenge)) {
-            throw new \InvalidArgumentException('Invalid PKCE code_challenge format.');
+            throw new \InvalidArgumentException($this->trans('social.error.invalid_pkce_challenge'));
         }
 
         $oauthProvider = $config
@@ -165,7 +186,7 @@ class SocialLoginService
             : $this->getProviderForAdmin($provider);
 
         if (!$oauthProvider) {
-            throw new \RuntimeException("Provider '$provider' is not configured.");
+            throw new \RuntimeException($this->trans('social.error.provider_not_configured', ['%provider%' => $provider]));
         }
 
         $cfg = self::PROVIDER_CONFIG[$provider];
@@ -205,15 +226,15 @@ class SocialLoginService
         ?string $codeVerifier = null,
     ): SocialUser {
         if (!isset(self::PROVIDER_CONFIG[$provider])) {
-            throw new \InvalidArgumentException("Unknown provider: $provider");
+            throw new \InvalidArgumentException($this->trans('social.error.unknown_provider', ['%provider%' => $provider]));
         }
 
         if (strlen($code) < 1 || strlen($code) > 2048 || preg_match('/[\x00-\x1F\x7F]/', $code)) {
-            throw new \InvalidArgumentException('Invalid authorization code format.');
+            throw new \InvalidArgumentException($this->trans('social.error.invalid_auth_code'));
         }
 
         if ($codeVerifier !== null && !preg_match('/^[A-Za-z0-9\-._~]{43,128}$/', $codeVerifier)) {
-            throw new \InvalidArgumentException('Invalid PKCE code_verifier format.');
+            throw new \InvalidArgumentException($this->trans('social.error.invalid_pkce_verifier'));
         }
 
         $oauthProvider = $config
@@ -221,7 +242,7 @@ class SocialLoginService
             : $this->getProviderForAdmin($provider);
 
         if (!$oauthProvider) {
-            throw new \RuntimeException("Provider '$provider' is not configured.");
+            throw new \RuntimeException($this->trans('social.error.provider_not_configured', ['%provider%' => $provider]));
         }
 
         $tokenParams = ['code' => $code, 'redirect_uri' => $redirectUri];
@@ -241,7 +262,7 @@ class SocialLoginService
 
         // Sécurité OAuth : refuser les comptes dont l'adresse email n'a pas été validée chez le fournisseur
         if (isset($data['email_verified']) && $data['email_verified'] === false) {
-            throw new \RuntimeException("The email address from $provider is not verified.");
+            throw new \RuntimeException($this->trans('social.error.email_not_verified', ['%provider%' => $provider]));
         }
 
         return match ($provider) {
@@ -269,7 +290,7 @@ class SocialLoginService
                 username:   $this->sanitizeUsername((string) ($data['username'] ?? '')),
                 avatarUrl:  $this->sanitizeAvatarUrl($data['avatar_url'] ?? null),
             ),
-            default => throw new \InvalidArgumentException("Unknown provider: $provider"),
+            default => throw new \InvalidArgumentException($this->trans('social.error.unknown_provider', ['%provider%' => $provider])),
         };
     }
 
@@ -295,7 +316,7 @@ class SocialLoginService
     public function findOrCreateAdminUser(SocialUser $socialUser, string $provider): User
     {
         if (empty($socialUser->email) || !filter_var($socialUser->email, FILTER_VALIDATE_EMAIL)) {
-            throw new \RuntimeException("The $provider account did not return a valid email address.");
+            throw new \RuntimeException($this->trans('social.error.invalid_email', ['%provider%' => $provider]));
         }
 
         $providerField = $this->getProviderIdField($provider);
@@ -335,7 +356,7 @@ class SocialLoginService
     public function findOrCreateEndUser(Project $project, SocialUser $socialUser, string $provider): EndUser
     {
         if (empty($socialUser->email) || !filter_var($socialUser->email, FILTER_VALIDATE_EMAIL)) {
-            throw new \RuntimeException("The $provider account did not return a valid email address.");
+            throw new \RuntimeException($this->trans('social.error.invalid_email', ['%provider%' => $provider]));
         }
 
         $providerField = $this->getProviderIdField($provider);
@@ -380,7 +401,7 @@ class SocialLoginService
     public function unlinkProvider(User|EndUser $user, string $provider): void
     {
         if (!$this->canUnlinkProvider($user, $provider)) {
-            throw new \RuntimeException('Cannot unlink the last authentication method. Set a password or link another provider first.');
+            throw new \RuntimeException($this->trans('social.error.cannot_unlink_last'));
         }
 
         $field = $this->getProviderIdField($provider);
@@ -440,7 +461,7 @@ class SocialLoginService
             'microsoft' => 'microsoftId',
             'github'    => 'githubId',
             'gitlab'    => 'gitlabId',
-            default     => throw new \InvalidArgumentException("Unknown provider: $provider"),
+            default     => throw new \InvalidArgumentException($this->trans('social.error.unknown_provider', ['%provider%' => $provider])),
         };
     }
 }

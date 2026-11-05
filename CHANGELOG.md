@@ -7,6 +7,24 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.140] — 2026-11-05
+
+### Security & i18n Hardening — SocialLoginService & StudioController strict i18n (Cycle #76)
+- **SocialLoginService — strict i18n compliance & backward compatibility**:
+  - Injected optional `TranslatorInterface $translator = null` with fallback resolver ensuring smooth DI autowiring and backward-compatible test instantiations.
+  - Replaced hardcoded exception error strings across all OAuth provider workflows with `$this->trans()` using 8 translation keys: `social.error.unknown_provider`, `social.error.invalid_pkce_challenge`, `social.error.invalid_pkce_verifier`, `social.error.invalid_auth_code`, `social.error.provider_not_configured`, `social.error.email_not_verified`, `social.error.invalid_email`, `social.error.cannot_unlink_last`.
+  - Added all 8 keys in complete 4-language dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+- **StudioController — strict i18n compliance**:
+  - Replaced hardcoded French string `"Tool '$tool' inconnu"` in `ai-execute` fallback with `studio.error.unknown_tool` using `$this->trans(...)`.
+  - Added `studio.error.unknown_tool` to all 4 language dictionaries (`messages.{en,fr,es,ar}.php`).
+- **HealthController & System Info version synchronization**:
+  - Synchronized `HealthController::VERSION` with `1.26.140`, ensuring `/health` and `/api/system/info` are 100% consistent with `VERSION` and `composer.json`.
+- **Unit & Security Tests**:
+  - Added `testTranslatorIsInvokedWhenProvided()` and `testI18nParityForSocialLoginErrors()` in `SocialLoginServiceTest`.
+  - Full PHPUnit suite passes: 1,713 tests, 11,179 assertions, 0 errors, 0 failures.
+
+---
+
 ## [1.26.139] — 2026-11-05
 
 ### Security & i18n Hardening — AiContentService strict i18n & translator injection (Cycle #76)

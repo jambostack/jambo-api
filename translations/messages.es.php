@@ -2790,6 +2790,15 @@ return [
     'ai.error.translation'                            => 'Se produjo un error durante la traducción.',
     'ai.error.seo'                                    => 'Se produjo un error durante la generación SEO.',
     'ai.error.analyze'                                => 'No se pudo analizar el contenido.',
+    // Social login service errors
+    'social.error.unknown_provider'                   => 'Proveedor OAuth desconocido: %provider%.',
+    'social.error.invalid_pkce_challenge'             => 'Formato de code_challenge PKCE no válido.',
+    'social.error.invalid_pkce_verifier'              => 'Formato de code_verifier PKCE no válido.',
+    'social.error.invalid_auth_code'                  => 'Formato de código de autorización no válido.',
+    'social.error.provider_not_configured'            => 'El proveedor OAuth «%provider%» no está configurado.',
+    'social.error.email_not_verified'                 => 'La dirección de correo electrónico de %provider% no ha sido verificada.',
+    'social.error.invalid_email'                      => 'La cuenta de %provider% no devolvió una dirección de correo electrónico válida.',
+    'social.error.cannot_unlink_last'                 => 'No se puede desvincular el último método de autenticación. Establezca una contraseña o vincule otro proveedor.',
 
     // AuditController
     'audit.invalid_project_uuid'                      => 'Formato de UUID de proyecto no válido.',
@@ -3172,6 +3181,7 @@ return [
     'studio.ai_chat_failed' => 'Error en el chat de IA',
     'studio.ai_chat_error_reply' => 'Lo sentimos, ocurrió un error. Por favor inténtalo de nuevo.',
     'studio.tool_internal_error' => 'Error interno al ejecutar la herramienta. Consulte los registros del servidor.',
+    'studio.error.unknown_tool' => 'Herramienta «%tool%» desconocida.',
     'studio.failed_persist_entries' => 'No se pudieron guardar las entradas. Inténtelo de nuevo.',
     'api_docs.project_not_found' => 'Proyecto no encontrado',
     'api_docs.auth_required' => 'Autenticación requerida',

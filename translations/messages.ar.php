@@ -2792,6 +2792,15 @@ return [
     'ai.error.translation'                            => 'حدث خطأ أثناء الترجمة.',
     'ai.error.seo'                                    => 'حدث خطأ أثناء إنشاء بيانات SEO.',
     'ai.error.analyze'                                => 'تعذر تحليل المحتوى.',
+    // Social login service errors
+    'social.error.unknown_provider'                   => 'مزود OAuth غير معروف: %provider%.',
+    'social.error.invalid_pkce_challenge'             => 'تنسيق code_challenge PKCE غير صالح.',
+    'social.error.invalid_pkce_verifier'              => 'تنسيق code_verifier PKCE غير صالح.',
+    'social.error.invalid_auth_code'                  => 'تنسيق رمز التفويض غير صالح.',
+    'social.error.provider_not_configured'            => 'مزود OAuth «%provider%» غير مهيأ.',
+    'social.error.email_not_verified'                 => 'لم يتم التحقق من عنوان البريد الإلكتروني من %provider%.',
+    'social.error.invalid_email'                      => 'لم يُرجع حساب %provider% عنوان بريد إلكتروني صالحًا.',
+    'social.error.cannot_unlink_last'                 => 'لا يمكن إلغاء ربط آخر طريقة مصادقة. قم بتعيين كلمة مرور أو ربط مزود آخر.',
 
     // AuditController
     'audit.invalid_project_uuid'                      => 'تنسيق المعرف الفريد للمشروع غير صالح.',
@@ -3174,6 +3183,7 @@ return [
     'studio.ai_chat_failed' => 'فشل الدردشة بالذكاء الاصطناعي',
     'studio.ai_chat_error_reply' => 'عذراً، حدث خطأ. يُرجى المحاولة مرة أخرى.',
     'studio.tool_internal_error' => 'خطأ داخلي أثناء تنفيذ الأداة. راجع سجلات الخادم للحصول على التفاصيل.',
+    'studio.error.unknown_tool' => 'أداة «%tool%» غير معروفة.',
     'studio.failed_persist_entries' => 'فشل في حفظ المدخلات. يرجى المحاولة مرة أخرى.',
     'api_docs.project_not_found' => 'المشروع غير موجود',
     'api_docs.auth_required' => 'المصادقة مطلوبة',

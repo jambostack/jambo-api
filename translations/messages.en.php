@@ -2790,6 +2790,15 @@ return [
     'ai.error.translation'                            => 'An error occurred during translation.',
     'ai.error.seo'                                    => 'An error occurred during SEO generation.',
     'ai.error.analyze'                                => 'Failed to analyze the content.',
+    // Social login service errors
+    'social.error.unknown_provider'                   => 'Unknown OAuth provider: %provider%.',
+    'social.error.invalid_pkce_challenge'             => 'Invalid PKCE code_challenge format.',
+    'social.error.invalid_pkce_verifier'              => 'Invalid PKCE code_verifier format.',
+    'social.error.invalid_auth_code'                  => 'Invalid authorization code format.',
+    'social.error.provider_not_configured'            => 'OAuth provider "%provider%" is not configured.',
+    'social.error.email_not_verified'                 => 'The email address from %provider% is not verified.',
+    'social.error.invalid_email'                      => 'The %provider% account did not return a valid email address.',
+    'social.error.cannot_unlink_last'                 => 'Cannot unlink the last authentication method. Set a password or link another provider first.',
 
     // AuditController
     'audit.invalid_project_uuid'                      => 'Invalid project UUID format.',
@@ -3172,6 +3181,7 @@ return [
     'studio.ai_chat_failed' => 'AI chat failed',
     'studio.ai_chat_error_reply' => 'Sorry, an error occurred. Please try again.',
     'studio.tool_internal_error' => 'Internal error executing tool. Check server logs for details.',
+    'studio.error.unknown_tool' => 'Unknown tool \'%tool%\'.',
     'studio.failed_persist_entries' => 'Failed to persist entries. Please try again.',
     'api_docs.project_not_found' => 'Project not found',
     'api_docs.auth_required' => 'Authentication required',

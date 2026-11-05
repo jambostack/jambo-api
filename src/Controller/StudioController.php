@@ -1436,7 +1436,7 @@ PROMPT;
                     'read_entries'       => $this->executeReadEntries($project, $params),
                     'translate_entries'  => $this->executeTranslateEntries($project, $params),
                     'explore_schema'     => $this->executeExploreSchema($project),
-                    default              => ['error' => "Tool '$tool' inconnu"],
+                    default              => ['error' => $this->trans('studio.error.unknown_tool', ['%tool%' => $tool], sprintf("Unknown tool '%s'", $tool))],
                 };
             } catch (\Throwable $e) {
                 $this->logger->error('ai-execute tool failed', [

@@ -2808,6 +2808,15 @@ return [
     'ai.error.translation'                            => 'Une erreur est survenue lors de la traduction.',
     'ai.error.seo'                                    => 'Une erreur est survenue lors de la génération SEO.',
     'ai.error.analyze'                                => 'Impossible d\'analyser le contenu.',
+    // Social login service errors
+    'social.error.unknown_provider'                   => 'Fournisseur OAuth inconnu : %provider%.',
+    'social.error.invalid_pkce_challenge'             => 'Format de code_challenge PKCE invalide.',
+    'social.error.invalid_pkce_verifier'              => 'Format de code_verifier PKCE invalide.',
+    'social.error.invalid_auth_code'                  => 'Format du code d\'autorisation invalide.',
+    'social.error.provider_not_configured'            => 'Le fournisseur OAuth « %provider% » n\'est pas configuré.',
+    'social.error.email_not_verified'                 => 'L\'adresse e-mail de %provider% n\'a pas été vérifiée.',
+    'social.error.invalid_email'                      => 'Le compte %provider% n\'a pas retourné d\'adresse e-mail valide.',
+    'social.error.cannot_unlink_last'                 => 'Impossible de dissocier le dernier moyen d\'authentification. Définissez un mot de passe ou liez un autre fournisseur.',
 
     // AuditController
     'audit.invalid_project_uuid'                      => 'Format d\'UUID de projet invalide.',
@@ -3190,6 +3199,7 @@ return [
     'studio.ai_chat_failed' => 'Échec du chat IA',
     'studio.ai_chat_error_reply' => 'Désolé, une erreur est survenue. Réessaie.',
     'studio.tool_internal_error' => 'Erreur interne lors de l\'exécution de l\'outil. Consultez les journaux du serveur.',
+    'studio.error.unknown_tool' => 'Outil « %tool% » inconnu.',
     'studio.failed_persist_entries' => 'Impossible d\'enregistrer les entrées. Veuillez réessayer.',
     'api_docs.project_not_found' => 'Projet introuvable',
     'api_docs.auth_required' => 'Authentification requise',

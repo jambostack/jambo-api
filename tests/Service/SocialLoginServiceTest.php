@@ -257,4 +257,53 @@ class SocialLoginServiceTest extends TestCase
 
         $method->invoke($service, 'google', $owner);
     }
+
+    public function testTranslatorIsInvokedWhenProvided(): void
+    {
+        $em = $this->createMock(\Doctrine\ORM\EntityManagerInterface::class);
+        $userRepo = $this->createMock(\App\Repository\UserRepository::class);
+        $endUserRepo = $this->createMock(\App\Repository\EndUserRepository::class);
+        $appSettingsRepo = $this->createMock(\App\Repository\AppSettingsRepository::class);
+        $secretService = $this->createMock(\App\Service\WebhookSecretService::class);
+        $translator = $this->createMock(\Symfony\Contracts\Translation\TranslatorInterface::class);
+
+        $translator->expects($this->once())
+            ->method('trans')
+            ->with('social.error.unknown_provider', ['%provider%' => 'unknown_service'])
+            ->willReturn('Fournisseur OAuth inconnu : unknown_service.');
+
+        $service = new SocialLoginService($em, $userRepo, $endUserRepo, $appSettingsRepo, $secretService, $translator);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Fournisseur OAuth inconnu : unknown_service.');
+
+        $service->getAuthorizationUrlAndState('unknown_service', 'https://example.com/callback');
+    }
+
+    public function testI18nParityForSocialLoginErrors(): void
+    {
+        $locales = ['en', 'fr', 'es', 'ar'];
+        $keys = [
+            'social.error.unknown_provider',
+            'social.error.invalid_pkce_challenge',
+            'social.error.invalid_pkce_verifier',
+            'social.error.invalid_auth_code',
+            'social.error.provider_not_configured',
+            'social.error.email_not_verified',
+            'social.error.invalid_email',
+            'social.error.cannot_unlink_last',
+        ];
+
+        foreach ($locales as $locale) {
+            $file = __DIR__ . '/../../translations/messages.' . $locale . '.php';
+            $this->assertFileExists($file, "Translation file for locale {$locale} must exist.");
+            $dict = require $file;
+            $this->assertIsArray($dict);
+
+            foreach ($keys as $key) {
+                $this->assertArrayHasKey($key, $dict, "Locale {$locale} must define translation key {$key}.");
+                $this->assertNotEmpty($dict[$key], "Translation for {$key} in {$locale} must not be empty.");
+            }
+        }
+    }
 }
