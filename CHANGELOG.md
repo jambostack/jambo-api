@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.159] — 2026-11-05
+
+### Outbound HTTP Flow Node SSRF, Recursion & Complete Flow Validator I18n Hardening (Cycle #91 Finalization)
+- **Flow Engine HTTP Request Node Hardening (`HttpRequestHandler`)**:
+  - Added hop count tracking and recursion limit enforcement: requests exceeding 5 hops are blocked with translated error code.
+  - Propagated platform-guaranteed header `X-JamboApi-Hop-Count` along with `X-JamboApi-Project`, `X-JamboApi-Automation-Id`, and `X-JamboApi-Run-Id`.
+  - Added configurable timeout support: bounded between 1.0s and 15.0s (default 5.0s) and max total duration between 2.0s and 30.0s (default 10.0s).
+  - Added configurable retry support: bounded between 0 and 3 retries with exponential backoff on HTTP 502/503/504 errors, and strict non-retry policy on SSRF blocks (`\InvalidArgumentException`).
+  - Added explicit translated SSRF blocking message (`flow.http_request.ssrf_blocked`).
+- **Complete Flow Validator I18n Localization (`FlowValidator`)**:
+  - Replaced all 25+ hardcoded error messages with Symfony Translator calls (`$this->trans(...)`), supporting dynamic parameter placeholders with backward-compatible fallbacks.
+  - Covers structural errors (at least one node, edges required, nodes/edges DoS limits), variable naming & sensitive patterns, node integrity (invalid ID format, duplicate ID, required/unknown type), edge integrity (source/target not found), DAG cycle detection, depth limits, trigger constraints, and orphan nodes.
+- **Strict 100% I18n Compliance**:
+  - Added 27 new translation keys across all 4 locales (`en`, `fr`, `es`, `ar`), maintaining exact parity (3,433 keys per locale, 0 diffs).
+- **Test Suite Verification**:
+  - Enhanced `Cycle91WebhookAndFlowHardeningTest` to 12 tests (40 assertions) with 0 failures, 0 notices, verifying `HttpRequestHandler` hop count, SSRF blocking, 503 exponential retries, and `FlowValidator` i18n translation coverage.
+
 ## [1.26.158] — 2026-11-05
 
 ### Webhook SSRF, Flow Recursion, Retries & Log Retention Hardening (Cycle #91)

@@ -189,39 +189,94 @@ class HttpRequestHandler implements FlowNodeHandler
         }
         $headers = $cleanHeaders;
 
+        // Contrôle strict de profondeur d'appels et prévention des boucles infinies de requêtes HTTP
+        $currentHop = (int) ($ctx->variables['_hop_count'] ?? $ctx->getVariable('_hop_count', 0));
+        if ($currentHop >= 5) {
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => $url,
+                'error'       => $this->trans('flow.http_request.recursion_limit_exceeded', ['%max%' => '5'], 'Maximum HTTP request recursion depth exceeded (5).'),
+                'status_code' => 0,
+                'headers'     => [],
+            ]);
+        }
+
         // Tracing multi-tenant authentique garanti par la plateforme
         $headers['X-JamboApi-Project'] = $ctx->projectUuid;
         $headers['X-JamboApi-Automation-Id'] = (string) $ctx->automationId;
         $headers['X-JamboApi-Run-Id'] = $ctx->runId;
+        $headers['X-JamboApi-Hop-Count'] = (string) ($currentHop + 1);
 
         if (!isset($headers['User-Agent']) && !isset($headers['user-agent'])) {
             $headers['User-Agent'] = 'JamboApi-FlowHttp/1.0';
         }
 
-        try {
-            $options = $this->ssrfProtection->buildSafeHttpClientOptions($url, [
-                'headers' => $headers,
-                'body'    => $body,
-            ], idleTimeout: 5.0, maxDuration: 10.0);
+        $timeout = isset($config['timeout']) && is_numeric($config['timeout'])
+            ? min(15.0, max(1.0, (float) $config['timeout']))
+            : 5.0;
+        $maxDuration = isset($config['max_duration']) && is_numeric($config['max_duration'])
+            ? min(30.0, max(2.0, (float) $config['max_duration']))
+            : 10.0;
+        $maxRetries = isset($config['retries']) && is_numeric($config['retries'])
+            ? min(3, max(0, (int) $config['retries']))
+            : 0;
 
-            $client = $this->httpClient ?? HttpClient::create();
-            $response = $client->request($method, $url, $options);
-            return new NodeOutput(data: [
-                'called'      => true,
-                'url'         => $url,
-                'status_code' => $response->getStatusCode(),
-                'body'        => $this->ssrfProtection->readSafeResponseBody($response, 1048576), // 1 Mo max
-                'headers'     => $response->getHeaders(false),
-            ]);
-        } catch (\Throwable $e) {
-            return new NodeOutput(data: [
-                'called'      => false,
-                'url'         => $url,
-                'error'       => $e->getMessage(),
-                'status_code' => 0,
-                'headers'     => [],
-            ]);
+        $attempt = 0;
+        $lastException = null;
+
+        while ($attempt <= $maxRetries) {
+            try {
+                $options = $this->ssrfProtection->buildSafeHttpClientOptions($url, [
+                    'headers' => $headers,
+                    'body'    => $body,
+                ], idleTimeout: $timeout, maxDuration: $maxDuration);
+
+                $client = $this->httpClient ?? HttpClient::create();
+                $response = $client->request($method, $url, $options);
+                $statusCode = $response->getStatusCode();
+
+                if (in_array($statusCode, [502, 503, 504], true) && $attempt < $maxRetries) {
+                    $attempt++;
+                    usleep((int) (min(500, pow(2, $attempt) * 50) * 1000));
+                    continue;
+                }
+
+                return new NodeOutput(data: [
+                    'called'      => true,
+                    'url'         => $url,
+                    'status_code' => $statusCode,
+                    'body'        => $this->ssrfProtection->readSafeResponseBody($response, 1048576), // 1 Mo max
+                    'headers'     => $response->getHeaders(false),
+                    'attempts'    => $attempt + 1,
+                ]);
+            } catch (\InvalidArgumentException $e) {
+                // Erreur de sécurité SSRF (RFC 1918, loopback, metadata) : NE JAMAIS RETENTER
+                return new NodeOutput(data: [
+                    'called'      => false,
+                    'url'         => $url,
+                    'error'       => $this->trans('flow.http_request.ssrf_blocked', ['%reason%' => $e->getMessage()], 'Outbound HTTP request blocked by SSRF protection policy: ' . $e->getMessage()),
+                    'status_code' => 0,
+                    'headers'     => [],
+                ]);
+            } catch (\Throwable $e) {
+                $lastException = $e;
+                $attempt++;
+                if ($attempt <= $maxRetries) {
+                    usleep((int) (min(500, pow(2, $attempt) * 50) * 1000));
+                    continue;
+                }
+                break;
+            }
         }
+
+        return new NodeOutput(data: [
+            'called'      => false,
+            'url'         => $url,
+            'error'       => $lastException?->getMessage() ?? 'HTTP request failed',
+            'status_code' => 0,
+            'headers'     => [],
+            'attempts'    => $attempt,
+        ]);
     }
 
     private function interpolateSafe(string $text, array $data, array $safeVars): string

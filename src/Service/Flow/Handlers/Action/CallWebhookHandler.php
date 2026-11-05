@@ -184,7 +184,7 @@ class CallWebhookHandler implements FlowNodeHandler
         $headers = $cleanHeaders;
 
         // Contrôle strict de profondeur d'appels et prévention des boucles infinies de webhooks
-        $currentHop = (int) $ctx->getVariable('_hop_count', 0);
+        $currentHop = (int) ($ctx->variables['_hop_count'] ?? $ctx->getVariable('_hop_count', 0));
         if ($currentHop >= 5) {
             return new NodeOutput(data: [
                 'called'      => false,

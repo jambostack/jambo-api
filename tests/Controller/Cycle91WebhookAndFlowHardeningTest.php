@@ -13,6 +13,7 @@ use App\Repository\WebhookLogRepository;
 use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowValidator;
 use App\Service\Flow\Handlers\Action\CallWebhookHandler;
+use App\Service\Flow\Handlers\Http\HttpRequestHandler;
 use App\Service\Flow\NodeRegistry;
 use App\Service\Security\SsrfProtectionService;
 use App\Service\WebhookSecretService;
@@ -59,8 +60,8 @@ class Cycle91WebhookAndFlowHardeningTest extends WebTestCase
     public function testFlowValidatorRejectsPrivateIpsAndMetadata(): void
     {
         $validator = new FlowValidator($this->ssrf);
-        $registry = $this->createMock(NodeRegistry::class);
-        $registry->method('resolve')->willReturn($this->createMock(\App\Service\Flow\FlowNodeHandler::class));
+        $registry = $this->createStub(NodeRegistry::class);
+        $registry->method('resolve')->willReturn($this->createStub(\App\Service\Flow\FlowNodeHandler::class));
 
         // RFC 1918 Private IP
         $graphPrivate = [
@@ -333,5 +334,73 @@ class Cycle91WebhookAndFlowHardeningTest extends WebTestCase
         $this->assertTrue($data['success']);
         $this->assertGreaterThanOrEqual(1, $data['deleted_count']);
         $this->assertSame(30, $data['retention_days']);
+    }
+
+    public function testHttpRequestHandlerHopCountLimitExceeded(): void
+    {
+        $translator = $this->client->getContainer()->get('translator');
+        $handler = new HttpRequestHandler(ssrfProtection: $this->ssrf, translator: $translator);
+        $ctx = new FlowContext(automationId: 1, projectUuid: 'demo-project');
+        $ctx->variables['_hop_count'] = 5;
+        $ctx->setCurrentNodeConfig([
+            'url'    => 'https://example.com/api/notify',
+            'method' => 'POST',
+        ]);
+
+        $res = $handler->execute([], $ctx);
+        $this->assertFalse($res->data['called']);
+        $this->assertSame(0, $res->data['status_code']);
+        $this->assertStringContainsString('recursion depth exceeded', (string) ($res->data['error'] ?? ''));
+    }
+
+    public function testHttpRequestHandlerSsrfBlocked(): void
+    {
+        $translator = $this->client->getContainer()->get('translator');
+        $handler = new HttpRequestHandler(ssrfProtection: $this->ssrf, translator: $translator);
+        $ctx = new FlowContext(automationId: 1, projectUuid: 'demo-project');
+        $ctx->setCurrentNodeConfig([
+            'url'    => 'http://172.16.0.5/internal/status',
+            'method' => 'GET',
+        ]);
+
+        $res = $handler->execute([], $ctx);
+        $this->assertFalse($res->data['called']);
+        $this->assertSame(0, $res->data['status_code']);
+        $this->assertStringContainsString('SSRF', (string) ($res->data['error'] ?? ''));
+    }
+
+    public function testHttpRequestHandlerRetriesOn503(): void
+    {
+        $responses = [
+            new MockResponse('Service Unavailable', ['http_code' => 503]),
+            new MockResponse('{"status":"recovered"}', ['http_code' => 200]),
+        ];
+        $mockHttp = new MockHttpClient($responses);
+
+        $handler = new HttpRequestHandler(ssrfProtection: $this->ssrf, httpClient: $mockHttp);
+        $ctx = new FlowContext(automationId: 1, projectUuid: 'demo-project');
+        $ctx->setCurrentNodeConfig([
+            'url'     => 'https://example.com/api/flaky',
+            'method'  => 'GET',
+            'retries' => 1,
+        ]);
+
+        $res = $handler->execute([], $ctx);
+        $this->assertTrue($res->data['called']);
+        $this->assertSame(200, $res->data['status_code']);
+        $this->assertSame(2, $res->data['attempts']);
+    }
+
+    public function testFlowValidatorI18nTranslations(): void
+    {
+        $translator = $this->client->getContainer()->get('translator');
+        $validator = new FlowValidator($this->ssrf, $translator);
+        $registry = $this->createStub(NodeRegistry::class);
+
+        // Empty graph
+        $res = $validator->validate([], $registry);
+        $this->assertFalse($res['valid']);
+        $this->assertNotEmpty($res['errors']);
+        $this->assertStringContainsString('node', strtolower($res['errors'][0]));
     }
 }

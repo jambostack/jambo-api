@@ -45,49 +45,49 @@ class FlowValidator
 
         // 1. Structure
         if (!is_array($nodes) || empty($nodes)) {
-            $errors[] = 'Le graphe doit contenir au moins un node';
+            $errors[] = $this->trans('flow.validator.at_least_one_node', [], 'Le graphe doit contenir au moins un node');
             return ['valid' => false, 'errors' => $errors];
         }
 
         if (!isset($flowGraph['edges']) || !is_array($edges)) {
-            $errors[] = 'Le champ edges est requis';
+            $errors[] = $this->trans('flow.validator.edges_required', [], 'Le champ edges est requis');
             return ['valid' => false, 'errors' => $errors];
         }
 
         // 1b. Limites anti-DoS
         if (count($nodes) > self::MAX_NODES) {
-            $errors[] = sprintf('Le graphe dépasse la limite de %d nodes (reçu: %d)', self::MAX_NODES, count($nodes));
+            $errors[] = $this->trans('flow.validator.nodes_limit_exceeded', ['%max%' => (string) self::MAX_NODES, '%count%' => (string) count($nodes)], sprintf('Le graphe dépasse la limite de %d nodes (reçu: %d)', self::MAX_NODES, count($nodes)));
             return ['valid' => false, 'errors' => $errors];
         }
 
         if (count($edges) > self::MAX_EDGES) {
-            $errors[] = sprintf('Le graphe dépasse la limite de %d edges (reçu: %d)', self::MAX_EDGES, count($edges));
+            $errors[] = $this->trans('flow.validator.edges_limit_exceeded', ['%max%' => (string) self::MAX_EDGES, '%count%' => (string) count($edges)], sprintf('Le graphe dépasse la limite de %d edges (reçu: %d)', self::MAX_EDGES, count($edges)));
             return ['valid' => false, 'errors' => $errors];
         }
 
         // 1c. Cloisonnement strict des variables de flow (prévention d'échappement global)
         if (isset($flowGraph['variables'])) {
             if (!is_array($flowGraph['variables'])) {
-                $errors[] = 'Le champ variables doit être un objet clé-valeur';
+                $errors[] = $this->trans('flow.validator.variables_must_be_object', [], 'Le champ variables doit être un objet clé-valeur');
                 return ['valid' => false, 'errors' => $errors];
             }
             if (count($flowGraph['variables']) > 50) {
-                $errors[] = 'Le nombre de variables de flow ne peut excéder 50';
+                $errors[] = $this->trans('flow.validator.variables_max_count', ['%max%' => '50'], 'Le nombre de variables de flow ne peut excéder 50');
                 return ['valid' => false, 'errors' => $errors];
             }
             foreach ($flowGraph['variables'] as $varKey => $varValue) {
                 if (!is_string($varKey) || !preg_match('/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/', $varKey)) {
-                    $errors[] = sprintf("Variable '%s' invalide : doit débuter par une lettre et comporter uniquement alphanumériques et underscores (max 64 car)", (string) $varKey);
+                    $errors[] = $this->trans('flow.validator.variable_invalid_format', ['%var%' => (string) $varKey], sprintf("Variable '%s' invalide : doit débuter par une lettre et comporter uniquement alphanumériques et underscores (max 64 car)", (string) $varKey));
                     continue;
                 }
                 foreach (FlowContext::FORBIDDEN_VARIABLE_PATTERNS as $pattern) {
                     if (preg_match($pattern, $varKey)) {
-                        $errors[] = sprintf("Variable '%s' interdite : nom réservé ou sensible", $varKey);
+                        $errors[] = $this->trans('flow.validator.variable_forbidden', ['%var%' => $varKey], sprintf("Variable '%s' interdite : nom réservé ou sensible", $varKey));
                         break;
                     }
                 }
                 if (!is_scalar($varValue) && !is_array($varValue) && $varValue !== null) {
-                    $errors[] = sprintf("Variable '%s' : type de valeur invalide (seuls scalaires et tableaux autorisés)", $varKey);
+                    $errors[] = $this->trans('flow.validator.variable_invalid_type', ['%var%' => $varKey], sprintf("Variable '%s' : type de valeur invalide (seuls scalaires et tableaux autorisés)", $varKey));
                 }
             }
         }
@@ -96,34 +96,34 @@ class FlowValidator
         $nodeIds = [];
         foreach ($nodes as $index => $node) {
             if (!is_array($node)) {
-                $errors[] = "Node à l'index {$index} invalide (doit être un objet)";
+                $errors[] = $this->trans('flow.validator.node_invalid_object', ['%index%' => (string) $index], "Node à l'index {$index} invalide (doit être un objet)");
                 continue;
             }
 
             $id = $node['id'] ?? null;
             if (!is_string($id) || trim($id) === '') {
-                $errors[] = 'Un node sans id';
+                $errors[] = $this->trans('flow.validator.node_missing_id', [], 'Un node sans id');
                 continue;
             }
 
             if (strlen($id) > self::MAX_ID_LENGTH || !preg_match('/^[a-zA-Z0-9_\-]+$/', $id)) {
-                $errors[] = "Node '{$id}': id invalide (doit être alphanumérique, _ ou -, max " . self::MAX_ID_LENGTH . " caractères)";
+                $errors[] = $this->trans('flow.validator.node_invalid_id', ['%id%' => $id, '%max%' => (string) self::MAX_ID_LENGTH], "Node '{$id}': id invalide (doit être alphanumérique, _ ou -, max " . self::MAX_ID_LENGTH . " caractères)");
                 continue;
             }
 
             if (in_array($id, $nodeIds, true)) {
-                $errors[] = "Node id en doublon : '{$id}'";
+                $errors[] = $this->trans('flow.validator.node_duplicate_id', ['%id%' => $id], "Node id en doublon : '{$id}'");
                 continue;
             }
 
             $type = $node['type'] ?? null;
             if (!is_string($type) || trim($type) === '') {
-                $errors[] = "Node {$id}: type requis";
+                $errors[] = $this->trans('flow.validator.node_type_required', ['%id%' => $id], "Node {$id}: type requis");
                 continue;
             }
 
             if (!$registry->resolve($type)) {
-                $errors[] = "Node {$id}: type '{$type}' inconnu";
+                $errors[] = $this->trans('flow.validator.node_unknown_type', ['%id%' => $id, '%type%' => $type], "Node {$id}: type '{$type}' inconnu");
             }
 
             $nodeIds[] = $id;
@@ -131,7 +131,7 @@ class FlowValidator
 
         foreach ($edges as $edge) {
             if (!is_array($edge)) {
-                $errors[] = "Edge invalide (doit être un objet)";
+                $errors[] = $this->trans('flow.validator.edge_invalid_object', [], 'Edge invalide (doit être un objet)');
                 continue;
             }
 
@@ -140,10 +140,10 @@ class FlowValidator
             $target = (string) ($edge['target'] ?? '');
 
             if (!in_array($source, $nodeIds, true)) {
-                $errors[] = "Edge {$edgeId}: source '{$source}' introuvable";
+                $errors[] = $this->trans('flow.validator.edge_source_not_found', ['%edge%' => $edgeId, '%source%' => $source], "Edge {$edgeId}: source '{$source}' introuvable");
             }
             if (!in_array($target, $nodeIds, true)) {
-                $errors[] = "Edge {$edgeId}: target '{$target}' introuvable";
+                $errors[] = $this->trans('flow.validator.edge_target_not_found', ['%edge%' => $edgeId, '%target%' => $target], "Edge {$edgeId}: target '{$target}' introuvable");
             }
         }
 
@@ -154,12 +154,12 @@ class FlowValidator
 
         // 3. DAG check (algorithme de Kahn)
         if (!$this->isDAG($nodes, $edges)) {
-            $errors[] = 'Le graphe contient un cycle — les flows doivent être acycliques';
+            $errors[] = $this->trans('flow.validator.cycle_detected', [], 'Le graphe contient un cycle — les flows doivent être acycliques');
         } else {
             // 3b. Limite de profondeur du graphe
             $maxDepth = $this->calculateMaxDepth($nodes, $edges);
             if ($maxDepth > self::MAX_GRAPH_DEPTH) {
-                $errors[] = sprintf('Le graphe dépasse la profondeur maximale de %d niveaux (profondeur: %d)', self::MAX_GRAPH_DEPTH, $maxDepth);
+                $errors[] = $this->trans('flow.validator.max_depth_exceeded', ['%max%' => (string) self::MAX_GRAPH_DEPTH, '%depth%' => (string) $maxDepth], sprintf('Le graphe dépasse la profondeur maximale de %d niveaux (profondeur: %d)', self::MAX_GRAPH_DEPTH, $maxDepth));
             }
         }
 
@@ -171,9 +171,9 @@ class FlowValidator
             }
         }
         if ($triggerCount === 0) {
-            $errors[] = 'Le graphe doit contenir au moins un trigger';
+            $errors[] = $this->trans('flow.validator.trigger_required', [], 'Le graphe doit contenir au moins un trigger');
         } elseif ($triggerCount > 10) {
-            $errors[] = 'Le graphe ne peut pas contenir plus de 10 triggers';
+            $errors[] = $this->trans('flow.validator.max_triggers_exceeded', ['%max%' => '10'], 'Le graphe ne peut pas contenir plus de 10 triggers');
         }
 
         // 5. Validation des entrées/sorties des nodes et anti-SSRF sur URLs statiques
@@ -184,10 +184,10 @@ class FlowValidator
             $isTrigger = str_starts_with($type, 'trigger.');
 
             if ($isTrigger && in_array($nid, $targetIds, true)) {
-                $errors[] = "Node {$nid}: un trigger ne peut pas recevoir d'arêtes entrantes";
+                $errors[] = $this->trans('flow.validator.trigger_incoming_edge', ['%node%' => $nid], "Node {$nid}: un trigger ne peut pas recevoir d'arêtes entrantes");
             }
             if (!$isTrigger && !in_array($nid, $targetIds, true)) {
-                $errors[] = "Node {$nid}: orphelin — aucune entrée et n'est pas un trigger";
+                $errors[] = $this->trans('flow.validator.orphan_node', ['%node%' => $nid], "Node {$nid}: orphelin — aucune entrée et n'est pas un trigger");
             }
 
             // Contrôle de taille du payload config (anti-DoS mémoire)
@@ -195,7 +195,7 @@ class FlowValidator
             if (is_array($config)) {
                 $encodedConfig = json_encode($config);
                 if ($encodedConfig !== false && strlen($encodedConfig) > 65536) {
-                    $errors[] = "Node {$nid}: configuration trop volumineuse (max 64 Ko)";
+                    $errors[] = $this->trans('flow.validator.config_too_large', ['%node%' => $nid, '%max%' => '64'], "Node {$nid}: configuration trop volumineuse (max 64 Ko)");
                 }
 
                 // Anti-SSRF préventif sur les URLs statiques et semi-statiques d'actions HTTP / Webhook
