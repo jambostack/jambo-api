@@ -6,6 +6,7 @@ use App\Entity\User;
 use App\Repository\RoleRepository;
 use App\Repository\UserRepository;
 use App\Service\AuditService;
+use App\Service\ProjectAuthLockoutService;
 use App\Service\Security\PasswordPolicyValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -37,6 +38,7 @@ class UserController extends AbstractController
         private UserPasswordHasherInterface $hasher,
         private TranslatorInterface $translator,
         private AuditService $auditService,
+        private ?ProjectAuthLockoutService $lockoutService = null,
     ) {}
 
     private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
@@ -503,6 +505,53 @@ class UserController extends AbstractController
         return $this->secureJson(null, 204);
     }
 
+    #[Route('/{id}/reset-2fa', name: 'reset_2fa', methods: ['POST'])]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
+    public function resetTwoFactor(int $id): JsonResponse
+    {
+        $targetUser = $this->userRepository->find($id);
+        if ($targetUser === null) {
+            return $this->secureJson(['error' => $this->translator->trans('user.admin.not_found')], 404);
+        }
+
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+        if ($targetUser === $currentUser) {
+            return $this->secureJson(['error' => $this->translator->trans('user_management.cannot_reset_self_2fa_via_admin')], 400);
+        }
+
+        if (!$targetUser->twoFactorEnabled) {
+            return $this->secureJson(['error' => $this->translator->trans('user_management.2fa_not_enabled')], 400);
+        }
+
+        $targetUser->twoFactorEnabled = false;
+        $targetUser->twoFactorMethod = null;
+        $targetUser->twoFactorSecret = null;
+        $targetUser->twoFactorBackupCodes = null;
+        $targetUser->twoFactorConfirmedAt = null;
+        $this->em->flush();
+
+        $this->lockoutService?->clearAttempts('user_2fa_account:' . $targetUser->id);
+        $this->lockoutService?->clearAttempts('user_2fa_backup:' . $targetUser->id);
+        $this->lockoutService?->clearAttempts('security_2fa_user:' . $targetUser->id);
+
+        $this->auditService->log(
+            toolName: 'admin_user_2fa_reset',
+            project: null,
+            input: ['target_user_id' => $targetUser->id, 'email' => $targetUser->email],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $currentUser->getUserIdentifier(),
+            source: 'user_management'
+        );
+        $this->auditService->flush();
+
+        return $this->secureJson([
+            'message' => $this->translator->trans('user_management.2fa_reset_success', ['%email%' => $targetUser->email]),
+            'two_factor_enabled' => false,
+        ]);
+    }
+
     private function countSuperAdmins(): int
     {
         return (int) $this->em->createQuery(
@@ -522,6 +571,8 @@ class UserController extends AbstractController
             'roles'               => $roles,
             'userRoles'           => $roles,
             'is_super_admin'      => $user->isSuperAdmin(),
+            'two_factor_enabled'  => $user->twoFactorEnabled,
+            'two_factor_method'   => $user->twoFactorMethod,
             'password_changed_at' => $user->passwordChangedAt?->format(\DateTimeInterface::ATOM),
             'created_at'          => $user->createdAt->format(\DateTimeInterface::ATOM),
             'updated_at'          => $user->createdAt->format(\DateTimeInterface::ATOM),

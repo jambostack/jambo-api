@@ -5,7 +5,9 @@ namespace App\Tests\Controller\Auth;
 use App\Controller\Auth\TwoFactorChallengeController;
 use App\Entity\User;
 use App\Repository\AppSettingsRepository;
+use App\Service\AuditService;
 use App\Service\FrontendRouteManifestService;
+use App\Service\ProjectAuthLockoutService;
 use App\Service\TwoFactorMailer;
 use App\Service\TwoFactorService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -38,7 +40,9 @@ class TwoFactorChallengeControllerTest extends TestCase
         ?TwoFactorService $twoFactor = null,
         ?TwoFactorMailer $mailer = null,
         ?EntityManagerInterface $em = null,
-        ?RateLimiterFactory $limiterFactory = null
+        ?RateLimiterFactory $limiterFactory = null,
+        ?ProjectAuthLockoutService $lockoutService = null,
+        ?AuditService $auditService = null,
     ): TwoFactorChallengeController {
         $twoFactor = $twoFactor ?? new TwoFactorService();
         $mailer = $mailer ?? $this->createMock(TwoFactorMailer::class);
@@ -53,7 +57,9 @@ class TwoFactorChallengeControllerTest extends TestCase
             $requestStack,
             $em,
             $tokenStorage,
-            $limiterFactory
+            $limiterFactory,
+            $lockoutService,
+            $auditService,
         );
 
         $container = new Container();
@@ -165,5 +171,66 @@ class TwoFactorChallengeControllerTest extends TestCase
         $this->assertSame(429, $res4->getStatusCode());
         $data = json_decode((string) $res4->getContent(), true);
         $this->assertStringContainsString('limit reached', $data['error']);
+    }
+
+    public function testVerifyDistributedBruteForceAccountLockout(): void
+    {
+        $user = new User();
+        $user->twoFactorMethod = 'totp';
+        $user->twoFactorSecret = 'JBSWY3DPEHPK3PXP';
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('find')->with(99)->willReturn($user);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->with(User::class)->willReturn($repo);
+
+        $lockoutService = $this->createMock(ProjectAuthLockoutService::class);
+        $lockoutService->method('isLockedOut')
+            ->willReturnCallback(fn ($key) => $key === 'user_2fa_account:99');
+        $lockoutService->method('getRemainingLockoutSeconds')->willReturn(450);
+
+        $controller = $this->createController(em: $em, lockoutService: $lockoutService);
+
+        $session = new Session(new MockArraySessionStorage());
+        $session->set('two_factor_user_id', 99);
+        $session->set('two_factor_expires', time() + 300);
+
+        $request = new Request([], ['code' => '123456'], [], [], [], ['HTTP_X-Inertia' => 'true']);
+        $request->setSession($session);
+
+        $response = $controller->verify($request);
+        $this->assertSame(429, $response->getStatusCode());
+        $this->assertFalse($session->has('two_factor_user_id'), 'Session must be cleared on distributed account lockout');
+    }
+
+    public function testVerifyBackupCodeBruteForceLockout(): void
+    {
+        $user = new User();
+        $user->twoFactorMethod = 'totp';
+        $user->twoFactorSecret = 'JBSWY3DPEHPK3PXP';
+
+        $repo = $this->createMock(EntityRepository::class);
+        $repo->method('find')->with(77)->willReturn($user);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getRepository')->with(User::class)->willReturn($repo);
+
+        $lockoutService = $this->createMock(ProjectAuthLockoutService::class);
+        $lockoutService->method('isLockedOut')
+            ->willReturnCallback(fn ($key) => $key === 'user_2fa_backup:77');
+        $lockoutService->method('getRemainingLockoutSeconds')->willReturn(600);
+
+        $controller = $this->createController(em: $em, lockoutService: $lockoutService);
+
+        $session = new Session(new MockArraySessionStorage());
+        $session->set('two_factor_user_id', 77);
+        $session->set('two_factor_expires', time() + 300);
+
+        $request = new Request([], ['code' => 'ABCD-EF01', 'use_backup' => true], [], [], [], ['HTTP_X-Inertia' => 'true']);
+        $request->setSession($session);
+
+        $response = $controller->verify($request);
+        $this->assertSame(429, $response->getStatusCode());
     }
 }

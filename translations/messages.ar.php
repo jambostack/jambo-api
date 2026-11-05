@@ -3629,4 +3629,15 @@ return [
     'auth.social.error_failed' => 'فشل تسجيل الدخول عبر الشبكة الاجتماعية. يُرجى المحاولة مرة أخرى.',
     'auth.social.cancelled' => 'تم إلغاء تسجيل الدخول عبر الشبكة الاجتماعية.',
     'oidc.cancelled' => 'تم إلغاء تسجيل الدخول الموحد SSO.',
+
+    // ─── Cycle 86+: 2FA & Backup Codes Hardening Against Distributed Brute-Force ───
+    'auth.2fa.account_locked_retry_after' => 'محاولات تحقق ثنائي فاشلة كثيرة جداً عبر الجلسات. تم قفل تحدي الحساب لمدة %seconds% ثانية.',
+    'auth.2fa.backup_locked_retry_after' => 'محاولات فاشلة كثيرة جداً لرموز النسخ الاحتياطي. تم قفل التحقق من رموز الاسترداد لمدة %seconds% ثانية.',
+    'auth.2fa.backup_codes_depleted_warning' => 'تحذير: لم يتبق سوى %count% من رموز النسخ الاحتياطي. يُرجى إعادة إنشاء رموزك في أقرب وقت.',
+    'user_management.2fa_reset_success' => 'تمت إعادة تعيين التحقق بخطوتين بنجاح للمستخدم %email%.',
+    'user_management.2fa_not_enabled' => 'التحقق بخطوتين غير مفعّل لهذا المستخدم.',
+    'user_management.cannot_reset_self_2fa_via_admin' => 'لا يمكنك إعادة تعيين التحقق بخطوتين الخاص بك عبر الإجراءات الإدارية. استخدم إعدادات أمان ملفك الشخصي.',
+    'admin_end_users.2fa_reset_success' => 'تمت إعادة تعيين التحقق بخطوتين بنجاح للمستخدم النهائي %email%.',
+    'admin_end_users.2fa_not_enabled' => 'التحقق بخطوتين غير مفعّل لهذا المستخدم النهائي.',
+    'enduser.auth.backup_codes_locked' => 'محاولات كثيرة غير صالحة لرموز النسخ الاحتياطي. تم قفل رموز الاسترداد مؤقتاً. يُرجى المحاولة بعد %seconds% ثانية.',
 ];

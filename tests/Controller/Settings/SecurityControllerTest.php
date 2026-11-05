@@ -4,6 +4,8 @@ namespace App\Tests\Controller\Settings;
 
 use App\Controller\Settings\SecurityController;
 use App\Entity\User;
+use App\Service\AuditService;
+use App\Service\ProjectAuthLockoutService;
 use App\Service\SocialLoginService;
 use App\Service\TwoFactorMailer;
 use App\Service\TwoFactorService;
@@ -36,7 +38,9 @@ class SecurityControllerTest extends TestCase
         ?TwoFactorService $twoFactor = null,
         ?UserPasswordHasherInterface $hasher = null,
         ?RateLimiterFactory $limiterFactory = null,
-        ?TranslatorInterface $translator = null
+        ?TranslatorInterface $translator = null,
+        ?ProjectAuthLockoutService $lockoutService = null,
+        ?AuditService $auditService = null,
     ): SecurityController {
         $em = $this->createMock(EntityManagerInterface::class);
         $twoFactor = $twoFactor ?? new TwoFactorService();
@@ -59,7 +63,9 @@ class SecurityControllerTest extends TestCase
             $requestStack,
             $socialLogin,
             $limiterFactory,
-            $translator
+            $translator,
+            $lockoutService,
+            $auditService,
         );
 
         $container = new Container();
@@ -173,5 +179,63 @@ class SecurityControllerTest extends TestCase
         $this->assertSame(400, $response->getStatusCode());
         $data = json_decode((string) $response->getContent(), true);
         $this->assertSame('trans:security.2fa.not_enabled', $data['error']);
+    }
+
+    public function testRegenerateBackupCodesRequiresValidPassword(): void
+    {
+        $user = new User();
+        $user->email = 'user6@example.com';
+        $user->twoFactorEnabled = true;
+
+        $hasher = $this->createMock(UserPasswordHasherInterface::class);
+        $hasher->method('isPasswordValid')->willReturn(false);
+
+        $controller = $this->createController($user, hasher: $hasher);
+        $request = Request::create('/api/settings/security/backup-codes', 'POST', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['password' => 'wrong-pass']));
+
+        $response = $controller->regenerateBackupCodes($request);
+        $this->assertSame(422, $response->getStatusCode());
+        $data = json_decode((string) $response->getContent(), true);
+        $this->assertSame('trans:security.2fa.invalid_password', $data['error']);
+
+        // Now with valid password
+        $validHasher = $this->createMock(UserPasswordHasherInterface::class);
+        $validHasher->method('isPasswordValid')->willReturn(true);
+
+        $validController = $this->createController($user, hasher: $validHasher);
+        $validRequest = Request::create('/api/settings/security/backup-codes', 'POST', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['password' => 'correct-pass']));
+
+        $validResponse = $validController->regenerateBackupCodes($validRequest);
+        $this->assertSame(200, $validResponse->getStatusCode());
+        $validData = json_decode((string) $validResponse->getContent(), true);
+        $this->assertArrayHasKey('backup_codes', $validData);
+        $this->assertCount(8, $validData['backup_codes']);
+    }
+
+    public function testTotpConfirmDistributedBruteForceLockout(): void
+    {
+        $user = new User();
+        $user->email = 'user7@example.com';
+        $user->twoFactorEnabled = false;
+        $user->twoFactorMethod = 'totp';
+        $user->twoFactorSecret = 'JBSWY3DPEHPK3PXP';
+
+        $lockoutService = $this->createMock(ProjectAuthLockoutService::class);
+        $lockoutService->method('isLockedOut')->willReturn(true);
+        $lockoutService->method('getRemainingLockoutSeconds')->willReturn(300);
+
+        $controller = $this->createController($user, lockoutService: $lockoutService);
+        $request = Request::create('/api/settings/security/totp/confirm', 'POST', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['code' => '123456']));
+
+        $response = $controller->totpConfirm($request);
+        $this->assertSame(429, $response->getStatusCode());
+        $data = json_decode((string) $response->getContent(), true);
+        $this->assertSame('trans:security.2fa.too_many_attempts', $data['error']);
     }
 }

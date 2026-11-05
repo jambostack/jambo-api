@@ -7,6 +7,29 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.152] — 2026-11-05
+
+### 2FA & Backup Codes Hardening, Distributed Brute-Force Protection & Admin 2FA Reset (Cycle #86+)
+- **Distributed Brute-Force & Account Lockout Defense (`TwoFactorChallengeController`)**:
+  - Implemented persistent multi-tier cache-based lockout (`user_2fa_account:<id>` & `user_2fa_ip:<ip>`) via `ProjectAuthLockoutService`, preventing botnets and distributed IP proxies from bypassing per-IP sliding windows.
+  - Added dedicated distributed brute-force protection for static recovery keys (`user_2fa_backup:<id>`) with strict lockout thresholds (3 attempts -> 300s, 5 -> 900s, 8 -> 3600s).
+  - Integrated `AuditService` logging for 2FA verification attempts (`auth_2fa_verify` and `auth_2fa_failure`).
+- **Backup Codes Validation & Re-Authentication Hardening (`TwoFactorService` & `SecurityController`)**:
+  - Hardened `verifyAndConsumeBackupCode` with strict length and character checks (`8` alphanumeric characters `XXXX-XXXX`).
+  - Added `getRemainingBackupCodesCount()`, `hasRemainingBackupCodes()`, and `isBackupCodeFormat()` helpers.
+  - Enforced mandatory password re-authentication (`isPasswordValid`) on backup code regeneration (`POST /api/settings/security/backup-codes`) to prevent token/session hijacking extraction.
+  - Added distributed tiered lockouts and audit logging on 2FA TOTP/email confirmations (`2fa_enable_totp`, `2fa_enable_email`, `2fa_disable`).
+  - Updated frontend `assets/js/pages/settings/security.tsx` to prompt for password confirmation when regenerating backup codes.
+- **Tenant & End-User 2FA Distributed Brute-Force Hardening (`EndUserAuthController`)**:
+  - Added dedicated backup code lockout (`enduser_2fa_backup:<uuid>`) and automatic syntax detection (`isBackupCodeFormat`) on tenant 2FA verification.
+  - Tracked backup code consumption and remaining count on verified challenges.
+- **Administrative 2FA Reset Flows (`UserController` & `EndUserAdminController`)**:
+  - Created Super Admin endpoint `POST /api/users/{id}/reset-2fa` with self-reset prevention, active lockout clearing, and security audit logging.
+  - Created Project Admin endpoint `POST /api/projects/{uuid}/end-users/{endUserUuid}/reset-2fa` with project isolation, lockout clearing, and audit logging.
+  - Serialized `two_factor_enabled` and `two_factor_method` flags across user and end-user management APIs.
+- **Strict I18n Expansion**:
+  - Added 9 complete translation keys across `en`, `fr`, `es`, and `ar` dictionaries (exactly 3,338 keys in each file).
+
 ## [1.26.151] — 2026-11-05
 
 ### OAuth & OIDC Callback Resiliency, Anti-Cache Hardening, Social Auth & Strict I18n (Cycle #86)

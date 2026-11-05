@@ -7,7 +7,9 @@ use App\Repository\EndUserRepository;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\AuditService;
 use App\Service\EndUserCustomFieldsSanitizer;
+use App\Service\ProjectAuthLockoutService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use App\Controller\Api\ProjectAwareControllerTrait;
@@ -38,6 +40,8 @@ class EndUserAdminController extends AbstractController
         private ?\App\Repository\ProjectAuthRefreshTokenRepository $refreshTokenRepo = null,
         private ?TranslatorInterface $translator = null,
         private ?EndUserCustomFieldsSanitizer $customFieldsSanitizer = null,
+        private ?ProjectAuthLockoutService $lockoutService = null,
+        private ?AuditService $auditService = null,
     ) {
         $this->customFieldsSanitizer ??= new EndUserCustomFieldsSanitizer($this->translator);
     }
@@ -315,19 +319,65 @@ class EndUserAdminController extends AbstractController
         return $this->json(['success' => true, 'status' => $newStatus]);
     }
 
+    // ─── RESET 2FA ───────────────────────────────────────────────────────────
+
+    #[Route('/{endUserUuid}/reset-2fa', name: 'reset_2fa', requirements: ['endUserUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'], methods: ['POST'])]
+    public function resetTwoFactor(string $uuid, string $endUserUuid, Request $request): JsonResponse
+    {
+        $project = $this->resolveProject($uuid, $request);
+        if ($project instanceof JsonResponse) return $project;
+
+        $endUser = $this->endUserRepository->findOneBy(['uuid' => $endUserUuid, 'project' => $project]);
+        if (!$endUser) return $this->json(['error' => $this->trans('enduser.admin.not_found', [], 'Not found')], 404);
+
+        if (!$endUser->twoFactorEnabled) {
+            return $this->json(['error' => $this->trans('admin_end_users.2fa_not_enabled', [], 'Two-factor authentication is not enabled for this end user.')], 400);
+        }
+
+        $endUser->twoFactorEnabled = false;
+        $endUser->twoFactorMethod = null;
+        $endUser->twoFactorSecret = null;
+        $endUser->twoFactorBackupCodes = null;
+        $endUser->twoFactorConfirmedAt = null;
+        $this->em->flush();
+
+        if ($this->lockoutService !== null) {
+            $this->lockoutService->clearAttempts('enduser_2fa:' . $endUser->uuid?->toString());
+            $this->lockoutService->clearAttempts('enduser_2fa_backup:' . $endUser->uuid?->toString());
+        }
+
+        $this->auditService?->log(
+            toolName: 'admin_enduser_2fa_reset',
+            project: $project,
+            input: ['end_user_uuid' => $endUserUuid, 'email' => $endUser->email],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $this->security->getUser()?->getUserIdentifier() ?? 'system',
+            source: 'enduser_admin'
+        );
+        $this->auditService?->flush();
+
+        return $this->json([
+            'message' => $this->trans('admin_end_users.2fa_reset_success', ['%email%' => $endUser->email], "Two-factor authentication has been successfully reset for end user {$endUser->email}."),
+            'two_factor_enabled' => false,
+        ]);
+    }
+
     // ─── Serializer ──────────────────────────────────────────────────────────
 
     private function serializeUser(EndUser $eu): array
     {
         return [
-            'uuid'          => $eu->uuid?->toString(),
-            'email'         => $eu->email,
-            'name'          => $eu->username,
-            'status'        => $eu->status,
-            'avatar_url'    => $eu->avatarUrl,
-            'custom_fields' => $eu->customFields,
-            'created_at'    => $eu->createdAt?->format(\DateTimeInterface::ATOM),
-            'updated_at'    => $eu->updatedAt?->format(\DateTimeInterface::ATOM),
+            'uuid'               => $eu->uuid?->toString(),
+            'email'              => $eu->email,
+            'name'               => $eu->username,
+            'status'             => $eu->status,
+            'avatar_url'         => $eu->avatarUrl,
+            'custom_fields'      => $eu->customFields,
+            'two_factor_enabled' => $eu->twoFactorEnabled,
+            'two_factor_method'  => $eu->twoFactorMethod,
+            'created_at'         => $eu->createdAt?->format(\DateTimeInterface::ATOM),
+            'updated_at'         => $eu->updatedAt?->format(\DateTimeInterface::ATOM),
         ];
     }
 }

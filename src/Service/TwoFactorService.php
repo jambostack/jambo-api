@@ -58,7 +58,7 @@ class TwoFactorService
         return ['hashes' => $hashes, 'plaintext' => $plaintext];
     }
 
-    /** Vérifie et consomme un code de secours en temps constant (résistant aux attaques temporelles). Retourne true si valide, false sinon. */
+    /** Vérifie et consomme un code de secours en temps constant (résistant aux attaques temporelles et force brute distribuée). Retourne true si valide, false sinon. */
     public function verifyAndConsumeBackupCode(array &$storedCodes, string $code): bool
     {
         if (strlen($code) > self::MAX_CODE_LENGTH) {
@@ -66,7 +66,7 @@ class TwoFactorService
         }
 
         $clean = strtoupper(str_replace(['-', ' '], '', $code));
-        if ($clean === '' || !ctype_alnum($clean)) {
+        if (strlen($clean) !== (self::BACKUP_CODE_BYTES * 2) || !ctype_alnum($clean)) {
             return false;
         }
 
@@ -90,6 +90,34 @@ class TwoFactorService
         }
 
         return false;
+    }
+
+    /** Détecte si un code soumis correspond au format syntaxique d'une clé de récupération */
+    public function isBackupCodeFormat(string $code): bool
+    {
+        if (strlen($code) > self::MAX_CODE_LENGTH) {
+            return false;
+        }
+        $clean = strtoupper(str_replace(['-', ' '], '', $code));
+        return strlen($clean) === (self::BACKUP_CODE_BYTES * 2) && ctype_alnum($clean);
+    }
+
+    /** Retourne le nombre de codes de secours encore non consommés */
+    public function getRemainingBackupCodesCount(array $storedCodes): int
+    {
+        $count = 0;
+        foreach ($storedCodes as $entry) {
+            if (is_array($entry) && !empty($entry['hash']) && empty($entry['used'])) {
+                $count++;
+            }
+        }
+        return $count;
+    }
+
+    /** Indique si des codes de secours restent disponibles */
+    public function hasRemainingBackupCodes(array $storedCodes): bool
+    {
+        return $this->getRemainingBackupCodesCount($storedCodes) > 0;
     }
 
     /** Vérification timing-safe d'un code email */

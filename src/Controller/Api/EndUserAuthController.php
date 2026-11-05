@@ -382,6 +382,7 @@ class EndUserAuthController extends AbstractController
         }
 
         $tfaLockoutKey = 'enduser_2fa:' . $endUser->uuid?->toString();
+        $tfaBackupLockoutKey = 'enduser_2fa_backup:' . $endUser->uuid?->toString();
         $tfaIpLockoutKey = 'enduser_2fa_ip:' . $projectId . ':' . ($request->getClientIp() ?: '127.0.0.1');
 
         if ($this->lockoutService !== null && ($this->lockoutService->isLockedOut($tfaLockoutKey) || $this->lockoutService->isLockedOut($tfaIpLockoutKey))) {
@@ -394,17 +395,29 @@ class EndUserAuthController extends AbstractController
             ], 429, ['Retry-After' => (string) $retryAfter]);
         }
 
+        $isBackup = (!empty($data['use_backup'])) || $this->twoFactorService->isBackupCodeFormat($code);
+        if ($isBackup && $this->lockoutService !== null && $this->lockoutService->isLockedOut($tfaBackupLockoutKey)) {
+            $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($tfaBackupLockoutKey);
+            return new JsonResponse([
+                'error' => $this->trans('enduser.auth.backup_codes_locked', ['%seconds%' => (string) $retryAfter], "Too many invalid backup code attempts. Recovery codes are temporarily locked. Please retry in {$retryAfter} seconds."),
+            ], 429, ['Retry-After' => (string) $retryAfter]);
+        }
+
         if (strlen($code) > \App\Service\TwoFactorService::MAX_CODE_LENGTH) {
             $this->lockoutService?->recordTieredFailedAttempt($tfaLockoutKey, [3 => 180, 5 => 600, 8 => 1800]);
             $this->lockoutService?->recordTieredFailedAttempt($tfaIpLockoutKey, [5 => 180, 10 => 600, 15 => 1800]);
+            if ($isBackup) {
+                $this->lockoutService?->recordTieredFailedAttempt($tfaBackupLockoutKey, [3 => 300, 5 => 900, 8 => 3600]);
+            }
             return $this->json(['error' => $this->trans('enduser.auth.invalid_code', [], 'Invalid code')], 422);
         }
 
         // Verify the code
         $valid = false;
-        if ($endUser->twoFactorMethod === 'totp') {
+        $remainingBackupCodes = null;
+        if ($endUser->twoFactorMethod === 'totp' && !$isBackup) {
             $valid = $this->twoFactorService->verifyTotp($endUser->twoFactorSecret ?? '', $code);
-        } elseif ($endUser->twoFactorMethod === 'email') {
+        } elseif ($endUser->twoFactorMethod === 'email' && !$isBackup) {
             // Le JWT contient un hash du code (pas le code en clair)
             $storedHash = $claims['ech'] ?? null;
             $valid = $this->twoFactorService->verifyEmailHash($storedHash, $code);
@@ -417,16 +430,21 @@ class EndUserAuthController extends AbstractController
             if ($valid) {
                 $endUser->twoFactorBackupCodes = $codes;
                 $this->em->flush();
+                $remainingBackupCodes = $this->twoFactorService->getRemainingBackupCodesCount($codes);
             }
         }
 
         if (!$valid) {
             $this->lockoutService?->recordTieredFailedAttempt($tfaLockoutKey, [3 => 180, 5 => 600, 8 => 1800]);
             $this->lockoutService?->recordTieredFailedAttempt($tfaIpLockoutKey, [5 => 180, 10 => 600, 15 => 1800]);
+            if ($isBackup) {
+                $this->lockoutService?->recordTieredFailedAttempt($tfaBackupLockoutKey, [3 => 300, 5 => 900, 8 => 3600]);
+            }
             return $this->json(['error' => $this->trans('enduser.auth.invalid_code', [], 'Invalid code')], 422);
         }
 
         $this->lockoutService?->clearAttempts($tfaLockoutKey);
+        $this->lockoutService?->clearAttempts($tfaBackupLockoutKey);
         $this->lockoutService?->clearAttempts($tfaIpLockoutKey);
 
         $session = $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));

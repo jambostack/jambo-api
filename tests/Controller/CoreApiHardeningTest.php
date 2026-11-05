@@ -787,8 +787,8 @@ class CoreApiHardeningTest extends WebTestCase
         $client->request('POST', '/register', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
             'name' => 'New Guy',
             'email' => $email,
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Str0ng!P@ssw0rd#2026',
+            'password_confirmation' => 'Str0ng!P@ssw0rd#2026',
         ]));
 
         $this->assertSame(422, $client->getResponse()->getStatusCode());

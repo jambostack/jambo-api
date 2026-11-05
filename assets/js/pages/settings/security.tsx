@@ -139,8 +139,10 @@ export default function Security() {
 
     const regenerateCodes = async () => {
         setError(''); setMessage('');
+        const pw = prompt(t('settings.security.enter_pw_confirm'));
+        if (!pw) return;
         try {
-            const data = await api('/api/settings/security/backup-codes');
+            const data = await api('/api/settings/security/backup-codes', { password: pw });
             setMessage(data.message);
             setBackupCodes(data.backup_codes ?? []);
         } catch (e: any) { setError(e.message); }

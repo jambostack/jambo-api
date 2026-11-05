@@ -3645,4 +3645,15 @@ return [
     'auth.social.error_failed' => 'Échec de l\'authentification sociale. Veuillez réessayer.',
     'auth.social.cancelled' => 'La connexion sociale a été annulée.',
     'oidc.cancelled' => 'La connexion SSO a été annulée.',
+
+    // ─── Cycle 86+: 2FA & Backup Codes Hardening Against Distributed Brute-Force ───
+    'auth.2fa.account_locked_retry_after' => 'Trop de tentatives 2FA infructueuses sur l\'ensemble des sessions. Défi de compte verrouillé pendant %seconds% secondes.',
+    'auth.2fa.backup_locked_retry_after' => 'Trop de tentatives infructueuses avec des codes de secours. Vérification des clés de récupération verrouillée pendant %seconds% secondes.',
+    'auth.2fa.backup_codes_depleted_warning' => 'Attention : il ne vous reste que %count% code(s) de secours. Veuillez régénérer vos clés rapidement.',
+    'user_management.2fa_reset_success' => 'L\'authentification à deux facteurs a été réinitialisée avec succès pour %email%.',
+    'user_management.2fa_not_enabled' => 'L\'authentification à deux facteurs n\'est pas activée pour cet utilisateur.',
+    'user_management.cannot_reset_self_2fa_via_admin' => 'Vous ne pouvez pas réinitialiser votre propre 2FA via les actions administratives. Utilisez les paramètres de sécurité de votre profil.',
+    'admin_end_users.2fa_reset_success' => 'L\'authentification à deux facteurs a été réinitialisée avec succès pour l\'utilisateur final %email%.',
+    'admin_end_users.2fa_not_enabled' => 'L\'authentification à deux facteurs n\'est pas activée pour cet utilisateur final.',
+    'enduser.auth.backup_codes_locked' => 'Trop de tentatives de codes de secours invalides. Les clés de récupération sont temporairement verrouillées. Veuillez réessayer dans %seconds% secondes.',
 ];

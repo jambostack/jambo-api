@@ -3627,4 +3627,15 @@ return [
     'auth.social.error_failed' => 'Error en la autenticación social. Inténtelo de nuevo.',
     'auth.social.cancelled' => 'El inicio de sesión social ha sido cancelado.',
     'oidc.cancelled' => 'El inicio de sesión SSO ha sido cancelado.',
+
+    // ─── Cycle 86+: 2FA & Backup Codes Hardening Against Distributed Brute-Force ───
+    'auth.2fa.account_locked_retry_after' => 'Demasiados intentos fallidos de 2FA en todas las sesiones. Desafío de cuenta bloqueado durante %seconds% segundos.',
+    'auth.2fa.backup_locked_retry_after' => 'Demasiados intentos fallidos con códigos de respaldo. Verificación de códigos de recuperación bloqueada durante %seconds% segundos.',
+    'auth.2fa.backup_codes_depleted_warning' => 'Advertencia: Solo quedan %count% código(s) de respaldo. Regenere sus claves a la brevedad.',
+    'user_management.2fa_reset_success' => 'La autenticación de dos factores se ha restablecido con éxito para %email%.',
+    'user_management.2fa_not_enabled' => 'La autenticación de dos factores no está activada para este usuario.',
+    'user_management.cannot_reset_self_2fa_via_admin' => 'No puede restablecer su propio 2FA mediante acciones administrativas. Utilice la configuración de seguridad de su perfil.',
+    'admin_end_users.2fa_reset_success' => 'La autenticación de dos factores se ha restablecido con éxito para el usuario final %email%.',
+    'admin_end_users.2fa_not_enabled' => 'La autenticación de dos factores no está activada para este usuario final.',
+    'enduser.auth.backup_codes_locked' => 'Demasiados intentos inválidos de códigos de respaldo. Las claves de recuperación están temporalmente bloqueadas. Vuelva a intentarlo en %seconds% segundos.',
 ];

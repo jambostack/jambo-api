@@ -16,6 +16,8 @@ trait EndUserSerializerTrait
             'status'        => $eu->status,
             'avatar_url'    => $eu->avatarUrl,
             'custom_fields' => $eu->customFields,
+            'two_factor_enabled' => $eu->twoFactorEnabled,
+            'two_factor_method'  => $eu->twoFactorMethod,
             'password_changed_at' => $eu->passwordChangedAt?->format(\DateTimeInterface::ATOM),
             'created_at'    => $eu->createdAt->format(\DateTimeInterface::ATOM),
             'updated_at'    => $eu->updatedAt->format(\DateTimeInterface::ATOM),

@@ -2,6 +2,8 @@
 namespace App\Controller\Settings;
 
 use App\Entity\User;
+use App\Service\AuditService;
+use App\Service\ProjectAuthLockoutService;
 use App\Service\SocialLoginService;
 use App\Service\TwoFactorService;
 use App\Service\TwoFactorMailer;
@@ -41,6 +43,8 @@ class SecurityController extends AbstractController
         #[Autowire(service: 'limiter.two_factor_limiter')]
         private ?RateLimiterFactory $rateLimiter = null,
         private ?TranslatorInterface $translator = null,
+        private ?ProjectAuthLockoutService $lockoutService = null,
+        private ?AuditService $auditService = null,
     ) {}
 
     private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
@@ -144,17 +148,39 @@ class SecurityController extends AbstractController
             return $this->secureJson(['error' => $this->trans('security.2fa.totp_setup_required', [], 'Run TOTP setup first.')], 400);
         }
 
+        $userLockoutKey = 'security_2fa_user:' . $user->id;
+        if ($this->lockoutService !== null && $this->lockoutService->isLockedOut($userLockoutKey)) {
+            $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($userLockoutKey);
+            return $this->secureJson([
+                'error' => $this->trans('security.2fa.too_many_attempts', [], 'Too many requests. Please wait 60 seconds.'),
+                'retry_after' => $retryAfter,
+            ], 429);
+        }
+
         $data = $this->getJsonData($request);
         $code = trim((string) ($data['code'] ?? ''));
         if (strlen($code) > self::MAX_CODE_LENGTH || !$this->twoFactor->verifyTotp($user->twoFactorSecret, $code)) {
+            $this->lockoutService?->recordTieredFailedAttempt($userLockoutKey, [5 => 300, 10 => 900, 15 => 3600]);
             return $this->secureJson(['error' => $this->trans('security.2fa.invalid_code', [], 'Invalid code. Please try again.')], 422);
         }
 
+        $this->lockoutService?->clearAttempts($userLockoutKey);
         $backupResult = $this->twoFactor->generateBackupCodes();
         $user->twoFactorEnabled = true;
         $user->twoFactorConfirmedAt = new \DateTimeImmutable();
         $user->twoFactorBackupCodes = $backupResult['hashes'];
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: '2fa_enable_totp',
+            project: null,
+            input: ['ip' => $request->getClientIp()],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $user->getUserIdentifier(),
+            source: 'security_settings'
+        );
+        $this->auditService?->flush();
 
         return $this->secureJson([
             'message' => $this->trans('security.2fa.enabled_success', [], '2FA enabled successfully.'),
@@ -209,6 +235,15 @@ class SecurityController extends AbstractController
             return $this->secureJson(['error' => $this->trans('security.2fa.email_setup_required', [], 'Run email setup first.')], 400);
         }
 
+        $userLockoutKey = 'security_2fa_user:' . $user->id;
+        if ($this->lockoutService !== null && $this->lockoutService->isLockedOut($userLockoutKey)) {
+            $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($userLockoutKey);
+            return $this->secureJson([
+                'error' => $this->trans('security.2fa.too_many_attempts', [], 'Too many requests. Please wait 60 seconds.'),
+                'retry_after' => $retryAfter,
+            ], 429);
+        }
+
         $data = $this->getJsonData($request);
         $code = trim((string) ($data['code'] ?? ''));
         $session = $this->requestStack->getCurrentRequest()->getSession();
@@ -222,6 +257,8 @@ class SecurityController extends AbstractController
         if (strlen($code) > self::MAX_CODE_LENGTH || !$this->twoFactor->verifyEmailCode($storedCode, $expires, $code)) {
             $attempts = ((int) $session->get('security_email_attempts', 0)) + 1;
             $session->set('security_email_attempts', $attempts);
+            $this->lockoutService?->recordTieredFailedAttempt($userLockoutKey, [5 => 300, 10 => 900, 15 => 3600]);
+
             if ($attempts >= self::MAX_FAILED_ATTEMPTS) {
                 $session->remove('two_factor_email_code');
                 $session->remove('two_factor_email_expires');
@@ -234,12 +271,24 @@ class SecurityController extends AbstractController
         $session->remove('two_factor_email_code');
         $session->remove('two_factor_email_expires');
         $session->remove('security_email_attempts');
+        $this->lockoutService?->clearAttempts($userLockoutKey);
 
         $backupResult = $this->twoFactor->generateBackupCodes();
         $user->twoFactorEnabled = true;
         $user->twoFactorConfirmedAt = new \DateTimeImmutable();
         $user->twoFactorBackupCodes = $backupResult['hashes'];
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: '2fa_enable_email',
+            project: null,
+            input: ['ip' => $request->getClientIp()],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $user->getUserIdentifier(),
+            source: 'security_settings'
+        );
+        $this->auditService?->flush();
 
         return $this->secureJson([
             'message' => $this->trans('security.2fa.enabled_success', [], '2FA enabled successfully.'),
@@ -272,6 +321,21 @@ class SecurityController extends AbstractController
         $user->twoFactorConfirmedAt = null;
         $this->em->flush();
 
+        $this->lockoutService?->clearAttempts('user_2fa_account:' . $user->id);
+        $this->lockoutService?->clearAttempts('user_2fa_backup:' . $user->id);
+        $this->lockoutService?->clearAttempts('security_2fa_user:' . $user->id);
+
+        $this->auditService?->log(
+            toolName: '2fa_disable',
+            project: null,
+            input: ['ip' => $request->getClientIp()],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $user->getUserIdentifier(),
+            source: 'security_settings'
+        );
+        $this->auditService?->flush();
+
         return $this->secureJson(['message' => $this->trans('security.2fa.disabled_success', [], '2FA disabled successfully.')]);
     }
 
@@ -287,9 +351,26 @@ class SecurityController extends AbstractController
             return $this->secureJson(['error' => $this->trans('security.2fa.not_enabled', [], '2FA is not enabled.')], 400);
         }
 
+        $data = $this->getJsonData($request);
+        $password = (string) ($data['password'] ?? '');
+        if ($password === '' || strlen($password) > 4096 || !$this->hasher->isPasswordValid($user, $password)) {
+            return $this->secureJson(['error' => $this->trans('security.2fa.invalid_password', [], 'Invalid password.')], 422);
+        }
+
         $backupResult = $this->twoFactor->generateBackupCodes();
         $user->twoFactorBackupCodes = $backupResult['hashes'];
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: '2fa_regenerate_backup_codes',
+            project: null,
+            input: ['ip' => $request->getClientIp()],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $user->getUserIdentifier(),
+            source: 'security_settings'
+        );
+        $this->auditService?->flush();
 
         return $this->secureJson([
             'message' => $this->trans('security.2fa.backup_codes_regenerated', [], 'Backup codes regenerated.'),

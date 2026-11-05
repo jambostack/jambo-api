@@ -3627,4 +3627,15 @@ return [
     'auth.social.error_failed' => 'Social authentication failed. Please try again.',
     'auth.social.cancelled' => 'Social login was cancelled.',
     'oidc.cancelled' => 'SSO login was cancelled.',
+
+    // ─── Cycle 86+: 2FA & Backup Codes Hardening Against Distributed Brute-Force ───
+    'auth.2fa.account_locked_retry_after' => 'Too many failed 2FA attempts across sessions. Account challenge locked for %seconds% seconds.',
+    'auth.2fa.backup_locked_retry_after' => 'Too many failed backup code attempts. Recovery code verification locked for %seconds% seconds.',
+    'auth.2fa.backup_codes_depleted_warning' => 'Warning: Only %count% backup recovery code(s) remaining. Please regenerate your codes promptly.',
+    'user_management.2fa_reset_success' => 'Two-factor authentication has been successfully reset for %email%.',
+    'user_management.2fa_not_enabled' => 'Two-factor authentication is not enabled for this user.',
+    'user_management.cannot_reset_self_2fa_via_admin' => 'You cannot reset your own 2FA via administrative actions. Use your profile security settings.',
+    'admin_end_users.2fa_reset_success' => 'Two-factor authentication has been successfully reset for end user %email%.',
+    'admin_end_users.2fa_not_enabled' => 'Two-factor authentication is not enabled for this end user.',
+    'enduser.auth.backup_codes_locked' => 'Too many invalid backup code attempts. Recovery codes are temporarily locked. Please retry in %seconds% seconds.',
 ];

@@ -3,6 +3,8 @@ namespace App\Controller\Auth;
 
 use App\Controller\InertiaController;
 use App\Entity\User;
+use App\Service\AuditService;
+use App\Service\ProjectAuthLockoutService;
 use App\Service\TwoFactorService;
 use App\Service\TwoFactorMailer;
 use Doctrine\ORM\EntityManagerInterface;
@@ -37,6 +39,8 @@ class TwoFactorChallengeController extends InertiaController
         private TokenStorageInterface $tokenStorage,
         #[Autowire(service: 'limiter.two_factor_limiter')]
         private RateLimiterFactory $twoFactorLimiter,
+        private ?ProjectAuthLockoutService $lockoutService = null,
+        private ?AuditService $auditService = null,
     ) {}
 
     private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
@@ -82,13 +86,35 @@ class TwoFactorChallengeController extends InertiaController
             return $this->redirectToRoute('app_login');
         }
 
-        // Rate limiting: keyed by IP and userId
+        // Distributed Brute-Force & Rate Limiting protection
         $userId = (string) $session->get('two_factor_user_id');
-        $limiter = $this->twoFactorLimiter->create(($request->getClientIp() ?: '127.0.0.1') . '_' . $userId);
+        $ip = $request->getClientIp() ?: '127.0.0.1';
+
+        if ($this->lockoutService !== null) {
+            $accountKey = 'user_2fa_account:' . $userId;
+            $ipKey = 'user_2fa_ip:' . $ip;
+
+            if ($this->lockoutService->isLockedOut($accountKey)) {
+                $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($accountKey);
+                $this->clearTwoFactorSession($session);
+                return $this->inertia($request, 'auth/two-factor-challenge', [
+                    'error' => $this->trans('auth.2fa.account_locked_retry_after', ['%seconds%' => (string) $retryAfter], "Too many failed 2FA attempts across sessions. Account challenge locked for {$retryAfter} seconds."),
+                ], 429);
+            }
+
+            if ($this->lockoutService->isLockedOut($ipKey)) {
+                $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($ipKey);
+                return $this->inertia($request, 'auth/two-factor-challenge', [
+                    'error' => $this->trans('auth.2fa.too_many_attempts', [], 'Too many attempts. Please wait 60 seconds.'),
+                ], 429);
+            }
+        }
+
+        $limiter = $this->twoFactorLimiter->create($ip . '_' . $userId);
         if (!$limiter->consume()->isAccepted()) {
             return $this->inertia($request, 'auth/two-factor-challenge', [
                 'error' => 'auth.2fa.too_many_attempts',
-            ]);
+            ], 429);
         }
 
         $user = $this->getUserById((int) $userId);
@@ -106,10 +132,21 @@ class TwoFactorChallengeController extends InertiaController
             $postData = $request->request->all();
         }
         $code = trim((string) ($postData['code'] ?? ''));
-        $useBackup = (bool) ($postData['use_backup'] ?? false);
+        $useBackup = (bool) ($postData['use_backup'] ?? false) || $this->twoFactor->isBackupCodeFormat($code);
+
+        // Dedicated distributed brute-force protection for static backup recovery keys
+        if ($useBackup && $this->lockoutService !== null) {
+            $backupKey = 'user_2fa_backup:' . $userId;
+            if ($this->lockoutService->isLockedOut($backupKey)) {
+                $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($backupKey);
+                return $this->inertia($request, 'auth/two-factor-challenge', [
+                    'error' => $this->trans('auth.2fa.backup_locked_retry_after', ['%seconds%' => (string) $retryAfter], "Too many failed backup code attempts. Recovery code verification locked for {$retryAfter} seconds."),
+                ], 429);
+            }
+        }
 
         if (strlen($code) > TwoFactorService::MAX_CODE_LENGTH) {
-            return $this->handleFailedAttempt($session, $request);
+            return $this->handleFailedAttempt($session, $request, $userId, $useBackup);
         }
 
         $valid = false;
@@ -135,7 +172,27 @@ class TwoFactorChallengeController extends InertiaController
         }
 
         if (!$valid) {
-            return $this->handleFailedAttempt($session, $request);
+            return $this->handleFailedAttempt($session, $request, $userId, $useBackup);
+        }
+
+        // Clear lockouts on success
+        if ($this->lockoutService !== null) {
+            $this->lockoutService->clearAttempts('user_2fa_account:' . $userId);
+            $this->lockoutService->clearAttempts('user_2fa_backup:' . $userId);
+            $this->lockoutService->clearAttempts('user_2fa_ip:' . $ip);
+        }
+
+        if ($this->auditService !== null) {
+            $this->auditService->log(
+                toolName: 'auth_2fa_verify',
+                project: null,
+                input: ['userId' => $userId, 'method' => $useBackup ? 'backup_code' : $user->twoFactorMethod, 'ip' => $ip],
+                output: ['success' => true],
+                status: 'success',
+                createdBy: $user->getUserIdentifier(),
+                source: 'two_factor_challenge'
+            );
+            $this->auditService->flush();
         }
 
         // Nettoyer la session 2FA
@@ -184,10 +241,32 @@ class TwoFactorChallengeController extends InertiaController
         return $this->secureJson(['message' => $this->trans('auth.2fa.code_sent', [], 'Code sent.')]);
     }
 
-    private function handleFailedAttempt($session, Request $request): Response
+    private function handleFailedAttempt($session, Request $request, string $userId, bool $useBackup = false): Response
     {
         $attempts = ((int) $session->get('two_factor_failed_attempts', 0)) + 1;
         $session->set('two_factor_failed_attempts', $attempts);
+
+        $ip = $request->getClientIp() ?: '127.0.0.1';
+        if ($this->lockoutService !== null) {
+            $this->lockoutService->recordTieredFailedAttempt('user_2fa_account:' . $userId, [5 => 300, 10 => 900, 15 => 3600]);
+            $this->lockoutService->recordTieredFailedAttempt('user_2fa_ip:' . $ip, [10 => 300, 20 => 900, 30 => 3600]);
+            if ($useBackup) {
+                $this->lockoutService->recordTieredFailedAttempt('user_2fa_backup:' . $userId, [3 => 300, 5 => 900, 8 => 3600]);
+            }
+        }
+
+        if ($this->auditService !== null) {
+            $this->auditService->log(
+                toolName: 'auth_2fa_failure',
+                project: null,
+                input: ['userId' => $userId, 'use_backup' => $useBackup, 'ip' => $ip, 'attempt' => $attempts],
+                output: ['error' => 'invalid_code'],
+                status: 'failed',
+                createdBy: (string) $userId,
+                source: 'two_factor_challenge'
+            );
+            $this->auditService->flush();
+        }
 
         if ($attempts >= self::MAX_FAILED_ATTEMPTS) {
             $this->clearTwoFactorSession($session);
