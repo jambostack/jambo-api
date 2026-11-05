@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.136] — 2026-11-05
+
+### Security Hardening on MCP (Model Context Protocol), Rate Limiting, Audit Trail & Strict i18n (Phase 88 — Cycle #73)
+- **McpController Hardening**:
+  - Protected `GET /mcp` (info/capabilities discovery endpoint) with `mcpLimiter` rate limiter (60 req/min) to prevent automated discovery scraping and DoS attacks.
+  - Safe client IP resolution with fallback (`$request->getClientIp() ?: '127.0.0.1'`) across all MCP endpoints (`info`, `handle`, `handleProject`).
+  - Integrated `AuditService` in `McpController` for security audit trail logging on authentication failure (`mcp_auth_failure`) and project tenant isolation denials (`mcp_access_denied`).
+  - Wired `AuditService` and `TranslatorInterface` propagation directly to the underlying `JamboApiMcpServer`.
+- **McpServer & JamboApiMcpServer Strict i18n & Error Handling**:
+  - Enforced strict JSON-RPC root validation: rejecting numeric list payloads (`array_is_list`) via `-32600` `mcp.invalid_root`.
+  - Replaced all hardcoded exception messages and errors with parameterized translation keys via Symfony `TranslatorInterface` (`mcp.unknown_method`, `mcp.unknown_tool`, `mcp.tool_not_available`, `mcp.unknown_resource`, `mcp.resource_not_available`, `mcp.parse_error`, `mcp.invalid_root`, `mcp.invalid_id`, `mcp.id_too_long`, `mcp.invalid_version`, `mcp.method_required`, `mcp.method_too_long`, `mcp.invalid_params`, `mcp.internal_error`, `mcp.collection_not_found`, `mcp.entry_not_found`, `mcp.singleton_entry_exists`, `mcp.field_error`, `mcp.field_exception`, `mcp.source_entry_not_found`, `mcp.singleton_duplicate_error`, `mcp.field_not_found`, `mcp.insufficient_scope`, `mcp.template_not_found`, `mcp.media_not_found`, `mcp.version_not_found`, `mcp.access_denied_project`).
+  - Maintained 100% translation dictionary parity across all 4 languages (`messages.en.php`, `messages.fr.php`, `messages.es.php`, `messages.ar.php`).
+- **Test Suite**:
+  - Added comprehensive `McpHardeningAndSecurityTest` with 10 assertions verifying capabilities info headers, empty body rejection, malformed JSON handling, list payload rejection, unknown method/tool handling, project isolation, and unauthenticated/member access controls.
+
 ## [1.26.135] — 2026-11-05
 
 ### Security Hardening on Share, Preview, Column Settings, ApiDocs & Plugins (Phase 87 — Cycle #72)

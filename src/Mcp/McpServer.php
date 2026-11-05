@@ -3,6 +3,7 @@
 namespace App\Mcp;
 
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class McpServer
 {
@@ -18,10 +19,23 @@ class McpServer
     private ?\App\Service\AuditService $audit = null;
     private bool $auditEnabled = false;
 
-    public function __construct(string $name, string $version = '1.0.0')
-    {
+    public function __construct(
+        string $name,
+        string $version = '1.0.0',
+        protected ?TranslatorInterface $translator = null,
+    ) {
         $this->serverName = $name;
         $this->serverVersion = $version;
+    }
+
+    public function setTranslator(?TranslatorInterface $translator): void
+    {
+        $this->translator = $translator;
+    }
+
+    protected function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
     }
 
     public function setAuditService(\App\Service\AuditService $auditService): void
@@ -48,36 +62,36 @@ class McpServer
         try {
             $request = json_decode($jsonBody, true, 64, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
-            return $this->error(null, -32700, 'Parse error: ' . $e->getMessage());
+            return $this->error(null, -32700, $this->trans('mcp.parse_error', ['%error%' => $e->getMessage()], 'Parse error: ' . $e->getMessage()));
         }
 
-        if (!is_array($request)) {
-            return $this->error(null, -32600, 'Invalid Request: root must be a JSON object');
+        if (!is_array($request) || (array_is_list($request) && !empty($request))) {
+            return $this->error(null, -32600, $this->trans('mcp.invalid_root', [], 'Invalid Request: root must be a JSON object.'));
         }
 
         $id = $request['id'] ?? null;
         if ($id !== null && !is_string($id) && !is_int($id)) {
-            return $this->error(null, -32600, 'Invalid Request: id must be a string, integer or null');
+            return $this->error(null, -32600, $this->trans('mcp.invalid_id', [], 'Invalid Request: id must be a string, integer or null.'));
         }
         if (is_string($id) && strlen($id) > 256) {
-            return $this->error(null, -32600, 'Invalid Request: id exceeds maximum length');
+            return $this->error(null, -32600, $this->trans('mcp.id_too_long', [], 'Invalid Request: id exceeds maximum length.'));
         }
 
         if (isset($request['jsonrpc']) && $request['jsonrpc'] !== '2.0') {
-            return $this->error($id, -32600, 'Invalid Request: jsonrpc version must be "2.0"');
+            return $this->error($id, -32600, $this->trans('mcp.invalid_version', [], 'Invalid Request: jsonrpc version must be "2.0".'));
         }
 
         $method = $request['method'] ?? '';
         if (!is_string($method) || empty($method)) {
-            return $this->error($id, -32600, 'Invalid Request: method required');
+            return $this->error($id, -32600, $this->trans('mcp.method_required', [], 'Invalid Request: method required.'));
         }
         if (strlen($method) > 128) {
-            return $this->error($id, -32600, 'Invalid Request: method name too long');
+            return $this->error($id, -32600, $this->trans('mcp.method_too_long', [], 'Invalid Request: method name too long.'));
         }
 
         $params = $request['params'] ?? [];
         if (!is_array($params)) {
-            return $this->error($id, -32600, 'Invalid Request: params must be an object or array');
+            return $this->error($id, -32600, $this->trans('mcp.invalid_params', [], 'Invalid Request: params must be an object or array.'));
         }
 
         try {
@@ -86,7 +100,7 @@ class McpServer
         } catch (McpException $e) {
             return $this->error($id, $e->getCode(), $e->getMessage());
         } catch (\Throwable $e) {
-            return $this->error($id, -32603, 'Internal error: ' . $e->getMessage());
+            return $this->error($id, -32603, $this->trans('mcp.internal_error', ['%error%' => $e->getMessage()], 'Internal error: ' . $e->getMessage()));
         }
     }
 
@@ -100,7 +114,7 @@ class McpServer
             'resources/list' => $this->handleResourcesList($context),
             'resources/read' => $this->handleResourcesRead($params, $context),
             'ping' => ['pong' => true],
-            default => throw new McpException("Méthode inconnue: $method", -32601),
+            default => throw new McpException($this->trans('mcp.unknown_method', ['%method%' => $method], "Method not found: $method"), -32601),
         };
     }
 
@@ -148,12 +162,12 @@ class McpServer
         $arguments = is_array($params['arguments'] ?? null) ? $params['arguments'] : [];
 
         if (!isset($this->tools[$toolName])) {
-            throw new McpException("Outil inconnu: $toolName", -32602);
+            throw new McpException($this->trans('mcp.unknown_tool', ['%tool%' => $toolName], "Tool not found: $toolName"), -32602);
         }
 
         $tool = $this->tools[$toolName];
         if (!$tool->isAvailable($context)) {
-            throw new McpException("Outil non disponible dans ce contexte", -32001);
+            throw new McpException($this->trans('mcp.tool_not_available', [], 'Tool not available in this context.'), -32001);
         }
 
         $startTime = microtime(true);
@@ -236,12 +250,12 @@ class McpServer
         $uri = $params['uri'] ?? '';
 
         if (!isset($this->resources[$uri])) {
-            throw new McpException("Ressource inconnue: $uri", -32602);
+            throw new McpException($this->trans('mcp.unknown_resource', ['%uri%' => $uri], "Resource not found: $uri"), -32602);
         }
 
         $resource = $this->resources[$uri];
         if (!$resource->isAvailable($context)) {
-            throw new McpException("Ressource non disponible", -32001);
+            throw new McpException($this->trans('mcp.resource_not_available', [], 'Resource not available in this context.'), -32001);
         }
 
         $data = $resource->read($context);

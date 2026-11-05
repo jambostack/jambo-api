@@ -42,8 +42,9 @@ class JamboApiMcpServer extends McpServer
         SchemaProvisioner $provisioner,
         \App\Repository\ProjectMemberRepository $memberRepo,
         private ?\Symfony\Contracts\EventDispatcher\EventDispatcherInterface $eventDispatcher = null,
+        ?\Symfony\Contracts\Translation\TranslatorInterface $translator = null,
     ) {
-        parent::__construct('JamboApi CMS', '2.0.0');
+        parent::__construct('JamboApi CMS', '2.0.0', $translator);
 
         $this->em = $entityManager;
         $this->formatter = $formatterService;
@@ -76,7 +77,7 @@ class JamboApiMcpServer extends McpServer
                 $isAuthenticated = $ctx['authenticated'] ?? false;
 
                 if (!$user instanceof \App\Entity\User && !$isAuthenticated) {
-                    throw new McpException('Authentification requise', 401);
+                    throw new McpException($this->trans('mcp.auth_required', [], 'Authentication required.'), 401);
                 }
 
                 $qb = $this->em->getRepository(Project::class)->createQueryBuilder('p');
@@ -150,7 +151,7 @@ class JamboApiMcpServer extends McpServer
             ], ['project_uuid', 'collection_slug']),
             function (array $args, array $ctx): array {
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
-                if (!$collection) throw new McpException('Collection introuvable', 404);
+                if (!$collection) throw new McpException($this->trans('mcp.collection_not_found', [], 'Collection not found.'), 404);
 
                 $fields = [];
                 foreach ($collection->fields as $f) {
@@ -194,7 +195,7 @@ class JamboApiMcpServer extends McpServer
             ], ['project_uuid', 'collection_slug']),
             function (array $args, array $ctx): array {
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
-                if (!$collection) throw new McpException('Collection introuvable', 404);
+                if (!$collection) throw new McpException($this->trans('mcp.collection_not_found', [], 'Collection not found.'), 404);
 
                 $limit = max(1, min((int) ($args['limit'] ?? 50), 200));
                 $offset = max(0, (int) ($args['offset'] ?? 0));
@@ -227,7 +228,7 @@ class JamboApiMcpServer extends McpServer
             ], ['project_uuid', 'collection_slug', 'entry_uuid']),
             function (array $args, array $ctx): array {
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
-                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if (!$entry) throw new McpException($this->trans('mcp.entry_not_found', [], 'Entry not found.'), 404);
 
                 return $this->formatter->formatEntry($entry);
             }
@@ -246,13 +247,13 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
-                if (!$collection) throw new McpException('Collection introuvable', 404);
+                if (!$collection) throw new McpException($this->trans('mcp.collection_not_found', [], 'Collection not found.'), 404);
 
                 if ($collection->isSingleton) {
                     $existing = $this->em->getRepository(ContentEntry::class)
                         ->findOneBy(['collection' => $collection, 'deletedAt' => null]);
                     if ($existing) {
-                        throw new McpException('Cette collection singleton a déjà une entrée', 422);
+                        throw new McpException($this->trans('mcp.singleton_entry_exists', [], 'This singleton collection already has an entry.'), 422);
                     }
                 }
 
@@ -274,12 +275,12 @@ class JamboApiMcpServer extends McpServer
                     if (!$field) continue;
                     $errors = $this->fieldHelper->validateValue($field->type, $value);
                     if (!empty($errors)) {
-                        throw new McpException(sprintf("Champ '%s': %s", $fieldSlug, implode(', ', $errors)), 422);
+                        throw new McpException($this->trans('mcp.field_error', ['%field%' => $fieldSlug, '%errors%' => implode(', ', $errors)], sprintf("Field '%s': %s", $fieldSlug, implode(', ', $errors))), 422);
                     }
                     try {
                         $cfv = $this->createFieldValue($field, $value);
                     } catch (\Throwable $e) {
-                        throw new McpException(sprintf("Erreur champ '%s': %s", $fieldSlug, $e->getMessage()), 422);
+                        throw new McpException($this->trans('mcp.field_exception', ['%field%' => $fieldSlug, '%error%' => $e->getMessage()], sprintf("Field '%s' error: %s", $fieldSlug, $e->getMessage())), 422);
                     }
                     $cfv->contentEntry = $entry;
                     $entry->fieldValues->add($cfv);
@@ -312,7 +313,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
-                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if (!$entry) throw new McpException($this->trans('mcp.entry_not_found', [], 'Entry not found.'), 404);
 
                 $previousStatus = $entry->status;
                 if (isset($args['status'])) $entry->status = $args['status'];
@@ -331,7 +332,7 @@ class JamboApiMcpServer extends McpServer
                     if (!$field) continue;
                     $errors = $this->fieldHelper->validateValue($field->type, $value);
                     if (!empty($errors)) {
-                        throw new McpException(sprintf("Champ '%s': %s", $fieldSlug, implode(', ', $errors)), 422);
+                        throw new McpException($this->trans('mcp.field_error', ['%field%' => $fieldSlug, '%errors%' => implode(', ', $errors)], sprintf("Field '%s': %s", $fieldSlug, implode(', ', $errors))), 422);
                     }
                     $cfv = $entry->fieldValues->findFirst(
                         fn(int $k, ContentFieldValue $v) => $v->field?->slug === $fieldSlug
@@ -345,7 +346,7 @@ class JamboApiMcpServer extends McpServer
                             $entry->fieldValues->add($cfv);
                         }
                     } catch (\Throwable $e) {
-                        throw new McpException(sprintf("Erreur champ '%s': %s", $fieldSlug, $e->getMessage()), 422);
+                        throw new McpException($this->trans('mcp.field_exception', ['%field%' => $fieldSlug, '%error%' => $e->getMessage()], sprintf("Field '%s' error: %s", $fieldSlug, $e->getMessage())), 422);
                     }
                 }
 
@@ -378,7 +379,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
-                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if (!$entry) throw new McpException($this->trans('mcp.entry_not_found', [], 'Entry not found.'), 404);
 
                 $entry->deletedAt = new \DateTimeImmutable();
                 $this->em->flush();
@@ -404,7 +405,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
-                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if (!$entry) throw new McpException($this->trans('mcp.entry_not_found', [], 'Entry not found.'), 404);
 
                 $previousStatus = $entry->status;
                 $entry->status = 'published';
@@ -433,7 +434,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
-                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if (!$entry) throw new McpException($this->trans('mcp.entry_not_found', [], 'Entry not found.'), 404);
 
                 $previousStatus = $entry->status;
                 $entry->status = 'draft';
@@ -462,7 +463,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx, true);
-                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if (!$entry) throw new McpException($this->trans('mcp.entry_not_found', [], 'Entry not found.'), 404);
                 if ($entry->deletedAt === null) {
                     return ['restored' => false, 'message' => 'L\'entrée n\'est pas supprimée', 'uuid' => $entry->uuid?->toRfc4122()];
                 }
@@ -492,11 +493,11 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $project = $this->assertCanWriteProject($args['project_uuid'], $ctx);
                 $source = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
-                if (!$source) throw new McpException('Entrée source introuvable', 404);
+                if (!$source) throw new McpException($this->trans('mcp.source_entry_not_found', [], 'Source entry not found.'), 404);
 
                 $collection = $source->collection;
                 if ($collection->isSingleton) {
-                    throw new McpException('Impossible de dupliquer une entrée dans une collection singleton', 422);
+                    throw new McpException($this->trans('mcp.singleton_duplicate_error', [], 'Cannot duplicate an entry in a singleton collection.'), 422);
                 }
 
                 $clone = new ContentEntry();
@@ -626,7 +627,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $this->assertCanWriteSchema($args, $ctx);
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
-                if (!$collection) throw new McpException('Collection introuvable', 404);
+                if (!$collection) throw new McpException($this->trans('mcp.collection_not_found', [], 'Collection not found.'), 404);
 
                 try {
                     $field = $this->provisioner->addField($collection, [
@@ -662,7 +663,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $this->assertCanWriteSchema($args, $ctx);
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
-                if (!$collection) throw new McpException('Collection introuvable', 404);
+                if (!$collection) throw new McpException($this->trans('mcp.collection_not_found', [], 'Collection not found.'), 404);
 
                 try {
                     $dto = [];
@@ -695,7 +696,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $this->assertCanWriteSchema($args, $ctx);
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
-                if (!$collection) throw new McpException('Collection introuvable', 404);
+                if (!$collection) throw new McpException($this->trans('mcp.collection_not_found', [], 'Collection not found.'), 404);
 
                 try {
                     $this->provisioner->deleteCollection($collection);
@@ -721,10 +722,10 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $this->assertCanWriteSchema($args, $ctx);
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
-                if (!$collection) throw new McpException('Collection introuvable', 404);
+                if (!$collection) throw new McpException($this->trans('mcp.collection_not_found', [], 'Collection not found.'), 404);
 
                 $field = $this->fieldHelper->findField($collection, $args['field_slug']);
-                if (!$field) throw new McpException('Champ introuvable', 404);
+                if (!$field) throw new McpException($this->trans('mcp.field_not_found', [], 'Field not found.'), 404);
 
                 try {
                     $dto = [];
@@ -758,10 +759,10 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $this->assertCanWriteSchema($args, $ctx);
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
-                if (!$collection) throw new McpException('Collection introuvable', 404);
+                if (!$collection) throw new McpException($this->trans('mcp.collection_not_found', [], 'Collection not found.'), 404);
 
                 $field = $this->fieldHelper->findField($collection, $args['field_slug']);
-                if (!$field) throw new McpException('Champ introuvable', 404);
+                if (!$field) throw new McpException($this->trans('mcp.field_not_found', [], 'Field not found.'), 404);
 
                 try {
                     $this->provisioner->deleteField($field);
@@ -784,11 +785,11 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $user = $ctx['user'] ?? null;
                 if (!$user instanceof \App\Entity\User) {
-                    throw new McpException('Authentification requise', 401);
+                    throw new McpException($this->trans('mcp.auth_required', [], 'Authentication required.'), 401);
                 }
                 $scopes = $ctx['scopes'] ?? null;
                 if ($scopes !== null && !in_array('projects:write', $scopes, true)) {
-                    throw new McpException('Scope insuffisant', 403);
+                    throw new McpException($this->trans('mcp.insufficient_scope', [], 'Insufficient scope.'), 403);
                 }
                 try {
                     $project = $this->provisioner->createProject($user, [
@@ -818,16 +819,16 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $user = $ctx['user'] ?? null;
                 if (!$user instanceof \App\Entity\User) {
-                    throw new McpException('Authentification requise', 401);
+                    throw new McpException($this->trans('mcp.auth_required', [], 'Authentication required.'), 401);
                 }
                 $scopes = $ctx['scopes'] ?? null;
                 if ($scopes !== null && !in_array('projects:write', $scopes, true)) {
-                    throw new McpException('Scope insuffisant', 403);
+                    throw new McpException($this->trans('mcp.insufficient_scope', [], 'Insufficient scope.'), 403);
                 }
 
                 $template = $this->em->getRepository(\App\Entity\ProjectTemplate::class)
                     ->find($args['template_id']);
-                if (!$template) throw new McpException('Template introuvable', 404);
+                if (!$template) throw new McpException($this->trans('mcp.template_not_found', [], 'Template not found.'), 404);
 
                 $project = new Project();
                 $project->name = $args['project_name'];
@@ -924,7 +925,7 @@ class JamboApiMcpServer extends McpServer
             ], ['media_uuid']),
             function (array $args, array $ctx): array {
                 $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
-                if (!$media) throw new McpException('Média introuvable', 404);
+                if (!$media) throw new McpException($this->trans('mcp.media_not_found', [], 'Media not found.'), 404);
                 if ($media->project !== null) {
                     $this->assertCanReadProject($media->project->uuid->toRfc4122(), $ctx);
                 }
@@ -956,7 +957,7 @@ class JamboApiMcpServer extends McpServer
             ], ['media_uuid']),
             function (array $args, array $ctx): array {
                 $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
-                if (!$media) throw new McpException('Média introuvable', 404);
+                if (!$media) throw new McpException($this->trans('mcp.media_not_found', [], 'Media not found.'), 404);
                 if ($media->project !== null) {
                     $this->assertCanWriteProject($media->project->uuid->toRfc4122(), $ctx);
                 }
@@ -982,7 +983,7 @@ class JamboApiMcpServer extends McpServer
             ], ['media_uuid']),
             function (array $args, array $ctx): array {
                 $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
-                if (!$media) throw new McpException('Média introuvable', 404);
+                if (!$media) throw new McpException($this->trans('mcp.media_not_found', [], 'Media not found.'), 404);
                 if ($media->project !== null) {
                     $this->assertCanWriteProject($media->project->uuid->toRfc4122(), $ctx);
                 }
@@ -1075,7 +1076,7 @@ class JamboApiMcpServer extends McpServer
             ], ['project_uuid', 'collection_slug', 'brief']),
             function (array $args, array $ctx) use ($aiService): array {
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
-                if (!$collection) throw new McpException('Collection introuvable', 404);
+                if (!$collection) throw new McpException($this->trans('mcp.collection_not_found', [], 'Collection not found.'), 404);
 
                 return $aiService->generateContent(
                     $args['brief'], $collection, $args['locale'] ?? 'fr'
@@ -1145,7 +1146,7 @@ class JamboApiMcpServer extends McpServer
             ], ['project_uuid', 'collection_slug']),
             function (array $args, array $ctx) use ($aiService): array {
                 $collection = $this->findCollection($args['project_uuid'], $args['collection_slug'], $ctx);
-                if (!$collection) throw new McpException('Collection introuvable', 404);
+                if (!$collection) throw new McpException($this->trans('mcp.collection_not_found', [], 'Collection not found.'), 404);
 
                 return $aiService->suggestSchema($collection);
             }
@@ -1180,7 +1181,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx) use ($versioningService): array {
                 $this->assertCanWriteProject($args['project_uuid'], $ctx);
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
-                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if (!$entry) throw new McpException($this->trans('mcp.entry_not_found', [], 'Entry not found.'), 404);
 
                 $version = $versioningService->createVersion($entry, $args['label'] ?? null);
 
@@ -1204,7 +1205,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx): array {
                 $this->assertCanReadProject($args['project_uuid'], $ctx);
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
-                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if (!$entry) throw new McpException($this->trans('mcp.entry_not_found', [], 'Entry not found.'), 404);
 
                 $repo = $this->em->getRepository(\App\Entity\ContentVersion::class);
                 return array_map(fn($v) => [
@@ -1228,10 +1229,10 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx) use ($versioningService): array {
                 $this->assertCanWriteProject($args['project_uuid'], $ctx);
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
-                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if (!$entry) throw new McpException($this->trans('mcp.entry_not_found', [], 'Entry not found.'), 404);
 
                 $ok = $versioningService->restoreVersion($entry, (int) $args['version_number']);
-                if (!$ok) throw new McpException("Version {$args['version_number']} introuvable pour cette entrée", 404);
+                if (!$ok) throw new McpException($this->trans('mcp.version_not_found', ['%version%' => (string) $args['version_number']], "Version {$args['version_number']} not found for this entry."), 404);
 
                 return [
                     'restored' => true,
@@ -1254,7 +1255,7 @@ class JamboApiMcpServer extends McpServer
             function (array $args, array $ctx) use ($versioningService): array {
                 $this->assertCanReadProject($args['project_uuid'], $ctx);
                 $entry = $this->findEntry($args['project_uuid'], $args['collection_slug'], $args['entry_uuid'], $ctx);
-                if (!$entry) throw new McpException('Entrée introuvable', 404);
+                if (!$entry) throw new McpException($this->trans('mcp.entry_not_found', [], 'Entry not found.'), 404);
 
                 return $versioningService->diff($entry, (int) $args['v1'], (int) $args['v2']);
             }
@@ -1273,7 +1274,7 @@ class JamboApiMcpServer extends McpServer
             ], ['media_uuid']),
             function (array $args, array $ctx): array {
                 $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
-                if (!$media) throw new McpException('Média introuvable', 404);
+                if (!$media) throw new McpException($this->trans('mcp.media_not_found', [], 'Media not found.'), 404);
                 if ($media->project !== null) {
                     $this->assertCanReadProject($media->project->uuid->toRfc4122(), $ctx);
                 }
@@ -1322,7 +1323,7 @@ class JamboApiMcpServer extends McpServer
                 $user = $ctx['user'] ?? null;
                 $isAuthenticated = $ctx['authenticated'] ?? false;
                 if (!$user instanceof \App\Entity\User && !$isAuthenticated) {
-                    throw new McpException('Authentification requise', 401);
+                    throw new McpException($this->trans('mcp.auth_required', [], 'Authentication required.'), 401);
                 }
 
                 $qb = $this->em->getRepository(Project::class)->createQueryBuilder('p');
@@ -1362,14 +1363,14 @@ class JamboApiMcpServer extends McpServer
     {
         $project = $this->findProject($projectUuid);
         if (!$project) {
-            throw new McpException('Projet introuvable', 404);
+            throw new McpException($this->trans('mcp.project_not_found', [], 'Project not found.'), 404);
         }
 
         // Contexte ApiToken / endpoint projet-scopé : doit cibler CE projet.
         $ctxProjectId = $ctx['project_id'] ?? ($ctx['_project']->id ?? null);
         if ($ctxProjectId !== null) {
             if ($ctxProjectId !== $project->id) {
-                throw new McpException('Accès refusé à ce projet', 403);
+                throw new McpException($this->trans('mcp.access_denied_project', [], 'Access denied to this project.'), 403);
             }
             return $project;
         }
@@ -1377,11 +1378,11 @@ class JamboApiMcpServer extends McpServer
         // Contexte utilisateur (session admin ou PAT) : appartenance active requise.
         $user = $ctx['user'] ?? null;
         if (!$user instanceof \App\Entity\User) {
-            throw new McpException('Authentification requise', 401);
+            throw new McpException($this->trans('mcp.auth_required', [], 'Authentication required.'), 401);
         }
         if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)
             && $this->memberRepo->findActiveByUserAndProject($user, $project) === null) {
-            throw new McpException('Accès refusé à ce projet', 403);
+            throw new McpException($this->trans('mcp.access_denied_project', [], 'Access denied to this project.'), 403);
         }
 
         return $project;
@@ -1396,18 +1397,18 @@ class JamboApiMcpServer extends McpServer
     {
         $project = $this->findProject($args['project_uuid'] ?? '');
         if (!$project) {
-            throw new McpException('Projet introuvable', 404);
+            throw new McpException($this->trans('mcp.project_not_found', [], 'Project not found.'), 404);
         }
 
         // Contexte ApiToken / endpoint projet-scopé : doit cibler CE projet + capacité d'écriture.
         $ctxProjectId = $ctx['project_id'] ?? ($ctx['_project']->id ?? null);
         if ($ctxProjectId !== null) {
             if ($ctxProjectId !== $project->id) {
-                throw new McpException('Accès refusé à ce projet', 403);
+                throw new McpException($this->trans('mcp.access_denied_project', [], 'Access denied to this project.'), 403);
             }
             $abilities = $ctx['token_abilities'] ?? [];
             if (!array_intersect(['create', 'write', 'schema:write'], $abilities)) {
-                throw new McpException('Scope insuffisant', 403);
+                throw new McpException($this->trans('mcp.insufficient_scope', [], 'Insufficient scope.'), 403);
             }
             return $project;
         }
@@ -1415,18 +1416,18 @@ class JamboApiMcpServer extends McpServer
         // Contexte utilisateur (session admin ou PAT) : appartenance active requise.
         $user = $ctx['user'] ?? null;
         if (!$user instanceof \App\Entity\User) {
-            throw new McpException('Authentification requise', 401);
+            throw new McpException($this->trans('mcp.auth_required', [], 'Authentication required.'), 401);
         }
         if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)
             && $this->memberRepo->findActiveByUserAndProject($user, $project) === null) {
-            throw new McpException('Accès refusé à ce projet', 403);
+            throw new McpException($this->trans('mcp.access_denied_project', [], 'Access denied to this project.'), 403);
         }
         // Si le contexte porte des scopes (PAT), exiger un scope d'écriture de structure.
         $scopes = $ctx['scopes'] ?? null;
         if ($scopes !== null
             && !in_array('schema:write', $scopes, true)
             && !in_array('projects:write', $scopes, true)) {
-            throw new McpException('Scope insuffisant', 403);
+            throw new McpException($this->trans('mcp.insufficient_scope', [], 'Insufficient scope.'), 403);
         }
 
         return $project;
@@ -1440,18 +1441,18 @@ class JamboApiMcpServer extends McpServer
     {
         $project = $this->findProject($projectUuid);
         if (!$project) {
-            throw new McpException('Projet introuvable', 404);
+            throw new McpException($this->trans('mcp.project_not_found', [], 'Project not found.'), 404);
         }
 
         // Contexte ApiToken / endpoint projet-scopé : doit cibler CE projet + avoir la capacité d'écriture.
         $ctxProjectId = $ctx['project_id'] ?? ($ctx['_project']->id ?? null);
         if ($ctxProjectId !== null) {
             if ($ctxProjectId !== $project->id) {
-                throw new McpException('Accès refusé à ce projet', 403);
+                throw new McpException($this->trans('mcp.access_denied_project', [], 'Access denied to this project.'), 403);
             }
             $abilities = $ctx['token_abilities'] ?? [];
             if (!empty($abilities) && !array_intersect(['create', 'write', 'entries:write', 'content:write', '*'], $abilities)) {
-                throw new McpException('Scope insuffisant', 403);
+                throw new McpException($this->trans('mcp.insufficient_scope', [], 'Insufficient scope.'), 403);
             }
             return $project;
         }
@@ -1459,11 +1460,11 @@ class JamboApiMcpServer extends McpServer
         // Contexte utilisateur (session admin ou PAT) : appartenance active requise.
         $user = $ctx['user'] ?? null;
         if (!$user instanceof \App\Entity\User) {
-            throw new McpException('Authentification requise', 401);
+            throw new McpException($this->trans('mcp.auth_required', [], 'Authentication required.'), 401);
         }
         if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)
             && $this->memberRepo->findActiveByUserAndProject($user, $project) === null) {
-            throw new McpException('Accès refusé à ce projet', 403);
+            throw new McpException($this->trans('mcp.access_denied_project', [], 'Access denied to this project.'), 403);
         }
 
         // Si le contexte porte des scopes (PAT), exiger un scope d'écriture.
@@ -1473,7 +1474,7 @@ class JamboApiMcpServer extends McpServer
             && !in_array('entries:write', $scopes, true)
             && !in_array('write', $scopes, true)
             && !in_array('projects:write', $scopes, true)) {
-            throw new McpException('Scope insuffisant', 403);
+            throw new McpException($this->trans('mcp.insufficient_scope', [], 'Insufficient scope.'), 403);
         }
 
         return $project;
@@ -1484,7 +1485,7 @@ class JamboApiMcpServer extends McpServer
         $user = $ctx['user'] ?? null;
         $isAuthenticated = $ctx['authenticated'] ?? false;
         if (!$user instanceof \App\Entity\User && !$isAuthenticated) {
-            throw new McpException('Authentification requise', 401);
+            throw new McpException($this->trans('mcp.auth_required', [], 'Authentication required.'), 401);
         }
     }
 

@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Project;
 use App\Mcp\JamboApiMcpServer;
+use App\Service\AuditService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -28,7 +29,15 @@ class McpController extends AbstractController
         private JamboApiMcpServer $mcpServer,
         private RateLimiterFactory $mcpLimiter,
         private ?TranslatorInterface $translator = null,
-    ) {}
+        private ?AuditService $auditService = null,
+    ) {
+        if ($this->auditService !== null) {
+            $this->mcpServer->setAuditService($this->auditService);
+        }
+        if ($this->translator !== null) {
+            $this->mcpServer->setTranslator($this->translator);
+        }
+    }
 
     private function trans(string $key, array $params = [], string $default = ''): string
     {
@@ -49,7 +58,7 @@ class McpController extends AbstractController
     public function handle(Request $request): Response
     {
         // Rate limiting : 60 requêtes par minute par IP
-        $limiter = $this->mcpLimiter->create($request->getClientIp());
+        $limiter = $this->mcpLimiter->create($request->getClientIp() ?: '127.0.0.1');
         if (false === $limiter->consume(1)->isAccepted()) {
             return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
         }
@@ -83,7 +92,7 @@ class McpController extends AbstractController
     public function handleProject(string $uuid, Request $request): Response
     {
         // Rate limiting : 60 requêtes par minute par IP
-        $limiter = $this->mcpLimiter->create($request->getClientIp());
+        $limiter = $this->mcpLimiter->create($request->getClientIp() ?: '127.0.0.1');
         if (false === $limiter->consume(1)->isAccepted()) {
             return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
         }
@@ -124,11 +133,31 @@ class McpController extends AbstractController
 
         // Rejeter si ni utilisateur ni token valide
         if (!$user instanceof \App\Entity\User && !$isAuthenticated) {
+            $this->auditService?->log(
+                toolName: 'mcp_auth_failure',
+                project: $project,
+                input: ['uuid' => $uuid],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Authentication required for project MCP endpoint',
+                createdBy: 'anonymous',
+                source: 'mcp_controller',
+            );
             return $this->secureJson(['error' => $this->trans('mcp.auth_required', [], 'Authentication required.')], 401);
         }
 
         // Si authentifié via ApiToken, vérifier que le token est scopé à ce projet
         if (isset($context['project_uuid']) && $context['project_uuid'] !== $uuid) {
+            $this->auditService?->log(
+                toolName: 'mcp_access_denied',
+                project: $project,
+                input: ['uuid' => $uuid, 'token_project' => $context['project_uuid']],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Token project mismatch for project MCP endpoint',
+                createdBy: $user?->getUserIdentifier() ?? 'token',
+                source: 'mcp_controller',
+            );
             return $this->secureJson(['error' => $this->trans('mcp.access_denied', [], 'Access denied.')], 403);
         }
 
@@ -138,6 +167,16 @@ class McpController extends AbstractController
             $isMember = $this->em->getRepository(\App\Entity\ProjectMember::class)
                 ->findActiveByUserAndProject($user, $project) !== null;
             if (!$isSuperAdmin && !$isMember) {
+                $this->auditService?->log(
+                    toolName: 'mcp_access_denied',
+                    project: $project,
+                    input: ['uuid' => $uuid],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'User is not a member of project',
+                    createdBy: $user->getUserIdentifier(),
+                    source: 'mcp_controller',
+                );
                 return $this->secureJson(['error' => $this->trans('mcp.access_denied', [], 'Access denied.')], 403);
             }
         }
@@ -153,8 +192,14 @@ class McpController extends AbstractController
      * MCP Server Information (pour découvrir les capacités sans JSON-RPC).
      */
     #[Route('/mcp', name: 'mcp_info', methods: ['GET'])]
-    public function info(): JsonResponse
+    public function info(?Request $request = null): JsonResponse
     {
+        if ($this->mcpLimiter !== null && $request !== null) {
+            $limiter = $this->mcpLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
+            }
+        }
         return $this->secureJson([
             'name' => 'JamboApi MCP Server',
             'version' => '2.0.0',
