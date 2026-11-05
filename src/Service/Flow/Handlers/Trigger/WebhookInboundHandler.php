@@ -32,6 +32,12 @@ class WebhookInboundHandler implements FlowNodeHandler
                     'title' => 'Secret (optionnel)',
                     'description' => 'Secret partagé pour valider le webhook entrant',
                 ],
+                'ip_allowlist' => [
+                    'type' => 'array',
+                    'items' => ['type' => 'string'],
+                    'title' => 'Allowlist IP (optionnel)',
+                    'description' => 'Liste des adresses IP ou sous-réseaux CIDR autorisés à appeler ce webhook',
+                ],
             ],
         ];
     }

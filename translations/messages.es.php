@@ -2423,6 +2423,9 @@ return [
     'automation.admin.webhook_secret_decrypt_error'   => 'Error al descifrar el secreto del webhook.',
     'automation.admin.webhook_invalid_signature'      => 'Secreto o firma de webhook no válido.',
     'automation.admin.webhook_internal_error'         => 'Error interno al procesar el webhook.',
+    'automation.admin.webhook_ip_forbidden'           => 'La IP del cliente no está permitida para este webhook.',
+    'automation.admin.webhook_replay_detected'        => 'Ataque de reproducción de webhook detectado.',
+    'automation.admin.webhook_expired_timestamp'      => 'La marca de tiempo del webhook está fuera del intervalo aceptable.',
 
     // Flow Admin
     'flow.admin.catalog_loaded'                       => 'Catálogo de nodos de flujo recuperado con éxito.',

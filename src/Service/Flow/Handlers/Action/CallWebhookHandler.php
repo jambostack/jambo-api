@@ -11,6 +11,7 @@ use Symfony\Component\HttpClient\HttpClient;
 class CallWebhookHandler implements FlowNodeHandler
 {
     private const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'];
+    private const MAX_BODY_BYTES = 2097152; // 2MB
 
     private SsrfProtectionService $ssrfProtection;
     private ?\Symfony\Contracts\HttpClient\HttpClientInterface $httpClient;
@@ -42,8 +43,22 @@ class CallWebhookHandler implements FlowNodeHandler
         $url  = trim($this->interpolateSafe($url, $inputData, $safeVars));
         $body = $this->interpolateSafe($body, $inputData, $safeVars);
 
+        if (strlen($body) > self::MAX_BODY_BYTES) {
+            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => 'Webhook request payload exceeds 2MB limit']);
+        }
+
         if ($url === '') {
             return new NodeOutput(data: ['called' => false, 'url' => '', 'error' => 'URL is empty']);
+        }
+
+        // Signature HMAC et headers par défaut
+        $secret = trim((string) ($config['secret'] ?? ''));
+        if ($secret !== '') {
+            $headers['X-JamboApi-Timestamp'] = (string) time();
+            $headers['X-JamboApi-Signature'] = 'sha256=' . hash_hmac('sha256', $body, $secret);
+        }
+        if (!isset($headers['User-Agent']) && !isset($headers['user-agent'])) {
+            $headers['User-Agent'] = 'JamboApi-FlowWebhook/1.0';
         }
 
         try {

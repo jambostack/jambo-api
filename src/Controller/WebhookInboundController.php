@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Repository\AutomationRepository;
 use App\Service\Automation\AutomationEngine;
 use App\Service\WebhookSecretService;
+use Psr\Cache\CacheItemPoolInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -24,10 +25,12 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class WebhookInboundController extends AbstractController
 {
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+    private const MAX_PAYLOAD_BYTES = 2097152; // 2MB
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options'        => 'DENY',
+        'Referrer-Policy'        => 'no-referrer',
         'Cache-Control'          => 'no-store',
     ];
 
@@ -38,6 +41,7 @@ class WebhookInboundController extends AbstractController
         private readonly ?RateLimiterFactory $webhookInboundLimiter = null,
         private readonly ?WebhookSecretService $secretService = null,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?CacheItemPoolInterface $cache = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -124,9 +128,36 @@ class WebhookInboundController extends AbstractController
             ], 400);
         }
 
+        $triggerConfig = $triggerNode['data']['config'] ?? [];
+
+        // Vérification de la liste blanche d'adresses IP (IP allowlist)
+        $allowlist = $triggerConfig['ip_allowlist'] ?? $triggerConfig['allowed_ips'] ?? null;
+        if ($allowlist !== null && $allowlist !== '' && $allowlist !== []) {
+            $clientIp = $request->getClientIp() ?: '127.0.0.1';
+            if (!$this->isIpAllowed($clientIp, $allowlist)) {
+                $this->logger->warning('Webhook inbound rejected by IP allowlist', [
+                    'automation_uuid' => $automationUuid,
+                    'client_ip' => $clientIp,
+                ]);
+                return $this->secureJson([
+                    'error' => $this->trans('automation.admin.webhook_ip_forbidden', [], 'Client IP is not permitted for this webhook.'),
+                    'code' => 'IP_FORBIDDEN',
+                ], 403);
+            }
+        }
+
+        // Pré-contrôle Content-Length
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('automation.admin.payload_too_large', [], 'Payload too large (max 2MB)'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
         // Parse et contrôle strict de la taille du corps (max 2 Mo)
         $body = (string) $request->getContent();
-        if (strlen($body) > 2 * 1024 * 1024) {
+        if (strlen($body) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson([
                 'error' => $this->trans('automation.admin.payload_too_large', [], 'Payload too large (max 2MB)'),
                 'code' => 'PAYLOAD_TOO_LARGE',
@@ -134,7 +165,7 @@ class WebhookInboundController extends AbstractController
         }
 
         // Vérifie le secret ou signature HMAC si configuré
-        $secret = $triggerNode['data']['config']['secret'] ?? null;
+        $secret = $triggerConfig['secret'] ?? null;
         if ($secret !== null && $secret !== '') {
             $resolvedSecret = (string) $secret;
             if (str_starts_with($resolvedSecret, 'enc:') && $this->secretService !== null) {
@@ -154,6 +185,14 @@ class WebhookInboundController extends AbstractController
                     'code' => 'SIGNATURE_INVALID',
                 ], 403);
             }
+        }
+
+        // Détection et blocage des attaques par rejeu (Replay prevention)
+        if ($this->cache !== null && $this->isReplayedRequest($automationUuid, $request, $body)) {
+            return $this->secureJson([
+                'error' => $this->trans('automation.admin.webhook_replay_detected', [], 'Webhook replay detected'),
+                'code' => 'REPLAY_DETECTED',
+            ], 409);
         }
 
         $decoded = null;
@@ -191,7 +230,139 @@ class WebhookInboundController extends AbstractController
     }
 
     /**
-     * Valide le secret via token direct, signature HMAC standard (GitHub, Stripe, Svix)
+     * Valide si l'IP cliente correspond aux règles d'allowlist (IP uniques ou CIDR).
+     */
+    public function isIpAllowed(string $clientIp, array|string $allowlist): bool
+    {
+        $entries = is_array($allowlist) ? $allowlist : preg_split('/[\s,]+/', trim($allowlist));
+        $entries = array_filter(array_map('trim', (array) $entries), fn ($ip) => $ip !== '');
+
+        if (empty($entries)) {
+            return true;
+        }
+
+        // Clean client IP (e.g. handle IPv4-mapped IPv6 like ::ffff:192.0.2.1)
+        $cleanIp = $clientIp;
+        if (str_starts_with($cleanIp, '::ffff:')) {
+            $mapped = substr($cleanIp, 7);
+            if (filter_var($mapped, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                $cleanIp = $mapped;
+            }
+        }
+
+        $isClientIpv4 = filter_var($cleanIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+        $isClientIpv6 = filter_var($cleanIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
+
+        if (!$isClientIpv4 && !$isClientIpv6) {
+            return false;
+        }
+
+        foreach ($entries as $entry) {
+            if ($cleanIp === $entry) {
+                return true;
+            }
+
+            if (str_contains($entry, '/')) {
+                [$subnet, $mask] = explode('/', $entry, 2);
+                $mask = is_numeric($mask) ? (int) $mask : -1;
+
+                if ($isClientIpv4 && filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                    if ($mask >= 0 && $mask <= 32) {
+                        $ipLong = ip2long($cleanIp);
+                        $subnetLong = ip2long($subnet);
+                        if ($ipLong !== false && $subnetLong !== false) {
+                            $networkMask = $mask === 0 ? 0 : (-1 << (32 - $mask));
+                            if (($ipLong & $networkMask) === ($subnetLong & $networkMask)) {
+                                return true;
+                            }
+                        }
+                    }
+                } elseif ($isClientIpv6 && filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+                    if ($mask >= 0 && $mask <= 128) {
+                        $ipBin = inet_pton($cleanIp);
+                        $subnetBin = inet_pton($subnet);
+                        if ($ipBin !== false && $subnetBin !== false) {
+                            $bytes = intdiv($mask, 8);
+                            $remainder = $mask % 8;
+                            if ($bytes > 0 && substr($ipBin, 0, $bytes) !== substr($subnetBin, 0, $bytes)) {
+                                continue;
+                            }
+                            if ($remainder === 0) {
+                                return true;
+                            }
+                            $ipByte = ord($ipBin[$bytes]);
+                            $subnetByte = ord($subnetBin[$bytes]);
+                            $bitMask = (0xFF << (8 - $remainder)) & 0xFF;
+                            if (($ipByte & $bitMask) === ($subnetByte & $bitMask)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Détecte les attaques par rejeu en mémorisant les identifiants ou signatures d'événements.
+     */
+    private function isReplayedRequest(string $automationUuid, Request $request, string $body): bool
+    {
+        if ($this->cache === null) {
+            return false;
+        }
+
+        $nonce = null;
+        $deliveryId = $request->headers->get('X-GitHub-Delivery')
+            ?? $request->headers->get('X-Webhook-ID')
+            ?? $request->headers->get('Webhook-Id')
+            ?? $request->headers->get('X-Delivery-Id')
+            ?? $request->headers->get('X-Webhook-Nonce')
+            ?? $request->headers->get('X-Nonce');
+
+        if ($deliveryId !== null && trim($deliveryId) !== '') {
+            $nonce = 'deliv:' . trim($deliveryId);
+        } else {
+            $sig = $request->headers->get('Stripe-Signature')
+                ?? $request->headers->get('X-Slack-Signature')
+                ?? $request->headers->get('webhook-signature')
+                ?? $request->headers->get('X-Hub-Signature-256')
+                ?? $request->headers->get('X-Signature-SHA256')
+                ?? $request->headers->get('X-Webhook-Signature');
+            $ts = $request->headers->get('X-Slack-Request-Timestamp')
+                ?? $request->headers->get('webhook-timestamp')
+                ?? $request->headers->get('X-Webhook-Timestamp')
+                ?? $request->headers->get('X-Timestamp')
+                ?? $request->headers->get('X-JamboApi-Timestamp');
+            if ($sig !== null && $ts !== null) {
+                $nonce = 'sigts:' . hash('sha256', $sig . ':' . $ts);
+            }
+        }
+
+        if ($nonce === null) {
+            return false;
+        }
+
+        $cacheKey = 'wh_seen_' . hash('sha256', $automationUuid . ':' . $nonce);
+        try {
+            $item = $this->cache->getItem($cacheKey);
+            if ($item->isHit()) {
+                return true;
+            }
+            $item->set(time());
+            $item->expiresAfter(300);
+            $this->cache->save($item);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return false;
+    }
+
+    /**
+     * Valide le secret via token direct, signature HMAC standard (GitHub, Stripe, Svix, Slack)
      * et prévient les attaques par rejeu de timestamp.
      */
     private function verifyWebhookSecretOrSignature(Request $request, string $body, string $secret): bool
@@ -243,7 +414,9 @@ class WebhookInboundController extends AbstractController
                 }
             }
             if ($ts !== null && !empty($sigs) && is_numeric($ts)) {
-                if (abs(time() - (int) $ts) > 300) {
+                $tInt = (int) $ts;
+                $now = time();
+                if (($now - $tInt) > 300 || ($tInt - $now) > 60) {
                     return false;
                 }
                 $expected = hash_hmac('sha256', "{$ts}.{$body}", $secret);
@@ -265,7 +438,9 @@ class WebhookInboundController extends AbstractController
         $slackSig = $request->headers->get('X-Slack-Signature');
         $slackTs = $request->headers->get('X-Slack-Request-Timestamp');
         if ($slackSig !== null && $slackTs !== null && is_numeric($slackTs)) {
-            if (abs(time() - (int) $slackTs) <= 300) {
+            $tInt = (int) $slackTs;
+            $now = time();
+            if (($now - $tInt) <= 300 && ($tInt - $now) <= 60) {
                 if (str_starts_with($slackSig, 'v0=')) {
                     $slackSig = substr($slackSig, 3);
                 }
@@ -276,7 +451,36 @@ class WebhookInboundController extends AbstractController
             }
         }
 
-        // 7. Standard Authorization: Bearer <secret>
+        // 7. Standard Svix / Standard Webhooks : webhook-signature, webhook-id, webhook-timestamp
+        $svixSig = $request->headers->get('webhook-signature');
+        $svixId = $request->headers->get('webhook-id') ?? $request->headers->get('msg_id');
+        $svixTs = $request->headers->get('webhook-timestamp');
+        if ($svixSig !== null && $svixId !== null && $svixTs !== null && is_numeric($svixTs)) {
+            $ts = (int) $svixTs;
+            $now = time();
+            if (($now - $ts) <= 300 && ($ts - $now) <= 60) {
+                $keyBytes = $secret;
+                if (str_starts_with($secret, 'whsec_')) {
+                    $decodedKey = base64_decode(substr($secret, 6), true);
+                    if ($decodedKey !== false && $decodedKey !== '') {
+                        $keyBytes = $decodedKey;
+                    }
+                }
+                $toSign = "{$svixId}.{$svixTs}.{$body}";
+                $rawHash = hash_hmac('sha256', $toSign, $keyBytes, true);
+                $expectedB64 = base64_encode($rawHash);
+                $expectedHex = bin2hex($rawHash);
+                $signatures = preg_split('/\s+/', trim($svixSig));
+                foreach ($signatures as $sigItem) {
+                    $val = str_starts_with($sigItem, 'v1,') ? substr($sigItem, 3) : (str_starts_with($sigItem, 'v1=') ? substr($sigItem, 3) : $sigItem);
+                    if (hash_equals($expectedB64, $val) || hash_equals($expectedHex, $val)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // 8. Standard Authorization: Bearer <secret>
         $authHeader = $request->headers->get('Authorization');
         if ($authHeader !== null && str_starts_with($authHeader, 'Bearer ')) {
             $bearer = substr($authHeader, 7);
@@ -290,9 +494,14 @@ class WebhookInboundController extends AbstractController
 
     private function verifyTimestampHeader(Request $request): bool
     {
-        $tsHeader = $request->headers->get('X-Webhook-Timestamp') ?? $request->headers->get('X-Timestamp');
+        $tsHeader = $request->headers->get('X-Webhook-Timestamp')
+            ?? $request->headers->get('X-Timestamp')
+            ?? $request->headers->get('X-JamboApi-Timestamp')
+            ?? $request->headers->get('Webhook-Timestamp');
         if ($tsHeader !== null && is_numeric($tsHeader)) {
-            if (abs(time() - (int) $tsHeader) > 300) {
+            $ts = (int) $tsHeader;
+            $now = time();
+            if (($now - $ts) > 300 || ($ts - $now) > 60) {
                 return false;
             }
         }
@@ -307,10 +516,17 @@ class WebhookInboundController extends AbstractController
     private function filterSafeHeaders(Request $request): array
     {
         $safe = [];
-        $excluded = ['x-webhook-secret', 'authorization', 'cookie', 'set-cookie',
-                     'x-api-key', 'x-csrf-token', 'proxy-authorization'];
-        $allowed = ['content-type', 'user-agent', 'accept', 'accept-language',
-                    'x-forwarded-for', 'x-real-ip', 'x-request-id'];
+        $excluded = [
+            'x-webhook-secret', 'authorization', 'cookie', 'set-cookie',
+            'x-api-key', 'x-csrf-token', 'proxy-authorization',
+        ];
+        $allowed = [
+            'content-type', 'user-agent', 'accept', 'accept-language',
+            'x-forwarded-for', 'x-real-ip', 'x-request-id',
+            'x-github-event', 'x-gitlab-event', 'x-event-key',
+            'x-delivery-id', 'x-github-delivery', 'webhook-id', 'webhook-timestamp',
+            'x-slack-request-timestamp', 'x-webhook-timestamp', 'x-jamboapi-event',
+        ];
 
         foreach ($request->headers->all() as $name => $values) {
             $lower = strtolower($name);

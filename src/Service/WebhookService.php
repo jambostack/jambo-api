@@ -9,6 +9,7 @@ use App\Entity\WebhookLog;
 use App\Repository\WebhookRepository;
 use App\Service\Security\SsrfProtectionService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Uid\Uuid;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -97,15 +98,22 @@ class WebhookService
             return $log;
         }
 
+        $timestamp = time();
+        $deliveryId = Uuid::v4()->toRfc4122();
+
         $headers = [
-            'Content-Type'     => 'application/json',
-            'X-JamboApi-Event' => $event,
+            'Content-Type'         => 'application/json',
+            'User-Agent'           => 'JamboApi-Webhook/1.0',
+            'X-JamboApi-Event'     => $event,
+            'X-JamboApi-Delivery'  => $deliveryId,
+            'X-JamboApi-Timestamp' => (string) $timestamp,
         ];
 
         if ($webhook->secret !== null) {
             try {
                 $plainSecret = $this->secretService->decrypt($webhook->secret);
                 $headers['X-JamboApi-Signature'] = 'sha256=' . hash_hmac('sha256', $payloadJson, $plainSecret);
+                $headers['X-JamboApi-Signature-256'] = "t={$timestamp},v1=" . hash_hmac('sha256', "{$timestamp}.{$payloadJson}", $plainSecret);
             } catch (\Throwable $e) {
                 // Erreur de déchiffrement du secret
                 $log = new WebhookLog();

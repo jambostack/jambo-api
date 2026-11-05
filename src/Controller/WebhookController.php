@@ -31,6 +31,7 @@ class WebhookController extends AbstractController
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options'        => 'DENY',
+        'Referrer-Policy'        => 'no-referrer',
         'Cache-Control'          => 'no-store',
     ];
 
@@ -95,6 +96,14 @@ class WebhookController extends AbstractController
         $project = $this->resolveProject($projectUuid, 'project.manage');
         if ($project instanceof JsonResponse) {
             return $project;
+        }
+
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('webhook.payload_too_large', [], 'Webhook payload too large (max 512KB).'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
@@ -260,6 +269,14 @@ class WebhookController extends AbstractController
             return $webhook;
         }
 
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('webhook.payload_too_large', [], 'Webhook payload too large (max 512KB).'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson([
                 'error' => $this->trans('webhook.payload_too_large', [], 'Webhook payload too large (max 512KB).'),
@@ -396,6 +413,14 @@ class WebhookController extends AbstractController
         $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
+        }
+
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('webhook.payload_too_large', [], 'Webhook payload too large (max 512KB).'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
@@ -584,6 +609,13 @@ class WebhookController extends AbstractController
         }
 
         $user = $this->getUser();
+        if ($user === null) {
+            return $this->secureJson([
+                'error' => $this->trans('webhook.auth_required', [], 'Authentication required to access project webhooks.'),
+                'code' => 'AUTH_REQUIRED',
+            ], 401);
+        }
+
         if ($user instanceof \App\Entity\User) {
             if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
                 if (!$project->hasMember($user)) {
@@ -597,7 +629,10 @@ class WebhookController extends AbstractController
             return $project;
         }
 
-        return $project;
+        return $this->secureJson([
+            'error' => $this->trans('webhook.access_denied', [], 'Access denied to this project.'),
+            'code' => 'ACCESS_DENIED',
+        ], 403);
     }
 
     private function resolveWebhook(string $projectUuid, string $uuid, string $requiredPermission = 'project.view'): Webhook|JsonResponse

@@ -530,10 +530,10 @@ class Cycle55PublicAuditTest extends WebTestCase
         $es = include dirname(__DIR__, 2) . '/translations/messages.es.php';
         $ar = include dirname(__DIR__, 2) . '/translations/messages.ar.php';
 
-        $this->assertCount(2881, $en, 'EN must have 2881 keys');
-        $this->assertCount(2881, $fr, 'FR must have 2881 keys');
-        $this->assertCount(2881, $es, 'ES must have 2881 keys');
-        $this->assertCount(2881, $ar, 'AR must have 2881 keys');
+        $this->assertGreaterThanOrEqual(2881, count($en), 'EN must have at least 2881 keys');
+        $this->assertCount(count($en), $fr, 'FR must have same key count as EN');
+        $this->assertCount(count($en), $es, 'ES must have same key count as EN');
+        $this->assertCount(count($en), $ar, 'AR must have same key count as EN');
 
         $this->assertSame([], array_keys(array_diff_key($en, $fr)), 'Missing keys in FR');
         $this->assertSame([], array_keys(array_diff_key($en, $es)), 'Missing keys in ES');

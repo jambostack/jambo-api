@@ -2423,6 +2423,9 @@ return [
     'automation.admin.webhook_secret_decrypt_error'   => 'Webhook secret decryption failure.',
     'automation.admin.webhook_invalid_signature'      => 'Invalid webhook secret or signature',
     'automation.admin.webhook_internal_error'         => 'Internal error processing webhook.',
+    'automation.admin.webhook_ip_forbidden'           => 'Client IP is not permitted for this webhook.',
+    'automation.admin.webhook_replay_detected'        => 'Webhook replay detected.',
+    'automation.admin.webhook_expired_timestamp'      => 'Webhook timestamp is outside acceptable window.',
 
     // Flow Admin
     'flow.admin.catalog_loaded'                       => 'Flow node catalog retrieved successfully.',

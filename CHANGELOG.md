@@ -7,6 +7,32 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.118] — 2026-11-05
+
+### Security Audit & Hardening on Webhook Subsystems (Inbound & Outbound Webhooks)
+- **WebhookInboundController (`/api/webhooks/inbound/{automationUuid}`)**:
+  - Enforced IP allowlist checks (`ip_allowlist` / `allowed_ips`) supporting single IPv4/IPv6, CIDR blocks (`192.168.1.0/24`, `10.0.0.0/8`, `2001:db8::/32`), and IPv4-mapped IPv6, returning 403 `IP_FORBIDDEN` with translated feedback.
+  - Added replay attack prevention via cache-backed seen delivery/signature tracker (`wh_seen_{hash}` with 300s TTL), returning 409 `REPLAY_DETECTED` for repeated deliveries or identical timestamped signatures.
+  - Hardened timestamp verification window: strictly rejects timestamps > 300s in the past or > 60s in the future (tight clock skew protection).
+  - Extended HMAC signature verification to Svix / Standard Webhooks standard (`webhook-signature`, `webhook-id`, `webhook-timestamp`), in addition to GitHub (`X-Hub-Signature-256`), Stripe (`Stripe-Signature`), Slack (`X-Slack-Signature`), and Bearer tokens.
+  - Added `Content-Length` header pre-check (2MB cap) before reading request body into memory.
+  - Preserved standard non-sensitive event headers (`x-github-event`, `x-gitlab-event`, `webhook-id`, `x-delivery-id`) in execution payload while stripping sensitive credentials.
+- **WebhookController (`/api/projects/{projectUuid}/webhooks`)**:
+  - Fixed authorization loophole in `resolveProject()` by strictly enforcing user authentication and membership; unauthenticated calls now return 401 `AUTH_REQUIRED`.
+  - Added `Content-Length` header pre-checks across create, update, and rotate-secret endpoints (512KB cap).
+  - Added `Referrer-Policy: no-referrer` to security headers.
+- **WebhookService (Outbound Webhooks)**:
+  - Added `X-JamboApi-Delivery` (unique UUID v4) and `X-JamboApi-Timestamp` headers to outbound dispatches.
+  - Added replay-protected dual signature `X-JamboApi-Signature-256: t={ts},v1={hash}` alongside backward-compatible `X-JamboApi-Signature`.
+  - Enforced `User-Agent: JamboApi-Webhook/1.0`.
+- **CallWebhookHandler (Automation Flows)**:
+  - Added payload cap protection (max 2MB request body).
+  - Added automatic HMAC signing with `X-JamboApi-Signature` and `X-JamboApi-Timestamp` when secret is configured.
+- **I18N Parity**:
+  - Added `automation.admin.webhook_ip_forbidden`, `automation.admin.webhook_replay_detected`, `automation.admin.webhook_expired_timestamp` across all 4 languages (EN, FR, ES, AR) — maintaining 100% parity with 2,884 keys.
+- **Testing**:
+  - Added `Cycle56WebhookHardeningTest` covering 13 test scenarios and 46 assertions with 100% pass rate.
+
 ## [1.26.117] — 2026-11-05
 
 ### Security Audit & Hardening on Public Endpoints (Forms, Redirects, Embeds & CORS)

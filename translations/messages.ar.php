@@ -2425,6 +2425,9 @@ return [
     'automation.admin.webhook_secret_decrypt_error'   => 'فشل في فك تشفير سر خطاف الويب.',
     'automation.admin.webhook_invalid_signature'      => 'سر أو توقيع خطاف الويب غير صالح.',
     'automation.admin.webhook_internal_error'         => 'خطأ داخلي أثناء معالجة خطاف الويب.',
+    'automation.admin.webhook_ip_forbidden'           => 'عنوان IP الخاص بالعميل غير مسموح به لهذا الخطاف.',
+    'automation.admin.webhook_replay_detected'        => 'تم اكتشاف إعادة إرسال لخطاف الويب.',
+    'automation.admin.webhook_expired_timestamp'      => 'الطابع الزمني لخطاف الويب خارج النافذة المقبولة.',
 
     // Flow Admin
     'flow.admin.catalog_loaded'                       => 'تم استرداد دليل عقد التدفق بنجاح.',
