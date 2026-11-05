@@ -7,6 +7,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.112] — 2026-11-05
+
+### Core API & Controller Security Hardening, Security Headers, Strict I18N Parity
+- **Controller Security Hardening (`SECURITY_HEADERS`)**:
+  - Enforced `SECURITY_HEADERS` (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Cache-Control: no-store`) via `secureJson()` across 15 controllers: `AiController`, `AutomationController`, `CollectionController`, `ColumnSettingController`, `CommentController`, `ContentController`, `FieldController`, `GraphQLController`, `InvitationController`, `McpController`, `NotificationController`, `SearchController`, `ShareController`, `WebhookController`, and `WebhookInboundController`.
+  - Replaced all raw JSON returns in `AiController` and `WebhookController` with `secureJson()` to prevent header omissions and MIME sniffing.
+  - Enforced strict payload size caps, prompt sanitization against breakout attacks, and multi-tenant scoping in `AiController`.
+  - Enforced rate limiting, body size limits, and project scoping on `/mcp` and `/api/projects/{uuid}/mcp` in `McpController`.
+- **Strict I18N Parity**:
+  - Added `graphql.mercure_not_configured` translation key across `translations/messages.{en,fr,es,ar}.php`.
+  - Maintained 100% key parity across all 4 locales (validated by automated test suite).
+- **Test Suite**:
+  - Added `Cycle53SecurityHardeningTest` verifying version bump, translation parity, and security headers on hardened controllers.
+
 ## [1.26.111] — 2026-11-05
 
 ### Project Management & Audit Logs Security Hardening, Strict Role Protection, Rate Limiting & I18N Parity

@@ -17,6 +17,12 @@ class McpController extends AbstractController
 {
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
 
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private EntityManagerInterface $em,
         private JamboApiMcpServer $mcpServer,
@@ -27,6 +33,11 @@ class McpController extends AbstractController
     private function trans(string $key, array $params = [], string $default = ''): string
     {
         return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
     /**
@@ -40,15 +51,15 @@ class McpController extends AbstractController
         // Rate limiting : 60 requêtes par minute par IP
         $limiter = $this->mcpLimiter->create($request->getClientIp());
         if (false === $limiter->consume(1)->isAccepted()) {
-            return new JsonResponse(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
+            return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
         }
 
         $body = $request->getContent();
         if (strlen($body) > 2 * 1024 * 1024) {
-            return new JsonResponse(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
+            return $this->secureJson(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
         }
         if (trim($body) === '') {
-            return new JsonResponse([
+            return $this->secureJson([
                 'jsonrpc' => '2.0',
                 'id' => null,
                 'error' => [
@@ -74,15 +85,15 @@ class McpController extends AbstractController
         // Rate limiting : 60 requêtes par minute par IP
         $limiter = $this->mcpLimiter->create($request->getClientIp());
         if (false === $limiter->consume(1)->isAccepted()) {
-            return new JsonResponse(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
+            return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
         }
 
         $body = $request->getContent();
         if (strlen($body) > 2 * 1024 * 1024) {
-            return new JsonResponse(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
+            return $this->secureJson(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
         }
         if (trim($body) === '') {
-            return new JsonResponse([
+            return $this->secureJson([
                 'jsonrpc' => '2.0',
                 'id' => null,
                 'error' => [
@@ -93,16 +104,16 @@ class McpController extends AbstractController
         }
 
         if (!preg_match(self::UUID_REGEX, $uuid)) {
-            return new JsonResponse(['error' => $this->trans('mcp.project_not_found', [], 'Project not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('mcp.project_not_found', [], 'Project not found.')], 404);
         }
 
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('mcp.project_not_found', [], 'Project not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('mcp.project_not_found', [], 'Project not found.')], 404);
         }
         if (!$project) {
-            return new JsonResponse(['error' => $this->trans('mcp.project_not_found', [], 'Project not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('mcp.project_not_found', [], 'Project not found.')], 404);
         }
 
         $token = $this->extractBearerToken($request);
@@ -113,12 +124,12 @@ class McpController extends AbstractController
 
         // Rejeter si ni utilisateur ni token valide
         if (!$user instanceof \App\Entity\User && !$isAuthenticated) {
-            return new JsonResponse(['error' => $this->trans('mcp.auth_required', [], 'Authentication required.')], 401);
+            return $this->secureJson(['error' => $this->trans('mcp.auth_required', [], 'Authentication required.')], 401);
         }
 
         // Si authentifié via ApiToken, vérifier que le token est scopé à ce projet
         if (isset($context['project_uuid']) && $context['project_uuid'] !== $uuid) {
-            return new JsonResponse(['error' => $this->trans('mcp.access_denied', [], 'Access denied.')], 403);
+            return $this->secureJson(['error' => $this->trans('mcp.access_denied', [], 'Access denied.')], 403);
         }
 
         // Si authentifié par session utilisateur ou PAT, vérifier l'appartenance
@@ -127,7 +138,7 @@ class McpController extends AbstractController
             $isMember = $this->em->getRepository(\App\Entity\ProjectMember::class)
                 ->findActiveByUserAndProject($user, $project) !== null;
             if (!$isSuperAdmin && !$isMember) {
-                return new JsonResponse(['error' => $this->trans('mcp.access_denied', [], 'Access denied.')], 403);
+                return $this->secureJson(['error' => $this->trans('mcp.access_denied', [], 'Access denied.')], 403);
             }
         }
 
@@ -144,7 +155,7 @@ class McpController extends AbstractController
     #[Route('/mcp', name: 'mcp_info', methods: ['GET'])]
     public function info(): JsonResponse
     {
-        return new JsonResponse([
+        return $this->secureJson([
             'name' => 'JamboApi MCP Server',
             'version' => '2.0.0',
             'protocolVersion' => '2024-11-05',

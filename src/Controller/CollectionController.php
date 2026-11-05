@@ -22,6 +22,12 @@ class CollectionController extends AbstractController
 {
     public const MAX_PAYLOAD_BYTES = 524288; // 512KB
 
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private EntityManagerInterface $em,
         private ProjectRepository $projectRepository,
@@ -36,24 +42,29 @@ class CollectionController extends AbstractController
         return $this->translator?->trans($id, $parameters) ?? $id;
     }
 
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, ?Request $request = null): JsonResponse
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $projectUuid)) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         if (!$project) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         if (!$this->getUser() && $request?->attributes->get('_project') !== $project) {
-            return $this->json(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -62,7 +73,7 @@ class CollectionController extends AbstractController
 
         $collections = $this->collectionRepository->findByProject($project);
 
-        return $this->json([
+        return $this->secureJson([
             'data' => array_map(fn($c) => $this->serialize($c), $collections),
         ]);
     }
@@ -71,20 +82,20 @@ class CollectionController extends AbstractController
     public function create(string $projectUuid, Request $request): JsonResponse
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $projectUuid)) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         if (!$project) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
-            return $this->json(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -92,42 +103,42 @@ class CollectionController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->trans('collection.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+            return $this->secureJson(['error' => $this->trans('collection.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('collection.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
+            return $this->secureJson(['error' => $this->trans('collection.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
-            return $this->json(['errors' => ['name' => $this->trans('collection.admin.name_required')], 'code' => 'NAME_REQUIRED'], 422);
+            return $this->secureJson(['errors' => ['name' => $this->trans('collection.admin.name_required')], 'code' => 'NAME_REQUIRED'], 422);
         }
         if (mb_strlen($name) > 255) {
-            return $this->json(['errors' => ['name' => $this->trans('collection.admin.name_too_long')], 'code' => 'NAME_TOO_LONG'], 422);
+            return $this->secureJson(['errors' => ['name' => $this->trans('collection.admin.name_too_long')], 'code' => 'NAME_TOO_LONG'], 422);
         }
 
         if (isset($data['slug'])) {
             $slug = trim((string) $data['slug']);
             if (mb_strlen($slug) > 255) {
-                return $this->json(['errors' => ['slug' => $this->trans('collection.admin.slug_too_long')], 'code' => 'SLUG_TOO_LONG'], 422);
+                return $this->secureJson(['errors' => ['slug' => $this->trans('collection.admin.slug_too_long')], 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($slug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
-                return $this->json(['errors' => ['slug' => $this->trans('collection.admin.invalid_slug_format')], 'code' => 'INVALID_SLUG_FORMAT'], 422);
+                return $this->secureJson(['errors' => ['slug' => $this->trans('collection.admin.invalid_slug_format')], 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
         }
 
         if (isset($data['description']) && mb_strlen((string) $data['description']) > 2000) {
-            return $this->json(['errors' => ['description' => $this->trans('collection.admin.description_too_long')], 'code' => 'DESCRIPTION_TOO_LONG'], 422);
+            return $this->secureJson(['errors' => ['description' => $this->trans('collection.admin.description_too_long')], 'code' => 'DESCRIPTION_TOO_LONG'], 422);
         }
 
         try {
             // Logique centralisée dans SchemaProvisioner (conventions + validation).
             $collection = $this->provisioner->createCollection($project, $data);
         } catch (SchemaException $e) {
-            return $this->json(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
+            return $this->secureJson(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
 
         $this->auditService?->log(
@@ -141,27 +152,27 @@ class CollectionController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return $this->json(['data' => $this->serialize($collection)], 201);
+        return $this->secureJson(['data' => $this->serialize($collection)], 201);
     }
 
     #[Route('/reorder', name: 'reorder', methods: ['POST'], priority: 10)]
     public function reorder(string $projectUuid, Request $request): JsonResponse
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $projectUuid)) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         if (!$project) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
-            return $this->json(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -169,17 +180,17 @@ class CollectionController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->trans('collection.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+            return $this->secureJson(['error' => $this->trans('collection.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('collection.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
+            return $this->secureJson(['error' => $this->trans('collection.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         if (!isset($data['collections']) || !is_array($data['collections']) || count($data['collections']) > 500) {
-            return $this->json(['error' => $this->trans('collection.admin.reorder_invalid_list'), 'code' => 'REORDER_INVALID_LIST'], 422);
+            return $this->secureJson(['error' => $this->trans('collection.admin.reorder_invalid_list'), 'code' => 'REORDER_INVALID_LIST'], 422);
         }
 
         $updatedCount = 0;
@@ -216,7 +227,7 @@ class CollectionController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return $this->json(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     #[Route('/{slug}', name: 'show', methods: ['GET'])]
@@ -228,14 +239,14 @@ class CollectionController extends AbstractController
         }
 
         if (!$this->getUser() && $request?->attributes->get('_project') !== $collection->project) {
-            return $this->json(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $collection->project);
         }
 
-        return $this->json(['data' => $this->serialize($collection)]);
+        return $this->secureJson(['data' => $this->serialize($collection)]);
     }
 
     #[Route('/{slug}', name: 'update', methods: ['PUT', 'PATCH'])]
@@ -247,7 +258,7 @@ class CollectionController extends AbstractController
         }
 
         if (!$this->getUser() && $request->attributes->get('_project') !== $collection->project) {
-            return $this->json(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -255,44 +266,44 @@ class CollectionController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->trans('collection.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+            return $this->secureJson(['error' => $this->trans('collection.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('collection.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
+            return $this->secureJson(['error' => $this->trans('collection.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         if (isset($data['name'])) {
             $name = trim((string) $data['name']);
             if ($name === '') {
-                return $this->json(['errors' => ['name' => $this->trans('collection.admin.name_required')], 'code' => 'NAME_REQUIRED'], 422);
+                return $this->secureJson(['errors' => ['name' => $this->trans('collection.admin.name_required')], 'code' => 'NAME_REQUIRED'], 422);
             }
             if (mb_strlen($name) > 255) {
-                return $this->json(['errors' => ['name' => $this->trans('collection.admin.name_too_long')], 'code' => 'NAME_TOO_LONG'], 422);
+                return $this->secureJson(['errors' => ['name' => $this->trans('collection.admin.name_too_long')], 'code' => 'NAME_TOO_LONG'], 422);
             }
             $collection->name = NamingConvention::toPascalCase($name);
         }
         if (isset($data['slug'])) {
             $newSlug = trim((string) $data['slug']);
             if (mb_strlen($newSlug) > 255) {
-                return $this->json(['errors' => ['slug' => $this->trans('collection.admin.slug_too_long')], 'code' => 'SLUG_TOO_LONG'], 422);
+                return $this->secureJson(['errors' => ['slug' => $this->trans('collection.admin.slug_too_long')], 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($newSlug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $newSlug)) {
-                return $this->json(['errors' => ['slug' => $this->trans('collection.admin.invalid_slug_format')], 'code' => 'INVALID_SLUG_FORMAT'], 422);
+                return $this->secureJson(['errors' => ['slug' => $this->trans('collection.admin.invalid_slug_format')], 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
             $normalizedSlug = NamingConvention::toSnakeCase($newSlug);
             $existing = $this->collectionRepository->findOneByProjectAndSlug($collection->project, $normalizedSlug);
             if ($existing !== null && $existing->id !== $collection->id) {
-                return $this->json(['errors' => ['slug' => $this->trans('collection.admin.slug_already_exists')], 'code' => 'SLUG_ALREADY_EXISTS'], 409);
+                return $this->secureJson(['errors' => ['slug' => $this->trans('collection.admin.slug_already_exists')], 'code' => 'SLUG_ALREADY_EXISTS'], 409);
             }
             $collection->slug = $normalizedSlug;
         }
         if (array_key_exists('description', $data)) {
             $desc = (string) $data['description'];
             if (mb_strlen($desc) > 2000) {
-                return $this->json(['errors' => ['description' => $this->trans('collection.admin.description_too_long')], 'code' => 'DESCRIPTION_TOO_LONG'], 422);
+                return $this->secureJson(['errors' => ['description' => $this->trans('collection.admin.description_too_long')], 'code' => 'DESCRIPTION_TOO_LONG'], 422);
             }
             $collection->description = $data['description'];
         }
@@ -319,7 +330,7 @@ class CollectionController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return $this->json(['data' => $this->serialize($collection)]);
+        return $this->secureJson(['data' => $this->serialize($collection)]);
     }
 
     #[Route('/{slug}', name: 'delete', methods: ['DELETE'])]
@@ -331,7 +342,7 @@ class CollectionController extends AbstractController
         }
 
         if (!$this->getUser() && $request?->attributes->get('_project') !== $collection->project) {
-            return $this->json(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('collection.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -357,27 +368,27 @@ class CollectionController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return $this->json(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     private function findCollection(string $projectUuid, string $slug): Collection|JsonResponse
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $projectUuid)) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         if (!$project) {
-            return $this->json(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $slug);
         if (!$collection) {
-            return $this->json(['error' => $this->trans('collection.admin.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('collection.admin.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
 
         return $collection;

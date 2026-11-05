@@ -24,6 +24,12 @@ class CommentController extends AbstractController
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
     private const MAX_PAYLOAD_BYTES = 524288; // 512 KB
 
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private CollectionRepository $collectionRepository,
@@ -42,6 +48,11 @@ class CommentController extends AbstractController
         return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
     }
 
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, string $collectionSlug, int $entryId, Request $request): JsonResponse
     {
@@ -54,7 +65,7 @@ class CommentController extends AbstractController
         $perPage = min(50, max(1, $request->query->getInt('per_page', 15)));
         $comments = $this->commentRepository->findByEntryPaginated($entryId, $page, $perPage);
         $total = $this->commentRepository->countByEntry($entryId);
-        return new JsonResponse([
+        return $this->secureJson([
             'data' => array_map(fn (Comment $c) => $this->serializeComment($c), $comments),
             'meta' => ['total' => $total, 'page' => $page, 'per_page' => $perPage, 'pages' => (int) ceil($total / $perPage)],
         ]);
@@ -70,7 +81,7 @@ class CommentController extends AbstractController
 
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.auth_required', [], 'Authentication required.'),
                 'code' => 'AUTH_REQUIRED',
             ], 401);
@@ -79,7 +90,7 @@ class CommentController extends AbstractController
         if ($this->commentLimiter !== null) {
             $identifier = $user->id ? ('user_' . $user->id) : ($request->getClientIp() ?: '127.0.0.1');
             if (false === $this->commentLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('comment.too_many_requests', [], 'Too many comment requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
                 ], 429);
@@ -87,7 +98,7 @@ class CommentController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.payload_too_large', [], 'Comment payload too large (max 512KB).'),
                 'code' => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -96,7 +107,7 @@ class CommentController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.invalid_json', [], 'Invalid JSON body.'),
                 'code' => 'INVALID_JSON',
             ], 400);
@@ -105,13 +116,13 @@ class CommentController extends AbstractController
         $rawBody = (string) ($data['body'] ?? '');
         $body = trim(preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $rawBody));
         if ($body === '') {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.body_empty', [], 'Comment body cannot be empty.'),
                 'code' => 'BODY_EMPTY',
             ], 422);
         }
         if (mb_strlen($body) > 10000) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.body_too_long', [], 'Comment body cannot exceed 10000 characters.'),
                 'code' => 'BODY_TOO_LONG',
             ], 422);
@@ -146,7 +157,7 @@ class CommentController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse(['data' => $this->serializeComment($comment)], 201);
+        return $this->secureJson(['data' => $this->serializeComment($comment)], 201);
     }
 
     #[Route('/{id}', name: 'update', methods: ['PUT'])]
@@ -159,21 +170,21 @@ class CommentController extends AbstractController
 
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.auth_required', [], 'Authentication required.'),
                 'code' => 'AUTH_REQUIRED',
             ], 401);
         }
 
         if ($comment->author?->id !== $user->id) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.access_denied', [], 'Access denied.'),
                 'code' => 'ACCESS_DENIED',
             ], 403);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.payload_too_large', [], 'Comment payload too large (max 512KB).'),
                 'code' => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -182,7 +193,7 @@ class CommentController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.invalid_json', [], 'Invalid JSON body.'),
                 'code' => 'INVALID_JSON',
             ], 400);
@@ -192,13 +203,13 @@ class CommentController extends AbstractController
             $rawBody = (string) $data['body'];
             $body = trim(preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $rawBody));
             if ($body === '') {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('comment.body_empty', [], 'Comment body cannot be empty.'),
                     'code' => 'BODY_EMPTY',
                 ], 422);
             }
             if (mb_strlen($body) > 10000) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('comment.body_too_long', [], 'Comment body cannot exceed 10000 characters.'),
                     'code' => 'BODY_TOO_LONG',
                 ], 422);
@@ -219,7 +230,7 @@ class CommentController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse(['data' => $this->serializeComment($comment)]);
+        return $this->secureJson(['data' => $this->serializeComment($comment)]);
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
@@ -232,7 +243,7 @@ class CommentController extends AbstractController
 
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.auth_required', [], 'Authentication required.'),
                 'code' => 'AUTH_REQUIRED',
             ], 401);
@@ -240,7 +251,7 @@ class CommentController extends AbstractController
 
         $isAdmin = in_array('ROLE_ADMIN', $user->getRoles(), true) || in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true);
         if ($comment->author?->id !== $user->id && !$isAdmin) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.access_denied', [], 'Access denied.'),
                 'code' => 'ACCESS_DENIED',
             ], 403);
@@ -261,7 +272,7 @@ class CommentController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     #[Route('/{id}/resolve', name: 'resolve', methods: ['POST'])]
@@ -274,14 +285,14 @@ class CommentController extends AbstractController
 
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.auth_required', [], 'Authentication required.'),
                 'code' => 'AUTH_REQUIRED',
             ], 401);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.payload_too_large', [], 'Comment payload too large (max 512KB).'),
                 'code' => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -290,14 +301,14 @@ class CommentController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.invalid_json', [], 'Invalid JSON body.'),
                 'code' => 'INVALID_JSON',
             ], 400);
         }
         $status = $data['status'] ?? '';
         if (!in_array($status, ['open', 'resolved'], true)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.invalid_status', [], 'Invalid comment status: must be open or resolved.'),
                 'code' => 'INVALID_STATUS',
             ], 422);
@@ -317,27 +328,27 @@ class CommentController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse(['data' => $this->serializeComment($comment)]);
+        return $this->secureJson(['data' => $this->serializeComment($comment)]);
     }
 
     private function resolveEntry(string $projectUuid, string $collectionSlug, int $entryId, string $permission): ContentEntry|JsonResponse
     {
         if (!preg_match(self::UUID_REGEX, $projectUuid)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.entry_not_found', [], 'Entry not found.'),
                 'code' => 'ENTRY_NOT_FOUND',
             ], 404);
         }
 
         if (strlen($collectionSlug) > 100 || !preg_match('/^[a-z0-9_-]+$/i', $collectionSlug)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.entry_not_found', [], 'Entry not found.'),
                 'code' => 'ENTRY_NOT_FOUND',
             ], 404);
         }
 
         if ($entryId <= 0) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.entry_not_found', [], 'Entry not found.'),
                 'code' => 'ENTRY_NOT_FOUND',
             ], 404);
@@ -346,14 +357,14 @@ class CommentController extends AbstractController
         try {
             $entry = $this->entryRepository->find($entryId);
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.entry_not_found', [], 'Entry not found.'),
                 'code' => 'ENTRY_NOT_FOUND',
             ], 404);
         }
 
         if (!$entry || $entry->project?->uuid?->toRfc4122() !== $projectUuid || $entry->collection?->slug !== $collectionSlug) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.entry_not_found', [], 'Entry not found.'),
                 'code' => 'ENTRY_NOT_FOUND',
             ], 404);
@@ -367,21 +378,21 @@ class CommentController extends AbstractController
     private function resolveComment(string $projectUuid, string $collectionSlug, int $entryId, int $id, string $permission): Comment|JsonResponse
     {
         if (!preg_match(self::UUID_REGEX, $projectUuid)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.not_found', [], 'Comment not found.'),
                 'code' => 'COMMENT_NOT_FOUND',
             ], 404);
         }
 
         if (strlen($collectionSlug) > 100 || !preg_match('/^[a-z0-9_-]+$/i', $collectionSlug)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.not_found', [], 'Comment not found.'),
                 'code' => 'COMMENT_NOT_FOUND',
             ], 404);
         }
 
         if ($id <= 0 || $entryId <= 0) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.not_found', [], 'Comment not found.'),
                 'code' => 'COMMENT_NOT_FOUND',
             ], 404);
@@ -390,14 +401,14 @@ class CommentController extends AbstractController
         try {
             $comment = $this->commentRepository->find($id);
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.not_found', [], 'Comment not found.'),
                 'code' => 'COMMENT_NOT_FOUND',
             ], 404);
         }
 
         if (!$comment || $comment->entry?->id !== $entryId) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.not_found', [], 'Comment not found.'),
                 'code' => 'COMMENT_NOT_FOUND',
             ], 404);
@@ -405,7 +416,7 @@ class CommentController extends AbstractController
 
         $entry = $comment->entry;
         if (!$entry || $entry->project?->uuid?->toRfc4122() !== $projectUuid || $entry->collection?->slug !== $collectionSlug) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('comment.not_found', [], 'Comment not found.'),
                 'code' => 'COMMENT_NOT_FOUND',
             ], 404);

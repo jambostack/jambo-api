@@ -22,6 +22,12 @@ class ShareController extends AbstractController
     public const MAX_PAGE_LIMIT = 100;
     public const MAX_OFFSET = 10000;
 
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private readonly ProjectRepository $projectRepository,
         private readonly ContentEntryRepository $entryRepository,
@@ -42,22 +48,27 @@ class ShareController extends AbstractController
         return $id;
     }
 
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
     #[Route('', name: 'store', methods: ['POST'])]
     public function store(string $projectUuid, Request $request): JsonResponse
     {
         if ($this->shareLimiter !== null) {
             $limiter = $this->shareLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('share.rate_limit_exceeded', [], 'Too many share requests. Try again later.')], 429);
+                return $this->secureJson(['error' => $this->trans('share.rate_limit_exceeded', [], 'Too many share requests. Try again later.')], 429);
             }
         }
 
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return new JsonResponse(['error' => $this->trans('share.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('share.project_not_found', [], 'Project not found')], 404);
         }
         if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
-            return new JsonResponse(['error' => $this->trans('share.auth_required', [], 'Authentication required')], 401);
+            return $this->secureJson(['error' => $this->trans('share.auth_required', [], 'Authentication required')], 401);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.update', $project);
@@ -65,18 +76,18 @@ class ShareController extends AbstractController
 
         $content = $request->getContent();
         if (strlen($content) > self::MAX_PAYLOAD_SIZE) {
-            return new JsonResponse(['error' => $this->trans('share.payload_too_large', [], 'Payload too large (max 16KB).')], 413);
+            return $this->secureJson(['error' => $this->trans('share.payload_too_large', [], 'Payload too large (max 16KB).')], 413);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('share.invalid_json', [], 'Invalid JSON body')], 400);
+            return $this->secureJson(['error' => $this->trans('share.invalid_json', [], 'Invalid JSON body')], 400);
         }
 
         $entryUuid = (string) ($data['entryUuid'] ?? '');
         if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $entryUuid)) {
-            return new JsonResponse(['error' => $this->trans('share.entry_not_found', [], 'Entry not found')], 404);
+            return $this->secureJson(['error' => $this->trans('share.entry_not_found', [], 'Entry not found')], 404);
         }
 
         try {
@@ -85,20 +96,20 @@ class ShareController extends AbstractController
             $entry = null;
         }
         if (!$entry || $entry->isDeleted()) {
-            return new JsonResponse(['error' => $this->trans('share.entry_not_found', [], 'Entry not found')], 404);
+            return $this->secureJson(['error' => $this->trans('share.entry_not_found', [], 'Entry not found')], 404);
         }
 
         try {
             $duration = ShareDuration::fromQuery($data['duration'] ?? null);
         } catch (\InvalidArgumentException) {
-            return new JsonResponse(['error' => $this->trans('share.invalid_duration', [], 'Invalid duration')], 400);
+            return $this->secureJson(['error' => $this->trans('share.invalid_duration', [], 'Invalid duration')], 400);
         }
 
         ['share' => $share, 'plainToken' => $plain] = $this->shareService->create($entry, $duration, $this->getUser());
 
         $url = $this->generateUrl('public_share_show', ['token' => $plain], UrlGeneratorInterface::ABSOLUTE_URL);
 
-        return new JsonResponse(['data' => [
+        return $this->secureJson(['data' => [
             'id'        => $share->id,
             'url'       => $url,
             'expiresAt' => $share->expiresAt?->format('c'),
@@ -112,16 +123,16 @@ class ShareController extends AbstractController
         if ($this->shareLimiter !== null) {
             $limiter = $this->shareLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('share.rate_limit_exceeded', [], 'Too many share requests. Try again later.')], 429);
+                return $this->secureJson(['error' => $this->trans('share.rate_limit_exceeded', [], 'Too many share requests. Try again later.')], 429);
             }
         }
 
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return new JsonResponse(['error' => $this->trans('share.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('share.project_not_found', [], 'Project not found')], 404);
         }
         if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
-            return new JsonResponse(['error' => $this->trans('share.auth_required', [], 'Authentication required')], 401);
+            return $this->secureJson(['error' => $this->trans('share.auth_required', [], 'Authentication required')], 401);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.update', $project);
@@ -129,7 +140,7 @@ class ShareController extends AbstractController
 
         $entryUuid = (string) $request->query->get('entryUuid', '');
         if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $entryUuid)) {
-            return new JsonResponse(['error' => $this->trans('share.entry_not_found', [], 'Entry not found')], 404);
+            return $this->secureJson(['error' => $this->trans('share.entry_not_found', [], 'Entry not found')], 404);
         }
 
         try {
@@ -138,12 +149,12 @@ class ShareController extends AbstractController
             $entry = null;
         }
         if (!$entry) {
-            return new JsonResponse(['error' => $this->trans('share.entry_not_found', [], 'Entry not found')], 404);
+            return $this->secureJson(['error' => $this->trans('share.entry_not_found', [], 'Entry not found')], 404);
         }
 
         $shares = $this->shareRepository->findByEntry($entry);
 
-        return new JsonResponse(['data' => array_map(fn ($s) => [
+        return $this->secureJson(['data' => array_map(fn ($s) => [
             'id'             => $s->id,
             'expiresAt'      => $s->expiresAt?->format('c'),
             'revokedAt'      => $s->revokedAt?->format('c'),
@@ -162,33 +173,33 @@ class ShareController extends AbstractController
         if ($this->shareLimiter !== null) {
             $limiter = $this->shareLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('share.rate_limit_exceeded', [], 'Too many share requests. Try again later.')], 429);
+                return $this->secureJson(['error' => $this->trans('share.rate_limit_exceeded', [], 'Too many share requests. Try again later.')], 429);
             }
         }
 
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return new JsonResponse(['error' => $this->trans('share.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('share.project_not_found', [], 'Project not found')], 404);
         }
         if (!$this->getUser() && $request->attributes->get('_project') !== $project) {
-            return new JsonResponse(['error' => $this->trans('share.auth_required', [], 'Authentication required')], 401);
+            return $this->secureJson(['error' => $this->trans('share.auth_required', [], 'Authentication required')], 401);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.update', $project);
         }
 
         if ($id <= 0) {
-            return new JsonResponse(['error' => $this->trans('share.not_found', [], 'Share not found')], 404);
+            return $this->secureJson(['error' => $this->trans('share.not_found', [], 'Share not found')], 404);
         }
 
         $share = $this->shareRepository->find($id);
         if (!$share || $share->project->id !== $project->id) {
-            return new JsonResponse(['error' => $this->trans('share.not_found', [], 'Share not found')], 404);
+            return $this->secureJson(['error' => $this->trans('share.not_found', [], 'Share not found')], 404);
         }
 
         $this->shareService->revoke($share);
 
-        return new JsonResponse(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     private function resolveProject(string $projectUuid): ?\App\Entity\Project

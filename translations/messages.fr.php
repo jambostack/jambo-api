@@ -1977,6 +1977,7 @@ return [
     'graphql.query_too_large' => 'Query GraphQL dépasse la taille maximale autorisée (64 Ko).',
     'graphql.invalid_variables' => 'Les variables GraphQL doivent être un objet ou tableau.',
     'graphql.too_many_aliases' => 'Trop d\'alias de champs GraphQL (max %max%). Réduisez le nombre d\'alias dans votre requête.',
+    'graphql.mercure_not_configured' => 'Hub Mercure non configuré. Installez et démarrez le service Docker Mercure.',
     'mcp.rate_limit_exceeded' => 'Trop de requêtes MCP. Veuillez réessayer plus tard.',
     'mcp.payload_too_large' => 'Payload trop volumineux (max 2 Mo).',
     'mcp.project_not_found' => 'Projet introuvable.',

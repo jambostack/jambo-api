@@ -25,6 +25,12 @@ class WebhookInboundController extends AbstractController
 {
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
 
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private readonly AutomationRepository $automationRepo,
         private readonly AutomationEngine $engine,
@@ -42,6 +48,11 @@ class WebhookInboundController extends AbstractController
         return $default ?? $id;
     }
 
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
     /**
      * Reçoit un webhook entrant et déclenche l'automatisation correspondante.
      *
@@ -55,7 +66,7 @@ class WebhookInboundController extends AbstractController
         if ($this->webhookInboundLimiter !== null) {
             $limiter = $this->webhookInboundLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('automation.admin.webhook_rate_limit', [], 'Too many webhook requests. Try again later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
                 ], 429);
@@ -63,7 +74,7 @@ class WebhookInboundController extends AbstractController
         }
 
         if (!preg_match(self::UUID_REGEX, $automationUuid)) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('automation.admin.webhook_endpoint_not_found', [], 'Webhook endpoint not found'),
                 'code' => 'ENDPOINT_NOT_FOUND',
             ], 404);
@@ -73,21 +84,21 @@ class WebhookInboundController extends AbstractController
         try {
             $automation = $this->automationRepo->findOneByUuid($automationUuid);
         } catch (\Throwable) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('automation.admin.webhook_endpoint_not_found', [], 'Webhook endpoint not found'),
                 'code' => 'ENDPOINT_NOT_FOUND',
             ], 404);
         }
 
         if (!$automation) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('automation.admin.webhook_endpoint_not_found', [], 'Webhook endpoint not found'),
                 'code' => 'ENDPOINT_NOT_FOUND',
             ], 404);
         }
 
         if (!$automation->isActive) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('automation.admin.webhook_automation_inactive', [], 'Automation is not active'),
                 'code' => 'AUTOMATION_INACTIVE',
             ], 410);
@@ -95,7 +106,7 @@ class WebhookInboundController extends AbstractController
 
         $graph = $automation->flowGraph;
         if (!$graph || empty($graph['nodes'])) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('automation.admin.no_flow_graph', [], 'Automation has no flow graph'),
                 'code' => 'NO_FLOW_GRAPH',
             ], 400);
@@ -107,7 +118,7 @@ class WebhookInboundController extends AbstractController
         $triggerType = $triggerInfo['type'];
 
         if (!$triggerNode || $triggerType !== 'trigger.webhook.inbound') {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('automation.admin.not_webhook_trigger', [], 'Not a webhook inbound automation'),
                 'code' => 'NOT_WEBHOOK_TRIGGER',
             ], 400);
@@ -116,7 +127,7 @@ class WebhookInboundController extends AbstractController
         // Parse et contrôle strict de la taille du corps (max 2 Mo)
         $body = (string) $request->getContent();
         if (strlen($body) > 2 * 1024 * 1024) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('automation.admin.payload_too_large', [], 'Payload too large (max 2MB)'),
                 'code' => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -130,7 +141,7 @@ class WebhookInboundController extends AbstractController
                 try {
                     $resolvedSecret = $this->secretService->decrypt(substr($resolvedSecret, 4));
                 } catch (\Throwable) {
-                    return $this->json([
+                    return $this->secureJson([
                         'error' => $this->trans('automation.admin.webhook_secret_decrypt_error', [], 'Webhook secret decryption failure'),
                         'code' => 'SECRET_DECRYPT_ERROR',
                     ], 500);
@@ -138,7 +149,7 @@ class WebhookInboundController extends AbstractController
             }
 
             if (!$this->verifyWebhookSecretOrSignature($request, $body, $resolvedSecret)) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('automation.admin.webhook_invalid_signature', [], 'Invalid webhook secret or signature'),
                     'code' => 'SIGNATURE_INVALID',
                 ], 403);
@@ -162,7 +173,7 @@ class WebhookInboundController extends AbstractController
         try {
             $run = $this->engine->execute($automation, $payload);
 
-            return $this->json([
+            return $this->secureJson([
                 'success' => $run->status !== 'failed',
                 'run_id' => $run->id,
                 'status' => $run->status,
@@ -172,7 +183,7 @@ class WebhookInboundController extends AbstractController
                 'automation_uuid' => $automationUuid,
                 'error' => $e->getMessage(),
             ]);
-            return $this->json([
+            return $this->secureJson([
                 'success' => false,
                 'error' => $this->trans('automation.admin.webhook_internal_error', [], 'Internal error processing webhook'),
             ], 500);

@@ -30,6 +30,12 @@ class FieldController extends AbstractController
         'code', 'json', 'array', 'repeater', 'enumeration', 'tags', 'media', 'relation',
     ];
 
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private EntityManagerInterface $em,
         private FieldRepository $fieldRepository,
@@ -46,6 +52,11 @@ class FieldController extends AbstractController
         return $this->translator?->trans($id, $parameters) ?? $id;
     }
 
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, string $collectionSlug, ?Request $request = null): JsonResponse
     {
@@ -55,7 +66,7 @@ class FieldController extends AbstractController
         }
 
         if (!$this->getUser() && $request?->attributes->get('_project') !== $collection->project) {
-            return $this->json(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -64,7 +75,7 @@ class FieldController extends AbstractController
 
         $fields = $this->fieldRepository->findByCollection($collection);
 
-        return $this->json([
+        return $this->secureJson([
             'data' => array_map(fn($f) => $this->serialize($f), $fields),
         ]);
     }
@@ -78,7 +89,7 @@ class FieldController extends AbstractController
         }
 
         if (!$this->getUser() && $request->attributes->get('_project') !== $collection->project) {
-            return $this->json(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -86,58 +97,58 @@ class FieldController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->trans('field.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+            return $this->secureJson(['error' => $this->trans('field.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('field.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
+            return $this->secureJson(['error' => $this->trans('field.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
-            return $this->json(['error' => $this->trans('field.admin.name_required'), 'code' => 'NAME_REQUIRED'], 422);
+            return $this->secureJson(['error' => $this->trans('field.admin.name_required'), 'code' => 'NAME_REQUIRED'], 422);
         }
         if (mb_strlen($name) > 255) {
-            return $this->json(['error' => $this->trans('field.admin.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
+            return $this->secureJson(['error' => $this->trans('field.admin.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
         }
 
         $type = (string) ($data['type'] ?? '');
         if ($type === '') {
-            return $this->json(['error' => $this->trans('field.admin.type_required'), 'code' => 'TYPE_REQUIRED'], 422);
+            return $this->secureJson(['error' => $this->trans('field.admin.type_required'), 'code' => 'TYPE_REQUIRED'], 422);
         }
         if (!in_array($type, self::ALLOWED_TYPES, true)) {
-            return $this->json(['error' => $this->trans('field.admin.invalid_type', ['%type%' => $type]), 'code' => 'INVALID_FIELD_TYPE'], 422);
+            return $this->secureJson(['error' => $this->trans('field.admin.invalid_type', ['%type%' => $type]), 'code' => 'INVALID_FIELD_TYPE'], 422);
         }
 
         if (isset($data['slug'])) {
             $slug = trim((string) $data['slug']);
             if (mb_strlen($slug) > 255) {
-                return $this->json(['error' => $this->trans('field.admin.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($slug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
-                return $this->json(['error' => $this->trans('field.admin.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
         }
 
         if (isset($data['options'])) {
             if (!is_array($data['options'])) {
-                return $this->json(['error' => $this->trans('field.admin.options_invalid'), 'code' => 'INVALID_OPTIONS'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.options_invalid'), 'code' => 'INVALID_OPTIONS'], 422);
             }
             $json = json_encode($data['options']);
             if ($json !== false && strlen($json) > 65536) {
-                return $this->json(['error' => $this->trans('field.admin.options_too_large'), 'code' => 'OPTIONS_TOO_LARGE'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.options_too_large'), 'code' => 'OPTIONS_TOO_LARGE'], 422);
             }
             if ($this->getArrayDepth($data['options']) > 6) {
-                return $this->json(['error' => $this->trans('field.admin.options_too_deep'), 'code' => 'OPTIONS_TOO_DEEP'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.options_too_deep'), 'code' => 'OPTIONS_TOO_DEEP'], 422);
             }
         }
 
         try {
             $field = $this->provisioner->addField($collection, $data);
         } catch (SchemaException $e) {
-            return $this->json(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
+            return $this->secureJson(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
 
         $this->auditService?->log(
@@ -151,7 +162,7 @@ class FieldController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return $this->json(['data' => $this->serialize($field)], 201);
+        return $this->secureJson(['data' => $this->serialize($field)], 201);
     }
 
     #[Route('/{fieldSlug}', name: 'show', methods: ['GET'])]
@@ -163,14 +174,14 @@ class FieldController extends AbstractController
         }
 
         if (!$this->getUser() && $request?->attributes->get('_project') !== $field->collection->project) {
-            return $this->json(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $field->collection->project);
         }
 
-        return $this->json(['data' => $this->serialize($field)]);
+        return $this->secureJson(['data' => $this->serialize($field)]);
     }
 
     #[Route('/{fieldSlug}', name: 'update', methods: ['PUT', 'PATCH'])]
@@ -182,7 +193,7 @@ class FieldController extends AbstractController
         }
 
         if (!$this->getUser() && $request->attributes->get('_project') !== $field->collection->project) {
-            return $this->json(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -190,56 +201,56 @@ class FieldController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->trans('field.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+            return $this->secureJson(['error' => $this->trans('field.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('field.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
+            return $this->secureJson(['error' => $this->trans('field.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         if (isset($data['name'])) {
             $name = trim((string) $data['name']);
             if ($name === '') {
-                return $this->json(['error' => $this->trans('field.admin.name_required'), 'code' => 'NAME_REQUIRED'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.name_required'), 'code' => 'NAME_REQUIRED'], 422);
             }
             if (mb_strlen($name) > 255) {
-                return $this->json(['error' => $this->trans('field.admin.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
             }
         }
 
         if (isset($data['type'])) {
             $type = (string) $data['type'];
             if (!in_array($type, self::ALLOWED_TYPES, true)) {
-                return $this->json(['error' => $this->trans('field.admin.invalid_type', ['%type%' => $type]), 'code' => 'INVALID_FIELD_TYPE'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.invalid_type', ['%type%' => $type]), 'code' => 'INVALID_FIELD_TYPE'], 422);
             }
         }
 
         if (isset($data['slug'])) {
             $slug = trim((string) $data['slug']);
             if (mb_strlen($slug) > 255) {
-                return $this->json(['error' => $this->trans('field.admin.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($slug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
-                return $this->json(['error' => $this->trans('field.admin.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
         }
 
         if (isset($data['options']) && is_array($data['options'])) {
             $json = json_encode($data['options']);
             if ($json !== false && strlen($json) > 65536) {
-                return $this->json(['error' => $this->trans('field.admin.options_too_large'), 'code' => 'OPTIONS_TOO_LARGE'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.options_too_large'), 'code' => 'OPTIONS_TOO_LARGE'], 422);
             }
             if ($this->getArrayDepth($data['options']) > 6) {
-                return $this->json(['error' => $this->trans('field.admin.options_too_deep'), 'code' => 'OPTIONS_TOO_DEEP'], 422);
+                return $this->secureJson(['error' => $this->trans('field.admin.options_too_deep'), 'code' => 'OPTIONS_TOO_DEEP'], 422);
             }
         }
 
         try {
             $this->provisioner->updateField($field, $data);
         } catch (SchemaException $e) {
-            return $this->json(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
+            return $this->secureJson(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
 
         $this->auditService?->log(
@@ -253,7 +264,7 @@ class FieldController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return $this->json(['data' => $this->serialize($field)]);
+        return $this->secureJson(['data' => $this->serialize($field)]);
     }
 
     #[Route('/reorder', name: 'reorder', methods: ['POST'], priority: 10)]
@@ -265,7 +276,7 @@ class FieldController extends AbstractController
         }
 
         if (!$this->getUser() && $request->attributes->get('_project') !== $collection->project) {
-            return $this->json(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -273,17 +284,17 @@ class FieldController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->json(['error' => $this->trans('field.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+            return $this->secureJson(['error' => $this->trans('field.admin.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('field.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
+            return $this->secureJson(['error' => $this->trans('field.admin.invalid_json'), 'code' => 'INVALID_JSON'], 400);
         }
 
         if (!isset($data['fields']) || !is_array($data['fields']) || count($data['fields']) > 500) {
-            return $this->json(['error' => $this->trans('field.admin.reorder_invalid_list'), 'code' => 'INVALID_REORDER_LIST'], 422);
+            return $this->secureJson(['error' => $this->trans('field.admin.reorder_invalid_list'), 'code' => 'INVALID_REORDER_LIST'], 422);
         }
 
         $updatedCount = 0;
@@ -316,7 +327,7 @@ class FieldController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return $this->json(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     #[Route('/{fieldSlug}', name: 'delete', methods: ['DELETE'])]
@@ -328,7 +339,7 @@ class FieldController extends AbstractController
         }
 
         if (!$this->getUser() && $request?->attributes->get('_project') !== $field->collection->project) {
-            return $this->json(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
+            return $this->secureJson(['error' => $this->trans('field.admin.auth_required'), 'code' => 'AUTH_REQUIRED'], 401);
         }
 
         if ($this->getUser()) {
@@ -354,27 +365,27 @@ class FieldController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return $this->json(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     private function findCollection(string $projectUuid, string $collectionSlug): Collection|JsonResponse
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $projectUuid)) {
-            return $this->json(['error' => $this->trans('field.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('field.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('field.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('field.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         if (!$project) {
-            return $this->json(['error' => $this->trans('field.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('field.admin.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if (!$collection) {
-            return $this->json(['error' => $this->trans('field.admin.collection_not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('field.admin.collection_not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
 
         return $collection;
@@ -389,7 +400,7 @@ class FieldController extends AbstractController
 
         $field = $this->fieldRepository->findOneByCollectionAndSlug($collection, $fieldSlug);
         if (!$field) {
-            return $this->json(['error' => $this->trans('field.admin.not_found'), 'code' => 'FIELD_NOT_FOUND'], 404);
+            return $this->secureJson(['error' => $this->trans('field.admin.not_found'), 'code' => 'FIELD_NOT_FOUND'], 404);
         }
 
         return $field;

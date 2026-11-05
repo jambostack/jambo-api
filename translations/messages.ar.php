@@ -1959,6 +1959,7 @@ return [
     'graphql.query_too_large' => 'استعلام GraphQL يتجاوز الحجم الأقصى المسموح به (64 كيلوبايت).',
     'graphql.invalid_variables' => 'يجب أن تكون متغيرات GraphQL كائناً أو مصفوفة.',
     'graphql.too_many_aliases' => 'عدد كبير جداً من الأسماء المستعارة لحقول GraphQL (الحد الأقصى %max%).',
+    'graphql.mercure_not_configured' => 'مركز Mercure غير مهيأ. قم بتثبيت وبدء تشغيل خدمة Mercure عبر Docker.',
     'mcp.rate_limit_exceeded' => 'طلبات MCP كثيرة جداً. يُرجى المحاولة لاحقاً.',
     'mcp.payload_too_large' => 'الحمولة كبيرة جداً (الحد الأقصى 2 ميغابايت).',
     'mcp.project_not_found' => 'المشروع غير موجود.',

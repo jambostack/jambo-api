@@ -19,6 +19,12 @@ class NotificationController extends AbstractController
 {
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
 
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private NotificationRepository $notificationRepository,
         #[Autowire(service: 'limiter.notification_limiter')]
@@ -31,6 +37,11 @@ class NotificationController extends AbstractController
     private function trans(string $key, array $params = [], string $default = ''): string
     {
         return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -62,7 +73,7 @@ class NotificationController extends AbstractController
             $unreadCount = $this->notificationRepository->countUnreadByUser($user);
         }
 
-        return $this->json([
+        return $this->secureJson([
             'data' => array_map(fn ($n) => $this->serializeNotification($n), $notifications),
             'meta' => ['unread_count' => $unreadCount],
         ]);
@@ -82,7 +93,7 @@ class NotificationController extends AbstractController
 
         $notification = $this->notificationRepository->find($id);
         if (!$notification || $notification->recipient?->id !== $user->id) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('notification.not_found', [], 'Notification not found.'),
                 'code' => 'NOTIFICATION_NOT_FOUND',
             ], 404);
@@ -91,7 +102,7 @@ class NotificationController extends AbstractController
             $notification->readAt = new \DateTimeImmutable();
             $this->notificationRepository->getEntityManager()->flush();
         }
-        return $this->json(['data' => $this->serializeNotification($notification)]);
+        return $this->secureJson(['data' => $this->serializeNotification($notification)]);
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
@@ -108,7 +119,7 @@ class NotificationController extends AbstractController
 
         $notification = $this->notificationRepository->find($id);
         if (!$notification || $notification->recipient?->id !== $user->id) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('notification.not_found', [], 'Notification not found.'),
                 'code' => 'NOTIFICATION_NOT_FOUND',
             ], 404);
@@ -118,7 +129,7 @@ class NotificationController extends AbstractController
         $em->remove($notification);
         $em->flush();
 
-        return $this->json(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     #[Route('/read-all', name: 'read_all', methods: ['POST'])]
@@ -144,7 +155,7 @@ class NotificationController extends AbstractController
             $this->notificationRepository->markAllAsRead($user);
         }
 
-        return $this->json(['unread_count' => 0]);
+        return $this->secureJson(['unread_count' => 0]);
     }
 
     #[Route('/unread-count', name: 'unread_count', methods: ['GET'])]
@@ -168,7 +179,7 @@ class NotificationController extends AbstractController
             ? $this->notificationRepository->countUnreadByUserAndProject($user, $projectFilter)
             : $this->notificationRepository->countUnreadByUser($user);
 
-        return $this->json(['count' => $count]);
+        return $this->secureJson(['count' => $count]);
     }
 
     private function resolveProjectFilter(Request $request, \App\Entity\User $user): Project|JsonResponse|null
@@ -180,7 +191,7 @@ class NotificationController extends AbstractController
 
         $trimmedParam = trim($projectParam);
         if (!preg_match(self::UUID_REGEX, $trimmedParam)) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('notification.project_not_found', [], 'Project not found.'),
                 'code' => 'PROJECT_NOT_FOUND',
             ], 404);
@@ -192,7 +203,7 @@ class NotificationController extends AbstractController
 
         $project = $this->projectRepository->findOneBy(['uuid' => $trimmedParam]);
         if (!$project) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('notification.project_not_found', [], 'Project not found.'),
                 'code' => 'PROJECT_NOT_FOUND',
             ], 404);
@@ -205,7 +216,7 @@ class NotificationController extends AbstractController
         if ($this->memberRepository !== null) {
             $member = $this->memberRepository->findActiveByUserAndProject($user, $project);
             if ($member === null) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('notification.access_denied', [], 'Forbidden: You do not have access to this project.'),
                     'code' => 'ACCESS_DENIED',
                 ], 403);
@@ -227,7 +238,7 @@ class NotificationController extends AbstractController
             } catch (\Throwable) {}
 
             if (!$this->notificationLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('notification.rate_limit_exceeded', [], 'Too many notification requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
                 ], 429);
@@ -240,7 +251,7 @@ class NotificationController extends AbstractController
     {
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('notification.auth_required', [], 'Authentication required.'),
                 'code' => 'AUTH_REQUIRED',
             ], 401);

@@ -32,6 +32,12 @@ class GraphQLController extends AbstractController
     public const MAX_ALIASES        = 30;    // Limit alias amplification attacks
     public const MAX_OPERATIONS     = 1;     // No batched queries via POST body array
 
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private EntityManagerInterface $em,
         private SchemaGenerator $schemaGenerator,
@@ -50,6 +56,11 @@ class GraphQLController extends AbstractController
         return strtr($default, $parameters);
     }
 
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
     #[Route('/api/projects/{uuid}/graphql', name: 'graphql_endpoint', methods: ['POST', 'GET'])]
     public function handle(string $uuid, Request $request): Response
     {
@@ -62,16 +73,16 @@ class GraphQLController extends AbstractController
         } catch (\Throwable) {}
 
         if ($this->graphqlLimiter !== null && false === $this->graphqlLimiter->create($identifier)->consume(1)->isAccepted()) {
-            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.too_many_requests', 'Trop de requêtes GraphQL. Veuillez réessayer plus tard.')]]], 429);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.too_many_requests', 'Trop de requêtes GraphQL. Veuillez réessayer plus tard.')]]], 429);
         }
 
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable')]]], 404);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable')]]], 404);
         }
         if (!$project) {
-            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable')]]], 404);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable')]]], 404);
         }
 
         if ($request->attributes->get('_project') !== $project) {
@@ -84,32 +95,32 @@ class GraphQLController extends AbstractController
         } else {
             $rawContent = $request->getContent();
             if (strlen($rawContent) > self::MAX_QUERY_LENGTH) {
-                return new JsonResponse(['errors' => [['message' => $this->trans('graphql.payload_too_large', 'Taille de payload GraphQL dépassée (max 64 Ko)')]]], 413);
+                return $this->secureJson(['errors' => [['message' => $this->trans('graphql.payload_too_large', 'Taille de payload GraphQL dépassée (max 64 Ko)')]]], 413);
             }
             $body = json_decode($rawContent, true);
             if (!is_array($body)) {
-                return new JsonResponse(['errors' => [['message' => $this->trans('graphql.invalid_json', 'Invalid JSON body')]]], 400);
+                return $this->secureJson(['errors' => [['message' => $this->trans('graphql.invalid_json', 'Invalid JSON body')]]], 400);
             }
             // ── Blocage des requêtes GraphQL en batch (array de queries) ─────────
             // Un tableau JSON au niveau racine indique un batch de plusieurs opérations.
             // Cela contourne les limites de complexité/profondeur par requête → rejeté.
             if (isset($body[0])) {
-                return new JsonResponse(['errors' => [['message' => $this->trans('graphql.batch_not_allowed', 'Les requêtes GraphQL en batch ne sont pas autorisées. Envoyez une seule opération par requête.')]]], 400);
+                return $this->secureJson(['errors' => [['message' => $this->trans('graphql.batch_not_allowed', 'Les requêtes GraphQL en batch ne sont pas autorisées. Envoyez une seule opération par requête.')]]], 400);
             }
             $query = $body['query'] ?? null;
             $variables = $body['variables'] ?? null;
         }
 
         if (!$query || !is_string($query)) {
-            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.query_required', 'Query GraphQL requise')]]], 400);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.query_required', 'Query GraphQL requise')]]], 400);
         }
 
         if (strlen($query) > self::MAX_QUERY_LENGTH) {
-            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.query_too_large', 'Query GraphQL dépasse la taille maximale autorisée (64 Ko)')]]], 413);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.query_too_large', 'Query GraphQL dépasse la taille maximale autorisée (64 Ko)')]]], 413);
         }
 
         if ($variables !== null && !is_array($variables)) {
-            return new JsonResponse(['errors' => [['message' => $this->trans('graphql.invalid_variables', 'Les variables GraphQL doivent être un objet ou tableau')]]], 400);
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.invalid_variables', 'Les variables GraphQL doivent être un objet ou tableau')]]], 400);
         }
 
         // ── Détection subscription ───────────────────────────────────
@@ -125,7 +136,7 @@ class GraphQLController extends AbstractController
         // Limite le nombre total de champs (alias inclus) dans le document parsé
         // pour éviter l'explosion mémoire via des centaines d'alias identiques.
         if ($document !== null && $this->countAliasedFields($document) > self::MAX_ALIASES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'errors' => [['message' => $this->trans(
                     'graphql.too_many_aliases',
                     sprintf('Trop d\'alias de champs GraphQL (max %d). Réduisez le nombre d\'alias dans votre requête.', self::MAX_ALIASES),
@@ -183,9 +194,9 @@ class GraphQLController extends AbstractController
             ? DebugFlag::INCLUDE_DEBUG_MESSAGE | DebugFlag::INCLUDE_TRACE
             : DebugFlag::NONE;
 
-        return new JsonResponse($result->toArray($debug), 200, [
+        return new JsonResponse($result->toArray($debug), 200, array_merge(self::SECURITY_HEADERS, [
             'Cache-Control' => 'no-store, private',
-        ]);
+        ]));
     }
 
     // ─── Subscription ───────────────────────────────────────────────────
@@ -231,8 +242,8 @@ class GraphQLController extends AbstractController
     {
         $mercureSecret = $this->getParameter('mercure_jwt_secret') ?? '';
         if ($mercureSecret === '' || strlen($mercureSecret) < 32) {
-            return new JsonResponse([
-                'errors' => [['message' => 'Mercure hub not configured. Install and start the Mercure Docker service.']],
+            return $this->secureJson([
+                'errors' => [['message' => $this->trans('graphql.mercure_not_configured', 'Mercure hub not configured. Install and start the Mercure Docker service.')]],
             ], 503);
         }
 
@@ -259,7 +270,7 @@ class GraphQLController extends AbstractController
         $hubUrl = $this->getParameter('mercure_public_url')
             ?? '/.well-known/mercure';
 
-        return new JsonResponse([
+        return $this->secureJson([
             'data' => [
                 'subscription' => [
                     'topics'  => $topics,

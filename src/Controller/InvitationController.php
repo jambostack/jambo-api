@@ -17,6 +17,11 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class InvitationController extends AbstractController
 {
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
     public function __construct(
         private ProjectMemberRepository $memberRepo,
         private EntityManagerInterface $em,
@@ -24,6 +29,11 @@ class InvitationController extends AbstractController
         #[Autowire(service: 'limiter.invitation_limiter')]
         private ?RateLimiterFactory $invitationLimiter = null,
     ) {}
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
 
     #[Route('/invitation/accept/{token}', name: 'invitation_accept', methods: ['GET', 'POST'])]
     #[Route('/api/invitations/{token}/accept', name: 'api_invitation_accept', methods: ['POST', 'GET'])]
@@ -37,7 +47,7 @@ class InvitationController extends AbstractController
             if (!$limiter->consume()->isAccepted()) {
                 $msg = $this->translator->trans('invitation.too_many_attempts') ?: 'Too many attempts. Please retry later.';
                 if ($wantsJson) {
-                    return new JsonResponse(['error' => $msg], 429);
+                    return $this->secureJson(['error' => $msg], 429);
                 }
                 return new Response($msg, 429, ['Content-Type' => 'text/plain']);
             }
@@ -46,7 +56,7 @@ class InvitationController extends AbstractController
         if (strlen($token) < 8 || strlen($token) > 128 || !preg_match('/^[A-Za-z0-9_\-]+$/', $token)) {
             $msg = $this->translator->trans('invitation.invalid_link');
             if ($wantsJson) {
-                return new JsonResponse(['error' => $msg], 404);
+                return $this->secureJson(['error' => $msg], 404);
             }
             return $this->render('invitation/invalid.html.twig', [
                 'error' => $msg,
@@ -58,7 +68,7 @@ class InvitationController extends AbstractController
         if ($member === null || $member->status !== ProjectMemberStatus::Pending) {
             $msg = $this->translator->trans('invitation.invalid_link');
             if ($wantsJson) {
-                return new JsonResponse(['error' => $msg], 404);
+                return $this->secureJson(['error' => $msg], 404);
             }
             return $this->render('invitation/invalid.html.twig', [
                 'error' => $msg,
@@ -68,7 +78,7 @@ class InvitationController extends AbstractController
         if ($member->isTokenExpired()) {
             $msg = $this->translator->trans('invitation.expired_link');
             if ($wantsJson) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error'        => $msg,
                     'project_name' => $member->project->name,
                 ], 410);
@@ -82,7 +92,7 @@ class InvitationController extends AbstractController
         $user = $this->getUser();
         if (!$user instanceof User) {
             if ($wantsJson) {
-                return new JsonResponse(['error' => $this->translator->trans('invitation.auth_required')], 401);
+                return $this->secureJson(['error' => $this->translator->trans('invitation.auth_required')], 401);
             }
             $redirectUrl = $this->generateUrl('invitation_accept', ['token' => $token]);
             return $this->redirectToRoute('app_login', ['_target_path' => $redirectUrl]);
@@ -91,7 +101,7 @@ class InvitationController extends AbstractController
         if (strtolower((string) $member->email) !== strtolower((string) $user->email)) {
             $msg = $this->translator->trans('invitation.wrong_recipient', ['{email}' => $member->email]);
             if ($wantsJson) {
-                return new JsonResponse(['error' => $msg], 403);
+                return $this->secureJson(['error' => $msg], 403);
             }
             return $this->render('invitation/invalid.html.twig', [
                 'error' => $msg,
@@ -105,7 +115,7 @@ class InvitationController extends AbstractController
             $this->em->flush();
             $alreadyMsg = $this->translator->trans('invitation.already_member', ['{project}' => $member->project->name]);
             if ($wantsJson) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'message' => $alreadyMsg,
                     'project' => [
                         'id'   => $member->project->id,
@@ -129,7 +139,7 @@ class InvitationController extends AbstractController
         $joinedMsg = $this->translator->trans('invitation.joined_success', ['{project}' => $member->project->name]);
 
         if ($wantsJson) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'success' => true,
                 'message' => $joinedMsg,
                 'project' => [
