@@ -3577,4 +3577,6 @@ return [
     'public_share.error.heading' => 'Link Unavailable',
     'automation.quota.exceeded' => 'Automation run quota exceeded for this project tier (%used%/%limit% runs used today).',
     'automation.quota.daily_limit_reached' => 'Daily automation execution limit reached (%limit% runs/day).',
+    'automation.quota.minute_limit_reached' => 'Automation execution rate limit exceeded (burst limit reached: %used%/%limit% runs per minute).',
+    'cli.automation.quota_exceeded_skipped' => 'Quota exceeded for automation "%name%", execution skipped.',
 ];

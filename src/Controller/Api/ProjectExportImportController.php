@@ -31,6 +31,10 @@ class ProjectExportImportController extends AbstractController
         'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
         'Pragma' => 'no-cache',
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options' => 'DENY',
+        'Referrer-Policy' => 'no-referrer',
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+        'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none';",
     ];
 
     public function __construct(

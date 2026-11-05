@@ -3577,4 +3577,6 @@ return [
     'public_share.error.heading' => 'Enlace no disponible',
     'automation.quota.exceeded' => 'Cuota de ejecuciones de automatización superada para este nivel de proyecto (%used%/%limit% ejecuciones utilizadas hoy).',
     'automation.quota.daily_limit_reached' => 'Límite diario de ejecuciones de automatización alcanzado (%limit% ejecuciones/día).',
+    'automation.quota.minute_limit_reached' => 'Límite de tasa de ejecución de automatización superado (límite de ráfaga alcanzado: %used%/%limit% ejecuciones por minuto).',
+    'cli.automation.quota_exceeded_skipped' => 'Cuota superada para la automatización "%name%", ejecución omitida.',
 ];

@@ -6,6 +6,7 @@ use App\Message\ExecuteAutomationMessage;
 use App\Repository\AutomationRepository;
 use App\Repository\AutomationRunRepository;
 use App\Service\Automation\AutomationEngine;
+use App\Service\Automation\AutomationQuotaService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -26,6 +27,7 @@ class ExecuteAutomationMessageHandler
         private readonly AutomationEngine $engine,
         private readonly EntityManagerInterface $em,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?AutomationQuotaService $quotaService = null,
     ) {}
 
     public function __invoke(ExecuteAutomationMessage $message): void
@@ -79,6 +81,27 @@ class ExecuteAutomationMessageHandler
         if ($message->projectUuid !== '' && $project->uuid?->toRfc4122() !== $message->projectUuid) {
             $run->status = 'failed';
             $run->errorMessage = $this->trans('automation.error.tenant_mismatch', 'Cross-tenant execution forbidden: message project UUID mismatch.');
+            $run->finishedAt = new \DateTimeImmutable();
+            $this->em->flush();
+            return;
+        }
+
+        // Contrôle des quotas et limitation de débit multi-tenant par tier
+        if ($this->quotaService !== null && $this->quotaService->isQuotaExceeded($project)) {
+            $quota = $this->quotaService->checkQuota($project);
+            $run->status = 'failed';
+            if ($quota['isBurstLimited'] ?? false) {
+                $run->errorMessage = $this->trans('automation.quota.minute_limit_reached', 'Automation execution rate limit exceeded (burst limit reached: %used%/%limit% runs per minute).', [
+                    '%used%' => (string) ($quota['minuteUsed'] ?? 0),
+                    '%limit%' => (string) ($quota['minuteLimit'] ?? 0),
+                ]);
+            } else {
+                $run->errorMessage = $this->trans('automation.quota.exceeded', 'Automation run quota exceeded for this project tier (%used%/%limit% runs used today).', [
+                    '%used%' => (string) $quota['used'],
+                    '%limit%' => (string) $quota['limit'],
+                    '%tier%' => (string) $quota['tier'],
+                ]);
+            }
             $run->finishedAt = new \DateTimeImmutable();
             $this->em->flush();
             return;

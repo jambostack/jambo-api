@@ -7,6 +7,7 @@ use App\Entity\AutomationRun;
 use App\Event\ContentEvent;
 use App\Message\ExecuteAutomationMessage;
 use App\Repository\AutomationRepository;
+use App\Service\Automation\AutomationQuotaService;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
@@ -19,6 +20,7 @@ class AutomationTriggerSubscriber implements EventSubscriberInterface
         private readonly MessageBusInterface $bus,
         private readonly EntityManagerInterface $em,
         private readonly LoggerInterface $logger,
+        private readonly ?AutomationQuotaService $quotaService = null,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -48,6 +50,14 @@ class AutomationTriggerSubscriber implements EventSubscriberInterface
         $automations = $this->automationRepo->findActiveByTriggerType($project, $triggerType);
 
         if (empty($automations)) return;
+
+        if ($this->quotaService !== null && $project !== null && $this->quotaService->isQuotaExceeded($project)) {
+            $this->logger->warning('AutomationTriggerSubscriber: skipping automations, project quota exceeded', [
+                'project_uuid' => $project->uuid?->toRfc4122(),
+                'trigger_type' => $triggerType,
+            ]);
+            return;
+        }
 
         $payload = $this->buildPayload($eventName, $project, $entry, $previousStatus);
 

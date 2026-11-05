@@ -19,7 +19,11 @@ class SeoPublicController extends AbstractController
 {
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options' => 'DENY',
         'Cache-Control' => 'public, max-age=3600',
+        'Referrer-Policy' => 'strict-origin-when-cross-origin',
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+        'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none';",
     ];
 
     public function __construct(
@@ -44,11 +48,10 @@ class SeoPublicController extends AbstractController
         if ($request !== null && $this->seoLimiter !== null) {
             $limiter = $this->seoLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new Response($this->trans('seo.rate_limit_exceeded', [], 'Too many SEO requests. Try again later.'), 429, [
+                return new Response($this->trans('seo.rate_limit_exceeded', [], 'Too many SEO requests. Try again later.'), 429, array_merge(self::SECURITY_HEADERS, [
                     'Content-Type' => 'text/plain',
                     'Retry-After' => '60',
-                    'X-Content-Type-Options' => 'nosniff',
-                ]);
+                ]));
             }
         }
         return null;

@@ -374,6 +374,8 @@ class Cycle83QuotaAndSecurityHardeningTest extends WebTestCase
             'public_share.error.unsupported_format',
             'automation.quota.exceeded',
             'automation.quota.daily_limit_reached',
+            'automation.quota.minute_limit_reached',
+            'cli.automation.quota_exceeded_skipped',
         ];
 
         foreach ($locales as $locale) {
@@ -387,5 +389,82 @@ class Cycle83QuotaAndSecurityHardeningTest extends WebTestCase
                 $this->assertNotEmpty($messages[$key], "Translation key '{$key}' must not be empty in locale '{$locale}'");
             }
         }
+    }
+
+    public function testBurstRateLimitingInAutomationQuotaService(): void
+    {
+        $runRepo = $this->em->getRepository(AutomationRun::class);
+        $quotaService = new AutomationQuotaService($runRepo);
+
+        // Free tier: minute limit 10
+        $freeProject = new Project();
+        $freeProject->name = 'Free Project';
+        $freeProject->settings = ['tier' => 'free'];
+        $this->assertSame(10, $quotaService->getMinuteLimit($freeProject));
+
+        // Starter tier: minute limit 30
+        $starterProject = new Project();
+        $starterProject->name = 'Starter Project';
+        $starterProject->settings = ['tier' => 'starter'];
+        $this->assertSame(30, $quotaService->getMinuteLimit($starterProject));
+
+        // Pro tier: minute limit 120
+        $proProject = new Project();
+        $proProject->name = 'Pro Project';
+        $proProject->settings = ['tier' => 'pro'];
+        $this->assertSame(120, $quotaService->getMinuteLimit($proProject));
+
+        // Enterprise tier: minute limit 1000
+        $entProject = new Project();
+        $entProject->name = 'Enterprise Project';
+        $entProject->settings = ['tier' => 'enterprise'];
+        $this->assertSame(1000, $quotaService->getMinuteLimit($entProject));
+
+        // Custom minute override
+        $customProject = new Project();
+        $customProject->name = 'Custom Minute Project';
+        $customProject->settings = [
+            'tier' => 'free',
+            'automation_runs_limit_per_minute' => 5,
+        ];
+        $this->assertSame(5, $quotaService->getMinuteLimit($customProject));
+
+        $res = $quotaService->checkQuota($customProject);
+        $this->assertSame(5, $res['minuteLimit']);
+        $this->assertSame(0, $res['minuteUsed']);
+        $this->assertFalse($res['isBurstLimited']);
+        $this->assertFalse($res['isDailyExceeded']);
+        $this->assertTrue($res['allowed']);
+    }
+
+    public function testPublicEndpointsSecurityHeadersCspAndHsts(): void
+    {
+        [, $project] = $this->createProjectWithMember();
+        $uuid = $project->uuid->toRfc4122();
+
+        // 1. Redirect resolve endpoint (404/not found redirect)
+        $this->client->request('GET', "/{$uuid}/redirects/resolve?path=/non-existent");
+        $redirectResp = $this->client->getResponse();
+        $this->assertSame('nosniff', $redirectResp->headers->get('X-Content-Type-Options'));
+        $this->assertSame('DENY', $redirectResp->headers->get('X-Frame-Options'));
+        $this->assertSame('max-age=31536000; includeSubDomains', $redirectResp->headers->get('Strict-Transport-Security'));
+        $this->assertStringContainsString("default-src 'none'", (string) $redirectResp->headers->get('Content-Security-Policy'));
+
+        // 2. Embed widget JS
+        $this->client->request('GET', '/forms/embed.js');
+        $embedJsResp = $this->client->getResponse();
+        $this->assertSame(200, $embedJsResp->getStatusCode());
+        $this->assertSame('nosniff', $embedJsResp->headers->get('X-Content-Type-Options'));
+        $this->assertSame('max-age=31536000; includeSubDomains', $embedJsResp->headers->get('Strict-Transport-Security'));
+        $this->assertSame('*', $embedJsResp->headers->get('Access-Control-Allow-Origin'));
+
+        // 3. Form show endpoint (404 form)
+        $this->client->request('GET', "/{$uuid}/forms/non-existent-form");
+        $formResp = $this->client->getResponse();
+        $this->assertSame(404, $formResp->getStatusCode());
+        $this->assertSame('nosniff', $formResp->headers->get('X-Content-Type-Options'));
+        $this->assertSame('DENY', $formResp->headers->get('X-Frame-Options'));
+        $this->assertSame('max-age=31536000; includeSubDomains', $formResp->headers->get('Strict-Transport-Security'));
+        $this->assertStringContainsString("default-src 'none'", (string) $formResp->headers->get('Content-Security-Policy'));
     }
 }

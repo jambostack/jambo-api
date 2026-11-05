@@ -3579,4 +3579,6 @@ return [
     'public_share.error.heading' => 'الرابط غير متوفر',
     'automation.quota.exceeded' => 'تم تجاوز حصة تشغيل الأتمتة لمستوى هذا المشروع (تم استخدام %used%/%limit% تشغيل اليوم).',
     'automation.quota.daily_limit_reached' => 'تم الوصول إلى الحد اليومي لتشغيل الأتمتة (%limit% تشغيل/يوم).',
+    'automation.quota.minute_limit_reached' => 'تم تجاوز معدل تشغيل الأتمتة (تم بلوغ الحد الأقصى للدفعات: %used%/%limit% تشغيل في الدقيقة).',
+    'cli.automation.quota_exceeded_skipped' => 'تم تجاوز الحصة للأتمتة "%name%"، تم تخطي التنفيذ.',
 ];

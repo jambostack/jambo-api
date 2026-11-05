@@ -7,7 +7,7 @@ doctrine:
         # For MariaDB on o2switch/cPanel, specify 'mariadb-10.6.18' or 'mariadb-10.11.8'
         # (or append ?serverVersion=mariadb-10.6.18 to DATABASE_URL) to ensure
         # full DBAL 4/5 compatibility and bypass runtime introspection queries.
-        #server_version: 'mariadb-10.6.18'
+        # server_version is set per environment below (dev=MySQL 8, prod=MariaDB o2switch)
 
         profiling_collect_backtrace: '%kernel.debug%'
     orm:
@@ -32,6 +32,10 @@ when@test:
 
 when@prod:
     doctrine:
+        dbal:
+            # o2switch uses MariaDB — declare server_version explicitly to avoid DBAL runtime introspection.
+            # Adjust to the actual MariaDB version reported by `SELECT @@version` on o2switch.
+            server_version: 'mariadb-10.6.18'
         orm:
             query_cache_driver:
                 type: pool

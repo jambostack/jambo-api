@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.148] — 2026-11-05
+
+### Symfony 8.1 Preparation, Burst Rate Limiting & Public Endpoints CSP/HSTS Hardening (Cycle #83 Part 2)
+- **Symfony 8.1 / UX Turbo Forward-Compatibility**:
+  - Implemented `RemoveDeprecatedTurboRendererPass` compiler pass migrating deprecated `TurboStreamListenRenderer` definitions to `MercureStreamSourceRenderer` with `turbo.renderer.stream_listen` tag, suppressing class-load deprecation notices in PHP 8.5 / Symfony 8.1.
+  - Added dedicated unit test `RemoveDeprecatedTurboRendererPassTest` validating container compilation, service aliasing, and tag attributes.
+  - Configured explicit `server_version: 'mariadb-10.6.18'` under `when@prod: doctrine: dbal` in `config/packages/doctrine.yaml` for o2switch MariaDB infrastructure, eliminating runtime introspection queries.
+- **Automation Execution Burst Limiting & Queue / CLI Quota Enforcement**:
+  - Extended `AutomationQuotaService` with per-minute rate limiting (`TIER_MINUTE_LIMITS`: Free 10/min, Starter 30/min, Pro 120/min, Enterprise 1,000/min) and custom override via `automation_runs_limit_per_minute` / `automation_minute_quota`.
+  - Added helper methods `getMinuteLimit()`, `getMinuteUsage()`, `isBurstLimited()`, and `isDailyLimitReached()`.
+  - Wired quota enforcement into `ExecuteAutomationMessageHandler` to reject queued executions with translated error and mark run status as `failed`.
+  - Wired quota check into `AutomationTriggerSubscriber` to skip dispatching and prevent message queue exhaustion when quota is exceeded.
+  - Wired quota check into CLI command `automation:run-scheduled` (`AutomationRunScheduledCommand`) to safely skip throttled projects with translated console feedback.
+- **Extended Public & Preview Endpoints Security Hardening (CSP & HSTS)**:
+  - Hardened `RedirectPublicController`, `FormPublicController`, `SeoPublicController`, `EmbedController`, and `ProjectExportImportController` with `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none';`, `X-Frame-Options: DENY`, and `Referrer-Policy: no-referrer`.
+  - Maintained iframe embedding compatibility on `/embed/forms/{projectUuid}/{slug}` with `frame-ancestors *;` while adding strict HSTS.
+- **Strict I18n Compliance**:
+  - Added 2 new translation keys (`automation.quota.minute_limit_reached`, `cli.automation.quota_exceeded_skipped`) with 100% parity across all 4 locales (3,287 keys in `en`, `fr`, `es`, `ar`).
+- **Test Suite Validation**:
+  - Added unit test `RemoveDeprecatedTurboRendererPassTest` and expanded `Cycle83QuotaAndSecurityHardeningTest` covering burst rate limits, queue rejection, and security headers.
+
 ## [1.26.147] — 2026-11-05
 
 ### Security, Multi-tenant Isolation & I18n Hardening — Flow Quotas & Public Share/Preview Hardening (Cycle #83)

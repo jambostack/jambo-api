@@ -55,6 +55,7 @@ class EmbedController extends AbstractController
             'Content-Type' => 'application/javascript; charset=utf-8',
             'Cache-Control' => 'public, max-age=3600',
             'X-Content-Type-Options' => 'nosniff',
+            'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
             'Access-Control-Allow-Origin' => '*',
         ]);
     }
@@ -105,6 +106,7 @@ class EmbedController extends AbstractController
             'Content-Type' => 'text/html; charset=utf-8',
             'Cache-Control' => 'public, max-age=60',
             'X-Content-Type-Options' => 'nosniff',
+            'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
             'Content-Security-Policy' => "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; frame-ancestors *; form-action 'self';",
         ]);
     }

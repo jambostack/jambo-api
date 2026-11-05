@@ -472,6 +472,7 @@ class AutomationController extends AbstractController
 
         $quota = $this->quotaService->checkQuota($project);
         if (!$quota['allowed']) {
+            $isBurst = (bool) ($quota['isBurstLimited'] ?? false);
             $this->auditService?->log(
                 toolName: 'automation_run_quota_exceeded',
                 project: $project,
@@ -481,26 +482,37 @@ class AutomationController extends AbstractController
                     'tier' => $quota['tier'],
                     'used' => $quota['used'],
                     'limit' => $quota['limit'],
+                    'minute_used' => $quota['minuteUsed'] ?? null,
+                    'minute_limit' => $quota['minuteLimit'] ?? null,
                 ],
                 output: null,
                 status: 'failure',
-                errorMessage: 'Automation run quota exceeded',
+                errorMessage: $isBurst ? 'Automation run rate limit exceeded (burst)' : 'Automation run quota exceeded',
                 createdBy: $this->getUser()?->getUserIdentifier(),
                 source: 'automation_management'
             );
             $this->auditService?->flush();
 
-            return $this->secureJson([
-                'success' => false,
-                'error' => $this->trans('automation.quota.exceeded', [
+            $errorMsg = $isBurst
+                ? $this->trans('automation.quota.minute_limit_reached', [
+                    '%used%' => (string) ($quota['minuteUsed'] ?? 0),
+                    '%limit%' => (string) ($quota['minuteLimit'] ?? 0),
+                ], sprintf('Automation execution rate limit exceeded (burst limit reached: %d/%d runs per minute).', $quota['minuteUsed'] ?? 0, $quota['minuteLimit'] ?? 0))
+                : $this->trans('automation.quota.exceeded', [
                     '%used%' => (string) $quota['used'],
                     '%limit%' => (string) $quota['limit'],
                     '%tier%' => (string) $quota['tier'],
-                ], sprintf('Automation run quota exceeded for this project tier (%d/%d runs used today).', $quota['used'], $quota['limit'])),
+                ], sprintf('Automation run quota exceeded for this project tier (%d/%d runs used today).', $quota['used'], $quota['limit']));
+
+            return $this->secureJson([
+                'success' => false,
+                'error' => $errorMsg,
                 'code' => 'AUTOMATION_QUOTA_EXCEEDED',
                 'tier' => $quota['tier'],
                 'limit' => $quota['limit'],
                 'used' => $quota['used'],
+                'minute_limit' => $quota['minuteLimit'] ?? null,
+                'minute_used' => $quota['minuteUsed'] ?? null,
                 'reset_in_seconds' => $quota['resetInSeconds'],
             ], 429, [
                 'Retry-After' => (string) $quota['resetInSeconds'],

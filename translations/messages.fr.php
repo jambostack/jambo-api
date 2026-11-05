@@ -3595,4 +3595,6 @@ return [
     'public_share.error.heading' => 'Lien indisponible',
     'automation.quota.exceeded' => 'Quota d\'exécutions d\'automatisation dépassé pour ce niveau de projet (%used%/%limit% exécutions utilisées aujourd\'hui).',
     'automation.quota.daily_limit_reached' => 'Limite quotidienne d\'exécutions d\'automatisation atteinte (%limit% exécutions/jour).',
+    'automation.quota.minute_limit_reached' => 'Limite de débit d\'automatisation dépassée (limite de rafale atteinte : %used%/%limit% exécutions par minute).',
+    'cli.automation.quota_exceeded_skipped' => 'Quota dépassé pour l\'automatisation « %name% », exécution ignorée.',
 ];

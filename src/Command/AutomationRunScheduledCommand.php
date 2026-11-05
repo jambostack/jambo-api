@@ -5,6 +5,7 @@ namespace App\Command;
 use App\Repository\AutomationRepository;
 use App\Repository\ProjectRepository;
 use App\Service\Automation\AutomationEngine;
+use App\Service\Automation\AutomationQuotaService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Command\LockableTrait;
@@ -25,6 +26,7 @@ class AutomationRunScheduledCommand extends Command
         private readonly AutomationEngine $engine,
         private readonly ?ProjectRepository $projects = null,
         ?TranslatorInterface $translator = null,
+        private readonly ?AutomationQuotaService $quotaService = null,
     ) {
         parent::__construct();
         $this->setTranslator($translator);
@@ -69,6 +71,11 @@ class AutomationRunScheduledCommand extends Command
 
                 $schedule = $triggerNode['data']['config']['schedule'] ?? null;
                 if ($schedule === null || $schedule === '') continue;
+
+                if ($automation->project !== null && $this->quotaService !== null && $this->quotaService->isQuotaExceeded($automation->project)) {
+                    $output->writeln('<comment>' . $this->trans('cli.automation.quota_exceeded_skipped', ['%name%' => $automation->name ?? (string) $automation->id], null, null, "Quota dépassé pour l'automatisation %name%, ignorée.") . '</comment>');
+                    continue;
+                }
 
                 try {
                     if ($this->cronMatches($schedule, $now)) {

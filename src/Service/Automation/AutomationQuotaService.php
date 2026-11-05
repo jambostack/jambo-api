@@ -30,6 +30,14 @@ class AutomationQuotaService
         self::TIER_ENTERPRISE => 50000,
     ];
 
+    /** Limites de débit par minute (burst protection) selon le tier de projet */
+    public const TIER_MINUTE_LIMITS = [
+        self::TIER_FREE       => 10,
+        self::TIER_STARTER    => 30,
+        self::TIER_PRO        => 120,
+        self::TIER_ENTERPRISE => 1000,
+    ];
+
     public function __construct(
         private readonly AutomationRunRepository $runRepository,
     ) {}
@@ -43,6 +51,44 @@ class AutomationQuotaService
         $tier = strtolower((string) ($settings['tier'] ?? $settings['plan'] ?? self::DEFAULT_TIER));
 
         return array_key_exists($tier, self::TIER_DAILY_LIMITS) ? $tier : self::DEFAULT_TIER;
+    }
+
+    /**
+     * Détermine la limite par minute (burst protection) pour le projet.
+     */
+    public function getMinuteLimit(Project $project): int
+    {
+        $settings = $project->settings ?? [];
+
+        if (isset($settings['automation_runs_limit_per_minute']) && is_numeric($settings['automation_runs_limit_per_minute'])) {
+            $customLimit = (int) $settings['automation_runs_limit_per_minute'];
+            if ($customLimit > 0) {
+                return $customLimit;
+            }
+        }
+
+        if (isset($settings['automation_minute_quota']) && is_numeric($settings['automation_minute_quota'])) {
+            $customLimit = (int) $settings['automation_minute_quota'];
+            if ($customLimit > 0) {
+                return $customLimit;
+            }
+        }
+
+        $tier = $this->getProjectTier($project);
+        return self::TIER_MINUTE_LIMITS[$tier] ?? self::TIER_MINUTE_LIMITS[self::DEFAULT_TIER];
+    }
+
+    /**
+     * Calcule le nombre d'exécutions d'automatisation déjà consommées dans la dernière minute (UTC).
+     */
+    public function getMinuteUsage(Project $project): int
+    {
+        if ($project->id === null) {
+            return 0;
+        }
+
+        $oneMinuteAgo = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->modify('-1 minute');
+        return $this->runRepository->countRunsForProjectSince($project, $oneMinuteAgo);
     }
 
     /**
@@ -88,31 +134,57 @@ class AutomationQuotaService
     /**
      * Vérifie si le projet dispose encore de quota pour exécuter une automatisation.
      *
-     * @return array{allowed: bool, limit: int, used: int, tier: string, resetInSeconds: int}
+     * @return array{allowed: bool, isDailyExceeded: bool, isBurstLimited: bool, limit: int, used: int, minuteLimit: int, minuteUsed: int, tier: string, resetInSeconds: int}
      */
     public function checkQuota(Project $project): array
     {
-        $limit = $this->getDailyLimit($project);
-        $used = $this->getDailyUsage($project);
+        $dailyLimit = $this->getDailyLimit($project);
+        $dailyUsed = $this->getDailyUsage($project);
         $tier = $this->getProjectTier($project);
 
+        $minuteLimit = $this->getMinuteLimit($project);
+        $minuteUsed = $this->getMinuteUsage($project);
+
+        $isDailyExceeded = $dailyUsed >= $dailyLimit;
+        $isBurstLimited = $minuteUsed >= $minuteLimit;
+
         $endOfDay = (new \DateTimeImmutable('tomorrow', new \DateTimeZone('UTC')))->getTimestamp();
-        $resetInSeconds = max(1, $endOfDay - time());
+        $resetInSeconds = $isBurstLimited ? 60 : max(1, $endOfDay - time());
 
         return [
-            'allowed'        => $used < $limit,
-            'limit'          => $limit,
-            'used'           => $used,
-            'tier'           => $tier,
-            'resetInSeconds' => $resetInSeconds,
+            'allowed'         => !$isDailyExceeded && !$isBurstLimited,
+            'isDailyExceeded' => $isDailyExceeded,
+            'isBurstLimited'  => $isBurstLimited,
+            'limit'           => $dailyLimit,
+            'used'            => $dailyUsed,
+            'minuteLimit'     => $minuteLimit,
+            'minuteUsed'      => $minuteUsed,
+            'tier'            => $tier,
+            'resetInSeconds'  => $resetInSeconds,
         ];
     }
 
     /**
-     * Vérifie rapidement si le quota est dépassé.
+     * Vérifie rapidement si le quota ou le débit est dépassé.
      */
     public function isQuotaExceeded(Project $project): bool
     {
         return !$this->checkQuota($project)['allowed'];
+    }
+
+    /**
+     * Vérifie si la limite de rafale par minute est atteinte.
+     */
+    public function isBurstLimited(Project $project): bool
+    {
+        return $this->checkQuota($project)['isBurstLimited'];
+    }
+
+    /**
+     * Vérifie si le quota journalier est atteint.
+     */
+    public function isDailyLimitReached(Project $project): bool
+    {
+        return $this->checkQuota($project)['isDailyExceeded'];
     }
 }

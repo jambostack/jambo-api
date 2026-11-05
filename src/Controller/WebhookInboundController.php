@@ -217,25 +217,37 @@ class WebhookInboundController extends AbstractController
         if ($automation->project !== null && $this->quotaService !== null) {
             $quota = $this->quotaService->checkQuota($automation->project);
             if (!$quota['allowed']) {
+                $isBurst = (bool) ($quota['isBurstLimited'] ?? false);
                 $this->logger->warning('Webhook inbound rejected: automation quota exceeded for project', [
                     'automation_uuid' => $automationUuid,
                     'project_id' => $automation->project->id,
                     'tier' => $quota['tier'],
                     'used' => $quota['used'],
                     'limit' => $quota['limit'],
+                    'minute_used' => $quota['minuteUsed'] ?? null,
+                    'minute_limit' => $quota['minuteLimit'] ?? null,
                 ]);
 
-                return $this->secureJson([
-                    'success' => false,
-                    'error' => $this->trans('automation.quota.exceeded', [
+                $errorMsg = $isBurst
+                    ? $this->trans('automation.quota.minute_limit_reached', [
+                        '%used%' => (string) ($quota['minuteUsed'] ?? 0),
+                        '%limit%' => (string) ($quota['minuteLimit'] ?? 0),
+                    ], sprintf('Automation execution rate limit exceeded (burst limit reached: %d/%d runs per minute).', $quota['minuteUsed'] ?? 0, $quota['minuteLimit'] ?? 0))
+                    : $this->trans('automation.quota.exceeded', [
                         '%used%' => (string) $quota['used'],
                         '%limit%' => (string) $quota['limit'],
                         '%tier%' => (string) $quota['tier'],
-                    ], sprintf('Automation run quota exceeded for this project tier (%d/%d runs used today).', $quota['used'], $quota['limit'])),
+                    ], sprintf('Automation run quota exceeded for this project tier (%d/%d runs used today).', $quota['used'], $quota['limit']));
+
+                return $this->secureJson([
+                    'success' => false,
+                    'error' => $errorMsg,
                     'code' => 'AUTOMATION_QUOTA_EXCEEDED',
                     'tier' => $quota['tier'],
                     'limit' => $quota['limit'],
                     'used' => $quota['used'],
+                    'minute_limit' => $quota['minuteLimit'] ?? null,
+                    'minute_used' => $quota['minuteUsed'] ?? null,
                     'reset_in_seconds' => $quota['resetInSeconds'],
                 ], 429, [
                     'Retry-After' => (string) $quota['resetInSeconds'],
