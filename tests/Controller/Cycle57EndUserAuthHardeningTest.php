@@ -353,4 +353,169 @@ class Cycle57EndUserAuthHardeningTest extends WebTestCase
         $revokeBody = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('All sessions have been revoked successfully.', $revokeBody['message']);
     }
+
+    /**
+     * Test 11: Multi-tier lockout calculation in ProjectAuthLockoutService
+     */
+    public function testMultiTierLockoutService(): void
+    {
+        $lockoutService = self::getContainer()->get(ProjectAuthLockoutService::class);
+        $testKey = 'test_tier_' . bin2hex(random_bytes(6));
+
+        self::assertSame(0, $lockoutService->getLockoutTier($testKey));
+        self::assertFalse($lockoutService->isLockedOut($testKey));
+
+        // 4 attempts: below Tier 1
+        for ($i = 1; $i <= 4; $i++) {
+            $lockoutService->recordTieredFailedAttempt($testKey);
+        }
+        self::assertSame(0, $lockoutService->getLockoutTier($testKey));
+        self::assertFalse($lockoutService->isLockedOut($testKey));
+
+        // 5th attempt: triggers Tier 1 (300s)
+        $lockoutService->recordTieredFailedAttempt($testKey);
+        self::assertSame(1, $lockoutService->getLockoutTier($testKey));
+        self::assertTrue($lockoutService->isLockedOut($testKey));
+        self::assertGreaterThanOrEqual(290, $lockoutService->getRemainingLockoutSeconds($testKey));
+
+        // 10th attempt: triggers Tier 2 (900s)
+        for ($i = 6; $i <= 10; $i++) {
+            $lockoutService->recordTieredFailedAttempt($testKey);
+        }
+        self::assertSame(2, $lockoutService->getLockoutTier($testKey));
+        self::assertGreaterThanOrEqual(890, $lockoutService->getRemainingLockoutSeconds($testKey));
+
+        // Clean up
+        $lockoutService->clearAttempts($testKey);
+        self::assertFalse($lockoutService->isLockedOut($testKey));
+    }
+
+    /**
+     * Test 12: IP brute force lockout defense on login
+     */
+    public function testIpLevelBruteForceLockoutOnLogin(): void
+    {
+        $client = static::createClient();
+        $lockoutService = self::getContainer()->get(ProjectAuthLockoutService::class);
+
+        $ipLockoutKey = 'enduser_login_ip:' . $this->projectUuid . ':127.0.0.1';
+        $lockoutService->clearAttempts($ipLockoutKey);
+
+        // Simulate IP hitting tier threshold (10 failed attempts)
+        for ($i = 1; $i <= 10; $i++) {
+            $lockoutService->recordTieredFailedAttempt($ipLockoutKey, [10 => 300, 20 => 900, 30 => 3600]);
+        }
+        self::assertTrue($lockoutService->isLockedOut($ipLockoutKey));
+
+        // Next login attempt should be rejected with 429
+        $client->jsonRequest('POST', $this->baseUrl() . '/login', [
+            'email'    => 'any-user@example.com',
+            'password' => 'AnyPassword123!',
+        ]);
+
+        self::assertSame(429, $client->getResponse()->getStatusCode());
+        self::assertTrue($client->getResponse()->headers->has('Retry-After'));
+        $body = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertStringContainsString('ip', strtolower($body['error']));
+
+        // Clean up
+        $lockoutService->clearAttempts($ipLockoutKey);
+    }
+
+    /**
+     * Test 13: Password change current-password lockout on PATCH /me
+     */
+    public function testPasswordChangeLockoutOnMeEndpoint(): void
+    {
+        $client = static::createClient();
+        $email = 'pw-change-user-' . bin2hex(random_bytes(4)) . '@example.com';
+
+        // Register
+        $client->jsonRequest('POST', $this->baseUrl() . '/register', [
+            'email'    => $email,
+            'password' => 'InitialPassword123!',
+        ]);
+        self::assertSame(201, $client->getResponse()->getStatusCode());
+        $regData = json_decode((string) $client->getResponse()->getContent(), true);
+        $token = $regData['data']['access_token'];
+        $userUuid = $regData['data']['user']['id'] ?? $regData['data']['user']['uuid'];
+
+        $lockoutService = self::getContainer()->get(ProjectAuthLockoutService::class);
+        $pwChangeKey = 'pw_change:' . $userUuid;
+        $lockoutService->clearAttempts($pwChangeKey);
+
+        // Pre-fill 5 failed attempts to lock out password change
+        for ($i = 1; $i <= 5; $i++) {
+            $lockoutService->recordTieredFailedAttempt($pwChangeKey, [5 => 300, 10 => 900, 15 => 3600]);
+        }
+        self::assertTrue($lockoutService->isLockedOut($pwChangeKey));
+
+        // Attempting to change password should return 429
+        $client->jsonRequest('PATCH', $this->baseUrl() . '/me', [
+            'current_password' => 'WrongPass123!',
+            'password'         => 'BrandNewPassword123!',
+        ], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+        ]);
+
+        self::assertSame(429, $client->getResponse()->getStatusCode());
+        self::assertTrue($client->getResponse()->headers->has('Retry-After'));
+        $body = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertStringContainsString('locked', strtolower($body['error']));
+
+        // Clean up
+        $lockoutService->clearAttempts($pwChangeKey);
+    }
+
+    /**
+     * Test 14: Token brute force lockout on reset-password
+     */
+    public function testResetPasswordTokenBruteForceLockout(): void
+    {
+        $client = static::createClient();
+        $lockoutService = self::getContainer()->get(ProjectAuthLockoutService::class);
+
+        $ipTokenKey = 'pw_reset_token_ip:' . $this->projectUuid . ':127.0.0.1';
+        $lockoutService->clearAttempts($ipTokenKey);
+
+        // Pre-fill 5 invalid token attempts
+        for ($i = 1; $i <= 5; $i++) {
+            $lockoutService->recordTieredFailedAttempt($ipTokenKey, [5 => 300, 10 => 900, 15 => 3600]);
+        }
+        self::assertTrue($lockoutService->isLockedOut($ipTokenKey));
+
+        // Next reset password attempt returns 429
+        $client->jsonRequest('POST', $this->baseUrl() . '/reset-password', [
+            'token'    => str_repeat('f', 64),
+            'password' => 'BrandNewPassword123!',
+        ]);
+
+        self::assertSame(429, $client->getResponse()->getStatusCode());
+        self::assertTrue($client->getResponse()->headers->has('Retry-After'));
+        $body = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertStringContainsString('token', strtolower($body['error']));
+
+        // Clean up
+        $lockoutService->clearAttempts($ipTokenKey);
+    }
+
+    /**
+     * Test 15: Password policy rejection on project name and ASCII control characters
+     */
+    public function testPasswordPolicyProjectNameAndControlChars(): void
+    {
+        $validator = new PasswordPolicyValidator();
+        $project = new Project();
+        $project->name = 'SuperSecProject';
+
+        // 1. Password contains project name
+        $resProj = $validator->validate('MySuperSecProjectPass123!', null, null, $project);
+        self::assertFalse($resProj['valid']);
+        self::assertContains('Password cannot contain the project name.', $resProj['errors']);
+
+        // 2. Password contains null byte or control char
+        $resControl = $validator->validate("StrongPassword\x00123!", null, null, $project);
+        self::assertFalse($resControl['valid']);
+        self::assertContains('Password cannot contain control characters.', $resControl['errors']);
+    }
 }

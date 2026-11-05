@@ -2197,6 +2197,9 @@ return [
     'enduser.auth.payload_too_large'          => 'الطلب أكبر من الحد المسموح به (1 ميغابايت كحد أقصى).',
     'enduser.auth.invalid_username'           => 'تنسيق اسم المستخدم غير صالح أو طويل جدًا (بحد أقصى 100 حرف).',
     'enduser.auth.account_locked_out'         => 'محاولات تسجيل دخول فاشلة كثيرة جداً. تم قفل الحساب مؤقتاً لأسباب أمنية. يُرجى إعادة المحاولة بعد %seconds% ثانية.',
+    'enduser.auth.ip_locked_out'              => 'عدد كبير جداً من المحاولات الفاشلة من عنوان IP هذا. يرجى إعادة المحاولة بعد %seconds% ثانية.',
+    'enduser.auth.password_change_locked_out' => 'عدد كبير جداً من محاولات كلمة المرور الحالية الخاطئة. تم قفل تحديث كلمة المرور لأسباب أمنية. يرجى إعادة المحاولة بعد %seconds% ثانية.',
+    'enduser.auth.token_rate_limit_lockout'   => 'عدد كبير جداً من محاولات الرموز غير الصالحة. تم قفل التحقق من الرموز مؤقتاً. يرجى إعادة المحاولة بعد %seconds% ثانية.',
     'enduser.auth.rate_limit_2fa_lockout'     => 'محاولات تحقق ثنائي غير صالحة كثيرة جداً. تم قفل التحدي. يُرجى إعادة المحاولة بعد %seconds% ثانية.',
     'enduser.auth.reset_cooldown'             => 'تم طلب رابط إعادة تعيين كلمة المرور مؤخراً. يُرجى التحقق من بريدك أو الانتظار قبل المحاولة مجدداً.',
     'enduser.auth.sessions_revoked'           => 'تم إلغاء جميع الجلسات بنجاح.',
@@ -2211,11 +2214,13 @@ return [
     'password.policy.contains_email'          => 'لا يمكن أن تحتوي كلمة المرور على بادئة بريدك الإلكتروني.',
     'password.policy.contains_username'       => 'لا يمكن أن تحتوي كلمة المرور على اسم المستخدم الخاص بك.',
     'password.policy.contains_name'           => 'لا يمكن أن تحتوي كلمة المرور على اسمك.',
+    'password.policy.contains_project'        => 'لا يمكن أن تحتوي كلمة المرور على اسم المشروع.',
     'password.policy.current_required'        => 'كلمة المرور الحالية مطلوبة لتغيير كلمة المرور.',
     'password.policy.current_incorrect'       => 'كلمة المرور الحالية غير صحيحة.',
     'password.policy.must_differ'             => 'يجب أن تكون كلمة المرور الجديدة مختلفة عن كلمة المرور الحالية.',
     'password.policy.require_special'         => 'يجب أن تحتوي كلمة المرور على رمز خاص واحد على الأقل.',
     'password.policy.repetitive_chars'        => 'لا يمكن أن تحتوي كلمة المرور على 4 أحرف متكررة أو متتالية أو أكثر.',
+    'password.policy.invalid_control_chars'   => 'لا يمكن أن تحتوي كلمة المرور على أحرف تحكم.',
 
     // EndUser Custom Fields Sanitization
     'enduser.custom_fields.must_be_object'    => 'يجب أن تكون الحقول المخصصة كائن مفتاح-قيمة صالحًا.',

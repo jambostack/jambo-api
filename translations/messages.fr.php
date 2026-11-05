@@ -2215,6 +2215,9 @@ return [
     'enduser.auth.payload_too_large'          => 'Données de requête trop volumineuses (max 1 Mo).',
     'enduser.auth.invalid_username'           => 'Format de nom d\'utilisateur invalide ou trop long (100 caractères maximum).',
     'enduser.auth.account_locked_out'         => 'Trop de tentatives de connexion échouées. Compte temporairement verrouillé par sécurité. Veuillez réessayer dans %seconds% secondes.',
+    'enduser.auth.ip_locked_out'              => 'Trop de tentatives infructueuses depuis cette adresse IP. Veuillez réessayer dans %seconds% secondes.',
+    'enduser.auth.password_change_locked_out' => 'Trop de tentatives incorrectes de mot de passe actuel. Modification verrouillée pour des raisons de sécurité. Veuillez réessayer dans %seconds% secondes.',
+    'enduser.auth.token_rate_limit_lockout'   => 'Trop de tentatives de jetons invalides. Validation temporairement verrouillée. Veuillez réessayer dans %seconds% secondes.',
     'enduser.auth.rate_limit_2fa_lockout'     => 'Trop de tentatives d\'authentification à deux facteurs invalides. Défi verrouillé. Veuillez réessayer dans %seconds% secondes.',
     'enduser.auth.reset_cooldown'             => 'Un lien de réinitialisation de mot de passe a été récemment demandé. Veuillez vérifier vos e-mails ou patienter avant de réessayer.',
     'enduser.auth.sessions_revoked'           => 'Toutes les sessions ont été révoquées avec succès.',
@@ -2229,11 +2232,13 @@ return [
     'password.policy.contains_email'          => 'Le mot de passe ne peut pas contenir le préfixe de votre adresse e-mail.',
     'password.policy.contains_username'       => 'Le mot de passe ne peut pas contenir votre nom d\'utilisateur.',
     'password.policy.contains_name'           => 'Le mot de passe ne peut pas contenir votre nom.',
+    'password.policy.contains_project'        => 'Le mot de passe ne peut pas contenir le nom du projet.',
     'password.policy.current_required'        => 'Le mot de passe actuel est requis pour changer de mot de passe.',
     'password.policy.current_incorrect'       => 'Le mot de passe actuel est incorrect.',
     'password.policy.must_differ'             => 'Le nouveau mot de passe doit être différent du mot de passe actuel.',
     'password.policy.require_special'         => 'Le mot de passe doit inclure au moins un caractère spécial.',
     'password.policy.repetitive_chars'        => 'Le mot de passe ne doit pas contenir 4 caractères identiques ou consécutifs consécutifs.',
+    'password.policy.invalid_control_chars'   => 'Le mot de passe ne peut pas contenir de caractères de contrôle.',
 
     // EndUser Custom Fields Sanitization
     'enduser.custom_fields.must_be_object'    => 'Les champs personnalisés doivent être un objet clé-valeur valide.',

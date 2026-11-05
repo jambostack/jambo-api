@@ -2197,6 +2197,9 @@ return [
     'enduser.auth.payload_too_large'          => 'Solicitud demasiado grande (máx. 1 MB).',
     'enduser.auth.invalid_username'           => 'Formato de nombre de usuario no válido o demasiado largo (máx. 100 caracteres).',
     'enduser.auth.account_locked_out'         => 'Demasiados intentos de inicio de sesión fallidos. Cuenta bloqueada temporalmente por seguridad. Vuelve a intentarlo en %seconds% segundos.',
+    'enduser.auth.ip_locked_out'              => 'Demasiados intentos fallidos desde esta dirección IP. Vuelva a intentarlo en %seconds% segundos.',
+    'enduser.auth.password_change_locked_out' => 'Demasiados intentos incorrectos de contraseña actual. Actualización bloqueada por seguridad. Vuelva a intentarlo en %seconds% segundos.',
+    'enduser.auth.token_rate_limit_lockout'   => 'Demasiados intentos con tokens inválidos. Validación bloqueada temporalmente. Vuelva a intentarlo en %seconds% segundos.',
     'enduser.auth.rate_limit_2fa_lockout'     => 'Demasiados intentos de verificación de dos factores no válidos. Desafío bloqueado. Vuelve a intentarlo en %seconds% segundos.',
     'enduser.auth.reset_cooldown'             => 'Se solicitó recientemente un enlace de restablecimiento de contraseña. Revisa tu correo o espera antes de volver a intentarlo.',
     'enduser.auth.sessions_revoked'           => 'Todas las sesiones se han revocado correctamente.',
@@ -2211,11 +2214,13 @@ return [
     'password.policy.contains_email'          => 'La contraseña no puede contener el prefijo de tu correo electrónico.',
     'password.policy.contains_username'       => 'La contraseña no puede contener tu nombre de usuario.',
     'password.policy.contains_name'           => 'La contraseña no puede contener tu nombre.',
+    'password.policy.contains_project'        => 'La contraseña no puede contener el nombre del proyecto.',
     'password.policy.current_required'        => 'Se requiere la contraseña actual para cambiarla.',
     'password.policy.current_incorrect'       => 'La contraseña actual es incorrecta.',
     'password.policy.must_differ'             => 'La nueva contraseña debe ser diferente de la actual.',
     'password.policy.require_special'         => 'La contraseña debe incluir al menos un carácter especial.',
     'password.policy.repetitive_chars'        => 'La contraseña no puede contener 4 o más caracteres repetitivos o secuenciales.',
+    'password.policy.invalid_control_chars'   => 'La contraseña no puede contener caracteres de control.',
 
     // EndUser Custom Fields Sanitization
     'enduser.custom_fields.must_be_object'    => 'Los campos personalizados deben ser un objeto clave-valor válido.',

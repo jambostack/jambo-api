@@ -7,6 +7,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.120] — 2026-11-05
+
+### Security Hardening on EndUser Auth API, Progressive Multi-Tier Lockout & Password Complexity (Cycle #57)
+- **ProjectAuthLockoutService Progressive Multi-Tier Lockout**:
+  - Implemented `recordTieredFailedAttempt()` with 3 escalating tiers: Tier 1 (5 attempts => 300s), Tier 2 (10 attempts => 900s), Tier 3 (15+ attempts => 3600s).
+  - Implemented `getLockoutTier()` and `recordProgressiveCooldown()` (60s -> 300s -> 900s) for forgot-password and 2FA requests.
+  - Implemented dual-tier lockout: target account key (`enduser_login`) + source IP key (`enduser_login_ip`) to prevent distributed credential stuffing.
+- **EndUserAuthController Fortification**:
+  - Timing oracle elimination: valid bcrypt hash for dummy user timing equalization, covering both null users and OAuth users with null passwords.
+  - Token brute force defense: IP-based lockout tier on `/reset-password` after 5 failed token submissions (`enduser.auth.token_rate_limit_lockout`).
+  - Password change defense: lockout on `PATCH /me` after 5 failed current password attempts (`enduser.auth.password_change_locked_out`).
+  - Session lifecycle binding: bound individual session `sessionId` to `ProjectAuthRefreshToken` `familyId`, so `DELETE /sessions/{sessionId}` revokes the refresh token family immediately.
+  - Uniform 401 on `/refresh` and `/verify-2fa` when user is not found or inactive, eliminating account status leakage.
+- **PasswordPolicyValidator Hardening**:
+  - Added ASCII control character rejection (`[\x00-\x1F\x7F]`) with translated `password.policy.invalid_control_chars`.
+  - Added project name containment rejection (`password.policy.contains_project`) with property-hook safe uninitialized reflection access.
+  - Expanded `COMMON_PASSWORDS` dictionary with 50+ NIST/OWASP weak patterns.
+- **I18N Parity**:
+  - Added 5 new keys (`enduser.auth.ip_locked_out`, `enduser.auth.password_change_locked_out`, `enduser.auth.token_rate_limit_lockout`, `password.policy.invalid_control_chars`, `password.policy.contains_project`) across EN, FR, ES, AR (2,895 keys each, 100% parity).
+- **Testing**:
+  - Expanded `Cycle57EndUserAuthHardeningTest` to 15 tests, 102 assertions with 100% success rate.
+
 ## [1.26.119] — 2026-11-05
 
 ### Security Audit & Hardening on EndUser Auth API & Password Policy

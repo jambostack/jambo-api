@@ -30,11 +30,16 @@ class PasswordPolicyValidator
      * Mots de passe extrêmement fréquents / faibles à rejeter.
      */
     public const COMMON_PASSWORDS = [
-        'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
-        'qwerty123', 'qwertyuiop', 'azerty123', 'admin123', 'admin1234', 'welcome1',
-        'welcome123', 'letmein1', 'changeme1', 'iloveyou1', 'secret123', 'root1234',
-        'administrator', 'adminadmin', 'jamboadmin', 'dragon123', 'football1', 'master123',
-        'monkey123', 'sunshine1', 'princess1', 'shadow123', 'superman1', 'trustno1',
+        'password', 'password1', 'password123', 'password1234', 'passw0rd', 'passw0rd1', 'passw0rd123',
+        '12345678', '123456789', '1234567890', '00000000', '11111111',
+        'qwerty123', 'qwertyuiop', 'azerty123', 'azertyuiop',
+        'admin123', 'admin1234', 'admin12345', 'administrator', 'adminadmin', 'jamboadmin',
+        'welcome1', 'welcome123', 'welcome1234', 'letmein1', 'letmein123',
+        'changeme1', 'changeme123', 'iloveyou1', 'iloveyou123',
+        'secret123', 'secret1234', 'root1234', 'rootadmin',
+        'dragon123', 'football1', 'master123', 'monkey123',
+        'sunshine1', 'princess1', 'shadow123', 'superman1', 'trustno1',
+        'testing123', 'default123', 'server123', 'database1',
     ];
 
     public function __construct(
@@ -78,6 +83,11 @@ class PasswordPolicyValidator
             $errors[] = $this->trans('password.policy.max_length', ['%max%' => (string) self::MAX_LENGTH], 'Password must not exceed %max% characters.');
         }
 
+        // 1b. Interdiction des caractères de contrôle ASCII
+        if (preg_match('/[\x00-\x1F\x7F]/', $password)) {
+            $errors[] = $this->trans('password.policy.invalid_control_chars', [], 'Password cannot contain control characters.');
+        }
+
         $requireComplexity = (bool) ($securityConfig['requirePasswordComplexity'] ?? false);
         $blockCommon = (bool) ($securityConfig['blockCommonPasswords'] ?? false) || $requireComplexity;
         $requireSpecial = (bool) ($securityConfig['requireSpecialChar'] ?? false);
@@ -91,6 +101,22 @@ class PasswordPolicyValidator
 
         if ($blockCommon && (preg_match('/(.)\1{3,}/', $password) || preg_match('/(?:0123|1234|2345|3456|4567|5678|6789|7890|abcd|bcde|cdef|defg|efgh|fghi|ghij|hijk|ijkl|jklm|klmn|lmno|mnop|nopq|opqr|pqrs|qrst|rstu|stuv|tuvw|uvwx|vwxy|wxyz)/i', $password))) {
             $errors[] = $this->trans('password.policy.repetitive_chars', [], 'Password cannot contain 4 or more repetitive or sequential characters.');
+        }
+
+        // 2b. Rejet du nom de projet si configuré ou pertinent
+        $projectName = null;
+        if ($project !== null) {
+            try {
+                $projectName = $project->name;
+            } catch (\Error) {
+                $projectName = null;
+            }
+        }
+        if ($projectName !== null && mb_strlen($projectName) >= 4) {
+            $normalizedProject = strtolower(trim($projectName));
+            if (str_contains($normalized, $normalizedProject)) {
+                $errors[] = $this->trans('password.policy.contains_project', [], 'Password cannot contain the project name.');
+            }
         }
 
         // 3. Diversité de caractères
@@ -156,6 +182,10 @@ class PasswordPolicyValidator
 
         if ($length > self::MAX_LENGTH) {
             $errors[] = $this->trans('password.policy.max_length', ['%max%' => (string) self::MAX_LENGTH], 'Password must not exceed %max% characters.');
+        }
+
+        if (preg_match('/[\x00-\x1F\x7F]/', $password)) {
+            $errors[] = $this->trans('password.policy.invalid_control_chars', [], 'Password cannot contain control characters.');
         }
 
         $normalized = strtolower(trim($password));
