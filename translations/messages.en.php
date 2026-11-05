@@ -3651,4 +3651,18 @@ return [
     'token.max_tokens_reached' => 'Maximum number of personal access tokens reached (%max%).',
     'webhook.limit_exceeded' => 'Project webhook limit reached (max %max% webhooks).',
     'insights.token_project_mismatch' => 'Forbidden: token belongs to another project.',
+
+    // ─── Cycle 88: Visual Blocks Quota, Page Composition Depth & XSS/DOM Security ───
+    'studio.quota.max_collections_exceeded' => 'Maximum number of collections exceeded (max %max%).',
+    'studio.quota.max_fields_exceeded' => 'Maximum number of fields for collection "%collection%" exceeded (max %max%).',
+    'studio.quota.max_subfields_exceeded' => 'Maximum number of subfields for block "%field%" exceeded (max %max%).',
+    'studio.quota.max_total_blocks_exceeded' => 'Maximum number of total visual blocks exceeded (max %max%).',
+    'studio.quota.max_batch_entries_exceeded' => 'Batch entry creation quota exceeded (max %max% entries).',
+    'studio.composition.max_depth_exceeded' => 'Page JSON composition depth exceeds maximum limit of %max% levels at "%path%".',
+    'studio.composition.forbidden_key' => 'Forbidden property "%key%" detected in composition.',
+    'studio.security.script_injection_detected' => 'Custom script injection detected and forbidden in block/page settings.',
+    'studio.security.dangerous_attribute_detected' => 'Dangerous DOM attribute or event handler "%attr%" detected and sanitized.',
+    'page.project_not_found' => 'Project not found',
+    'page.collection_not_found' => 'Collection not found',
+    'page.composition.max_depth_exceeded' => 'Page composition depth exceeds maximum limit of %max% levels.',
 ];

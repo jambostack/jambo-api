@@ -51,7 +51,12 @@ class PageController extends InertiaController
         private UserPasswordHasherInterface $hasher,
         private PermissionRepository $permissionRepository,
         private FieldRelationOptionsNormalizer $relationOptionsNormalizer,
-    ) {}
+        private ?\App\Service\Security\PageCompositionSecurityService $compositionSecurity = null,
+        private ?\App\Service\EndUserCustomFieldsSanitizer $customFieldsSanitizer = null,
+    ) {
+        $this->compositionSecurity ??= new \App\Service\Security\PageCompositionSecurityService();
+        $this->customFieldsSanitizer ??= new \App\Service\EndUserCustomFieldsSanitizer();
+    }
 
     /** Cached ProjectMember resolved by denyProjectAccess() for reuse in buildUserCan(). */
     private ?ProjectMember $currentProjectMember = null;
@@ -594,7 +599,7 @@ class PageController extends InertiaController
         }
         $email = $data['email'] ?? '';
         $password = $data['password'] ?? '';
-        $username = $data['username'] ?? null;
+        $username = isset($data['username']) ? $this->compositionSecurity->sanitizeText((string) $data['username']) : null;
         $status = $data['status'] ?? 'active';
 
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -609,7 +614,7 @@ class PageController extends InertiaController
 
         $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $email);
         if ($existing) {
-            return $this->json(['errors' => ['email' => 'Email already registered in this project']], 422);
+            return $this->json(['errors' => ['email' => $this->trans('page.email_already_registered', [], 'Email already registered in this project')]], 422);
         }
 
         $endUser = new EndUser($project, $email);
@@ -617,8 +622,12 @@ class PageController extends InertiaController
         $endUser->password = $this->hasher->hashPassword($endUser, $password);
         $endUser->status = $status;
 
-        if (!empty($data['custom_fields']) && is_array($data['custom_fields'])) {
-            $endUser->customFields = $data['custom_fields'];
+        if (!empty($data['custom_fields'])) {
+            $cfRes = $this->customFieldsSanitizer->sanitize($data['custom_fields']);
+            if (!$cfRes['valid']) {
+                return $this->json(['errors' => ['custom_fields' => $cfRes['error']]], 422);
+            }
+            $endUser->customFields = $cfRes['sanitized'];
         }
 
         $this->em->persist($endUser);
@@ -707,11 +716,15 @@ class PageController extends InertiaController
         }
 
         if (isset($data['username'])) {
-            $endUser->username = $data['username'] ?: null;
+            $endUser->username = $this->compositionSecurity->sanitizeText((string) $data['username']) ?: null;
         }
 
         if (isset($data['custom_fields'])) {
-            $endUser->customFields = $data['custom_fields'];
+            $cfRes = $this->customFieldsSanitizer->sanitize($data['custom_fields']);
+            if (!$cfRes['valid']) {
+                return $this->json(['errors' => ['custom_fields' => $cfRes['error']]], 422);
+            }
+            $endUser->customFields = $cfRes['sanitized'];
         }
 
         if (!empty($data['password'])) {
@@ -890,13 +903,13 @@ class PageController extends InertiaController
     {
         $project = $this->projectRepository->find($project);
         if (!$project) {
-            throw $this->createNotFoundException('Project not found');
+            throw $this->createNotFoundException($this->trans('page.project_not_found', [], 'Project not found'));
         }
         $this->denyProjectAccess($project);
 
         $collection = $this->collectionRepository->find($collection);
         if (!$collection || $collection->project->id !== $project->id || $collection->isDeleted()) {
-            throw $this->createNotFoundException('Collection not found');
+            throw $this->createNotFoundException($this->trans('page.collection_not_found', [], 'Collection not found'));
         }
 
         return [$project, $collection];
@@ -967,9 +980,9 @@ class PageController extends InertiaController
             'id'           => $collection->id,
             'uuid'         => $collection->uuid?->toRfc4122(),
             'project_id'   => $collection->project->id,
-            'name'         => $collection->name,
+            'name'         => $this->compositionSecurity->sanitizeText($collection->name) ?? $collection->name,
             'slug'         => $collection->slug,
-            'description'  => $collection->description,
+            'description'  => $collection->description !== null ? $this->compositionSecurity->sanitizeText($collection->description) : null,
             'is_singleton' => $collection->isSingleton,
             'order'        => $collection->order,
             'created_at'   => null,
@@ -995,13 +1008,20 @@ class PageController extends InertiaController
             $options = $this->relationOptionsNormalizer->normalize($options, $collection->project) ?? [];
         }
 
+        if (isset($options['attributes']) && is_array($options['attributes'])) {
+            $options['attributes'] = $this->compositionSecurity->sanitizeDomAttributes($options['attributes']);
+        }
+        if (isset($options['props']) && is_array($options['props'])) {
+            $options['props'] = $this->compositionSecurity->sanitizeDomAttributes($options['props']);
+        }
+
         return [
             'id'            => $field->id,
             'project_id'    => $collection->project->id,
             'project_uuid'  => $collection->project->uuid?->toRfc4122(),
             'collection_id' => $collection->id,
-            'name'          => $field->name,
-            'label'         => $field->name,
+            'name'          => $this->compositionSecurity->sanitizeText($field->name) ?? $field->name,
+            'label'         => $this->compositionSecurity->sanitizeText($field->name) ?? $field->name,
             'slug'          => $field->slug,
             'type'          => $field->type,
             'required'      => $field->isRequired,

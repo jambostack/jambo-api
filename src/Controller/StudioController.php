@@ -57,8 +57,10 @@ class StudioController extends InertiaController
         #[Autowire(service: 'limiter.ai_limiter')]
         private readonly ?RateLimiterFactory $aiLimiter = null,
         ?TranslatorInterface $translator = null,
+        private ?\App\Service\Security\PageCompositionSecurityService $compositionSecurity = null,
     ) {
         $this->ssrfProtection ??= new \App\Service\Security\SsrfProtectionService();
+        $this->compositionSecurity ??= new \App\Service\Security\PageCompositionSecurityService(null, $this->ssrfProtection, $translator);
         if ($translator !== null) {
             $this->translator = $translator;
         }
@@ -153,8 +155,11 @@ EUSER;
             while (isset($seenCollectionSlugs[$slug])) { $slug = $base . '_' . $i++; }
             $seenCollectionSlugs[$slug] = true;
 
-            $col['name'] = $name;
+            $col['name'] = $this->compositionSecurity->sanitizeText($name) ?? $name;
             $col['slug'] = $slug;
+            if (isset($col['description'])) {
+                $col['description'] = $this->compositionSecurity->sanitizeText((string) $col['description']);
+            }
 
             $fields = [];
             $seenFieldSlugs = [];
@@ -166,8 +171,11 @@ EUSER;
                 if ($fslug === '' || in_array($fslug, self::RESERVED_FIELD_SLUGS, true)) continue;
                 if (isset($seenFieldSlugs[$fslug])) continue;
                 $seenFieldSlugs[$fslug] = true;
-                $field['name'] = $fname;
+                $field['name'] = $this->compositionSecurity->sanitizeText($fname) ?? $fname;
                 $field['slug'] = $fslug;
+                if (isset($field['options']) && is_array($field['options'])) {
+                    $field['options'] = $this->compositionSecurity->sanitizeFieldOptions($field['options']);
+                }
                 $fields[] = $field;
             }
             $col['fields'] = $fields;
@@ -430,7 +438,13 @@ PROMPT;
             // Extraire le JSON (le modèle peut wrapper dans ```json)
             if (preg_match('/\{[\s\S]*\}/', $content, $m)) {
                 $data = json_decode($m[0], true);
-                if ($data && isset($data['collections'])) {
+                if ($data && isset($data['collections']) && is_array($data['collections'])) {
+                    try {
+                        $this->compositionSecurity->validateBlockQuotas($data['collections']);
+                        $this->compositionSecurity->assertJsonDepth($data['collections']);
+                    } catch (\InvalidArgumentException $e) {
+                        return $this->jsonResponse(['error' => $e->getMessage()], 422);
+                    }
                     $data['collections'] = $this->normalizeSchema($data['collections']);
                     return $this->jsonResponse($data);
                 }
@@ -778,8 +792,14 @@ PROMPT;
         $collectionSlug = $body['collection'] ?? '';
         $entryData = $body['entry'] ?? [];
 
-        if ($collectionSlug === '' || empty($entryData)) {
+        if ($collectionSlug === '' || empty($entryData) || !is_array($entryData)) {
             return $this->jsonResponse(['error' => $this->trans('studio.collection_and_entry_required', [], 'Collection and entry required')], 422);
+        }
+
+        try {
+            $this->compositionSecurity->assertJsonDepth($entryData);
+        } catch (\InvalidArgumentException $e) {
+            return $this->jsonResponse(['error' => $e->getMessage()], 422);
         }
 
         // Cas spécial EndUsers
@@ -1256,10 +1276,23 @@ PROMPT;
 
         $data = json_decode($request->getContent(), true);
         if (!is_array($data)) return $this->jsonResponse(['error' => $this->trans('studio.invalid_json', [], 'Invalid JSON body')], 400);
+
+        $rawCollections = $data['collections'] ?? [];
+        if (!is_array($rawCollections)) {
+            return $this->jsonResponse(['error' => $this->trans('studio.invalid_json', [], 'Invalid JSON body')], 400);
+        }
+
+        try {
+            $this->compositionSecurity->validateBlockQuotas($rawCollections);
+            $this->compositionSecurity->assertJsonDepth($rawCollections);
+        } catch (\InvalidArgumentException $e) {
+            return $this->jsonResponse(['error' => $e->getMessage()], 422);
+        }
+
         // Garantie ultime : on normalise au point de persistance, donc quelle que
         // soit la source (chat IA, schéma IA, builder visuel), les conventions de
         // nommage sont toujours respectées en base.
-        $collections = $this->normalizeSchema($data['collections'] ?? []);
+        $collections = $this->normalizeSchema($rawCollections);
 
         $created = 0;
         $updated = 0;
@@ -1305,8 +1338,12 @@ PROMPT;
             $collection->isSingleton = $colData['isSingleton'] ?? false;
             $collection->deletedAt = null; // Restaurer si soft-deletée auparavant
 
-            if (isset($colData['settings'])) {
-                $collection->settings = $colData['settings'];
+            if (isset($colData['settings']) && is_array($colData['settings'])) {
+                try {
+                    $collection->settings = $this->compositionSecurity->sanitizeCollectionSettings($colData['settings']);
+                } catch (\InvalidArgumentException $e) {
+                    return $this->jsonResponse(['error' => $e->getMessage()], 422);
+                }
             }
 
             $keptCollectionUuids[] = $collection->uuid?->toRfc4122();
@@ -1344,6 +1381,13 @@ PROMPT;
                 $field->isRequired = $fieldData['isRequired'] ?? false;
                 $field->options = $this->normalizeFieldOptions($field->type, $fieldData['options'] ?? null, $project);
                 if (isset($fieldData['validationRules'])) {
+                    if (is_array($fieldData['validationRules'])) {
+                        try {
+                            $this->compositionSecurity->assertJsonDepth($fieldData['validationRules']);
+                        } catch (\InvalidArgumentException $e) {
+                            return $this->jsonResponse(['error' => $e->getMessage()], 422);
+                        }
+                    }
                     $field->validationRules = $fieldData['validationRules'];
                 }
                 $field->order = $order++;
@@ -1578,7 +1622,14 @@ PROMPT;
     private function executeCreateCollections(Project $project, array $params): array
     {
         $collections = $params['collections'] ?? [];
-        if (empty($collections)) return ['error' => $this->trans('studio.no_collections_provided', [], 'Aucune collection fournie')];
+        if (empty($collections) || !is_array($collections)) return ['error' => $this->trans('studio.no_collections_provided', [], 'Aucune collection fournie')];
+
+        try {
+            $this->compositionSecurity->validateBlockQuotas($collections);
+            $this->compositionSecurity->assertJsonDepth($collections);
+        } catch (\InvalidArgumentException $e) {
+            return ['error' => $e->getMessage()];
+        }
 
         $normalized = $this->normalizeSchema($collections);
         $created = 0;
@@ -1641,8 +1692,15 @@ PROMPT;
         $entries = $params['entries'] ?? [];
         $locales = $params['locales'] ?? null; // null = locale par défaut uniquement
 
-        if ($collectionSlug === '' || empty($entries)) {
+        if ($collectionSlug === '' || empty($entries) || !is_array($entries)) {
             return ['error' => $this->trans('studio.collection_and_entries_required', [], 'Collection et entries requis')];
+        }
+
+        try {
+            $this->compositionSecurity->validateBatchEntriesQuota($entries);
+            $this->compositionSecurity->assertJsonDepth($entries);
+        } catch (\InvalidArgumentException $e) {
+            return ['error' => $e->getMessage()];
         }
 
         // EndUsers
@@ -1727,8 +1785,14 @@ PROMPT;
         $uuids = $params['uuids'] ?? [];
         $patch = $params['patch'] ?? [];
 
-        if (empty($uuids) || empty($patch)) return ['error' => $this->trans('studio.uuids_and_patch_required', [], 'uuids et patch requis')];
+        if (empty($uuids) || empty($patch) || !is_array($patch)) return ['error' => $this->trans('studio.uuids_and_patch_required', [], 'uuids et patch requis')];
         if ($collectionSlug === '') return ['error' => $this->trans('studio.collection_required', [], 'Collection requise')];
+
+        try {
+            $this->compositionSecurity->assertJsonDepth($patch);
+        } catch (\InvalidArgumentException $e) {
+            return ['error' => $e->getMessage()];
+        }
 
         $collection = $this->em->getRepository(Collection::class)
             ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);

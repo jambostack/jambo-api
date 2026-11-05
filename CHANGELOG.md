@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.155] — 2026-11-05
+
+### Visual Blocks Quotas, Page Composition Depth & XSS/DOM Custom Script Security (Cycle #88)
+- **Visual Block Quotas & Recursion Defense (`PageCompositionSecurityService` & `StudioController`)**:
+  - Implemented visual block quotas: `MAX_COLLECTIONS_PER_SCHEMA = 50`, `MAX_FIELDS_PER_COLLECTION = 100`, `MAX_SUBFIELDS_PER_BLOCK = 50`, `MAX_TOTAL_BLOCKS = 500`, and `MAX_BATCH_ENTRIES = 100`.
+  - Enforced strict page JSON composition depth limit (`MAX_JSON_DEPTH = 10`) protecting against deeply nested DoS and recursive stack overflow attacks.
+  - Implemented prototype pollution prevention blocking dangerous keys (`__proto__`, `constructor`, `prototype`) in composition and schema structures.
+- **XSS/DOM Attribute Sanitization & Custom Script Injection Hardening (`PageCompositionSecurityService`, `StudioController` & `PageController`)**:
+  - Sanitized DOM attributes: stripped inline DOM event handlers (`on*`: `onclick`, `onload`, `onerror`, etc.), neutralized dangerous URI schemes (`javascript:`, `vbscript:`, `data:text/html`), and neutralized malicious CSS expression / behavior bindings.
+  - Hardened collection/page settings against unauthorized custom script injection; restricted inline script tags to safe JSON-LD (`application/ld+json`) and enforced strict HTTPS protocols for external scripts.
+  - Sanitized plain text fields (collection name, description, field names) stripping executable tags and control characters.
+- **EndUsers Security in PageController (`PageController`)**:
+  - Integrated `EndUserCustomFieldsSanitizer` into `settingsEndUsersStore` and `settingsEndUsersUpdate`, validating custom fields depth, size and attributes.
+  - Sanitized `username` inputs and resolved hardcoded error string on duplicate emails using `page.email_already_registered`.
+  - Added translated exceptions for collection and project lookup in `resolveProjectAndCollection`.
+  - Re-aligned `InsightsController` 404 response handling to preserve both format validation and multi-tenant isolation.
+- **Strict 100% I18n Compliance**:
+  - Added 12 new translation keys across all 4 locales (`en`, `fr`, `es`, `ar`): `studio.quota.max_collections_exceeded`, `studio.quota.max_fields_exceeded`, `studio.quota.max_subfields_exceeded`, `studio.quota.max_total_blocks_exceeded`, `studio.quota.max_batch_entries_exceeded`, `studio.composition.max_depth_exceeded`, `studio.composition.forbidden_key`, `studio.security.script_injection_detected`, `studio.security.dangerous_attribute_detected`, `page.project_not_found`, `page.collection_not_found`, `page.composition.max_depth_exceeded`. Exactly 3,359 keys per locale.
+- **Test Suite Verification**:
+  - Added `Cycle88StudioAndPageHardeningTest` covering block quotas, batch entries limits, JSON depth limits, prototype pollution defense, DOM attribute sanitization, script injection rejection, EndUser custom field validation, username sanitization, and translated exceptions (22 tests, 58 assertions, 100% pass).
+
 ## [1.26.154] — 2026-11-05
 
 ### AI Payload Protection, Personal Access Token & Webhook Quotas, Multi-Tenant Resiliency (Cycle #87)

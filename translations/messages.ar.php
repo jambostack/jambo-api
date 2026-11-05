@@ -3653,4 +3653,18 @@ return [
     'token.max_tokens_reached' => 'تم الوصول إلى الحد الأقصى لرموز الوصول الشخصية (%max%).',
     'webhook.limit_exceeded' => 'تم الوصول إلى الحد الأقصى لخطافات الويب للمشروع (الحد الأقصى %max% خطافات).',
     'insights.token_project_mismatch' => 'محظور: الرمز ينتمي إلى مشروع آخر.',
+
+    // ─── Cycle 88: Visual Blocks Quota, Page Composition Depth & XSS/DOM Security ───
+    'studio.quota.max_collections_exceeded' => 'تم تجاوز الحد الأقصى للمجموعات (الحد الأقصى %max%).',
+    'studio.quota.max_fields_exceeded' => 'تم تجاوز الحد الأقصى للحقول للمجموعة "%collection%" (الحد الأقصى %max%).',
+    'studio.quota.max_subfields_exceeded' => 'تم تجاوز الحد الأقصى للحقول الفرعية للكتلة "%field%" (الحد الأقصى %max%).',
+    'studio.quota.max_total_blocks_exceeded' => 'تم تجاوز الحد الأقصى الإجمالي للكتل المرئية (الحد الأقصى %max%).',
+    'studio.quota.max_batch_entries_exceeded' => 'تم تجاوز حصة إنشاء المدخلات بالدفعة (الحد الأقصى %max% مدخلات).',
+    'studio.composition.max_depth_exceeded' => 'يتجاوز عمق تكوين JSON الحد الأقصى البالغ %max% مستويات عند "%path%".',
+    'studio.composition.forbidden_key' => 'تم اكتشاف خاصية محظورة "%key%" في التكوين.',
+    'studio.security.script_injection_detected' => 'تم اكتشاف حقن برنامج نصي مخصص ومحظور في الإعدادات.',
+    'studio.security.dangerous_attribute_detected' => 'تم اكتشاف خاصية DOM أو معالج أحداث خطير "%attr%" وتطهيره.',
+    'page.project_not_found' => 'المشروع غير موجود',
+    'page.collection_not_found' => 'المجموعة غير موجودة',
+    'page.composition.max_depth_exceeded' => 'يتجاوز عمق تكوين الصفحة الحد الأقصى البالغ %max% مستويات.',
 ];

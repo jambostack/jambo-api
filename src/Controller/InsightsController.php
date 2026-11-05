@@ -102,10 +102,7 @@ class InsightsController extends AbstractController
         $isUuid = (bool) preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $project);
 
         if (!$isNumeric && !$isUuid) {
-            return new JsonResponse([
-                'error' => $this->trans('insights.project_not_found', [], 'Project not found'),
-                'code' => 'PROJECT_NOT_FOUND',
-            ], 404, self::SECURITY_HEADERS);
+            throw $this->createNotFoundException($this->trans('insights.project_not_found', [], 'Project not found'));
         }
 
         try {

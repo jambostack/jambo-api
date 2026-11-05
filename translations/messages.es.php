@@ -3651,4 +3651,18 @@ return [
     'token.max_tokens_reached' => 'Número máximo de tokens de acceso personal alcanzado (%max%).',
     'webhook.limit_exceeded' => 'Límite de webhooks del proyecto alcanzado (máx. %max% webhooks).',
     'insights.token_project_mismatch' => 'Prohibido: el token pertenece a otro proyecto.',
+
+    // ─── Cycle 88: Visual Blocks Quota, Page Composition Depth & XSS/DOM Security ───
+    'studio.quota.max_collections_exceeded' => 'Número máximo de colecciones superado (máx. %max%).',
+    'studio.quota.max_fields_exceeded' => 'Número máximo de campos para la colección "%collection%" superado (máx. %max%).',
+    'studio.quota.max_subfields_exceeded' => 'Número máximo de subcampos para el bloque "%field%" superado (máx. %max%).',
+    'studio.quota.max_total_blocks_exceeded' => 'Número máximo total de bloques visuales superado (máx. %max%).',
+    'studio.quota.max_batch_entries_exceeded' => 'Cuota de creación de entradas por lote superada (máx. %max% entradas).',
+    'studio.composition.max_depth_exceeded' => 'La profundidad de composición JSON supera el límite máximo de %max% niveles en "%path%".',
+    'studio.composition.forbidden_key' => 'Propiedad prohibida "%key%" detectada en la composición.',
+    'studio.security.script_injection_detected' => 'Inyección de script personalizado detectada y prohibida en la configuración.',
+    'studio.security.dangerous_attribute_detected' => 'Atributo DOM o controlador de eventos peligroso "%attr%" detectado y saneado.',
+    'page.project_not_found' => 'Proyecto no encontrado',
+    'page.collection_not_found' => 'Colección no encontrada',
+    'page.composition.max_depth_exceeded' => 'La profundidad de composición de la página supera el límite máximo de %max% niveles.',
 ];
