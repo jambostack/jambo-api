@@ -92,7 +92,7 @@ class WebhookService
             $log->event          = $event;
             $log->requestPayload = '{}';
             $log->status         = 'failed';
-            $log->errorMessage   = 'JSON encoding error: ' . substr($e->getMessage(), 0, 255);
+            $log->errorMessage   = $this->trans('webhook.json_encode_error', ['%error%' => substr($e->getMessage(), 0, 200)], 'JSON encoding error: ' . substr($e->getMessage(), 0, 200));
             $this->em->persist($log);
             $this->em->flush();
             return $log;
@@ -107,6 +107,7 @@ class WebhookService
             'X-JamboApi-Event'     => $event,
             'X-JamboApi-Delivery'  => $deliveryId,
             'X-JamboApi-Timestamp' => (string) $timestamp,
+            'X-JamboApi-Project'   => $webhook->project?->uuid?->toRfc4122() ?? '',
         ];
 
         if ($webhook->secret !== null) {
@@ -121,7 +122,7 @@ class WebhookService
                 $log->event          = $event;
                 $log->requestPayload = $payloadJson;
                 $log->status         = 'failed';
-                $log->errorMessage   = 'Failed to decrypt webhook secret: ' . substr($e->getMessage(), 0, 255);
+                $log->errorMessage   = $this->trans('webhook.secret_decrypt_error', ['%error%' => substr($e->getMessage(), 0, 200)], 'Failed to decrypt webhook secret: ' . substr($e->getMessage(), 0, 200));
                 $this->em->persist($log);
                 $this->em->flush();
                 return $log;
@@ -136,7 +137,8 @@ class WebhookService
         // Contrôle SSRF dynamique au moment de l'appel (Time of Check to Time of Use)
         if (!$this->ssrfProtection->isSafeUrl($webhook->url, false, $reason)) {
             $log->status       = 'failed';
-            $log->errorMessage = 'Blocked outbound request to private/internal IP: ' . ($reason ?? 'SSRF blocked');
+            $reasonText        = $reason ?? 'SSRF blocked';
+            $log->errorMessage = $this->trans('webhook.ssrf_blocked', ['%reason%' => $reasonText], 'Blocked outbound request to private/internal IP: ' . $reasonText);
             $this->em->persist($log);
             $this->em->flush();
             return $log;

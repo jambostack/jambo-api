@@ -12,6 +12,7 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsMessageHandler]
 class SendWebhookMessageHandler
@@ -27,6 +28,7 @@ class SendWebhookMessageHandler
         ?SsrfProtectionService $ssrfProtection = null,
         ?WebhookService $webhookService = null,
         private LoggerInterface $logger = new NullLogger(),
+        private ?TranslatorInterface $translator = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
         $this->webhookService = $webhookService ?? new WebhookService(
@@ -34,7 +36,8 @@ class SendWebhookMessageHandler
             $this->em,
             $this->httpClient,
             $this->secretService,
-            $this->ssrfProtection
+            $this->ssrfProtection,
+            $this->translator
         );
     }
 
@@ -53,6 +56,19 @@ class SendWebhookMessageHandler
 
         if ($webhook === null || !$webhook->isActive) {
             return;
+        }
+
+        // Cloisonnement multi-tenant strict : validation du projet
+        if ($message->projectUuid !== null) {
+            $webhookProjectUuid = $webhook->project?->uuid?->toRfc4122();
+            if ($webhookProjectUuid === null || $webhookProjectUuid !== $message->projectUuid) {
+                $this->logger->warning('Webhook delivery rejected due to tenant project mismatch', [
+                    'webhook_id'       => $message->webhookId,
+                    'expected_project' => $message->projectUuid,
+                    'actual_project'   => $webhookProjectUuid,
+                ]);
+                return;
+            }
         }
 
         $this->webhookService->send($webhook, $message->event, $message->payload);

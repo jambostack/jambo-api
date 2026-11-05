@@ -52,7 +52,14 @@ class DispatchProjectWebhooksSubscriber implements EventSubscriberInterface
                 }
             }
 
-            $this->bus->dispatch(new SendWebhookMessage($webhook->id, $event->eventName, $payload));
+            $this->bus->dispatch(new SendWebhookMessage(
+                $webhook->id,
+                $event->eventName,
+                $payload,
+                null,
+                86400,
+                $event->project->uuid?->toRfc4122()
+            ));
         }
     }
 }

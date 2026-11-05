@@ -6,7 +6,10 @@ use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowNodeHandler;
 use App\Service\Flow\NodeOutput;
 use App\Service\Security\SsrfProtectionService;
+use App\Service\WebhookSecretService;
 use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class CallWebhookHandler implements FlowNodeHandler
 {
@@ -15,18 +18,48 @@ class CallWebhookHandler implements FlowNodeHandler
     private const MAX_URL_LENGTH = 2048;
 
     private SsrfProtectionService $ssrfProtection;
-    private ?\Symfony\Contracts\HttpClient\HttpClientInterface $httpClient;
+    private ?HttpClientInterface $httpClient;
+    private ?WebhookSecretService $secretService;
+    private ?TranslatorInterface $translator;
 
     public function __construct(
         ?SsrfProtectionService $ssrfProtection = null,
-        ?\Symfony\Contracts\HttpClient\HttpClientInterface $httpClient = null,
+        ?HttpClientInterface $httpClient = null,
+        ?WebhookSecretService $secretService = null,
+        ?TranslatorInterface $translator = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
         $this->httpClient = $httpClient;
+        $this->secretService = $secretService;
+        $this->translator = $translator;
+    }
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($id, $parameters, 'messages');
+            if ($translated !== $id) {
+                return $translated;
+            }
+        }
+        if ($default !== null) {
+            return strtr($default, $parameters);
+        }
+        return $id;
     }
 
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
+        // Contrôle strict du contexte multi-tenant
+        if (trim($ctx->projectUuid) === '') {
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => '',
+                'error'       => $this->trans('flow.call_webhook.missing_project_context', [], 'Missing project context for outbound webhook.'),
+                'status_code' => 0,
+            ]);
+        }
+
         $firstInput = array_values($input)[0] ?? null;
         $inputData = $firstInput instanceof NodeOutput ? $firstInput->data : (is_array($firstInput) ? $firstInput : []);
         $config = $ctx->variables['_node_config'] ?? [];
@@ -40,10 +73,15 @@ class CallWebhookHandler implements FlowNodeHandler
                 $headers = $decoded;
             }
         }
-        $body   = (string) ($config['body'] ?? '');
+        $body = (string) ($config['body'] ?? '');
 
         if (!in_array($method, self::ALLOWED_METHODS, true)) {
-            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => sprintf('Unsupported HTTP method "%s"', $method)]);
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => $url,
+                'error'       => $this->trans('flow.call_webhook.unsupported_method', ['%method%' => $method], sprintf('Unsupported HTTP method "%s"', $method)),
+                'status_code' => 0,
+            ]);
         }
 
         // Cloisonnement contextuel strict : interpolation sécurisée sans échappement environnement
@@ -51,31 +89,79 @@ class CallWebhookHandler implements FlowNodeHandler
         $url  = trim($this->interpolateSafe($url, $inputData, $safeVars));
         $body = $this->interpolateSafe($body, $inputData, $safeVars);
 
-        if (strlen($body) > self::MAX_BODY_BYTES) {
-            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => 'Webhook request payload exceeds 2MB limit']);
-        }
-
         if ($url === '') {
-            return new NodeOutput(data: ['called' => false, 'url' => '', 'error' => 'URL is empty']);
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => '',
+                'error'       => $this->trans('flow.call_webhook.url_empty', [], 'URL is empty'),
+                'status_code' => 0,
+            ]);
         }
 
         if (strlen($url) > self::MAX_URL_LENGTH) {
-            return new NodeOutput(data: ['called' => false, 'url' => substr($url, 0, 100) . '...', 'error' => sprintf('Webhook URL exceeds %d characters limit', self::MAX_URL_LENGTH)]);
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => substr($url, 0, 100) . '...',
+                'error'       => $this->trans('flow.call_webhook.url_too_long', ['%max%' => (string) self::MAX_URL_LENGTH], sprintf('Webhook URL exceeds %d characters limit', self::MAX_URL_LENGTH)),
+                'status_code' => 0,
+            ]);
+        }
+
+        if (preg_match('/[\r\n\x00-\x1F\x7F]/', $url)) {
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => preg_replace('/[\r\n\x00-\x1F\x7F]/', '', substr($url, 0, 100)),
+                'error'       => $this->trans('flow.call_webhook.url_control_chars', [], 'Webhook URL contains forbidden control characters.'),
+                'status_code' => 0,
+            ]);
         }
 
         $parsedUrl = parse_url($url);
         if ($parsedUrl === false || !isset($parsedUrl['scheme'])) {
-            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => 'Invalid webhook URL format']);
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => $url,
+                'error'       => $this->trans('flow.call_webhook.invalid_url', [], 'Invalid webhook URL format'),
+                'status_code' => 0,
+            ]);
         }
         $scheme = strtolower((string) $parsedUrl['scheme']);
         if (!in_array($scheme, ['http', 'https'], true)) {
-            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => sprintf('Unsupported protocol "%s". Only HTTP and HTTPS are permitted.', $scheme)]);
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => $url,
+                'error'       => $this->trans('flow.call_webhook.unsupported_protocol', ['%scheme%' => $scheme], sprintf('Unsupported protocol "%s". Only HTTP and HTTPS are permitted.', $scheme)),
+                'status_code' => 0,
+            ]);
         }
-        if (!isset($parsedUrl['host'])) {
-            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => 'Invalid webhook URL format']);
+        if (!isset($parsedUrl['host']) || trim((string) $parsedUrl['host']) === '') {
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => $url,
+                'error'       => $this->trans('flow.call_webhook.invalid_url', [], 'Invalid webhook URL format'),
+                'status_code' => 0,
+            ]);
         }
 
-        // Nettoyage et assainissement des en-têtes (anti-CRLF, anti-Host spoofing, anti-smuggling)
+        if (isset($parsedUrl['user']) || isset($parsedUrl['pass'])) {
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => $url,
+                'error'       => $this->trans('flow.call_webhook.credentials_forbidden', [], 'Credentials in webhook URL are strictly forbidden.'),
+                'status_code' => 0,
+            ]);
+        }
+
+        if (strlen($body) > self::MAX_BODY_BYTES) {
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => $url,
+                'error'       => $this->trans('flow.call_webhook.payload_too_large', [], 'Webhook request payload exceeds 2MB limit'),
+                'status_code' => 0,
+            ]);
+        }
+
+        // Nettoyage et assainissement des en-têtes (anti-CRLF, anti-Host spoofing, anti-smuggling, anti-spoofing tenant)
         $cleanHeaders = [];
         foreach ($headers as $hKey => $hVal) {
             if (!is_string($hKey) || !is_scalar($hVal)) {
@@ -87,18 +173,40 @@ class CallWebhookHandler implements FlowNodeHandler
                 continue;
             }
             $hKeyLower = strtolower($hKeyTrim);
-            if (in_array($hKeyLower, ['host', 'transfer-encoding', 'connection', 'upgrade', 'keep-alive', 'proxy-connection'], true)) {
+            if (in_array($hKeyLower, ['host', 'transfer-encoding', 'connection', 'upgrade', 'keep-alive', 'proxy-connection', 'content-length'], true)) {
+                continue;
+            }
+            if (str_starts_with($hKeyLower, 'x-jamboapi-')) {
                 continue;
             }
             $cleanHeaders[$hKeyTrim] = $hValStr;
         }
         $headers = $cleanHeaders;
 
+        // Tracing multi-tenant authentique garanti par la plateforme
+        $headers['X-JamboApi-Project'] = $ctx->projectUuid;
+        $headers['X-JamboApi-Automation-Id'] = (string) $ctx->automationId;
+        $headers['X-JamboApi-Run-Id'] = $ctx->runId;
+
         // Signature HMAC et headers par défaut
         $secret = trim((string) ($config['secret'] ?? ''));
         if ($secret !== '') {
-            $headers['X-JamboApi-Timestamp'] = (string) time();
+            if (str_starts_with($secret, 'enc:') && $this->secretService !== null) {
+                try {
+                    $secret = $this->secretService->decrypt(substr($secret, 4));
+                } catch (\Throwable) {
+                    return new NodeOutput(data: [
+                        'called'      => false,
+                        'url'         => $url,
+                        'error'       => $this->trans('flow.call_webhook.secret_decrypt_error', [], 'Failed to decrypt webhook secret.'),
+                        'status_code' => 0,
+                    ]);
+                }
+            }
+            $timestamp = (string) time();
+            $headers['X-JamboApi-Timestamp'] = $timestamp;
             $headers['X-JamboApi-Signature'] = 'sha256=' . hash_hmac('sha256', $body, $secret);
+            $headers['X-JamboApi-Signature-256'] = "t={$timestamp},v1=" . hash_hmac('sha256', "{$timestamp}.{$body}", $secret);
         }
         if (!isset($headers['User-Agent']) && !isset($headers['user-agent'])) {
             $headers['User-Agent'] = 'JamboApi-FlowWebhook/1.0';
@@ -120,7 +228,12 @@ class CallWebhookHandler implements FlowNodeHandler
                 'body'        => $this->ssrfProtection->readSafeResponseBody($response, 16384),
             ]);
         } catch (\Throwable $e) {
-            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => $e->getMessage()]);
+            return new NodeOutput(data: [
+                'called'      => false,
+                'url'         => $url,
+                'error'       => $e->getMessage(),
+                'status_code' => 0,
+            ]);
         }
     }
 
@@ -131,9 +244,9 @@ class CallWebhookHandler implements FlowNodeHandler
         }
 
         $forbiddenEnvPatterns = [
-            '/\{\{\s*(?:_?ENV|_?SERVER|GLOBALS|getenv|putenv|env|server|system|exec|passthru|shell_exec|eval)\b[^\}]*\}\}/i',
-            '/\{\{\s*(?:APP_SECRET|APP_ENV|DATABASE_URL|MAILER_DSN|JWT_SECRET|MERCURE_JWT_SECRET|PHP_SELF|DOCUMENT_ROOT)[^\}]*\}\}/i',
-            '/\{\{\s*(?:[a-zA-Z0-9_\.]*(?:password|secret|token|credential|hash|salt|bearer|jwt|database_url|api_?key|access_?token|auth))[^\}]*\}\}/i',
+            '/\{\{\s*(?:_?ENV|_?SERVER|GLOBALS|getenv|putenv|env|server|system|exec|passthru|shell_exec|eval|php_sapi|php_uname)\b[^\}]*\}\}/i',
+            '/\{\{\s*(?:APP_SECRET|APP_ENV|DATABASE_URL|MAILER_DSN|JWT_SECRET|MERCURE_JWT_SECRET|PHP_SELF|DOCUMENT_ROOT|SYMFONY_DOTENV_VARS)[^\}]*\}\}/i',
+            '/\{\{\s*(?:[a-zA-Z0-9_\.]*(?:password|secret|token|credential|hash|salt|bearer|jwt|database_url|api_?key|access_?token|auth|cookie|session_id|private_key))[^\}]*\}\}/i',
         ];
         $result = (string) preg_replace($forbiddenEnvPatterns, '', $text);
         $merged = array_merge($safeVars, $data);
@@ -153,7 +266,7 @@ class CallWebhookHandler implements FlowNodeHandler
         // Chemins en notation pointée (ex: {{ entry.title }})
         if (preg_match_all('/\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}/', $result, $matches)) {
             foreach ($matches[1] as $fullMatch) {
-                if (str_starts_with($fullMatch, '_') || preg_match('/(?:env|server|globals|secret|password|token|key|credential|jwt|auth)/i', $fullMatch)) {
+                if (str_starts_with($fullMatch, '_') || preg_match('/(?:env|server|globals|secret|password|token|key|credential|jwt|auth|cookie|session)/i', $fullMatch)) {
                     continue;
                 }
                 if (str_contains($fullMatch, '.')) {
@@ -198,5 +311,6 @@ class CallWebhookHandler implements FlowNodeHandler
             ],
         ];
     }
+
     public static function getOutputPorts(): array { return ['default']; }
 }
