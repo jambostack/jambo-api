@@ -63,22 +63,24 @@ class EmbedController extends AbstractController
     #[Route('/forms/embed/{projectUuid}/{slug}', name: 'public_embed_form_iframe_alt', methods: ['GET'])]
     public function iframe(string $projectUuid, string $slug, Request $request): Response
     {
+        $errorHeaders = [
+            'Content-Type' => 'text/html; charset=utf-8',
+            'X-Content-Type-Options' => 'nosniff',
+            'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+            'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors *;",
+        ];
+
         if ($this->formViewLimiter !== null) {
             $limiter = $this->formViewLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new Response($this->renderErrorHtml($this->trans('form.rate_limit_exceeded', [], 'Too many requests. Try again later.')), 429, [
-                    'Content-Type' => 'text/html; charset=utf-8',
-                    'X-Content-Type-Options' => 'nosniff',
+                return new Response($this->renderErrorHtml($this->trans('form.rate_limit_exceeded', [], 'Too many requests. Try again later.')), 429, array_merge($errorHeaders, [
                     'Retry-After' => '60',
-                ]);
+                ]));
             }
         }
 
         if (!preg_match(self::UUID_REGEX, $projectUuid) || !preg_match(self::SLUG_REGEX, $slug)) {
-            return new Response($this->renderErrorHtml($this->trans('form.not_found', [], 'Form not found.')), 404, [
-                'Content-Type' => 'text/html; charset=utf-8',
-                'X-Content-Type-Options' => 'nosniff',
-            ]);
+            return new Response($this->renderErrorHtml($this->trans('form.not_found', [], 'Form not found.')), 404, $errorHeaders);
         }
 
         try {
@@ -88,18 +90,12 @@ class EmbedController extends AbstractController
         }
 
         if (!$project) {
-            return new Response($this->renderErrorHtml($this->trans('form.project_not_found', [], 'Project not found.')), 404, [
-                'Content-Type' => 'text/html; charset=utf-8',
-                'X-Content-Type-Options' => 'nosniff',
-            ]);
+            return new Response($this->renderErrorHtml($this->trans('form.project_not_found', [], 'Project not found.')), 404, $errorHeaders);
         }
 
         $form = $this->formRepo->findOneBy(['project' => $project, 'slug' => $slug]);
         if (!$form) {
-            return new Response($this->renderErrorHtml($this->trans('form.not_found', [], 'Form not found.')), 404, [
-                'Content-Type' => 'text/html; charset=utf-8',
-                'X-Content-Type-Options' => 'nosniff',
-            ]);
+            return new Response($this->renderErrorHtml($this->trans('form.not_found', [], 'Form not found.')), 404, $errorHeaders);
         }
 
         $submitUrl = '/api/projects/' . rawurlencode($projectUuid) . '/forms/' . rawurlencode($slug) . '/submit';

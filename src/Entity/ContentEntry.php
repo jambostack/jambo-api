@@ -92,6 +92,9 @@ class ContentEntry
     #[ORM\Column(length: 255, nullable: true)]
     public ?string $metaTitle = null;
 
+    /** Titre ou libellé de l'entrée (alias virtuel ou champ de confort) */
+    public ?string $name = null;
+
     #[ORM\Column(type: 'text', nullable: true)]
     public ?string $metaDescription = null;
 

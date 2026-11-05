@@ -81,6 +81,9 @@ class Project
     #[ORM\Column(type: 'json', nullable: true)]
     public ?array $settings = null;
 
+    /** Propriétaire virtuel ou explicite du projet */
+    public ?User $owner = null;
+
     #[ORM\OneToMany(targetEntity: ProjectStorageProfile::class, mappedBy: 'project', cascade: ['persist', 'remove'], orphanRemoval: true)]
     public DoctrineCollection $storageProfiles;
 

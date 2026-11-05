@@ -3569,4 +3569,14 @@ return [
     'cli.purge_logs.total_summary' => '- الإجمالي: %total% سجل %action%',
     'cli.purge_logs.identified' => 'تم تحديدها',
     'cli.purge_logs.purged' => 'تم تطهيرها',
+
+    // ─── Cycle 83: حصص تشغيل الأتمتة وتعزيز أمان الروابط المشتركة والمعاينة ───
+    'public_share.show.title' => '%collection% — معاينة مشتركة · جامبو',
+    'public_share.show.badge' => 'معاينة مشتركة',
+    'public_share.show.status' => 'الحالة: %status%',
+    'public_share.show.footer' => 'مشغل بواسطة جامبو',
+    'public_share.error.title' => 'الرابط غير متوفر · جامبو',
+    'public_share.error.heading' => 'الرابط غير متوفر',
+    'automation.quota.exceeded' => 'تم تجاوز حصة تشغيل الأتمتة لمستوى هذا المشروع (تم استخدام %used%/%limit% تشغيل اليوم).',
+    'automation.quota.daily_limit_reached' => 'تم الوصول إلى الحد اليومي لتشغيل الأتمتة (%limit% تشغيل/يوم).',
 ];

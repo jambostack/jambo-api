@@ -25,6 +25,9 @@ class FlowContext
     /** Variables partagées entre nodes */
     public array $variables = [];
 
+    /** Projet attaché au contexte d'exécution (optionnel) */
+    public ?\App\Entity\Project $project = null;
+
     public function __construct(
         public readonly int $automationId,
         public readonly string $projectUuid,

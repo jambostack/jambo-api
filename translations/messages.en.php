@@ -3567,4 +3567,14 @@ return [
     'cli.purge_logs.total_summary' => '- Total: %total% records %action%',
     'cli.purge_logs.identified' => 'identified',
     'cli.purge_logs.purged' => 'purged',
+
+    // ─── Cycle 83: Automation Run Quota & Public Share/Preview Hardening ───
+    'public_share.show.title' => '%collection% — Shared Preview · Jambo',
+    'public_share.show.badge' => 'Shared Preview',
+    'public_share.show.status' => 'Status: %status%',
+    'public_share.show.footer' => 'Powered by Jambo',
+    'public_share.error.title' => 'Link Unavailable · Jambo',
+    'public_share.error.heading' => 'Link Unavailable',
+    'automation.quota.exceeded' => 'Automation run quota exceeded for this project tier (%used%/%limit% runs used today).',
+    'automation.quota.daily_limit_reached' => 'Daily automation execution limit reached (%limit% runs/day).',
 ];

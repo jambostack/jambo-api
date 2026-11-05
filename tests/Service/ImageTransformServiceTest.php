@@ -62,7 +62,6 @@ class ImageTransformServiceTest extends TestCase
         $validPng = $this->tempDir . '/valid.png';
         $im = imagecreatetruecolor(10, 10);
         imagepng($im, $validPng);
-        imagedestroy($im);
 
         // 4000 x 4000 = 16 MP > 12 MP
         $this->expectException(\InvalidArgumentException::class);
@@ -75,7 +74,6 @@ class ImageTransformServiceTest extends TestCase
         $im = imagecreatetruecolor(50, 50);
         imagecolorallocate($im, 255, 0, 0);
         imagepng($im, $validPng);
-        imagedestroy($im);
 
         $cached = $this->service->transform($validPng, [
             'w' => 20,
@@ -134,7 +132,6 @@ class ImageTransformServiceTest extends TestCase
         $validPng = $this->tempDir . '/test_contain.png';
         $im = imagecreatetruecolor(100, 50);
         imagepng($im, $validPng);
-        imagedestroy($im);
 
         $contain = $this->service->transform($validPng, [
             'w' => 40,

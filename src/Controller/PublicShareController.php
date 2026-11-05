@@ -28,6 +28,8 @@ class PublicShareController extends AbstractController
         'X-Frame-Options' => 'DENY',
         'Referrer-Policy' => 'no-referrer',
         'X-Robots-Tag' => 'noindex, nofollow, noarchive, nosnippet',
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+        'Content-Security-Policy' => "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' https://fonts.gstatic.com; frame-ancestors 'none'; form-action 'none';",
     ];
 
     public function __construct(

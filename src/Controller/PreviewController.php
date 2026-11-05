@@ -32,6 +32,11 @@ class PreviewController extends AbstractController
     private const SECURITY_HEADERS = [
         'Cache-Control' => 'no-store, private',
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options' => 'DENY',
+        'Referrer-Policy' => 'no-referrer',
+        'X-Robots-Tag' => 'noindex, nofollow, noarchive, nosnippet',
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+        'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none';",
     ];
 
     public function __construct(

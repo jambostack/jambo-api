@@ -3567,4 +3567,14 @@ return [
     'cli.purge_logs.total_summary' => '- Total: %total% registros %action%',
     'cli.purge_logs.identified' => 'identificados',
     'cli.purge_logs.purged' => 'purgados',
+
+    // ─── Cycle 83: Cuotas de automatización y endurecimiento de enlaces compartidos / vista previa ───
+    'public_share.show.title' => '%collection% — Vista previa compartida · Jambo',
+    'public_share.show.badge' => 'Vista previa compartida',
+    'public_share.show.status' => 'Estado: %status%',
+    'public_share.show.footer' => 'Desarrollado con Jambo',
+    'public_share.error.title' => 'Enlace no disponible · Jambo',
+    'public_share.error.heading' => 'Enlace no disponible',
+    'automation.quota.exceeded' => 'Cuota de ejecuciones de automatización superada para este nivel de proyecto (%used%/%limit% ejecuciones utilizadas hoy).',
+    'automation.quota.daily_limit_reached' => 'Límite diario de ejecuciones de automatización alcanzado (%limit% ejecuciones/día).',
 ];

@@ -29,6 +29,10 @@ class ShareController extends AbstractController
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options'        => 'DENY',
         'Cache-Control'          => 'no-store',
+        'Referrer-Policy'        => 'no-referrer',
+        'X-Robots-Tag'           => 'noindex, nofollow, noarchive, nosnippet',
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+        'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none';",
     ];
 
     public function __construct(

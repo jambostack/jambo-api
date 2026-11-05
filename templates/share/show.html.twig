@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{ app.request.locale|default('en') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>{{ collection }} — Aperçu partagé · Jambo</title>
+    <title>{{ 'public_share.show.title'|trans({'%collection%': collection}) }}</title>
     <style>
         body { font-family: 'DM Sans', system-ui, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.6; }
         .badge { display: inline-block; background: #eef2ff; color: #4338ca; font-size: 12px; padding: 2px 10px; border-radius: 999px; }
@@ -18,9 +18,9 @@
     </style>
 </head>
 <body>
-    <span class="badge">Aperçu partagé</span>
+    <span class="badge">{{ 'public_share.show.badge'|trans }}</span>
     <h1>{{ collection }}</h1>
-    <p class="meta">Statut : {{ entry.status }}</p>
+    <p class="meta">{{ 'public_share.show.status'|trans({'%status%': entry.status}) }}</p>
     <dl>
         {% for key, value in entry %}
             {% if key not in ['id', 'uuid', 'collection', 'created_at', 'updated_at', 'deleted_at', 'creator', 'updater', 'assigned_to'] and value is not null %}
@@ -35,6 +35,6 @@
             {% endif %}
         {% endfor %}
     </dl>
-    <footer>Propulsé par Jambo</footer>
+    <footer>{{ 'public_share.show.footer'|trans }}</footer>
 </body>
 </html>

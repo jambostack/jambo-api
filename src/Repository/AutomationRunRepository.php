@@ -75,4 +75,19 @@ class AutomationRunRepository extends ServiceEntityRepository
 
         return (int) $qb->getQuery()->getSingleScalarResult();
     }
+
+    /**
+     * Compte le nombre d'exécutions d'automatisation d'un projet depuis une date donnée.
+     */
+    public function countRunsForProjectSince(Project $project, \DateTimeImmutable $since): int
+    {
+        return (int) $this->createQueryBuilder('r')
+            ->select('COUNT(r.id)')
+            ->where('r.startedAt >= :since')
+            ->andWhere('r.automation IN (SELECT auto.id FROM App\Entity\Automation auto WHERE auto.project = :project)')
+            ->setParameter('since', $since)
+            ->setParameter('project', $project)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
 }

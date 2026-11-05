@@ -10,6 +10,7 @@ use App\Repository\ProjectRepository;
 use App\Service\AuditService;
 use App\Service\Automation\AutomationEngine;
 use App\Service\Automation\AutomationExportImportService;
+use App\Service\Automation\AutomationQuotaService;
 use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowInterpreter;
 use App\Service\Flow\FlowValidator;
@@ -33,11 +34,16 @@ class AutomationController extends AbstractController
 
     private readonly FlowValidator $validator;
     private readonly AutomationExportImportService $exportImport;
+    private readonly AutomationQuotaService $quotaService;
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options'        => 'DENY',
         'Cache-Control'          => 'no-store',
+        'Referrer-Policy'        => 'no-referrer',
+        'X-Robots-Tag'           => 'noindex, nofollow, noarchive, nosnippet',
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+        'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none';",
     ];
 
     public function __construct(
@@ -55,9 +61,11 @@ class AutomationController extends AbstractController
         #[Autowire(service: 'limiter.automation_limiter')]
         private readonly ?RateLimiterFactory $automationLimiter = null,
         private readonly ?AuditService $auditService = null,
+        ?AutomationQuotaService $quotaService = null,
     ) {
         $this->validator = $flowValidator ?? new FlowValidator();
         $this->exportImport = $exportImportService ?? new AutomationExportImportService($em, $automationRepo, $this->validator, $nodeRegistry, $this->translator);
+        $this->quotaService = $quotaService ?? new AutomationQuotaService($this->runRepo);
     }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -461,6 +469,43 @@ class AutomationController extends AbstractController
         if (!$automation) return $this->secureJson(['error' => $this->trans('automation.admin.not_found', [], 'Automation not found')], 404);
 
         if (!$automation->isActive) return $this->secureJson(['error' => $this->trans('automation.admin.not_active', [], 'Automation is not active')], 400);
+
+        $quota = $this->quotaService->checkQuota($project);
+        if (!$quota['allowed']) {
+            $this->auditService?->log(
+                toolName: 'automation_run_quota_exceeded',
+                project: $project,
+                input: [
+                    'automation_id' => $automation->id,
+                    'name' => $automation->name,
+                    'tier' => $quota['tier'],
+                    'used' => $quota['used'],
+                    'limit' => $quota['limit'],
+                ],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Automation run quota exceeded',
+                createdBy: $this->getUser()?->getUserIdentifier(),
+                source: 'automation_management'
+            );
+            $this->auditService?->flush();
+
+            return $this->secureJson([
+                'success' => false,
+                'error' => $this->trans('automation.quota.exceeded', [
+                    '%used%' => (string) $quota['used'],
+                    '%limit%' => (string) $quota['limit'],
+                    '%tier%' => (string) $quota['tier'],
+                ], sprintf('Automation run quota exceeded for this project tier (%d/%d runs used today).', $quota['used'], $quota['limit'])),
+                'code' => 'AUTOMATION_QUOTA_EXCEEDED',
+                'tier' => $quota['tier'],
+                'limit' => $quota['limit'],
+                'used' => $quota['used'],
+                'reset_in_seconds' => $quota['resetInSeconds'],
+            ], 429, [
+                'Retry-After' => (string) $quota['resetInSeconds'],
+            ]);
+        }
 
         $payload = [
             'project_uuid' => $projectUuid,

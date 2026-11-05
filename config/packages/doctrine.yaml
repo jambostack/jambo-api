@@ -3,8 +3,11 @@ doctrine:
         url: '%env(resolve:DATABASE_URL)%'
 
         # IMPORTANT: You MUST configure your server version,
-        # either here or in the DATABASE_URL env var (see .env file)
-        #server_version: '16'
+        # either here or in the DATABASE_URL env var (see .env file).
+        # For MariaDB on o2switch/cPanel, specify 'mariadb-10.6.18' or 'mariadb-10.11.8'
+        # (or append ?serverVersion=mariadb-10.6.18 to DATABASE_URL) to ensure
+        # full DBAL 4/5 compatibility and bypass runtime introspection queries.
+        #server_version: 'mariadb-10.6.18'
 
         profiling_collect_backtrace: '%kernel.debug%'
     orm:

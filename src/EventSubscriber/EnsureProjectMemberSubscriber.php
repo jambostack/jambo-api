@@ -71,7 +71,7 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
         $path = $request->getPathInfo();
         if (
             str_ends_with($path, '/captcha') ||
-            preg_match('#^/api/projects/[^/]+/(forms/|redirects/resolve|sitemap|robots\.txt)#', $path)
+            preg_match('#^/api/projects/[^/]+/(forms/|redirects/resolve|sitemap|robots\.txt|preview/content/)#', $path)
         ) {
             return;
         }

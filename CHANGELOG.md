@@ -7,6 +7,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.147] — 2026-11-05
+
+### Security, Multi-tenant Isolation & I18n Hardening — Flow Quotas & Public Share/Preview Hardening (Cycle #83)
+- **Multi-Tenant Automation Run Quotas & Tier Enforcement**:
+  - Implemented `AutomationQuotaService` managing tiered daily execution limits for automation flows:
+    - Free: 100 runs/day
+    - Starter: 500 runs/day
+    - Pro: 2,500 runs/day
+    - Enterprise: 50,000 runs/day
+    - Custom project overrides supported via `$project->settings['automation_runs_limit_daily']` or `$project->settings['automation_daily_quota']`.
+  - Added `AutomationRunRepository::countRunsForProjectSince()` for tracking project executions in current UTC day.
+  - Enforced quotas in `AutomationController::run` and `WebhookInboundController::receive` with HTTP 429 status code, `Retry-After` header, structured JSON error, and security audit log tracking (`automation_run_quota_exceeded`).
+- **Public Share & Preview Security Hardening (CSP, HSTS & Anti-Framing)**:
+  - Enforced strict `Content-Security-Policy` (`default-src 'none'; ... frame-ancestors 'none'`) across `/share/{token}`, `/share/{token}.json`, `/api/projects/{uuid}/shares`, and `/api/projects/{uuid}/preview/content/{col}/{eid}`.
+  - Enforced `Strict-Transport-Security` (`max-age=31536000; includeSubDomains`) across all preview, public share, and form embed endpoints.
+  - Enforced `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` to block clickjacking and search engine indexing.
+  - Added public preview path exception in `EnsureProjectMemberSubscriber` allowing preview tokens to be verified by `PreviewController::content()`.
+- **Strict I18n Compliance**:
+  - Eliminated hardcoded French strings from Twig templates (`templates/share/show.html.twig`, `templates/share/error.html.twig`), substituting them with Symfony Translator filters (`|trans`) and `app.request.locale`.
+  - Added 12 translation keys with complete translations in English, French, Spanish, and Arabic (`translations/messages.{en,fr,es,ar}.php`).
+- **PHP 8.5 & DBAL Compatibility**:
+  - Eliminated dynamic property deprecations across `Project::$owner`, `ContentEntry::$name`, and `FlowContext::$project`.
+  - Removed deprecated `imagedestroy()` calls in test suites (PHP 8.5 deprecation).
+  - Documented explicit `serverVersion` configurations for MariaDB on o2switch/cPanel in `config/packages/doctrine.yaml` and `.env`.
+- **Validation**:
+  - Created `Cycle83QuotaAndSecurityHardeningTest` covering CSP, HSTS, quota calculations, controller rate limit enforcement, inbound webhook protection, and 100% strict i18n completeness.
+
 ## [1.26.146] — 2026-11-05
 
 ### Security, Multi-tenant Isolation & I18n Hardening — Operational Log Retention & Tenant-Scoped Purge (Cycle #82)

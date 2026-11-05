@@ -3585,4 +3585,14 @@ return [
     'cli.purge_logs.total_summary' => '- Total : %total% enregistrements %action%',
     'cli.purge_logs.identified' => 'identifiés',
     'cli.purge_logs.purged' => 'purgés',
+
+    // ─── Cycle 83: Quotas d'automatisation et durcissement des partages publics / prévisualisations ───
+    'public_share.show.title' => '%collection% — Aperçu partagé · Jambo',
+    'public_share.show.badge' => 'Aperçu partagé',
+    'public_share.show.status' => 'Statut : %status%',
+    'public_share.show.footer' => 'Propulsé par Jambo',
+    'public_share.error.title' => 'Lien indisponible · Jambo',
+    'public_share.error.heading' => 'Lien indisponible',
+    'automation.quota.exceeded' => 'Quota d\'exécutions d\'automatisation dépassé pour ce niveau de projet (%used%/%limit% exécutions utilisées aujourd\'hui).',
+    'automation.quota.daily_limit_reached' => 'Limite quotidienne d\'exécutions d\'automatisation atteinte (%limit% exécutions/jour).',
 ];

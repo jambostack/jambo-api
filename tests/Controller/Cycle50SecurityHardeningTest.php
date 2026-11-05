@@ -198,7 +198,6 @@ class Cycle50SecurityHardeningTest extends WebTestCase
         $testFile = $mediaDir . '/test_sample.jpg';
         $img = imagecreatetruecolor(100, 100);
         imagejpeg($img, $testFile);
-        imagedestroy($img);
 
         try {
             // Demande 4000x4000 = 16 MP (> 12 MP limit)
@@ -235,7 +234,6 @@ class Cycle50SecurityHardeningTest extends WebTestCase
         $testFile = $mediaDir . '/info_sample.jpg';
         $img = imagecreatetruecolor(50, 50);
         imagejpeg($img, $testFile);
-        imagedestroy($img);
 
         try {
             $client->request('GET', '/cdn/media/' . $media->uuid->toRfc4122() . '/info');

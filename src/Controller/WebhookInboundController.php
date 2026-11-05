@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Repository\AutomationRepository;
 use App\Service\Automation\AutomationEngine;
+use App\Service\Automation\AutomationQuotaService;
 use App\Service\WebhookSecretService;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Log\LoggerInterface;
@@ -32,6 +33,9 @@ class WebhookInboundController extends AbstractController
         'X-Frame-Options'        => 'DENY',
         'Referrer-Policy'        => 'no-referrer',
         'Cache-Control'          => 'no-store',
+        'X-Robots-Tag'           => 'noindex, nofollow, noarchive, nosnippet',
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+        'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none';",
     ];
 
     public function __construct(
@@ -42,6 +46,7 @@ class WebhookInboundController extends AbstractController
         private readonly ?WebhookSecretService $secretService = null,
         private readonly ?TranslatorInterface $translator = null,
         private readonly ?CacheItemPoolInterface $cache = null,
+        private readonly ?AutomationQuotaService $quotaService = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -207,6 +212,36 @@ class WebhookInboundController extends AbstractController
         $payload['headers'] = $this->filterSafeHeaders($request);
         $payload['method'] = $request->getMethod();
         $payload['query_params'] = $request->query->all();
+
+        // Contrôle des quotas d'exécution multi-tenant par tier
+        if ($automation->project !== null && $this->quotaService !== null) {
+            $quota = $this->quotaService->checkQuota($automation->project);
+            if (!$quota['allowed']) {
+                $this->logger->warning('Webhook inbound rejected: automation quota exceeded for project', [
+                    'automation_uuid' => $automationUuid,
+                    'project_id' => $automation->project->id,
+                    'tier' => $quota['tier'],
+                    'used' => $quota['used'],
+                    'limit' => $quota['limit'],
+                ]);
+
+                return $this->secureJson([
+                    'success' => false,
+                    'error' => $this->trans('automation.quota.exceeded', [
+                        '%used%' => (string) $quota['used'],
+                        '%limit%' => (string) $quota['limit'],
+                        '%tier%' => (string) $quota['tier'],
+                    ], sprintf('Automation run quota exceeded for this project tier (%d/%d runs used today).', $quota['used'], $quota['limit'])),
+                    'code' => 'AUTOMATION_QUOTA_EXCEEDED',
+                    'tier' => $quota['tier'],
+                    'limit' => $quota['limit'],
+                    'used' => $quota['used'],
+                    'reset_in_seconds' => $quota['resetInSeconds'],
+                ], 429, [
+                    'Retry-After' => (string) $quota['resetInSeconds'],
+                ]);
+            }
+        }
 
         // Exécute
         try {

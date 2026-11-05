@@ -358,7 +358,6 @@ class Cycle67HardeningTest extends TestCase
         // Use reflection to test buildHtml
         $reflection = new \ReflectionClass(SeoPdfExporter::class);
         $method = $reflection->getMethod('buildHtml');
-        $method->setAccessible(true);
 
         $score = $analyzer->analyze($entry);
         $report = $analyzer->audit($entry);
