@@ -8,14 +8,21 @@ use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[AsCommand(name: 'automation:migrate-to-flow')]
 class AutomationMigrateToFlowCommand extends Command
 {
+    use CliSecurityTrait;
+
     public function __construct(
         private readonly AutomationRepository $repo,
         private readonly EntityManagerInterface $em,
-    ) { parent::__construct(); }
+        ?TranslatorInterface $translator = null,
+    ) {
+        parent::__construct();
+        $this->setTranslator($translator);
+    }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
@@ -56,7 +63,8 @@ class AutomationMigrateToFlowCommand extends Command
         }
 
         $this->em->flush();
-        $output->writeln("$migrated automatisation(s) migrée(s) avec un flow par défaut.");
+        $msg = $this->trans('cli.automation.migrated_count', ['%count%' => $migrated], null, null, "$migrated automatisation(s) migrée(s) avec un flow par défaut.");
+        $output->writeln("<info>$msg</info>");
 
         return Command::SUCCESS;
     }

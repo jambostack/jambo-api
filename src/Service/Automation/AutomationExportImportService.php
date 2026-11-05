@@ -11,9 +11,10 @@ use App\Service\Flow\FlowValidator;
 use App\Service\Flow\NodeRegistry;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Uid\Uuid;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
- * Service d'export/import sécurisé d'automatisations avec vérification d'intégrité des graphes.
+ * Service d'export/import sécurisé d'automatisations avec vérification d'intégrité des graphes et isolation multi-tenant.
  */
 class AutomationExportImportService
 {
@@ -26,7 +27,16 @@ class AutomationExportImportService
         private readonly AutomationRepository $automationRepo,
         private readonly FlowValidator $flowValidator,
         private readonly NodeRegistry $nodeRegistry,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, string $default, array $parameters = []): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return empty($parameters) ? $default : strtr($default, $parameters);
+    }
 
     /**
      * Exporte une automatisation unique avec métadonnées d'intégrité et empreinte SHA-256.
@@ -96,12 +106,19 @@ class AutomationExportImportService
     {
         $schemaVersion = $payload['schema_version'] ?? null;
         if ($schemaVersion !== self::SCHEMA_VERSION) {
-            throw new \InvalidArgumentException(sprintf('Unsupported schema version "%s". Expected "%s".', (string) $schemaVersion, self::SCHEMA_VERSION));
+            throw new \InvalidArgumentException($this->trans(
+                'automation.export_import.unsupported_schema_version',
+                sprintf('Unsupported schema version "%s". Expected "%s".', (string) $schemaVersion, self::SCHEMA_VERSION),
+                ['%version%' => (string) $schemaVersion, '%expected%' => self::SCHEMA_VERSION]
+            ));
         }
 
         $autoData = $payload['automation'] ?? null;
         if (!is_array($autoData)) {
-            throw new \InvalidArgumentException('Payload missing "automation" object.');
+            throw new \InvalidArgumentException($this->trans(
+                'automation.export_import.missing_automation_object',
+                'Payload missing "automation" object.'
+            ));
         }
 
         // Vérification de la somme de contrôle si fournie
@@ -111,13 +128,17 @@ class AutomationExportImportService
             $canonicalJson = json_encode($autoData, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             $actualHash = hash('sha256', $canonicalJson);
             if (!hash_equals($expectedHash, $actualHash)) {
-                throw new \InvalidArgumentException('Checksum mismatch: payload data has been altered or corrupted.');
+                throw new \InvalidArgumentException($this->trans(
+                    'automation.export_import.checksum_mismatch',
+                    'Checksum mismatch: payload data has been altered or corrupted.'
+                ));
             }
         }
 
-        $name = trim((string) ($autoData['name'] ?? 'Imported Automation'));
+        $defaultName = $this->trans('automation.export_import.default_name', 'Imported Automation');
+        $name = trim((string) ($autoData['name'] ?? $defaultName));
         if ($name === '') {
-            $name = 'Imported Automation';
+            $name = $defaultName;
         }
         if (strlen($name) > 255) {
             $name = substr($name, 0, 255);
@@ -125,13 +146,34 @@ class AutomationExportImportService
 
         $flowGraph = $autoData['flow_graph'] ?? null;
         if (!is_array($flowGraph)) {
-            throw new \InvalidArgumentException('flow_graph must be a valid JSON object with nodes and edges.');
+            throw new \InvalidArgumentException($this->trans(
+                'automation.export_import.invalid_flow_graph_format',
+                'flow_graph must be a valid JSON object with nodes and edges.'
+            ));
+        }
+
+        // Assainissement multi-tenant du graphe : re-lier tout project_uuid présent dans la config des nœuds avec le projet cible
+        if (isset($flowGraph['nodes']) && is_array($flowGraph['nodes'])) {
+            $targetProjectUuid = $project->uuid?->toRfc4122();
+            if ($targetProjectUuid !== null) {
+                foreach ($flowGraph['nodes'] as &$node) {
+                    if (isset($node['data']['config']['project_uuid'])) {
+                        $node['data']['config']['project_uuid'] = $targetProjectUuid;
+                    }
+                }
+                unset($node);
+            }
         }
 
         // Validation stricte du graphe de flux
         $validation = $this->flowValidator->validate($flowGraph, $this->nodeRegistry);
         if (!$validation['valid']) {
-            throw new \InvalidArgumentException('Invalid flow graph: ' . implode('; ', $validation['errors']));
+            $errorsStr = implode('; ', $validation['errors']);
+            throw new \InvalidArgumentException($this->trans(
+                'automation.export_import.invalid_flow_graph',
+                'Invalid flow graph: ' . $errorsStr,
+                ['%errors%' => $errorsStr]
+            ));
         }
 
         $automation = new Automation();
@@ -159,16 +201,27 @@ class AutomationExportImportService
     {
         $schemaVersion = $payload['schema_version'] ?? null;
         if ($schemaVersion !== self::SCHEMA_VERSION) {
-            throw new \InvalidArgumentException(sprintf('Unsupported schema version "%s". Expected "%s".', (string) $schemaVersion, self::SCHEMA_VERSION));
+            throw new \InvalidArgumentException($this->trans(
+                'automation.export_import.unsupported_schema_version',
+                sprintf('Unsupported schema version "%s". Expected "%s".', (string) $schemaVersion, self::SCHEMA_VERSION),
+                ['%version%' => (string) $schemaVersion, '%expected%' => self::SCHEMA_VERSION]
+            ));
         }
 
         $items = $payload['automations'] ?? null;
         if (!is_array($items)) {
-            throw new \InvalidArgumentException('Payload missing "automations" array.');
+            throw new \InvalidArgumentException($this->trans(
+                'automation.export_import.missing_automations_array',
+                'Payload missing "automations" array.'
+            ));
         }
 
         if (count($items) > self::MAX_BUNDLE_ITEMS) {
-            throw new \InvalidArgumentException(sprintf('Bundle contains too many automations (max %d, received %d).', self::MAX_BUNDLE_ITEMS, count($items)));
+            throw new \InvalidArgumentException($this->trans(
+                'automation.export_import.bundle_too_many_items',
+                sprintf('Bundle contains too many automations (max %d, received %d).', self::MAX_BUNDLE_ITEMS, count($items)),
+                ['%max%' => self::MAX_BUNDLE_ITEMS, '%received%' => count($items)]
+            ));
         }
 
         $checksum = $payload['checksum'] ?? null;
@@ -177,7 +230,10 @@ class AutomationExportImportService
             $canonicalJson = json_encode($items, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             $actualHash = hash('sha256', $canonicalJson);
             if (!hash_equals($expectedHash, $actualHash)) {
-                throw new \InvalidArgumentException('Checksum mismatch: payload bundle has been altered or corrupted.');
+                throw new \InvalidArgumentException($this->trans(
+                    'automation.export_import.bundle_checksum_mismatch',
+                    'Checksum mismatch: payload bundle has been altered or corrupted.'
+                ));
             }
         }
 

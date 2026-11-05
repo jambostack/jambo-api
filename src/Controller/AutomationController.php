@@ -57,7 +57,7 @@ class AutomationController extends AbstractController
         private readonly ?AuditService $auditService = null,
     ) {
         $this->validator = $flowValidator ?? new FlowValidator();
-        $this->exportImport = $exportImportService ?? new AutomationExportImportService($em, $automationRepo, $this->validator, $nodeRegistry);
+        $this->exportImport = $exportImportService ?? new AutomationExportImportService($em, $automationRepo, $this->validator, $nodeRegistry, $this->translator);
     }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string

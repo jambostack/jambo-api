@@ -17,19 +17,27 @@ trait ProjectFinderTrait
 
         // Partial UUID lookup (6+ chars)
         if (strlen($input) >= 6) {
-            $escaped = addcslashes($input, '%_');
-            $results = $repo->createQueryBuilder('p')
-                ->where('p.uuid LIKE :uuid')
-                ->setParameter('uuid', $escaped . '%')
-                ->setMaxResults(2)
-                ->getQuery()
-                ->getResult();
+            try {
+                $escaped = addcslashes($input, '%_');
+                $results = $repo->createQueryBuilder('p')
+                    ->where('p.uuid LIKE :uuid')
+                    ->setParameter('uuid', $escaped . '%')
+                    ->setMaxResults(2)
+                    ->getQuery()
+                    ->getResult();
 
-            if (count($results) === 1) {
-                return $results[0];
-            }
-            if (count($results) > 1) {
-                throw new \RuntimeException("Plusieurs projets trouvés avec le préfixe '$input'. Soyez plus précis.");
+                if (is_array($results)) {
+                    if (count($results) === 1) {
+                        return $results[0];
+                    }
+                    if (count($results) > 1) {
+                        throw new \RuntimeException("Plusieurs projets trouvés avec le préfixe '$input'. Soyez plus précis.");
+                    }
+                }
+            } catch (\RuntimeException $e) {
+                throw $e;
+            } catch (\Throwable) {
+                // En cas d'exception query builder, poursuivre vers le fallback exact
             }
         }
 

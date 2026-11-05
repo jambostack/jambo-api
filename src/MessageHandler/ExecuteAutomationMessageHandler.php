@@ -58,6 +58,32 @@ class ExecuteAutomationMessageHandler
             return;
         }
 
+        // Vérification stricte d'isolation multi-tenant :
+        if ($run->automation?->id !== $automation->id) {
+            $run->status = 'failed';
+            $run->errorMessage = $this->trans('automation.error.run_mismatch', 'Automation run does not belong to the target automation.');
+            $run->finishedAt = new \DateTimeImmutable();
+            $this->em->flush();
+            return;
+        }
+
+        $project = $automation->project;
+        if ($project === null) {
+            $run->status = 'failed';
+            $run->errorMessage = $this->trans('automation.error.missing_project', 'Automation has no associated project.');
+            $run->finishedAt = new \DateTimeImmutable();
+            $this->em->flush();
+            return;
+        }
+
+        if ($message->projectUuid !== '' && $project->uuid?->toRfc4122() !== $message->projectUuid) {
+            $run->status = 'failed';
+            $run->errorMessage = $this->trans('automation.error.tenant_mismatch', 'Cross-tenant execution forbidden: message project UUID mismatch.');
+            $run->finishedAt = new \DateTimeImmutable();
+            $this->em->flush();
+            return;
+        }
+
         try {
             // Passe le Run existant pour éviter la création d'un doublon
             $this->engine->execute($automation, $message->triggerPayload, $run);

@@ -67,13 +67,14 @@ class AutomationRepository extends ServiceEntityRepository
     }
 
     /**
-     * Trouve toutes les automatisations actives de type cron (planifié).
+     * Trouve toutes les automatisations actives de type cron (planifié),
+     * optionnellement filtrées par projet pour garantir l'isolation multi-tenant.
      *
      * @return Automation[]
      */
-    public function findActiveScheduled(): array
+    public function findActiveScheduled(?Project $project = null): array
     {
-        return $this->findActiveByCondition(null, 'trigger.schedule.cron');
+        return $this->findActiveByCondition($project, 'trigger.schedule.cron');
     }
 
     /**

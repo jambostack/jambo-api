@@ -8,6 +8,7 @@ use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowNodeHandler;
 use App\Service\Flow\NodeOutput;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class PublishEntryHandler implements FlowNodeHandler
 {
@@ -15,17 +16,35 @@ class PublishEntryHandler implements FlowNodeHandler
         private readonly EntityManagerInterface $em,
         private readonly ContentEntryRepository $entryRepo,
         private readonly ProjectRepository $projectRepo,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
 
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
         $config = $ctx->variables['_node_config'] ?? [];
-        $entryUuid = $config['entry_uuid'] ?? '';
+        $entryUuid = (string) ($config['entry_uuid'] ?? '');
+
+        if (empty($ctx->projectUuid)) {
+            return new NodeOutput(data: [
+                'published' => false,
+                'error' => $this->trans('flow.action.project_uuid_required', 'Project context is required.'),
+            ]);
+        }
 
         $project = $this->projectRepo->findOneBy(['uuid' => $ctx->projectUuid]);
+        if (!$project) {
+            return new NodeOutput(data: [
+                'published' => false,
+                'error' => $this->trans('flow.action.project_not_found', 'Project not found.'),
+            ]);
+        }
+
         $entry = $this->entryRepo->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
         if (!$entry) {
-            return new NodeOutput(data: ['published' => false, 'error' => "Entry '$entryUuid' not found"]);
+            return new NodeOutput(data: [
+                'published' => false,
+                'error' => $this->trans('flow.action.entry_not_found', sprintf('Entry "%s" not found in current project.', $entryUuid), ['%uuid%' => $entryUuid]),
+            ]);
         }
 
         try {
@@ -37,6 +56,14 @@ class PublishEntryHandler implements FlowNodeHandler
         } catch (\Throwable $e) {
             return new NodeOutput(data: ['published' => false, 'error' => $e->getMessage()]);
         }
+    }
+
+    private function trans(string $id, string $default, array $parameters = []): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return empty($parameters) ? $default : strtr($default, $parameters);
     }
 
     public static function getCategory(): string { return 'action'; }

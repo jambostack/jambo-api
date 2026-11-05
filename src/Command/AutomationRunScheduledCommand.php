@@ -3,11 +3,13 @@
 namespace App\Command;
 
 use App\Repository\AutomationRepository;
+use App\Repository\ProjectRepository;
 use App\Service\Automation\AutomationEngine;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Command\LockableTrait;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -16,14 +18,21 @@ class AutomationRunScheduledCommand extends Command
 {
     use LockableTrait;
     use CliSecurityTrait;
+    use ProjectFinderTrait;
 
     public function __construct(
         private readonly AutomationRepository $automationRepo,
         private readonly AutomationEngine $engine,
+        private readonly ?ProjectRepository $projects = null,
         ?TranslatorInterface $translator = null,
     ) {
         parent::__construct();
         $this->setTranslator($translator);
+    }
+
+    protected function configure(): void
+    {
+        $this->addOption('project', 'p', InputOption::VALUE_OPTIONAL, 'Filter by project UUID or slug');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -34,7 +43,17 @@ class AutomationRunScheduledCommand extends Command
         }
 
         try {
-            $automations = $this->automationRepo->findActiveScheduled();
+            $projectFilter = null;
+            $projectInput = $input->getOption('project');
+            if ($projectInput !== null && $this->projects !== null) {
+                $projectFilter = $this->findProject((string) $projectInput);
+                if ($projectFilter === null) {
+                    $output->writeln('<error>' . $this->trans('cli.project_not_found', ['%ident%' => $projectInput], null, null, "Projet '$projectInput' introuvable.") . '</error>');
+                    return Command::FAILURE;
+                }
+            }
+
+            $automations = $this->automationRepo->findActiveScheduled($projectFilter);
             $now = new \DateTimeImmutable();
             $executed = 0;
 

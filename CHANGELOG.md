@@ -7,6 +7,31 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.143] — 2026-11-05
+
+### Security & Multi-tenant Isolation Hardening — Automation Async Flows, Handlers & Scheduler i18n (Cycle #79)
+- **ExecuteAutomationMessageHandler — strict multi-tenant isolation**:
+  - Enforced verification that `AutomationRun` belongs directly to targeted `Automation` (`automation.error.run_mismatch`).
+  - Enforced requirement for an associated `Project` (`automation.error.missing_project`).
+  - Added strict tenant boundary assertion comparing `message->projectUuid` to `$automation->project->uuid` (`automation.error.tenant_mismatch`).
+- **AutomationExportImportService — multi-tenant graph sanitization & strict i18n**:
+  - Injected `TranslatorInterface $translator = null` with fallback resolver `$this->trans()`.
+  - Automatically re-binds any `data.config.project_uuid` in flow nodes to target destination project UUID on import.
+  - Replaced all hardcoded exception messages and default names with translated error keys across schema validation, checksum verification, bundle limits, and flow validation.
+- **Flow Database & Action Handlers — multi-tenant scoping & i18n**:
+  - Hardened `CountEntriesHandler` & `FindEntriesHandler`: enforced non-empty `projectUuid`, project lookup, and project-scoped collection queries (preventing queries against null/unscoped collections). Handled status `'all'` properly.
+  - Hardened `CreateEntryHandler`, `UpdateEntryHandler`, `DeleteEntryHandler`, `PublishEntryHandler`: added strict project context guards and translated error messages.
+- **AutomationRunScheduledCommand & AutomationMigrateToFlowCommand**:
+  - Added optional `--project` / `-p` option to `AutomationRunScheduledCommand` using `ProjectFinderTrait` and updated `AutomationRepository::findActiveScheduled(?Project $project = null)` for tenant-isolated cron jobs.
+  - Hardened `AutomationMigrateToFlowCommand` with `CliSecurityTrait` and translated CLI message output.
+- **ProjectFinderTrait**:
+  - Guarded against `TypeError` on null results in PHP 8.5+ with safe `is_array` checks and query error recovery fallback.
+- **i18n Dictionaries**:
+  - Added 21 complete keys across `translations/messages.{en,fr,es,ar}.php`.
+- **Test Suite**:
+  - Added `Cycle79AutomationIsolationI18nTest.php` with 12 tests and 227 assertions.
+  - Total full suite: 1,737 tests, 11,970 assertions (100% success).
+
 ## [1.26.142] — 2026-11-05
 
 ### Security & i18n Hardening — Project Export & Import strict i18n and Zip Security (Cycle #78)

@@ -9,6 +9,7 @@ use App\Service\Flow\FlowContext;
 use App\Service\Flow\FlowNodeHandler;
 use App\Service\Flow\NodeOutput;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class UpdateEntryHandler implements FlowNodeHandler
 {
@@ -17,30 +18,50 @@ class UpdateEntryHandler implements FlowNodeHandler
         private readonly ContentEntryRepository $entryRepo,
         private readonly ProjectRepository $projectRepo,
         private readonly EavFieldHelperService $eavHelper,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
 
     public function execute(array $input, FlowContext $ctx): NodeOutput
     {
         $config = $ctx->variables['_node_config'] ?? [];
-        $entryUuid = $config['entry_uuid'] ?? '';
+        $entryUuid = (string) ($config['entry_uuid'] ?? '');
+
+        if (empty($ctx->projectUuid)) {
+            return new NodeOutput(data: [
+                'updated' => false,
+                'error' => $this->trans('flow.action.project_uuid_required', 'Project context is required.'),
+            ]);
+        }
 
         $project = $this->projectRepo->findOneBy(['uuid' => $ctx->projectUuid]);
+        if (!$project) {
+            return new NodeOutput(data: [
+                'updated' => false,
+                'error' => $this->trans('flow.action.project_not_found', 'Project not found.'),
+            ]);
+        }
+
         $entry = $this->entryRepo->findOneBy(['uuid' => $entryUuid, 'project' => $project]);
         if (!$entry) {
-            return new NodeOutput(data: ['updated' => false, 'error' => "Entry '$entryUuid' not found"]);
+            return new NodeOutput(data: [
+                'updated' => false,
+                'error' => $this->trans('flow.action.entry_not_found', sprintf('Entry "%s" not found in current project.', $entryUuid), ['%uuid%' => $entryUuid]),
+            ]);
         }
 
         try {
             $fields = $config['fields'] ?? [];
-            foreach ($fields as $slug => $value) {
-                $field = $entry->collection?->getFieldBySlug($slug);
-                if ($field) {
-                    $this->eavHelper->saveFieldValue($entry, $field, $value);
+            if (is_array($fields)) {
+                foreach ($fields as $slug => $value) {
+                    $field = $entry->collection?->getFieldBySlug((string) $slug);
+                    if ($field) {
+                        $this->eavHelper->saveFieldValue($entry, $field, $value);
+                    }
                 }
             }
 
             if (!empty($config['status'])) {
-                $entry->status = $config['status'];
+                $entry->status = (string) $config['status'];
             }
 
             $entry->updatedAt = new \DateTimeImmutable();
@@ -50,6 +71,14 @@ class UpdateEntryHandler implements FlowNodeHandler
         } catch (\Throwable $e) {
             return new NodeOutput(data: ['updated' => false, 'error' => $e->getMessage()]);
         }
+    }
+
+    private function trans(string $id, string $default, array $parameters = []): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return empty($parameters) ? $default : strtr($default, $parameters);
     }
 
     public static function getCategory(): string { return 'action'; }
