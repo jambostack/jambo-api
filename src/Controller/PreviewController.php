@@ -26,6 +26,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/projects/{projectUuid}/preview', name: 'api_preview_')]
 class PreviewController extends AbstractController
 {
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+
     public function __construct(
         private readonly ProjectRepository $projectRepository,
         private readonly ContentEntryRepository $entryRepository,
@@ -60,6 +62,14 @@ class PreviewController extends AbstractController
 
         if (!$this->getUser()) {
             return $this->json(['error' => $this->trans('preview.auth_required', [], 'Authentication required')], 401);
+        }
+
+        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+            return $this->json(['error' => $this->trans('preview.project_not_found', [], 'Project not found')], 404);
+        }
+
+        if (!preg_match(self::UUID_REGEX, $entryUuid)) {
+            return $this->json(['error' => $this->trans('preview.entry_not_found', [], 'Entry not found')], 404);
         }
 
         try {
@@ -123,6 +133,9 @@ class PreviewController extends AbstractController
     #[Route('/validate-url', name: 'validate_url', methods: ['GET', 'POST'])]
     public function validateUrl(string $projectUuid, Request $request): JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+            return new JsonResponse(['error' => $this->trans('preview.project_not_found', [], 'Project not found')], 404);
+        }
         if ($this->previewLimiter !== null) {
             $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
@@ -224,6 +237,18 @@ class PreviewController extends AbstractController
             }
         }
 
+        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+            return $this->json(['error' => $this->trans('preview.project_not_found', [], 'Project not found')], 404);
+        }
+
+        if (!preg_match(self::UUID_REGEX, $entryUuid)) {
+            return $this->json(['error' => $this->trans('preview.entry_not_found', [], 'Entry not found')], 404);
+        }
+
+        if (strlen($collection) > 100 || !preg_match('/^[a-z0-9_-]+$/i', $collection)) {
+            return $this->json(['error' => $this->trans('preview.invalid_collection', [], 'Invalid collection slug format.')], 400);
+        }
+
         // Extraire le token du header Authorization ou des query params (?token= ou ?preview_token=)
         $token = null;
         $authHeader = $request->headers->get('Authorization');
@@ -239,20 +264,33 @@ class PreviewController extends AbstractController
             return $this->json(['error' => $this->trans('preview.missing_token', [], 'Missing or malformed Authorization header or preview token parameter')], 401);
         }
 
+        $token = trim($token);
+        if (strlen($token) > 4096) {
+            return $this->json(['error' => $this->trans('preview.token_invalid_or_expired', [], 'Invalid or expired preview token')], 401);
+        }
+
         $claims = $this->tokenService->validateToken($token);
 
-        if ($claims === null) {
+        if ($claims === null || !is_array($claims)) {
+            return $this->json(['error' => $this->trans('preview.token_invalid_or_expired', [], 'Invalid or expired preview token')], 401);
+        }
+
+        $claimPid = (string) ($claims['pid'] ?? '');
+        $claimEid = (string) ($claims['eid'] ?? '');
+        $claimCol = (string) ($claims['col'] ?? '');
+
+        if (!preg_match(self::UUID_REGEX, $claimPid) || !preg_match(self::UUID_REGEX, $claimEid) || $claimCol === '') {
             return $this->json(['error' => $this->trans('preview.token_invalid_or_expired', [], 'Invalid or expired preview token')], 401);
         }
 
         // Verifier que le token correspond a l'URL
-        if ($claims['pid'] !== $projectUuid) {
+        if ($claimPid !== $projectUuid) {
             return $this->json(['error' => $this->trans('preview.token_project_mismatch', [], 'Token does not match project')], 403);
         }
-        if ($claims['eid'] !== $entryUuid) {
+        if ($claimEid !== $entryUuid) {
             return $this->json(['error' => $this->trans('preview.token_entry_mismatch', [], 'Token does not match entry')], 403);
         }
-        if ($claims['col'] !== $collection) {
+        if ($claimCol !== $collection) {
             return $this->json(['error' => $this->trans('preview.token_collection_mismatch', [], 'Token does not match collection')], 403);
         }
 

@@ -17,7 +17,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/notifications', name: 'api_notifications_')]
 class NotificationController extends AbstractController
 {
-    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
 
     public function __construct(
         private NotificationRepository $notificationRepository,

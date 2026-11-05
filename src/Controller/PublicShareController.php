@@ -15,7 +15,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class PublicShareController extends AbstractController
 {
     public const MAX_TOKEN_LENGTH = 128;
-    public const MIN_TOKEN_LENGTH = 10;
+    public const MIN_TOKEN_LENGTH = 8;
 
     public function __construct(
         private readonly ShareService $shares,

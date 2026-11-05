@@ -20,7 +20,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/projects/{projectUuid}/media/direct-upload', name: 'api_media_direct_upload_')]
 class DirectUploadController extends AbstractController
 {
-    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
     private const MAX_PAYLOAD_BYTES = 524288; // 512 KB
 
     public function __construct(
@@ -54,6 +54,13 @@ class DirectUploadController extends AbstractController
             }
         }
 
+        if (!$this->getUser() && !$request->attributes->get('_project')) {
+            return new JsonResponse([
+                'error' => $this->trans('direct_upload.auth_required', [], 'Authentication required'),
+                'code' => 'AUTH_REQUIRED',
+            ], 401);
+        }
+
         if (!preg_match(self::UUID_REGEX, $projectUuid)) {
             return new JsonResponse([
                 'error' => $this->trans('project.not_found', [], 'Project not found'),
@@ -74,13 +81,6 @@ class DirectUploadController extends AbstractController
                 'error' => $this->trans('project.not_found', [], 'Project not found'),
                 'code' => 'PROJECT_NOT_FOUND',
             ], 404);
-        }
-
-        if (!$this->getUser() && !$request->attributes->get('_project')) {
-            return new JsonResponse([
-                'error' => $this->trans('direct_upload.auth_required', [], 'Authentication required'),
-                'code' => 'AUTH_REQUIRED',
-            ], 401);
         }
 
         if ($this->getUser()) {
@@ -374,6 +374,13 @@ class DirectUploadController extends AbstractController
             }
         }
 
+        if (!$this->getUser() && !$request->attributes->get('_project')) {
+            return new JsonResponse([
+                'error' => $this->trans('direct_upload.auth_required', [], 'Authentication required'),
+                'code' => 'AUTH_REQUIRED',
+            ], 401);
+        }
+
         if (!preg_match(self::UUID_REGEX, $projectUuid)) {
             return new JsonResponse([
                 'error' => $this->trans('project.not_found', [], 'Project not found'),
@@ -394,13 +401,6 @@ class DirectUploadController extends AbstractController
                 'error' => $this->trans('project.not_found', [], 'Project not found'),
                 'code' => 'PROJECT_NOT_FOUND',
             ], 404);
-        }
-
-        if (!$this->getUser() && !$request->attributes->get('_project')) {
-            return new JsonResponse([
-                'error' => $this->trans('direct_upload.auth_required', [], 'Authentication required'),
-                'code' => 'AUTH_REQUIRED',
-            ], 401);
         }
 
         if ($this->getUser()) {

@@ -16,7 +16,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/column-settings', name: 'api_column_settings_')]
 class ColumnSettingController extends AbstractController
 {
-    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
     private const MAX_PAYLOAD_BYTES = 262144; // 256 KB
 
     public function __construct(

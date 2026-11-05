@@ -1948,6 +1948,8 @@ return [
     'media.not_found' => 'Media not found.',
     'media.access_denied' => 'Access denied.',
     'media.file_not_found' => 'File not found.',
+    'media.transform_failed' => 'Image transformation failed.',
+    'media.invalid_params' => 'Invalid image transformation parameters.',
     'graphql.too_many_requests' => 'Too many GraphQL requests. Please retry later.',
     'graphql.project_not_found' => 'Project not found.',
     'graphql.payload_too_large' => 'GraphQL payload size exceeded (max 64 KB).',
@@ -1963,6 +1965,7 @@ return [
     'mcp.auth_required' => 'Authentication required.',
     'mcp.access_denied' => 'Access denied.',
     'mcp.auth_description' => 'Use a JamboApi API token in the Authorization: Bearer <token> header.',
+    'mcp.invalid_request' => 'Invalid Request: body cannot be empty.',
     'deployment.auth_required' => 'Authentication required.',
     'deployment.access_denied' => 'Access denied.',
     'deployment.too_many_requests' => 'Too many deployment hook requests. Please retry later.',
@@ -2041,6 +2044,7 @@ return [
     'project.last_manage_member'               => 'Cannot remove the last member with project.manage permission.',
     'project.not_found'                        => 'Project not found.',
     'project.access_denied'                    => 'Access denied.',
+    'project.access_denied_to_project'         => 'Access denied to this project.',
 
     // DirectUploadController
     'direct_upload.rate_limit_exceeded'        => 'Too many direct upload requests. Please retry later.',
@@ -2109,6 +2113,7 @@ return [
     'preview.token_entry_mismatch'             => 'Token does not match entry',
     'preview.token_collection_mismatch'        => 'Token does not match collection',
     'preview.not_enabled'                      => 'Preview not enabled for this project',
+    'preview.invalid_collection'               => 'Invalid collection slug format.',
 
     // FormPublicController
     'form.project_not_found'                   => 'Project not found.',

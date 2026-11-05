@@ -7,6 +7,36 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.99] — 2026-11-05
+
+### ImageTransform, Preview & MCP Hardening, Strict I18N & UUID Full-Spectrum Compatibility
+- **ImageTransformController Hardening**:
+  - Enforced strict 36-char 8-4-4-4-12 UUID format validation on media route parameters for both transform and info endpoints.
+  - Eliminated internal exception message leakage on transformation errors, returning translated `media.transform_failed` with HTTP 422.
+  - Replaced hardcoded French fallback strings with standardized English defaults backed by Translator.
+  - Bounded transformation query parameters: width (1..4000), height (1..4000), quality (1..100), whitelist validation on fit (`contain`, `cover`, `fill`, `crop`, `scale-down`) and format (`webp`, `avif`, `png`, `jpg`, `jpeg`, `gif`), and hex color format on bg.
+  - Preserved SVG BinaryFileResponse security headers (`Content-Security-Policy: default-src 'none'; frame-ancestors 'none';`).
+- **PreviewController Hardening**:
+  - Enforced strict UUID format validation on `$projectUuid` and `$entryUuid` across token generation, URL validation, and preview content retrieval.
+  - Enforced collection slug length and character format validation (`^[a-z0-9_-]+$`).
+  - Bounded JWT preview token length to 4096 bytes to protect against token expansion attacks.
+  - Validated claims structure strictly: verified `pid` and `eid` are valid UUIDs, and enforced exact project, entry, and collection claim matching.
+- **McpController & McpServer Hardening**:
+  - Added strict JSON-RPC 2.0 version validation (`jsonrpc: "2.0"` required; returns error `-32600`).
+  - Enforced method string requirement (max 128 chars) and params array/object requirement (returns error `-32600`).
+  - Enforced RPC `id` scalar/string/integer type check and length capping (max 256 chars).
+  - Enforced payload bounding (max 2MB, HTTP 413) and empty payload rejection (HTTP 400 with JSON-RPC error).
+  - Enforced Bearer token character and length bounding (10..2048 chars).
+  - Enforced strict project UUID validation and multi-tenant isolation on `/api/projects/{uuid}/mcp`.
+- **Global Compatibility & Bugfixes**:
+  - Normalized `UUID_REGEX` across `DirectUploadController`, `ColumnSettingController`, `CommentController`, `NotificationController`, `WebhookController`, and `WebhookInboundController` to full 8-4-4-4-12 hex UUID format, resolving regressions on numeric/mock UUIDs.
+  - Fixed `CommentController::resolveComment` to resolve comment entity directly with multi-tenant project/collection matching.
+  - Fixed `EnsureProjectMemberSubscriber` translation key `project.access_denied_to_project`.
+  - Adjusted `PublicShareController::MIN_TOKEN_LENGTH` to 8 chars.
+- **Strict I18N Parity**:
+  - Added `media.transform_failed`, `media.invalid_params`, `mcp.invalid_request`, `preview.invalid_collection`, `project.access_denied_to_project`.
+  - Maintained 100% dictionary parity across all 4 locales (en, fr, es, ar: 2,540 keys each).
+
 ## [1.26.98] — 2026-11-05
 
 ### Webhook, Comment, Notification, ColumnSetting & DirectUpload Hardening & Strict I18N

@@ -1948,6 +1948,8 @@ return [
     'media.not_found' => 'Medio no encontrado.',
     'media.access_denied' => 'Acceso denegado.',
     'media.file_not_found' => 'Archivo no encontrado.',
+    'media.transform_failed' => 'Error al transformar la imagen.',
+    'media.invalid_params' => 'Parámetros de transformación de imagen no válidos.',
     'graphql.too_many_requests' => 'Demasiadas solicitudes GraphQL. Por favor, inténtelo de nuevo más tarde.',
     'graphql.project_not_found' => 'Proyecto no encontrado.',
     'graphql.payload_too_large' => 'Tamaño de carga GraphQL excedido (máx. 64 KB).',
@@ -1963,6 +1965,7 @@ return [
     'mcp.auth_required' => 'Autenticación requerida.',
     'mcp.access_denied' => 'Acceso denegado.',
     'mcp.auth_description' => 'Use un token de API JamboApi en el encabezado Authorization: Bearer <token>.',
+    'mcp.invalid_request' => 'Solicitud no válida: el cuerpo no puede estar vacío.',
     'deployment.auth_required' => 'Autenticación requerida.',
     'deployment.access_denied' => 'Acceso denegado.',
     'deployment.too_many_requests' => 'Demasiadas solicitudes de webhook de despliegue. Por favor intente más tarde.',
@@ -2041,6 +2044,7 @@ return [
     'project.last_manage_member'               => 'No se puede eliminar al último miembro con permiso project.manage.',
     'project.not_found'                        => 'Proyecto no encontrado.',
     'project.access_denied'                    => 'Acceso denegado.',
+    'project.access_denied_to_project'         => 'Acceso denegado a este proyecto.',
 
     // DirectUploadController
     'direct_upload.rate_limit_exceeded'        => 'Demasiadas solicitudes de subida directa. Por favor, inténtelo de nuevo más tarde.',
@@ -2109,6 +2113,7 @@ return [
     'preview.token_entry_mismatch'             => 'El token no coincide con la entrada.',
     'preview.token_collection_mismatch'        => 'El token no coincide con la colección.',
     'preview.not_enabled'                      => 'La vista previa no está habilitada para este proyecto.',
+    'preview.invalid_collection'               => 'Formato de slug de colección no válido.',
 
     // FormPublicController
     'form.project_not_found'                   => 'Proyecto no encontrado.',

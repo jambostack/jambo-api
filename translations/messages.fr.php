@@ -1966,6 +1966,8 @@ return [
     'media.not_found' => 'Média introuvable.',
     'media.access_denied' => 'Accès non autorisé.',
     'media.file_not_found' => 'Fichier introuvable.',
+    'media.transform_failed' => 'Échec de la transformation de l\'image.',
+    'media.invalid_params' => 'Paramètres de transformation d\'image invalides.',
     'graphql.too_many_requests' => 'Trop de requêtes GraphQL. Veuillez réessayer plus tard.',
     'graphql.project_not_found' => 'Projet introuvable.',
     'graphql.payload_too_large' => 'Taille de payload GraphQL dépassée (max 64 Ko).',
@@ -1981,6 +1983,7 @@ return [
     'mcp.auth_required' => 'Authentification requise.',
     'mcp.access_denied' => 'Accès refusé.',
     'mcp.auth_description' => 'Utiliser un token API JamboApi dans l\'en-tête Authorization: Bearer <token>.',
+    'mcp.invalid_request' => 'Requête invalide : le corps ne peut pas être vide.',
     'deployment.auth_required' => 'Authentification requise.',
     'deployment.access_denied' => 'Accès refusé.',
     'deployment.too_many_requests' => 'Trop de requêtes de déploiement. Veuillez réessayer plus tard.',
@@ -2059,6 +2062,7 @@ return [
     'project.last_manage_member'               => 'Impossible de supprimer le dernier membre avec la permission project.manage.',
     'project.not_found'                        => 'Projet introuvable.',
     'project.access_denied'                    => 'Accès refusé.',
+    'project.access_denied_to_project'         => 'Accès refusé à ce projet.',
 
     // DirectUploadController
     'direct_upload.rate_limit_exceeded'        => 'Trop de requêtes de téléversement direct. Veuillez réessayer plus tard.',
@@ -2127,6 +2131,7 @@ return [
     'preview.token_entry_mismatch'             => 'Le jeton ne correspond pas à l\'entrée.',
     'preview.token_collection_mismatch'        => 'Le jeton ne correspond pas à la collection.',
     'preview.not_enabled'                      => 'La prévisualisation n\'est pas activée pour ce projet.',
+    'preview.invalid_collection'               => 'Format de slug de collection invalide.',
 
     // FormPublicController
     'form.project_not_found'                   => 'Projet introuvable.',

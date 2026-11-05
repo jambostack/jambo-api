@@ -15,6 +15,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class McpController extends AbstractController
 {
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+
     public function __construct(
         private EntityManagerInterface $em,
         private JamboApiMcpServer $mcpServer,
@@ -45,6 +47,16 @@ class McpController extends AbstractController
         if (strlen($body) > 2 * 1024 * 1024) {
             return new JsonResponse(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
         }
+        if (trim($body) === '') {
+            return new JsonResponse([
+                'jsonrpc' => '2.0',
+                'id' => null,
+                'error' => [
+                    'code' => -32600,
+                    'message' => $this->trans('mcp.invalid_request', [], 'Invalid Request: body cannot be empty.'),
+                ],
+            ], 400);
+        }
         $token = $this->extractBearerToken($request);
 
         // Construire le contexte utilisateur/projet
@@ -63,6 +75,25 @@ class McpController extends AbstractController
         $limiter = $this->mcpLimiter->create($request->getClientIp());
         if (false === $limiter->consume(1)->isAccepted()) {
             return new JsonResponse(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
+        }
+
+        $body = $request->getContent();
+        if (strlen($body) > 2 * 1024 * 1024) {
+            return new JsonResponse(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
+        }
+        if (trim($body) === '') {
+            return new JsonResponse([
+                'jsonrpc' => '2.0',
+                'id' => null,
+                'error' => [
+                    'code' => -32600,
+                    'message' => $this->trans('mcp.invalid_request', [], 'Invalid Request: body cannot be empty.'),
+                ],
+            ], 400);
+        }
+
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return new JsonResponse(['error' => $this->trans('mcp.project_not_found', [], 'Project not found.')], 404);
         }
 
         try {
@@ -104,10 +135,6 @@ class McpController extends AbstractController
         $context['project_id'] = $project->id;
         $context['_project'] = $project;
 
-        $body = $request->getContent();
-        if (strlen($body) > 2 * 1024 * 1024) {
-            return new JsonResponse(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
-        }
         return $this->mcpServer->handleRequest($body, $context);
     }
 
@@ -140,7 +167,7 @@ class McpController extends AbstractController
     private function extractBearerToken(Request $request): ?string
     {
         $authHeader = $request->headers->get('Authorization');
-        if ($authHeader && preg_match('/^Bearer\s+(.+)$/i', trim($authHeader), $matches)) {
+        if ($authHeader && preg_match('/^Bearer\s+([a-zA-Z0-9_\-\.=]{10,2048})$/i', trim($authHeader), $matches)) {
             return trim($matches[1]);
         }
         return null;

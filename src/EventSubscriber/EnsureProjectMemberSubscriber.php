@@ -105,7 +105,7 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
 
         if ($member === null) {
             $event->setResponse(new JsonResponse([
-                'error' => $this->trans('project.access_denied', [], 'Access denied to this project.'),
+                'error' => $this->trans('project.access_denied_to_project', [], 'Access denied to this project.'),
                 'code' => 'ACCESS_DENIED',
             ], 403));
             return;
@@ -127,7 +127,7 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
 
         if ($apiToken->project->uuid?->toString() !== $projectUuid) {
             $event->setResponse(new JsonResponse([
-                'error' => $this->trans('project.access_denied', [], 'Access denied to this project.'),
+                'error' => $this->trans('project.access_denied_to_project', [], 'Access denied to this project.'),
                 'code' => 'ACCESS_DENIED',
             ], 403));
             return;

@@ -23,7 +23,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/projects/{projectUuid}/webhooks', name: 'api_webhook_')]
 class WebhookController extends AbstractController
 {
-    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
     private const MAX_PAYLOAD_BYTES = 524288; // 512 KB
     private const MAX_EVENTS_COUNT = 50;
     private const MAX_COLLECTIONS_COUNT = 50;

@@ -56,11 +56,28 @@ class McpServer
         }
 
         $id = $request['id'] ?? null;
-        $method = $request['method'] ?? '';
-        $params = $request['params'] ?? [];
+        if ($id !== null && !is_string($id) && !is_int($id)) {
+            return $this->error(null, -32600, 'Invalid Request: id must be a string, integer or null');
+        }
+        if (is_string($id) && strlen($id) > 256) {
+            return $this->error(null, -32600, 'Invalid Request: id exceeds maximum length');
+        }
 
+        if (isset($request['jsonrpc']) && $request['jsonrpc'] !== '2.0') {
+            return $this->error($id, -32600, 'Invalid Request: jsonrpc version must be "2.0"');
+        }
+
+        $method = $request['method'] ?? '';
         if (!is_string($method) || empty($method)) {
             return $this->error($id, -32600, 'Invalid Request: method required');
+        }
+        if (strlen($method) > 128) {
+            return $this->error($id, -32600, 'Invalid Request: method name too long');
+        }
+
+        $params = $request['params'] ?? [];
+        if (!is_array($params)) {
+            return $this->error($id, -32600, 'Invalid Request: params must be an object or array');
         }
 
         try {
@@ -127,8 +144,8 @@ class McpServer
 
     private function handleToolsCall(array $params, array $context): array
     {
-        $toolName = $params['name'] ?? '';
-        $arguments = $params['arguments'] ?? [];
+        $toolName = (string) ($params['name'] ?? '');
+        $arguments = is_array($params['arguments'] ?? null) ? $params['arguments'] : [];
 
         if (!isset($this->tools[$toolName])) {
             throw new McpException("Outil inconnu: $toolName", -32602);

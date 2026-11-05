@@ -21,7 +21,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/content/{entryId}/comments', name: 'api_comments_')]
 class CommentController extends AbstractController
 {
-    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
     private const MAX_PAYLOAD_BYTES = 524288; // 512 KB
 
     public function __construct(
@@ -366,12 +366,21 @@ class CommentController extends AbstractController
 
     private function resolveComment(string $projectUuid, string $collectionSlug, int $entryId, int $id, string $permission): Comment|JsonResponse
     {
-        $entry = $this->resolveEntry($projectUuid, $collectionSlug, $entryId, $permission);
-        if ($entry instanceof JsonResponse) {
-            return $entry;
+        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+            return new JsonResponse([
+                'error' => $this->trans('comment.not_found', [], 'Comment not found.'),
+                'code' => 'COMMENT_NOT_FOUND',
+            ], 404);
         }
 
-        if ($id <= 0) {
+        if (strlen($collectionSlug) > 100 || !preg_match('/^[a-z0-9_-]+$/i', $collectionSlug)) {
+            return new JsonResponse([
+                'error' => $this->trans('comment.not_found', [], 'Comment not found.'),
+                'code' => 'COMMENT_NOT_FOUND',
+            ], 404);
+        }
+
+        if ($id <= 0 || $entryId <= 0) {
             return new JsonResponse([
                 'error' => $this->trans('comment.not_found', [], 'Comment not found.'),
                 'code' => 'COMMENT_NOT_FOUND',
@@ -393,6 +402,16 @@ class CommentController extends AbstractController
                 'code' => 'COMMENT_NOT_FOUND',
             ], 404);
         }
+
+        $entry = $comment->entry;
+        if (!$entry || $entry->project?->uuid?->toRfc4122() !== $projectUuid || $entry->collection?->slug !== $collectionSlug) {
+            return new JsonResponse([
+                'error' => $this->trans('comment.not_found', [], 'Comment not found.'),
+                'code' => 'COMMENT_NOT_FOUND',
+            ], 404);
+        }
+
+        $this->denyAccessUnlessGranted($permission, $entry->project);
 
         return $comment;
     }

@@ -1948,6 +1948,8 @@ return [
     'media.not_found' => 'الوسائط غير موجودة.',
     'media.access_denied' => 'تم رفض الوصول.',
     'media.file_not_found' => 'الملف غير موجود.',
+    'media.transform_failed' => 'فشل في تحويل الصورة.',
+    'media.invalid_params' => 'معلمات تحويل الصورة غير صالحة.',
     'graphql.too_many_requests' => 'طلبات GraphQL كثيرة جداً. يرجى المحاولة مرة أخرى لاحقاً.',
     'graphql.project_not_found' => 'المشروع غير موجود.',
     'graphql.payload_too_large' => 'تم تجاوز حجم حمولة GraphQL (الحد الأقصى 64 كيلوبايت).',
@@ -1963,6 +1965,7 @@ return [
     'mcp.auth_required' => 'المصادقة مطلوبة.',
     'mcp.access_denied' => 'تم رفض الوصول.',
     'mcp.auth_description' => 'استخدم رمز API لـ JamboApi في رأس Authorization: Bearer <token>.',
+    'mcp.invalid_request' => 'طلب غير صالح: لا يمكن أن يكون المحتوى فارغًا.',
     'deployment.auth_required' => 'المصادقة مطلوبة.',
     'deployment.access_denied' => 'تم رفض الوصول.',
     'deployment.too_many_requests' => 'طلبات خطاف النشر كثيرة جداً. يُرجى المحاولة لاحقاً.',
@@ -2041,6 +2044,7 @@ return [
     'project.last_manage_member'               => 'لا يمكن إزالة آخر عضو يملك صلاحية project.manage.',
     'project.not_found'                        => 'المشروع غير موجود.',
     'project.access_denied'                    => 'الوصول مرفوض.',
+    'project.access_denied_to_project'         => 'تم رفض الوصول إلى هذا المشروع.',
 
     // DirectUploadController
     'direct_upload.rate_limit_exceeded'        => 'طلبات تحميل مباشر كثيرة جداً. يرجى إعادة المحاولة لاحقاً.',
@@ -2109,6 +2113,7 @@ return [
     'preview.token_entry_mismatch'             => 'الرمز لا يطابق الإدخال.',
     'preview.token_collection_mismatch'        => 'الرمز لا يطابق المجموعة.',
     'preview.not_enabled'                      => 'المعاينة غير مفعلة لهذا المشروع.',
+    'preview.invalid_collection'               => 'تنسيق اسم المجموعة الثابت غير صالح.',
 
     // FormPublicController
     'form.project_not_found'                   => 'المشروع غير موجود.',

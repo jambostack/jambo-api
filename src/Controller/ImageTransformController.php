@@ -19,6 +19,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class ImageTransformController extends AbstractController
 {
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+
     public function __construct(
         private EntityManagerInterface $em,
         private ImageTransformService $imageTransform,
@@ -42,25 +44,29 @@ class ImageTransformController extends AbstractController
     #[Route('/cdn/media/{uuid}', name: 'cdn_media_transform', methods: ['GET'])]
     public function serve(string $uuid, Request $request): Response
     {
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return new Response($this->trans('media.not_found', 'Media not found'), 404);
+        }
+
         try {
             $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return new Response($this->trans('media.not_found', 'Média introuvable'), 404);
+            return new Response($this->trans('media.not_found', 'Media not found'), 404);
         }
 
         // Vérifier que le média existe, n'est pas supprimé, et est accessible
         if (!$media || $media->isDeleted()) {
-            return new Response($this->trans('media.not_found', 'Média introuvable'), 404);
+            return new Response($this->trans('media.not_found', 'Media not found'), 404);
         }
 
         // Vérifier les autorisations d'accès au média (publicApi, session utilisateur ou ApiToken)
         if (!$this->canAccessMedia($media, $request)) {
-            return new Response($this->trans('media.access_denied', 'Accès non autorisé'), 403);
+            return new Response($this->trans('media.access_denied', 'Access denied'), 403);
         }
 
         $filePath = $this->resolveLocalOrRemoteFilePath($media);
         if ($filePath === null || !file_exists($filePath)) {
-            return new Response($this->trans('media.file_not_found', 'Fichier introuvable'), 404);
+            return new Response($this->trans('media.file_not_found', 'File not found'), 404);
         }
 
         $params = $request->query->all();
@@ -85,10 +91,55 @@ class ImageTransformController extends AbstractController
             ]);
         }
 
+        // Bounding & validation of transformation parameters
+        $validatedParams = [];
+        if (isset($params['w'])) {
+            $rawW = $params['w'];
+            if (!is_numeric($rawW) || (int) $rawW < 1 || (int) $rawW > 4000) {
+                return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422);
+            }
+            $validatedParams['w'] = (int) $rawW;
+        }
+        if (isset($params['h'])) {
+            $rawH = $params['h'];
+            if (!is_numeric($rawH) || (int) $rawH < 1 || (int) $rawH > 4000) {
+                return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422);
+            }
+            $validatedParams['h'] = (int) $rawH;
+        }
+        if (isset($params['q'])) {
+            $rawQ = $params['q'];
+            if (!is_numeric($rawQ) || (int) $rawQ < 1 || (int) $rawQ > 100) {
+                return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422);
+            }
+            $validatedParams['q'] = (int) $rawQ;
+        }
+        if (isset($params['fit'])) {
+            $rawFit = (string) $params['fit'];
+            if (!in_array($rawFit, ['contain', 'cover', 'fill', 'crop', 'scale-down'], true)) {
+                return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422);
+            }
+            $validatedParams['fit'] = $rawFit;
+        }
+        if (isset($params['fmt'])) {
+            $rawFmt = strtolower((string) $params['fmt']);
+            if (!in_array($rawFmt, ['webp', 'avif', 'png', 'jpg', 'jpeg', 'gif'], true)) {
+                return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422);
+            }
+            $validatedParams['fmt'] = $rawFmt;
+        }
+        if (isset($params['bg'])) {
+            $rawBg = (string) $params['bg'];
+            if (!preg_match('/^#[0-9a-fA-F]{3,8}$/', $rawBg)) {
+                return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422);
+            }
+            $validatedParams['bg'] = $rawBg;
+        }
+
         try {
-            $cachePath = $this->imageTransform->transform($filePath, $params);
-        } catch (\Throwable $e) {
-            return new Response($e->getMessage(), 422);
+            $cachePath = $this->imageTransform->transform($filePath, $validatedParams);
+        } catch (\Throwable) {
+            return new Response($this->trans('media.transform_failed', 'Image transformation failed.'), 422);
         }
 
         return new BinaryFileResponse($cachePath, 200, [
@@ -102,19 +153,28 @@ class ImageTransformController extends AbstractController
     #[Route('/cdn/media/{uuid}/info', name: 'cdn_media_info', methods: ['GET'])]
     public function info(string $uuid, Request $request): Response
     {
-        $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $uuid]);
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return new JsonResponse(['error' => $this->trans('media.not_found', 'Media not found')], 404);
+        }
+
+        try {
+            $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => $this->trans('media.not_found', 'Media not found')], 404);
+        }
+
         if (!$media || $media->isDeleted()) {
-            return new JsonResponse(['error' => $this->trans('media.not_found', 'Média introuvable')], 404);
+            return new JsonResponse(['error' => $this->trans('media.not_found', 'Media not found')], 404);
         }
 
         // Vérifier les autorisations d'accès au média (publicApi, session utilisateur ou ApiToken)
         if (!$this->canAccessMedia($media, $request)) {
-            return new JsonResponse(['error' => $this->trans('media.access_denied', 'Accès non autorisé')], 403);
+            return new JsonResponse(['error' => $this->trans('media.access_denied', 'Access denied')], 403);
         }
 
         $filePath = $this->resolveLocalOrRemoteFilePath($media);
         if ($filePath === null || !file_exists($filePath)) {
-            return new JsonResponse(['error' => $this->trans('media.file_not_found', 'Fichier introuvable')], 404);
+            return new JsonResponse(['error' => $this->trans('media.file_not_found', 'File not found')], 404);
         }
 
         $imageSize = @getimagesize($filePath);
@@ -139,7 +199,7 @@ class ImageTransformController extends AbstractController
     private function resolveLocalOrRemoteFilePath(Media $media): ?string
     {
         $fileName = basename((string) $media->fileName);
-        if ($fileName === '' || $fileName === '.' || $fileName === '..') {
+        if ($fileName === '' || $fileName === '.' || $fileName === '..' || str_contains($fileName, "\0") || str_contains($fileName, '/') || str_contains($fileName, '\\')) {
             return null;
         }
 
@@ -147,7 +207,7 @@ class ImageTransformController extends AbstractController
         $mediaRoot = $this->getParameter('kernel.project_dir') . '/public/uploads/media/';
 
         // 1. Emplacement local standard avec UUID du projet
-        if ($project?->uuid !== null) {
+        if ($project?->uuid !== null && preg_match(self::UUID_REGEX, (string) $project->uuid)) {
             $filePath = $mediaRoot . (string) $project->uuid . '/' . $fileName;
             if (file_exists($filePath)) {
                 return $filePath;
@@ -162,7 +222,10 @@ class ImageTransformController extends AbstractController
 
         // 3. Rapatriement depuis stockage distant Flysystem (S3 / R2 / MinIO)
         if ($this->storageDriverFactory !== null) {
-            $tempCacheDir = $this->getParameter('kernel.project_dir') . '/var/media_cache/' . ($project?->uuid ?? 'global');
+            $projectDirName = ($project?->uuid !== null && preg_match(self::UUID_REGEX, (string) $project->uuid))
+                ? (string) $project->uuid
+                : 'global';
+            $tempCacheDir = $this->getParameter('kernel.project_dir') . '/var/media_cache/' . $projectDirName;
             @mkdir($tempCacheDir, 0700, true);
             $localCached = $tempCacheDir . '/' . $fileName;
 
