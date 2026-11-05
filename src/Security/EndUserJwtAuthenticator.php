@@ -12,12 +12,14 @@ use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
 use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPassport;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class EndUserJwtAuthenticator extends AbstractAuthenticator
 {
     public function __construct(
         private EndUserJwtService $jwtService,
         private EndUserRepository $endUserRepository,
+        private ?TranslatorInterface $translator = null,
     ) {}
 
     public function supports(Request $request): ?bool
@@ -30,6 +32,10 @@ class EndUserJwtAuthenticator extends AbstractAuthenticator
     {
         $header = $request->headers->get('Authorization', '');
         $jwt = substr($header, 7);
+
+        if ($jwt === '' || strlen($jwt) > 8192) {
+            throw new AuthenticationException('Invalid or expired token.');
+        }
 
         $claims = $this->jwtService->validateToken($jwt);
         if ($claims === null) {
@@ -89,8 +95,15 @@ class EndUserJwtAuthenticator extends AbstractAuthenticator
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
+        $message = $this->translator !== null
+            ? $this->translator->trans($exception->getMessage(), [], 'messages')
+            : $exception->getMessage();
+        if ($message === $exception->getMessage() || $message === '') {
+            $message = $exception->getMessage();
+        }
+
         return new JsonResponse([
-            'error' => $exception->getMessage(),
+            'error' => $message,
         ], Response::HTTP_UNAUTHORIZED);
     }
 }

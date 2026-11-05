@@ -3221,4 +3221,19 @@ return [
     'cli.max_mb_positive_integer' => 'La opción --max-mb debe ser un número entero positivo.',
     'cli.distinct_source_target' => 'El proyecto de origen y el proyecto de destino deben ser distintos.',
     'cli.template_created' => 'Plantilla "%name%" (ID: %id%) creada con éxito.',
+
+    // ─── API & Security Exceptions ───
+    'api.unexpected_error' => 'Se ha producido un error inesperado.',
+    'auth.api_token.not_provided' => 'No se proporcionó ningún token de API.',
+    'auth.api_token.invalid' => 'Token de API no válido.',
+    'auth.api_token.expired' => 'El token de API ha caducado.',
+    'auth.pat.not_provided' => 'No se proporcionó ningún token.',
+    'auth.pat.invalid_or_expired' => 'Token no válido o caducado.',
+    'auth.jwt.invalid_or_expired' => 'Token no válido o caducado.',
+    'auth.jwt.refresh_token_not_allowed' => 'Los tokens de actualización no se pueden utilizar para el acceso a la API.',
+    'auth.jwt.tfa_challenge_not_allowed' => 'Los tokens de desafío 2FA no se pueden utilizar para el acceso a la API.',
+    'auth.jwt.missing_subject' => 'Token no válido: falta el asunto.',
+    'auth.jwt.user_inactive' => 'Usuario no encontrado o inactivo.',
+    'auth.jwt.version_mismatch' => 'Discrepancia en la versión del token; vuelva a iniciar sesión.',
+    'auth.jwt.project_mismatch' => 'El token no pertenece a este proyecto.',
 ];

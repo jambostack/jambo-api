@@ -3223,4 +3223,19 @@ return [
     'cli.max_mb_positive_integer' => 'يجب أن يكون الخيار --max-mb عددًا صحيحًا موجبًا.',
     'cli.distinct_source_target' => 'يجب أن يكون المشروع المصدر والمشروع الوجهة مختلفين.',
     'cli.template_created' => 'تم إنشاء النموذج "%name%" (المعرف: %id%) بنجاح.',
+
+    // ─── API & Security Exceptions ───
+    'api.unexpected_error' => 'حدث خطأ غير متوقع.',
+    'auth.api_token.not_provided' => 'لم يتم توفير رمز واجهة برمجة التطبيقات.',
+    'auth.api_token.invalid' => 'رمز واجهة برمجة التطبيقات غير صالح.',
+    'auth.api_token.expired' => 'انتهت صلاحية رمز واجهة برمجة التطبيقات.',
+    'auth.pat.not_provided' => 'لم يتم توفير أي رمز.',
+    'auth.pat.invalid_or_expired' => 'الرمز غير صالح أو منتهي الصلاحية.',
+    'auth.jwt.invalid_or_expired' => 'الرمز غير صالح أو منتهي الصلاحية.',
+    'auth.jwt.refresh_token_not_allowed' => 'لا يمكن استخدام رموز التحديث للوصول إلى واجهة برمجة التطبيقات.',
+    'auth.jwt.tfa_challenge_not_allowed' => 'لا يمكن استخدام رموز تحدي المصادقة الثنائية للوصول إلى واجهة برمجة التطبيقات.',
+    'auth.jwt.missing_subject' => 'الرمز غير صالح: الموضوع مفقود.',
+    'auth.jwt.user_inactive' => 'المستخدم غير موجود أو غير نشط.',
+    'auth.jwt.version_mismatch' => 'عدم تطابق إصدار الرمز — يُرجى تسجيل الدخول مرة أخرى.',
+    'auth.jwt.project_mismatch' => 'الرمز لا ينتمي إلى هذا المشروع.',
 ];

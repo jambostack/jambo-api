@@ -22,7 +22,11 @@ class TwoFactorRedirectSubscriber implements EventSubscriberInterface
         if (!$user instanceof User) return;
 
         if ($user->twoFactorEnabled) {
-            $session = $event->getRequest()->getSession();
+            $request = $event->getRequest();
+            if (!$request->hasSession()) {
+                return;
+            }
+            $session = $request->getSession();
             $session->set('two_factor_user_id', $user->id);
             $session->set('two_factor_expires', time() + 300); // 5 minutes
 
@@ -34,7 +38,7 @@ class TwoFactorRedirectSubscriber implements EventSubscriberInterface
             $response = new RedirectResponse($this->urlGenerator->generate('two_factor_challenge'));
             $event->setResponse($response);
             // Empêcher la création de la session complète
-            $event->getRequest()->getSession()->remove('_security_main');
+            $session->remove('_security_main');
         }
     }
 }

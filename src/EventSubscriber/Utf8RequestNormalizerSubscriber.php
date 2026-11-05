@@ -44,6 +44,12 @@ class Utf8RequestNormalizerSubscriber implements EventSubscriberInterface
             return;
         }
 
+        // Garde anti-épuisement mémoire : ignorer les payloads volumineux (> 10 Mo)
+        $contentLength = (int) $request->headers->get('Content-Length', '0');
+        if ($contentLength > 10 * 1024 * 1024) {
+            return;
+        }
+
         // Verifier si le contenu est deja de l'UTF-8 valide
         if (mb_check_encoding($content, 'UTF-8')) {
             return;

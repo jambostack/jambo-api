@@ -3221,4 +3221,19 @@ return [
     'cli.max_mb_positive_integer' => 'The --max-mb option must be a positive integer.',
     'cli.distinct_source_target' => 'Source project and target project must be distinct.',
     'cli.template_created' => 'Template "%name%" (ID: %id%) created successfully.',
+
+    // ─── API & Security Exceptions ───
+    'api.unexpected_error' => 'An unexpected error occurred.',
+    'auth.api_token.not_provided' => 'No API token provided.',
+    'auth.api_token.invalid' => 'Invalid API token.',
+    'auth.api_token.expired' => 'API token has expired.',
+    'auth.pat.not_provided' => 'No token provided.',
+    'auth.pat.invalid_or_expired' => 'Invalid or expired token.',
+    'auth.jwt.invalid_or_expired' => 'Invalid or expired token.',
+    'auth.jwt.refresh_token_not_allowed' => 'Refresh tokens cannot be used for API access.',
+    'auth.jwt.tfa_challenge_not_allowed' => '2FA challenge tokens cannot be used for API access.',
+    'auth.jwt.missing_subject' => 'Invalid token: missing subject.',
+    'auth.jwt.user_inactive' => 'User not found or inactive.',
+    'auth.jwt.version_mismatch' => 'Token version mismatch - please re-login.',
+    'auth.jwt.project_mismatch' => 'Token does not belong to this project.',
 ];

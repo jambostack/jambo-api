@@ -15,6 +15,7 @@ use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
 use Symfony\Component\Security\Http\Authenticator\Passport\Passport;
 use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPassport;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class PersonalAccessTokenAuthenticator extends AbstractAuthenticator
 {
@@ -22,6 +23,7 @@ class PersonalAccessTokenAuthenticator extends AbstractAuthenticator
         private PersonalAccessTokenRepository $patRepository,
         private EntityManagerInterface $em,
         private string $appSecret,
+        private ?TranslatorInterface $translator = null,
     ) {}
 
     public function supports(Request $request): ?bool
@@ -33,12 +35,16 @@ class PersonalAccessTokenAuthenticator extends AbstractAuthenticator
     {
         $plain = substr($request->headers->get('Authorization', ''), 7);
         if ($plain === '') {
-            throw new CustomUserMessageAuthenticationException('No token provided.');
+            throw new CustomUserMessageAuthenticationException('auth.pat.not_provided');
+        }
+
+        if (strlen($plain) > 1024) {
+            throw new CustomUserMessageAuthenticationException('auth.pat.invalid_or_expired');
         }
 
         $pat = $this->patRepository->findByPlainToken($plain);
         if ($pat === null || $pat->isExpired() || $pat->user === null) {
-            throw new CustomUserMessageAuthenticationException('Invalid or expired token.');
+            throw new CustomUserMessageAuthenticationException('auth.pat.invalid_or_expired');
         }
 
         // Track usage + upgrade legacy hash to HMAC on first use.
@@ -61,6 +67,9 @@ class PersonalAccessTokenAuthenticator extends AbstractAuthenticator
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
-        return new JsonResponse(['error' => $exception->getMessageKey()], Response::HTTP_UNAUTHORIZED);
+        $message = $this->translator !== null
+            ? $this->translator->trans($exception->getMessageKey(), $exception->getMessageData(), 'messages')
+            : $exception->getMessageKey();
+        return new JsonResponse(['error' => $message], Response::HTTP_UNAUTHORIZED);
     }
 }

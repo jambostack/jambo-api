@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.125] — 2026-11-05
+
+### Security Hardening on Authenticators, Exception Subscribers & Memory Guards (Cycle #62)
+- **Authenticators Hardening & Token Bounds Validation**:
+  - `ApiTokenAuthenticator`: Implemented maximum plain token length bound (1024 chars), preventing regex / hash memory attacks. Converted hardcoded failure messages into standardized translation keys (`auth.api_token.*`) with localized responses.
+  - `PersonalAccessTokenAuthenticator`: Added plain token length ceiling (1024 chars) and integrated `TranslatorInterface` with localized failure responses (`auth.pat.*`).
+  - `EndUserJwtAuthenticator`: Added JWT length ceiling (8192 chars) preventing header abuse, along with localized error responses.
+- **Exception Subscribers Hardening & Sensitive Data Leak Prevention**:
+  - `AdminApiExceptionSubscriber`: Hardened error handling on `/admin-api` routes. In production environments (`prod`), internal 500 exceptions are masked with a localized generic message (`api.unexpected_error`), preventing SQL/internal path disclosure while logging the full exception stack trace with context.
+  - `PublicApiExceptionSubscriber`: Integrated `TranslatorInterface` with localized generic error messages on internal errors in production.
+- **Session & Memory Exhaustion Guards**:
+  - `TwoFactorRedirectSubscriber`: Added defensive check `hasSession()` prior to session retrieval, preventing fatal crashes during stateless or API-driven authentication.
+  - `Utf8RequestNormalizerSubscriber`: Added body size check (`Content-Length > 10MB`) to bypass string transcoding and prevent memory exhaustion on oversized payloads.
+- **Multilingual Synchronization & Unit Testing**:
+  - Synchronized complete dictionary translations across `en`, `fr`, `es`, and `ar` for all new security and auth keys.
+  - Added unit test suites `ApiExceptionSubscribersTest` and `ApiTokenAuthenticatorTest` verifying error masking, token boundaries, and session resilience.
+
 ## [1.26.124] — 2026-11-05
 
 ### Security Hardening on Symfony CLI Console Commands & Concurrency (Cycle #61 & #62)

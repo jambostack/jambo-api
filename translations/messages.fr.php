@@ -3239,4 +3239,19 @@ return [
     'cli.max_mb_positive_integer' => 'L\'option --max-mb doit être un entier positif.',
     'cli.distinct_source_target' => 'Le projet source et le projet cible doivent être distincts.',
     'cli.template_created' => 'Modèle "%name%" (ID : %id%) créé avec succès.',
+
+    // ─── API & Security Exceptions ───
+    'api.unexpected_error' => 'Une erreur inattendue est survenue.',
+    'auth.api_token.not_provided' => 'Aucun jeton API fourni.',
+    'auth.api_token.invalid' => 'Jeton API invalide.',
+    'auth.api_token.expired' => 'Le jeton API a expiré.',
+    'auth.pat.not_provided' => 'Aucun jeton fourni.',
+    'auth.pat.invalid_or_expired' => 'Jeton invalide ou expiré.',
+    'auth.jwt.invalid_or_expired' => 'Jeton invalide ou expiré.',
+    'auth.jwt.refresh_token_not_allowed' => 'Les jetons d\'actualisation ne peuvent pas être utilisés pour accéder à l\'API.',
+    'auth.jwt.tfa_challenge_not_allowed' => 'Les jetons de défi 2FA ne peuvent pas être utilisés pour accéder à l\'API.',
+    'auth.jwt.missing_subject' => 'Jeton invalide : sujet manquant.',
+    'auth.jwt.user_inactive' => 'Utilisateur introuvable ou inactif.',
+    'auth.jwt.version_mismatch' => 'Version du jeton obsolète — veuillez vous reconnecter.',
+    'auth.jwt.project_mismatch' => 'Le jeton n\'appartient pas à ce projet.',
 ];
