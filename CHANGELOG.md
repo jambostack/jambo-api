@@ -7,6 +7,40 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.142] — 2026-11-05
+
+### Security & i18n Hardening — Project Export & Import strict i18n and Zip Security (Cycle #78)
+- **ProjectExporter — strict i18n compliance**:
+  - Replaced hardcoded temporary directory creation failure and ZIP archive creation failure exceptions with `$this->trans('export.temp_dir_create_failed')` and `$this->trans('export.zip_create_failed')`.
+  - Maintained complete backward compatibility and safe fallback strings.
+- **ProjectImporter — strict i18n compliance & translator injection**:
+  - Injected `TranslatorInterface $translator = null` with fallback resolver `$this->trans()`.
+  - Replaced 12 hardcoded exceptions with translated error keys:
+    - ZIP archive open failures (`import.zip.open_failed`).
+    - File count limit guards (`import.zip.too_many_files`).
+    - Symbolic link rejection (`import.zip.symlinks_forbidden`).
+    - Path traversal / Zip Slip guards (`import.zip.traversal_detected`).
+    - Executable and dangerous extensions filter (`import.zip.dangerous_extension`).
+    - Hidden files and directory guards (`import.zip.hidden_files_forbidden`).
+    - Zip bomb decompression ratio guards (`import.zip.excessive_compression_ratio`).
+    - Uncompressed ZIP size safety limit (`import.zip.total_size_exceeded`).
+    - Manifest validation failures (`import.manifest.not_found`, `import.manifest.too_large`, `import.manifest.malformed`).
+    - Data payload file size threshold assertions (`import.payload.size_exceeded`).
+- **StructureImportHandler, ContentImportHandler, MediaImportHandler, EndUserImportHandler**:
+  - Injected `TranslatorInterface $translator = null` across all import handler services.
+  - Replaced all hardcoded `\RuntimeException` messages with localized translation keys:
+    - `import.structure.collections_must_be_array`, `import.structure.too_many_collections`, `import.structure.collection_missing_slug`, `import.structure.invalid_collection_slug`, `import.structure.fields_must_be_array`, `import.structure.too_many_fields`, `import.structure.field_missing_slug`, `import.structure.invalid_field_slug`, `import.structure.invalid_field_type`, `import.structure.too_many_end_user_fields`.
+    - `import.content.too_many_entries`.
+    - `import.media.too_many_files`.
+    - `import.end_users.too_many_users`.
+- **Complete Quadrilingual Translation Catalogs**:
+  - Added 27 new translation keys across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+- **Unit & Security Tests**:
+  - Created `Cycle78ExportImportI18nTest` (5 tests, 229 assertions) validating multilingual error reporting across en, fr, es, ar and ensuring dictionary completeness.
+  - Full PHPUnit suite: 1 725 tests, 11 740 assertions, 0 errors, 0 failures.
+
+---
+
 ## [1.26.141] — 2026-11-05
 
 ### Security & i18n Hardening — UploadSecurityValidator & SsrfProtectionService strict i18n (Cycle #77)

@@ -9,13 +9,25 @@ use App\Entity\Media;
 use App\Entity\Project;
 use App\Service\ExportImport\ImportHandlerInterface;
 use Symfony\Component\Uid\Uuid;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class MediaImportHandler implements ImportHandlerInterface
 {
     /** @var Media[] */
     private array $importedMedia = [];
 
-    public function __construct(private string $projectDir) {}
+    public function __construct(
+        private string $projectDir,
+        private ?TranslatorInterface $translator = null,
+    ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return $default ?? $id;
+    }
 
     public static function getOptionKey(): string
     {
@@ -41,7 +53,7 @@ class MediaImportHandler implements ImportHandlerInterface
         }
 
         if (count($data['media']) > 2000) {
-            throw new \RuntimeException('media.json contains too many files (max 2000).');
+            throw new \RuntimeException($this->trans('import.media.too_many_files', ['%max%' => 2000], 'media.json contains too many files (max 2000).'));
         }
 
         $targetMediaDir = $this->projectDir . '/public/uploads/media/' . $project->uuid?->toString();

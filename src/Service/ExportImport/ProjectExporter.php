@@ -100,7 +100,7 @@ class ProjectExporter
 
         try {
             if (!mkdir($tempDir, 0700, true) && !is_dir($tempDir)) {
-                throw new \RuntimeException("Cannot create temp dir: $tempDir");
+                throw new \RuntimeException($this->trans('export.temp_dir_create_failed', ['%dir%' => $tempDir], "Cannot create temp dir: $tempDir"));
             }
 
             $included = [];
@@ -189,7 +189,7 @@ class ProjectExporter
         $zip = new \ZipArchive();
 
         if ($zip->open($outputPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
-            throw new \RuntimeException("Cannot create ZIP file: $outputPath");
+            throw new \RuntimeException($this->trans('export.zip_create_failed', ['%path%' => $outputPath], "Cannot create ZIP file: $outputPath"));
         }
 
         $iterator = new \RecursiveIteratorIterator(

@@ -9,6 +9,7 @@ use App\Entity\Project;
 use App\Repository\EndUserRepository;
 use App\Service\ExportImport\ImportHandlerInterface;
 use Symfony\Component\Uid\Uuid;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class EndUserImportHandler implements ImportHandlerInterface
 {
@@ -18,7 +19,16 @@ class EndUserImportHandler implements ImportHandlerInterface
     public function __construct(
         private EndUserRepository $endUserRepository,
         private ?\App\Service\EndUserCustomFieldsSanitizer $sanitizer = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return $default ?? $id;
+    }
 
     public static function getOptionKey(): string
     {
@@ -45,7 +55,7 @@ class EndUserImportHandler implements ImportHandlerInterface
         }
 
         if (count($data['end_users']) > 5000) {
-            throw new \RuntimeException('end_users.json contains too many users (max 5000).');
+            throw new \RuntimeException($this->trans('import.end_users.too_many_users', ['%max%' => 5000], 'end_users.json contains too many users (max 5000).'));
         }
 
         foreach ($data['end_users'] as $userData) {

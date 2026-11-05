@@ -9,15 +9,28 @@ use App\Entity\ContentFieldValue;
 use App\Entity\Project;
 use App\Service\ExportImport\ImportHandlerInterface;
 use Symfony\Component\Uid\Uuid;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class ContentImportHandler implements ImportHandlerInterface
 {
     /** @var array<string, \App\Entity\ContentEntry> */
     private array $entryIndex = [];
 
+    public function __construct(
+        private ?TranslatorInterface $translator = null,
+    ) {}
+
     public static function getOptionKey(): string
     {
         return 'content';
+    }
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return $default ?? $id;
     }
 
     public function import(Project $project, string $extractedDir, ImportOptions $options, array &$uuidMap): void
@@ -33,7 +46,7 @@ class ContentImportHandler implements ImportHandlerInterface
         }
 
         if (count($data['entries']) > 10000) {
-            throw new \RuntimeException('content.json contains too many entries (max 10000).');
+            throw new \RuntimeException($this->trans('import.content.too_many_entries', ['%max%' => 10000], 'content.json contains too many entries (max 10000).'));
         }
 
         // Index collections by slug

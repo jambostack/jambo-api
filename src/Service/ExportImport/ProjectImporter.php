@@ -5,6 +5,7 @@ namespace App\Service\ExportImport;
 use App\Dto\ConflictItem;
 use App\Dto\ImportOptions;
 use App\Entity\Project;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class ProjectImporter
 {
@@ -18,12 +19,21 @@ class ProjectImporter
         Import\SettingsImportHandler $settingsHandler,
         private Import\EndUserImportHandler $endUserHandler,
         private string $projectDir,
+        private ?TranslatorInterface $translator = null,
     ) {
         $this->handlers['structure'] = $structureHandler;
         $this->handlers['content'] = $contentHandler;
         $this->handlers['media'] = $mediaHandler;
         $this->handlers['settings'] = $settingsHandler;
         $this->handlers['end_users'] = $endUserHandler;
+    }
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return $default ?? $id;
     }
 
     private function getTempDir(): string
@@ -43,7 +53,7 @@ class ProjectImporter
         try {
             $zip = new \ZipArchive();
             if ($zip->open($zipPath) !== true) {
-                throw new \RuntimeException('Cannot open ZIP file: ' . $zipPath);
+                throw new \RuntimeException($this->trans('import.zip.open_failed', ['%path%' => $zipPath], 'Cannot open ZIP file: ' . $zipPath));
             }
 
             $maxFiles = 5000;
@@ -59,7 +69,7 @@ class ProjectImporter
 
             if ($zip->numFiles > $maxFiles) {
                 $zip->close();
-                throw new \RuntimeException('ZIP file contains too many files (max ' . $maxFiles . ')');
+                throw new \RuntimeException($this->trans('import.zip.too_many_files', ['%max%' => $maxFiles], 'ZIP file contains too many files (max ' . $maxFiles . ')'));
             }
 
             for ($i = 0; $i < $zip->numFiles; $i++) {
@@ -74,7 +84,7 @@ class ProjectImporter
                 $mode = ($extAttr >> 16) & 0170000;
                 if ($mode === 0120000) {
                     $zip->close();
-                    throw new \RuntimeException('Symbolic links are strictly forbidden in ZIP archives: ' . $entryName);
+                    throw new \RuntimeException($this->trans('import.zip.symlinks_forbidden', ['%file%' => $entryName], 'Symbolic links are strictly forbidden in ZIP archives: ' . $entryName));
                 }
 
                 // Prevent Zip Slip / path traversal, null bytes and Windows drive paths
@@ -88,14 +98,14 @@ class ProjectImporter
                     preg_match('/^[a-zA-Z]:/', $entryName)
                 ) {
                     $zip->close();
-                    throw new \RuntimeException('Invalid file path in ZIP archive (directory traversal detected): ' . $entryName);
+                    throw new \RuntimeException($this->trans('import.zip.traversal_detected', ['%file%' => $entryName], 'Invalid file path in ZIP archive (directory traversal detected): ' . $entryName));
                 }
 
                 // Reject dangerous and executable file extensions
                 $entryExt = strtolower(pathinfo($entryName, PATHINFO_EXTENSION));
                 if (in_array($entryExt, $blockedExtensions, true)) {
                     $zip->close();
-                    throw new \RuntimeException('Executable or dangerous file extension forbidden in ZIP archive: ' . $entryName);
+                    throw new \RuntimeException($this->trans('import.zip.dangerous_extension', ['%file%' => $entryName], 'Executable or dangerous file extension forbidden in ZIP archive: ' . $entryName));
                 }
 
                 // Reject hidden files and directories (.env, .git, .htaccess)
@@ -103,7 +113,7 @@ class ProjectImporter
                 foreach ($normalizedParts as $part) {
                     if (str_starts_with($part, '.') && $part !== '.' && $part !== '..') {
                         $zip->close();
-                        throw new \RuntimeException('Hidden files or directories forbidden in ZIP archive: ' . $entryName);
+                        throw new \RuntimeException($this->trans('import.zip.hidden_files_forbidden', ['%file%' => $entryName], 'Hidden files or directories forbidden in ZIP archive: ' . $entryName));
                     }
                 }
 
@@ -112,13 +122,13 @@ class ProjectImporter
                 $uncompSize = $stat['size'] ?? 0;
                 if ($compSize > 0 && ($uncompSize / $compSize) > $maxRatio && $uncompSize > 1048576) {
                     $zip->close();
-                    throw new \RuntimeException('Excessive compression ratio detected (potential decompression bomb): ' . $entryName);
+                    throw new \RuntimeException($this->trans('import.zip.excessive_compression_ratio', ['%file%' => $entryName], 'Excessive compression ratio detected (potential decompression bomb): ' . $entryName));
                 }
 
                 $totalSize += $uncompSize;
                 if ($totalSize > $maxTotalSize) {
                     $zip->close();
-                    throw new \RuntimeException('Uncompressed ZIP size exceeds safety limit of 250MB');
+                    throw new \RuntimeException($this->trans('import.zip.total_size_exceeded', ['%max%' => 250], 'Uncompressed ZIP size exceeds safety limit of 250MB'));
                 }
             }
 
@@ -136,23 +146,24 @@ class ProjectImporter
     {
         $manifestPath = $extractedDir . '/manifest.json';
         if (!file_exists($manifestPath)) {
-            throw new \RuntimeException('Invalid export package: manifest.json not found');
+            throw new \RuntimeException($this->trans('import.manifest.not_found', [], 'Invalid export package: manifest.json not found'));
         }
 
         if (filesize($manifestPath) > 5 * 1024 * 1024) {
-            throw new \RuntimeException('Manifest file is too large (max 5MB).');
+            throw new \RuntimeException($this->trans('import.manifest.too_large', ['%max%' => 5], 'Manifest file is too large (max 5MB).'));
         }
 
         $manifest = json_decode(file_get_contents($manifestPath), true);
         if (!$manifest || !isset($manifest['version'])) {
-            throw new \RuntimeException('Invalid export package: malformed manifest.json');
+            throw new \RuntimeException($this->trans('import.manifest.malformed', [], 'Invalid export package: malformed manifest.json'));
         }
 
         // Contrôle de taille des fichiers de données
         foreach (['structure.json' => 10 * 1024 * 1024, 'content.json' => 50 * 1024 * 1024, 'end_users.json' => 20 * 1024 * 1024, 'media.json' => 10 * 1024 * 1024, 'settings.json' => 5 * 1024 * 1024] as $file => $maxSize) {
             $path = $extractedDir . '/' . $file;
             if (file_exists($path) && filesize($path) > $maxSize) {
-                throw new \RuntimeException(sprintf('Import payload "%s" exceeds size limit (%d MB).', $file, (int) ($maxSize / 1048576)));
+                $maxMb = (int) ($maxSize / 1048576);
+                throw new \RuntimeException($this->trans('import.payload.size_exceeded', ['%file%' => $file, '%max%' => $maxMb], sprintf('Import payload "%s" exceeds size limit (%d MB).', $file, $maxMb)));
             }
         }
 

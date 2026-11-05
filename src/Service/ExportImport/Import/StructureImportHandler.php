@@ -10,6 +10,7 @@ use App\Entity\Field;
 use App\Entity\Project;
 use App\Repository\EndUserFieldRepository;
 use App\Service\ExportImport\ImportHandlerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class StructureImportHandler implements ImportHandlerInterface
 {
@@ -22,7 +23,18 @@ class StructureImportHandler implements ImportHandlerInterface
     /** @var EndUserField[] */
     private array $importedEndUserFields = [];
 
-    public function __construct(private EndUserFieldRepository $endUserFieldRepository) {}
+    public function __construct(
+        private EndUserFieldRepository $endUserFieldRepository,
+        private ?TranslatorInterface $translator = null,
+    ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return $default ?? $id;
+    }
 
     public static function getOptionKey(): string
     {
@@ -50,10 +62,10 @@ class StructureImportHandler implements ImportHandlerInterface
 
         $collections = $data['collections'] ?? [];
         if (!is_array($collections)) {
-            throw new \RuntimeException('Invalid structure.json format: collections must be an array.');
+            throw new \RuntimeException($this->trans('import.structure.collections_must_be_array', [], 'Invalid structure.json format: collections must be an array.'));
         }
         if (count($collections) > 100) {
-            throw new \RuntimeException('structure.json contains too many collections (max 100).');
+            throw new \RuntimeException($this->trans('import.structure.too_many_collections', ['%max%' => 100], 'structure.json contains too many collections (max 100).'));
         }
 
         $existingSlugs = [];
@@ -63,11 +75,11 @@ class StructureImportHandler implements ImportHandlerInterface
 
         foreach ($collections as $colData) {
             if (!is_array($colData) || empty($colData['slug']) || !is_string($colData['slug'])) {
-                throw new \RuntimeException('Collection missing required valid slug.');
+                throw new \RuntimeException($this->trans('import.structure.collection_missing_slug', [], 'Collection missing required valid slug.'));
             }
             $colSlug = trim($colData['slug']);
             if (!preg_match('/^[a-z0-9_-]+$/i', $colSlug) || strlen($colSlug) > 128) {
-                throw new \RuntimeException(sprintf('Invalid collection slug format: "%s".', $colSlug));
+                throw new \RuntimeException($this->trans('import.structure.invalid_collection_slug', ['%slug%' => $colSlug], sprintf('Invalid collection slug format: "%s".', $colSlug)));
             }
             $colName = preg_replace('/[\x00-\x1F\x7F]/', '', (string) ($colData['name'] ?? $colSlug));
             if (strlen($colName) > 255) {
@@ -76,10 +88,10 @@ class StructureImportHandler implements ImportHandlerInterface
 
             $fieldsData = $colData['fields'] ?? [];
             if (!is_array($fieldsData)) {
-                throw new \RuntimeException(sprintf('Collection "%s" fields must be an array.', $colSlug));
+                throw new \RuntimeException($this->trans('import.structure.fields_must_be_array', ['%slug%' => $colSlug], sprintf('Collection "%s" fields must be an array.', $colSlug)));
             }
             if (count($fieldsData) > 200) {
-                throw new \RuntimeException(sprintf('Collection "%s" contains too many fields (max 200).', $colSlug));
+                throw new \RuntimeException($this->trans('import.structure.too_many_fields', ['%slug%' => $colSlug, '%max%' => 200], sprintf('Collection "%s" contains too many fields (max 200).', $colSlug)));
             }
 
             if ($options->strategy === 'skip' && isset($existingSlugs[$colSlug])) {
@@ -102,15 +114,15 @@ class StructureImportHandler implements ImportHandlerInterface
 
             foreach ($fieldsData as $i => $fieldData) {
                 if (!is_array($fieldData) || empty($fieldData['slug']) || !is_string($fieldData['slug'])) {
-                    throw new \RuntimeException(sprintf('Field at index %d in collection "%s" missing slug.', $i, $colSlug));
+                    throw new \RuntimeException($this->trans('import.structure.field_missing_slug', ['%index%' => $i, '%collection%' => $colSlug], sprintf('Field at index %d in collection "%s" missing slug.', $i, $colSlug)));
                 }
                 $fieldSlug = trim($fieldData['slug']);
                 if (!preg_match('/^[a-z0-9_-]+$/i', $fieldSlug) || strlen($fieldSlug) > 128) {
-                    throw new \RuntimeException(sprintf('Invalid field slug format: "%s".', $fieldSlug));
+                    throw new \RuntimeException($this->trans('import.structure.invalid_field_slug', ['%slug%' => $fieldSlug], sprintf('Invalid field slug format: "%s".', $fieldSlug)));
                 }
                 $fieldType = strtolower((string) ($fieldData['type'] ?? 'text'));
                 if (!in_array($fieldType, self::ALLOWED_FIELD_TYPES, true)) {
-                    throw new \RuntimeException(sprintf('Invalid field type "%s" for field "%s" in collection "%s".', $fieldType, $fieldSlug, $colSlug));
+                    throw new \RuntimeException($this->trans('import.structure.invalid_field_type', ['%type%' => $fieldType, '%field%' => $fieldSlug, '%collection%' => $colSlug], sprintf('Invalid field type "%s" for field "%s" in collection "%s".', $fieldType, $fieldSlug, $colSlug)));
                 }
 
                 $fieldOptions = is_array($fieldData['options'] ?? null) ? $fieldData['options'] : null;
@@ -137,7 +149,7 @@ class StructureImportHandler implements ImportHandlerInterface
 
         if (!empty($data['end_user_fields']) && is_array($data['end_user_fields'])) {
             if (count($data['end_user_fields']) > 100) {
-                throw new \RuntimeException('structure.json contains too many end_user_fields (max 100).');
+                throw new \RuntimeException($this->trans('import.structure.too_many_end_user_fields', ['%max%' => 100], 'structure.json contains too many end_user_fields (max 100).'));
             }
 
             $existingFieldSlugs = [];
