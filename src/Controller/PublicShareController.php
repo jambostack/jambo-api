@@ -2,9 +2,11 @@
 
 namespace App\Controller;
 
+use App\Service\AuditService;
 use App\Service\EavDataFormatterService;
 use App\Service\Share\ShareService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -18,19 +20,23 @@ class PublicShareController extends AbstractController
     public const MIN_TOKEN_LENGTH = 8;
 
     private const SECURITY_HEADERS = [
-        'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        'Cache-Control' => 'no-store, no-cache, must-revalidate, private, max-age=0',
         'Pragma' => 'no-cache',
         'Expires' => '0',
+        'Surrogate-Control' => 'no-store',
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options' => 'DENY',
         'Referrer-Policy' => 'no-referrer',
+        'X-Robots-Tag' => 'noindex, nofollow, noarchive, nosnippet',
     ];
 
     public function __construct(
         private readonly ShareService $shares,
         private readonly EavDataFormatterService $formatter,
+        #[Autowire(service: 'limiter.share_limiter')]
         private readonly ?RateLimiterFactory $shareLimiter = null,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?AuditService $auditService = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -56,8 +62,18 @@ class PublicShareController extends AbstractController
         }
 
         if ($this->shareLimiter !== null) {
-            $limiter = $this->shareLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            $limiter = $this->shareLimiter->create($identifier);
             if (false === $limiter->consume(1)->isAccepted()) {
+                $this->auditService?->log(
+                    toolName: 'public_share_rate_limit',
+                    project: null,
+                    input: ['ip' => $identifier],
+                    output: null,
+                    status: 'failure',
+                    errorMessage: 'Rate limit exceeded',
+                    source: 'public_share',
+                );
                 return $this->renderError(429, 'too_many_requests', $wantsJson);
             }
         }

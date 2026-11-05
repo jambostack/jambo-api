@@ -1984,6 +1984,10 @@ return [
     'deployment.invalid_image_reference' => 'Invalid image reference.',
     'deployment.invalid_json' => 'Invalid JSON payload.',
     'deployment.secret_too_short' => 'Deployment webhook secret is too short (min 16 characters).',
+    'deployment.invalid_environment' => 'Invalid deployment environment: %env%.',
+    'deployment.invalid_status' => 'Invalid deployment status: %status%.',
+    'deployment.invalid_project_uuid' => 'Invalid project UUID format.',
+    'deployment.project_not_found' => 'Project not found.',
     'comment.entry_not_found' => 'Entry not found.',
     'comment.auth_required' => 'Authentication required.',
     'comment.access_denied' => 'Access denied.',
@@ -2652,6 +2656,9 @@ return [
     'template.max_templates_exceeded'                 => 'Maximum number of templates reached (%max%).',
     'template.field_invalid_type'                     => 'Field %name% has an unsupported type: %type%.',
     'template.field_options_too_large'                => 'Field options payload too large (max 32KB).',
+    'template.field_name_required'                    => 'Field name is required.',
+    'template.field_slug_required'                    => 'Field slug is required.',
+    'template.field_slug_invalid'                     => 'Field slug contains invalid characters: %slug%.',
 
     // AiController
     'ai.rate_limit_exceeded'                          => 'Too many AI requests. Please retry later.',

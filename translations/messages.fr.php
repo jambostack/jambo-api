@@ -2002,6 +2002,10 @@ return [
     'deployment.invalid_image_reference' => 'Référence d\'image invalide.',
     'deployment.invalid_json' => 'Charge utile JSON invalide.',
     'deployment.secret_too_short' => 'Le secret de webhook de déploiement est trop court (min 16 caractères).',
+    'deployment.invalid_environment' => 'Environnement de déploiement invalide : %env%.',
+    'deployment.invalid_status' => 'Statut de déploiement invalide : %status%.',
+    'deployment.invalid_project_uuid' => 'Format de l\'UUID du projet invalide.',
+    'deployment.project_not_found' => 'Projet introuvable.',
     'comment.entry_not_found' => 'Entrée introuvable.',
     'comment.auth_required' => 'Authentification requise.',
     'comment.access_denied' => 'Accès refusé.',
@@ -2670,6 +2674,9 @@ return [
     'template.max_templates_exceeded'                 => 'Nombre maximal de modèles atteint (%max%).',
     'template.field_invalid_type'                     => 'Le champ %name% a un type non pris en charge : %type%.',
     'template.field_options_too_large'                => 'Options de champ trop volumineuses (max 32 Ko).',
+    'template.field_name_required'                    => 'Le nom du champ est requis.',
+    'template.field_slug_required'                    => 'Le slug du champ est requis.',
+    'template.field_slug_invalid'                     => 'Le slug du champ contient des caractères invalides : %slug%.',
 
     // AiController
     'ai.rate_limit_exceeded'                          => 'Trop de requêtes IA. Veuillez réessayer plus tard.',

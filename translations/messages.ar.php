@@ -1984,6 +1984,10 @@ return [
     'deployment.invalid_image_reference' => 'مرجع الصورة غير صالح.',
     'deployment.invalid_json' => 'حمولة JSON غير صالحة.',
     'deployment.secret_too_short' => 'سر خطاف النشر قصير جداً (16 حرفاً على الأقل).',
+    'deployment.invalid_environment' => 'بيئة نشر غير صالحة: %env%.',
+    'deployment.invalid_status' => 'حالة نشر غير صالحة: %status%.',
+    'deployment.invalid_project_uuid' => 'تنسيق المعرف الفريد للمشروع غير صالح.',
+    'deployment.project_not_found' => 'المشروع غير موجود.',
     'comment.entry_not_found' => 'المدخلة غير موجودة.',
     'comment.auth_required' => 'المصادقة مطلوبة.',
     'comment.access_denied' => 'تم رفض الوصول.',
@@ -2654,6 +2658,9 @@ return [
     'template.max_templates_exceeded'                 => 'تم الوصول إلى الحد الأقصى لعدد القوالب (%max%).',
     'template.field_invalid_type'                     => 'الحقل %name% يحتوي على نوع غير مدعوم: %type%.',
     'template.field_options_too_large'                => 'خيارات الحقل كبيرة جداً (الحد الأقصى 32 كيلوبايت).',
+    'template.field_name_required'                    => 'اسم الحقل مطلوب.',
+    'template.field_slug_required'                    => 'المعرف اللطيف للحقل مطلوب.',
+    'template.field_slug_invalid'                     => 'يحتوي المعرف اللطيف للحقل على أحرف غير صالحة: %slug%.',
 
     // AiController
     'ai.rate_limit_exceeded'                          => 'طلبات كثيرة جداً للذكاء الاصطناعي. يرجى إعادة المحاولة لاحقاً.',

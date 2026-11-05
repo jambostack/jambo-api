@@ -7,6 +7,39 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.101] — 2026-11-05
+
+### Deployment Webhooks, Public Share Anti-Enumeration & Collection Template RBAC Hardening
+- **DeploymentController Security Hardening**:
+  - Enforced minimum secret length requirement (`MIN_SECRET_LENGTH = 16`) for `DEPLOY_WEBHOOK_SECRET` with localized `deployment.secret_too_short` (HTTP 503 `WEBHOOK_DISABLED`).
+  - Implemented anti-timing attack protection using `hash_equals()` with fallback dummy HMAC computations on missing or malformed signature prefixes.
+  - Added dual webhook signature support for `X-Jambo-Signature` and standard GitHub `X-Hub-Signature-256`.
+  - Added strict environment validation (`preview`, `staging`, `production`) returning HTTP 422 `INVALID_ENVIRONMENT` rather than silent fallback.
+  - Added strict deployment status validation (`pending`, `running`, `succeeded`, `failed`, `canceled`) returning HTTP 422 `INVALID_STATUS` rather than silent fallback.
+  - Normalized git commit SHA validation (`/^[a-fA-F0-9]{4,40}$/`, lowercased).
+  - Hardened git branch name validation enforcing git ref specs (rejection of control characters, spaces `\s`, path traversals `..`, consecutive slashes `//`, leading/trailing slashes or dots, reserved characters `~^:?*[]\@`, and `.lock$` suffix).
+  - Validated `project_uuid` format and existence, returning HTTP 422 `INVALID_PROJECT_UUID` or HTTP 404 `PROJECT_NOT_FOUND` on invalid inputs instead of silent omission.
+  - Added optional project filtering on `GET /api/deployments` with tenant authorization (`project.view`).
+  - Added audit logging on webhook auth failures (`deployment_hook_auth`) and deployment updates (`deployment_hook`).
+- **PublicShareController Security Hardening**:
+  - Reinforced strict response security headers with `Surrogate-Control: no-store` and `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` preventing proxy caching and crawler indexing.
+  - Explicitly autowired `limiter.share_limiter` rate limiting factory via `#[Autowire(service: 'limiter.share_limiter')]`.
+  - Anti-enumeration protection returning consistent HTTP 404 with error key `invalid` for unknown shares, revoked shares, deleted content entries, soft-deleted collections, and multi-tenant project mismatches.
+  - Integrated audit trail logging on rate-limited public share requests.
+- **CollectionTemplateController Security Hardening**:
+  - Enforced strict `ROLE_ADMIN` / `ROLE_SUPER_ADMIN` check on template creation and `saveFromCollection()` with localized access denied messaging.
+  - Made request parameter optional on `index(?Request $request = null)` with limit boundary validation (`MAX_TEMPLATES_COUNT = 200`).
+  - Validated EAV template field definitions on `create()`: required field name (`FIELD_NAME_REQUIRED`), required field slug (`FIELD_SLUG_REQUIRED`), and regex-validated slug (`INVALID_FIELD_SLUG`).
+  - Rejected template creation from soft-deleted collections with HTTP 404 `template.collection_not_found`.
+  - Enforced template quota (`MAX_TEMPLATES_COUNT = 200`) and field quota (`MAX_FIELDS_PER_TEMPLATE = 100`).
+- **100% Strict I18N Parity**:
+  - Added 7 new translation keys across English, French, Spanish, and Arabic dictionaries (`messages.{en,fr,es,ar}.php`):
+    - `deployment.invalid_environment`, `deployment.invalid_status`, `deployment.invalid_project_uuid`, `deployment.project_not_found`
+    - `template.field_name_required`, `template.field_slug_required`, `template.field_slug_invalid`
+  - Maintained exact parity across all 4 locales (2,555 keys per language, 0 diff).
+- **Test Coverage**:
+  - Expanded `Cycle45HardeningTest` to 24 tests and 126 assertions covering webhook bounds, timing attacks, branch validation, anti-enumeration, headers, and RBAC.
+
 ## [1.26.100] — 2026-11-05
 
 ### Deployment Webhooks, Public Share Enumeration Protection & Collection Template RBAC

@@ -51,9 +51,11 @@ class CollectionTemplateController extends AbstractController
     }
 
     #[Route('', name: 'index', methods: ['GET'])]
-    public function index(): JsonResponse
+    public function index(?Request $request = null): JsonResponse
     {
-        $templates = $this->templateRepository->findBy([], ['createdAt' => 'DESC']);
+        $request ??= new Request();
+        $limit = min(self::MAX_TEMPLATES_COUNT, max(1, $request->query->getInt('limit', self::MAX_TEMPLATES_COUNT)));
+        $templates = $this->templateRepository->findBy([], ['createdAt' => 'DESC'], $limit);
 
         return new JsonResponse([
             'data' => array_map(fn ($t) => $this->serialize($t), $templates),
@@ -128,12 +130,30 @@ class CollectionTemplateController extends AbstractController
 
         foreach (array_slice($rawFields, 0, self::MAX_FIELDS_PER_TEMPLATE) as $i => $f) {
             if (!is_array($f)) {
-                continue;
+                return new JsonResponse([
+                    'error' => $this->trans('template.fields_must_be_array', [], 'fields must be an array'),
+                    'code' => 'INVALID_FIELD_STRUCTURE',
+                ], 422, self::SECURITY_HEADERS);
             }
             $fieldName = trim((string) ($f['name'] ?? ''));
             $fieldSlug = trim((string) ($f['slug'] ?? ''));
-            if ($fieldName === '' || $fieldSlug === '') {
-                continue;
+            if ($fieldName === '') {
+                return new JsonResponse([
+                    'error' => $this->trans('template.field_name_required', [], 'Field name is required.'),
+                    'code' => 'FIELD_NAME_REQUIRED',
+                ], 422, self::SECURITY_HEADERS);
+            }
+            if ($fieldSlug === '') {
+                return new JsonResponse([
+                    'error' => $this->trans('template.field_slug_required', [], 'Field slug is required.'),
+                    'code' => 'FIELD_SLUG_REQUIRED',
+                ], 422, self::SECURITY_HEADERS);
+            }
+            if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $fieldSlug)) {
+                return new JsonResponse([
+                    'error' => $this->trans('template.field_slug_invalid', ['%slug%' => $fieldSlug], "Field slug contains invalid characters: {$fieldSlug}."),
+                    'code' => 'INVALID_FIELD_SLUG',
+                ], 422, self::SECURITY_HEADERS);
             }
 
             $rawType = is_string($f['type'] ?? null) ? trim($f['type']) : 'text';
@@ -224,7 +244,7 @@ class CollectionTemplateController extends AbstractController
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
-        if ($collection === null) {
+        if ($collection === null || $collection->isDeleted()) {
             return new JsonResponse(['error' => $this->trans('template.collection_not_found', [], 'Collection not found')], 404, self::SECURITY_HEADERS);
         }
 

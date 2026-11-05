@@ -1984,6 +1984,10 @@ return [
     'deployment.invalid_image_reference' => 'Referencia de imagen no válida.',
     'deployment.invalid_json' => 'Carga útil JSON no válida.',
     'deployment.secret_too_short' => 'El secreto del webhook de despliegue es demasiado corto (mín. 16 caracteres).',
+    'deployment.invalid_environment' => 'Entorno de despliegue no válido: %env%.',
+    'deployment.invalid_status' => 'Estado de despliegue no válido: %status%.',
+    'deployment.invalid_project_uuid' => 'Formato del UUID del proyecto no válido.',
+    'deployment.project_not_found' => 'Proyecto no encontrado.',
     'comment.entry_not_found' => 'Entrada no encontrada.',
     'comment.auth_required' => 'Autenticación requerida.',
     'comment.access_denied' => 'Acceso denegado.',
@@ -2652,6 +2656,9 @@ return [
     'template.max_templates_exceeded'                 => 'Número máximo de plantillas alcanzado (%max%).',
     'template.field_invalid_type'                     => 'El campo %name% tiene un tipo no compatible: %type%.',
     'template.field_options_too_large'                => 'Opciones de campo demasiado grandes (máx. 32KB).',
+    'template.field_name_required'                    => 'El nombre del campo es obligatorio.',
+    'template.field_slug_required'                    => 'El slug del campo es obligatorio.',
+    'template.field_slug_invalid'                     => 'El slug del campo contiene caracteres no válidos: %slug%.',
 
     // AiController
     'ai.rate_limit_exceeded'                          => 'Demasiadas solicitudes de IA. Inténtelo de nuevo más tarde.',

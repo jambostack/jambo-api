@@ -516,4 +516,212 @@ class Cycle45HardeningTest extends TestCase
         $this->assertSame(422, $respHugeOpts->getStatusCode());
         $this->assertSame('OPTIONS_TOO_LARGE', json_decode((string) $respHugeOpts->getContent(), true)['code']);
     }
+
+    public function testDeploymentHookSecretTooShort(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $deployments = $this->createMock(DeploymentRepository::class);
+        $projects = $this->createMock(ProjectRepository::class);
+
+        $_ENV['DEPLOY_WEBHOOK_SECRET'] = 'short-secret'; // < 16 chars
+
+        $controller = new DeploymentController($em, $deployments, $projects);
+        $response = $controller->hook(new Request([], [], [], [], [], [], '{}'));
+        $this->assertSame(503, $response->getStatusCode());
+        $data = json_decode((string) $response->getContent(), true);
+        $this->assertSame('WEBHOOK_DISABLED', $data['code']);
+    }
+
+    public function testDeploymentHookRejectsInvalidEnvironmentAndStatus(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $deployments = $this->createMock(DeploymentRepository::class);
+        $projects = $this->createMock(ProjectRepository::class);
+
+        $secret = 'secret-deployment-key-32-chars!!';
+        $_ENV['DEPLOY_WEBHOOK_SECRET'] = $secret;
+        $controller = new DeploymentController($em, $deployments, $projects);
+
+        // Invalid environment
+        $payloadBadEnv = json_encode(['environment' => 'development_local']);
+        $sigBadEnv = 'sha256=' . hash_hmac('sha256', (string) $payloadBadEnv, $secret);
+        $reqBadEnv = new Request([], [], [], [], [], ['HTTP_X_JAMBO_SIGNATURE' => $sigBadEnv], (string) $payloadBadEnv);
+        $respBadEnv = $controller->hook($reqBadEnv);
+        $this->assertSame(422, $respBadEnv->getStatusCode());
+        $this->assertSame('INVALID_ENVIRONMENT', json_decode((string) $respBadEnv->getContent(), true)['code']);
+
+        // Invalid status
+        $payloadBadStatus = json_encode(['status' => 'exploded']);
+        $sigBadStatus = 'sha256=' . hash_hmac('sha256', (string) $payloadBadStatus, $secret);
+        $reqBadStatus = new Request([], [], [], [], [], ['HTTP_X_JAMBO_SIGNATURE' => $sigBadStatus], (string) $payloadBadStatus);
+        $respBadStatus = $controller->hook($reqBadStatus);
+        $this->assertSame(422, $respBadStatus->getStatusCode());
+        $this->assertSame('INVALID_STATUS', json_decode((string) $respBadStatus->getContent(), true)['code']);
+    }
+
+    public function testDeploymentHookRejectsMalformedProjectUuidAndNonExistentProject(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $deployments = $this->createMock(DeploymentRepository::class);
+        $projects = $this->createMock(ProjectRepository::class);
+
+        $secret = 'secret-deployment-key-32-chars!!';
+        $_ENV['DEPLOY_WEBHOOK_SECRET'] = $secret;
+        $controller = new DeploymentController($em, $deployments, $projects);
+
+        // Malformed UUID
+        $payloadBadUuid = json_encode(['project_uuid' => 'not-a-valid-uuid']);
+        $sigBadUuid = 'sha256=' . hash_hmac('sha256', (string) $payloadBadUuid, $secret);
+        $reqBadUuid = new Request([], [], [], [], [], ['HTTP_X_JAMBO_SIGNATURE' => $sigBadUuid], (string) $payloadBadUuid);
+        $respBadUuid = $controller->hook($reqBadUuid);
+        $this->assertSame(422, $respBadUuid->getStatusCode());
+        $this->assertSame('INVALID_PROJECT_UUID', json_decode((string) $respBadUuid->getContent(), true)['code']);
+
+        // Non-existent UUID
+        $uuid = '00000000-0000-0000-0000-000000000000';
+        $projects->method('findOneBy')->with(['uuid' => $uuid])->willReturn(null);
+        $payloadMissing = json_encode(['project_uuid' => $uuid]);
+        $sigMissing = 'sha256=' . hash_hmac('sha256', (string) $payloadMissing, $secret);
+        $reqMissing = new Request([], [], [], [], [], ['HTTP_X_JAMBO_SIGNATURE' => $sigMissing], (string) $payloadMissing);
+        $respMissing = $controller->hook($reqMissing);
+        $this->assertSame(404, $respMissing->getStatusCode());
+        $this->assertSame('PROJECT_NOT_FOUND', json_decode((string) $respMissing->getContent(), true)['code']);
+    }
+
+    public function testDeploymentHookSupportsHubSignatureHeader(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $deployments = $this->createMock(DeploymentRepository::class);
+        $projects = $this->createMock(ProjectRepository::class);
+        $auditService = $this->createMock(AuditService::class);
+
+        $secret = 'secret-deployment-key-32-chars!!';
+        $_ENV['DEPLOY_WEBHOOK_SECRET'] = $secret;
+
+        $controller = new DeploymentController($em, $deployments, $projects, null, null, null, $auditService);
+
+        $payload = json_encode([
+            'branch' => 'main',
+            'commit_sha' => '43fd50de9fc627ce480a09a92fc98a085c341adb',
+            'status' => 'succeeded',
+            'environment' => 'production',
+        ]);
+        $sig = 'sha256=' . hash_hmac('sha256', (string) $payload, $secret);
+        // Using X-Hub-Signature-256 instead of X-Jambo-Signature
+        $req = new Request([], [], [], [], [], ['HTTP_X_HUB_SIGNATURE_256' => $sig], (string) $payload);
+
+        $response = $controller->hook($req);
+        $this->assertSame(201, $response->getStatusCode());
+    }
+
+    public function testDeploymentIndexFilterByProject(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $deployments = $this->createMock(DeploymentRepository::class);
+        $projects = $this->createMock(ProjectRepository::class);
+
+        $project = new Project();
+        $project->id = 10;
+        $uuid = '11111111-2222-3333-4444-555555555555';
+        $projects->method('findOneBy')->with(['uuid' => $uuid])->willReturn($project);
+
+        $d = new Deployment();
+        $d->branch = 'feature-x';
+        $deployments->method('findForProject')->with($project, 25)->willReturn([$d]);
+
+        $controller = new DeploymentController($em, $deployments, $projects);
+        $user = new User();
+        $user->roles = ['ROLE_SUPER_ADMIN'];
+        $controller->setContainer($this->createContainerWithUser($user, true));
+
+        $request = new Request(['project' => $uuid]);
+        $response = $controller->index($request);
+        $this->assertSame(200, $response->getStatusCode());
+        $data = json_decode((string) $response->getContent(), true)['data'];
+        $this->assertCount(1, $data);
+        $this->assertSame('feature-x', $data[0]['branch']);
+    }
+
+    public function testPublicShareIncludesSurrogateAndRobotsHeaders(): void
+    {
+        $shareService = $this->createMock(ShareService::class);
+        $formatter = $this->createMock(EavDataFormatterService::class);
+
+        $controller = new PublicShareController($shareService, $formatter);
+        $response = $controller->show('jbo_share_unknown_token', 'json', new Request());
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertSame('no-store', $response->headers->get('Surrogate-Control'));
+        $this->assertSame('noindex, nofollow, noarchive, nosnippet', $response->headers->get('X-Robots-Tag'));
+    }
+
+    public function testCollectionTemplateRejectsMissingFieldNameOrSlug(): void
+    {
+        $templateRepo = $this->createMock(CollectionTemplateRepository::class);
+        $collectionRepo = $this->createMock(CollectionRepository::class);
+        $projectRepo = $this->createMock(ProjectRepository::class);
+        $em = $this->createMock(EntityManagerInterface::class);
+
+        $controller = new CollectionTemplateController($templateRepo, $collectionRepo, $projectRepo, $em);
+        $user = new User();
+        $controller->setContainer($this->createContainerWithUser($user, true));
+
+        // Missing field name
+        $reqNoName = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Template with empty field name',
+            'fields' => [
+                ['name' => '', 'slug' => 'valid_slug', 'type' => 'text'],
+            ],
+        ]));
+        $respNoName = $controller->create($reqNoName);
+        $this->assertSame(422, $respNoName->getStatusCode());
+        $this->assertSame('FIELD_NAME_REQUIRED', json_decode((string) $respNoName->getContent(), true)['code']);
+
+        // Missing field slug
+        $reqNoSlug = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Template with empty field slug',
+            'fields' => [
+                ['name' => 'Valid Name', 'slug' => '', 'type' => 'text'],
+            ],
+        ]));
+        $respNoSlug = $controller->create($reqNoSlug);
+        $this->assertSame(422, $respNoSlug->getStatusCode());
+        $this->assertSame('FIELD_SLUG_REQUIRED', json_decode((string) $respNoSlug->getContent(), true)['code']);
+
+        // Invalid field slug
+        $reqBadSlug = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'Template with invalid field slug',
+            'fields' => [
+                ['name' => 'Valid Name', 'slug' => 'slug with spaces & symbols!', 'type' => 'text'],
+            ],
+        ]));
+        $respBadSlug = $controller->create($reqBadSlug);
+        $this->assertSame(422, $respBadSlug->getStatusCode());
+        $this->assertSame('INVALID_FIELD_SLUG', json_decode((string) $respBadSlug->getContent(), true)['code']);
+    }
+
+    public function testCollectionTemplateRejectsSaveFromDeletedCollection(): void
+    {
+        $templateRepo = $this->createMock(CollectionTemplateRepository::class);
+        $collectionRepo = $this->createMock(CollectionRepository::class);
+        $projectRepo = $this->createMock(ProjectRepository::class);
+        $em = $this->createMock(EntityManagerInterface::class);
+
+        $uuid = '22222222-3333-4444-5555-666666666666';
+        $project = new Project();
+        $project->id = 5;
+        $projectRepo->method('findOneBy')->with(['uuid' => $uuid])->willReturn($project);
+
+        $collection = new Collection();
+        $collection->deletedAt = new \DateTimeImmutable();
+        $collectionRepo->method('findOneByProjectAndSlug')->willReturn($collection);
+
+        $controller = new CollectionTemplateController($templateRepo, $collectionRepo, $projectRepo, $em, $this->createTranslatorMock());
+        $user = new User();
+        $controller->setContainer($this->createContainerWithUser($user, true));
+
+        $response = $controller->saveFromCollection($uuid, 'archived_collection', new Request());
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertSame('template.collection_not_found', json_decode((string) $response->getContent(), true)['error']);
+    }
 }

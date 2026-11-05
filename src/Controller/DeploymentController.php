@@ -31,6 +31,7 @@ class DeploymentController extends AbstractController
     public const MAX_URL_LENGTH = 500;
     public const MAX_IMAGE_LENGTH = 500;
     public const MAX_ERROR_LENGTH = 2048;
+    public const MIN_SECRET_LENGTH = 16;
 
     private const SECURITY_HEADERS = [
         'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
@@ -114,7 +115,30 @@ class DeploymentController extends AbstractController
         }
 
         $limit = min(100, max(1, $request->query->getInt('limit', 25)));
-        $deployments = $this->deployments->findRecent($limit);
+
+        $projectUuid = $request->query->get('project') ?: $request->query->get('project_uuid');
+        if ($projectUuid !== null && is_string($projectUuid) && trim($projectUuid) !== '') {
+            $pUuid = trim($projectUuid);
+            if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $pUuid)) {
+                return new JsonResponse([
+                    'error' => $this->trans('deployment.invalid_project_uuid', [], 'Invalid project UUID format.'),
+                    'code' => 'INVALID_PROJECT_UUID',
+                ], 422, self::SECURITY_HEADERS);
+            }
+            $project = $this->projects->findOneBy(['uuid' => $pUuid]);
+            if ($project === null) {
+                return new JsonResponse([
+                    'error' => $this->trans('deployment.project_not_found', [], 'Project not found.'),
+                    'code' => 'PROJECT_NOT_FOUND',
+                ], 404, self::SECURITY_HEADERS);
+            }
+            if (!$this->isGranted('ROLE_SUPER_ADMIN')) {
+                $this->denyAccessUnlessGranted('project.view', $project);
+            }
+            $deployments = $this->deployments->findForProject($project, $limit);
+        } else {
+            $deployments = $this->deployments->findRecent($limit);
+        }
 
         return new JsonResponse([
             'data' => array_map(fn (Deployment $d) => $this->serialize($d), $deployments),
@@ -125,7 +149,7 @@ class DeploymentController extends AbstractController
      * Webhook signé HMAC-SHA256 appelé par le workflow GitHub Actions.
      *
      * Le secret partagé est lu dans `DEPLOY_WEBHOOK_SECRET`. La signature
-     * arrive dans le header `X-Jambo-Signature: sha256=<hex>`.
+     * arrive dans le header `X-Jambo-Signature: sha256=<hex>` ou `X-Hub-Signature-256: sha256=<hex>`.
      */
     #[Route('/api/deployments/hook', name: 'deployments_hook', methods: ['POST'])]
     public function hook(Request $request): JsonResponse
@@ -140,10 +164,17 @@ class DeploymentController extends AbstractController
             }
         }
 
-        $secret = $_ENV['DEPLOY_WEBHOOK_SECRET'] ?? '';
-        if (!is_string($secret) || $secret === '') {
+        $secret = (string) ($_ENV['DEPLOY_WEBHOOK_SECRET'] ?? $_SERVER['DEPLOY_WEBHOOK_SECRET'] ?? '');
+        if ($secret === '') {
             return new JsonResponse([
                 'error' => $this->trans('deployment.webhook_disabled', [], 'Deployment webhook disabled: DEPLOY_WEBHOOK_SECRET not configured.'),
+                'code' => 'WEBHOOK_DISABLED',
+            ], 503, self::SECURITY_HEADERS);
+        }
+
+        if (strlen($secret) < self::MIN_SECRET_LENGTH) {
+            return new JsonResponse([
+                'error' => $this->trans('deployment.secret_too_short', [], 'Deployment webhook secret is too short (min 16 characters).'),
                 'code' => 'WEBHOOK_DISABLED',
             ], 503, self::SECURITY_HEADERS);
         }
@@ -156,8 +187,10 @@ class DeploymentController extends AbstractController
             ], 413, self::SECURITY_HEADERS);
         }
 
-        $signature = (string) $request->headers->get('X-Jambo-Signature', '');
+        $signature = (string) ($request->headers->get('X-Jambo-Signature') ?: $request->headers->get('X-Hub-Signature-256') ?: '');
         if (!str_starts_with($signature, 'sha256=')) {
+            // Anti-timing: perform dummy hash calculation before returning
+            hash_hmac('sha256', $payload, $secret);
             return new JsonResponse([
                 'error' => $this->trans('deployment.signature_missing', [], 'Signature header missing.'),
                 'code' => 'SIGNATURE_MISSING',
@@ -165,6 +198,15 @@ class DeploymentController extends AbstractController
         }
         $expected = 'sha256=' . hash_hmac('sha256', $payload, $secret);
         if (!hash_equals($expected, $signature)) {
+            $this->auditService?->log(
+                toolName: 'deployment_hook_auth',
+                project: null,
+                input: ['ip' => $request->getClientIp()],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Invalid signature',
+                source: 'webhook',
+            );
             return new JsonResponse([
                 'error' => $this->trans('deployment.signature_invalid', [], 'Invalid signature.'),
                 'code' => 'SIGNATURE_INVALID',
@@ -180,32 +222,58 @@ class DeploymentController extends AbstractController
         }
         $data = $decoded;
 
-        $environment = in_array($data['environment'] ?? '', [
-            Deployment::ENV_PREVIEW,
-            Deployment::ENV_STAGING,
-            Deployment::ENV_PRODUCTION,
-        ], true) ? $data['environment'] : Deployment::ENV_PREVIEW;
+        $rawEnv = $data['environment'] ?? null;
+        if ($rawEnv !== null && $rawEnv !== '') {
+            if (!in_array($rawEnv, [
+                Deployment::ENV_PREVIEW,
+                Deployment::ENV_STAGING,
+                Deployment::ENV_PRODUCTION,
+            ], true)) {
+                return new JsonResponse([
+                    'error' => $this->trans('deployment.invalid_environment', ['%env%' => (string) $rawEnv], "Invalid deployment environment: {$rawEnv}."),
+                    'code' => 'INVALID_ENVIRONMENT',
+                ], 422, self::SECURITY_HEADERS);
+            }
+            $environment = (string) $rawEnv;
+        } else {
+            $environment = Deployment::ENV_PREVIEW;
+        }
 
-        $status = in_array($data['status'] ?? '', [
-            Deployment::STATUS_PENDING,
-            Deployment::STATUS_RUNNING,
-            Deployment::STATUS_SUCCEEDED,
-            Deployment::STATUS_FAILED,
-            Deployment::STATUS_CANCELED,
-        ], true) ? $data['status'] : Deployment::STATUS_PENDING;
+        $rawStatus = $data['status'] ?? null;
+        if ($rawStatus !== null && $rawStatus !== '') {
+            if (!in_array($rawStatus, [
+                Deployment::STATUS_PENDING,
+                Deployment::STATUS_RUNNING,
+                Deployment::STATUS_SUCCEEDED,
+                Deployment::STATUS_FAILED,
+                Deployment::STATUS_CANCELED,
+            ], true)) {
+                return new JsonResponse([
+                    'error' => $this->trans('deployment.invalid_status', ['%status%' => (string) $rawStatus], "Invalid deployment status: {$rawStatus}."),
+                    'code' => 'INVALID_STATUS',
+                ], 422, self::SECURITY_HEADERS);
+            }
+            $status = (string) $rawStatus;
+        } else {
+            $status = Deployment::STATUS_PENDING;
+        }
 
         $commitSha = trim((string) ($data['commit_sha'] ?? ''));
-        if ($commitSha !== '' && !preg_match('/^[a-fA-F0-9]{4,40}$/', $commitSha)) {
-            return new JsonResponse([
-                'error' => $this->trans('deployment.invalid_commit_sha', [], 'Invalid commit SHA format.'),
-                'code' => 'INVALID_COMMIT_SHA',
-            ], 422, self::SECURITY_HEADERS);
+        if ($commitSha !== '') {
+            if (!preg_match('/^[a-fA-F0-9]{4,40}$/', $commitSha)) {
+                return new JsonResponse([
+                    'error' => $this->trans('deployment.invalid_commit_sha', [], 'Invalid commit SHA format.'),
+                    'code' => 'INVALID_COMMIT_SHA',
+                ], 422, self::SECURITY_HEADERS);
+            }
+            $commitSha = strtolower($commitSha);
         }
 
         $branch = isset($data['branch']) ? trim((string) $data['branch']) : null;
         if ($branch !== null && $branch !== '') {
             if (strlen($branch) > self::MAX_BRANCH_LENGTH
-                || preg_match('/[\r\n\x00-\x1F\x7F~^:?*\[\]\\\]|\.\.|\/\/|^[\/\.\-]|[\/\.]$|@\{/', $branch)
+                || preg_match('/[\r\n\x00-\x1F\x7F~^:?*\[\]\\\]|\.\.|\/\/|^[\/\.\-]|[\/\.]$|@\{|\.lock$/', $branch)
+                || preg_match('/\s/', $branch)
             ) {
                 return new JsonResponse([
                     'error' => $this->trans('deployment.invalid_branch', [], 'Invalid branch name.'),
@@ -287,6 +355,28 @@ class DeploymentController extends AbstractController
             $errorMessage = substr($sanitizedErr, 0, self::MAX_ERROR_LENGTH);
         }
 
+        $project = null;
+        if (!empty($data['project_uuid'])) {
+            $pUuid = trim((string) $data['project_uuid']);
+            if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $pUuid)) {
+                return new JsonResponse([
+                    'error' => $this->trans('deployment.invalid_project_uuid', [], 'Invalid project UUID format.'),
+                    'code' => 'INVALID_PROJECT_UUID',
+                ], 422, self::SECURITY_HEADERS);
+            }
+            try {
+                $project = $this->projects->findOneBy(['uuid' => $pUuid]);
+            } catch (\Throwable) {
+                $project = null;
+            }
+            if ($project === null) {
+                return new JsonResponse([
+                    'error' => $this->trans('deployment.project_not_found', [], 'Project not found.'),
+                    'code' => 'PROJECT_NOT_FOUND',
+                ], 404, self::SECURITY_HEADERS);
+            }
+        }
+
         $deployment = new Deployment();
         $deployment->commitSha = substr($commitSha, 0, 40);
         $deployment->branch = $branch;
@@ -296,23 +386,10 @@ class DeploymentController extends AbstractController
         $deployment->previewUrl = $previewUrl;
         $deployment->runUrl = $runUrl;
         $deployment->errorMessage = $errorMessage;
+        $deployment->project = $project;
 
         if (in_array($status, [Deployment::STATUS_SUCCEEDED, Deployment::STATUS_FAILED, Deployment::STATUS_CANCELED], true)) {
             $deployment->finishedAt = new \DateTimeImmutable();
-        }
-
-        if (!empty($data['project_uuid'])) {
-            $pUuid = trim((string) $data['project_uuid']);
-            if (preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $pUuid)) {
-                try {
-                    $project = $this->projects->findOneBy(['uuid' => $pUuid]);
-                    if ($project) {
-                        $deployment->project = $project;
-                    }
-                } catch (\Throwable) {
-                    // Ignore malformed project uuid
-                }
-            }
         }
 
         $this->em->persist($deployment);
