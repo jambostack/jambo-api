@@ -3570,4 +3570,19 @@ return [
     'flow.action.send_notification.description' => 'Crée une notification interne dans le système',
     'audit.retention_purged' => 'Nettoyage et purge des journaux d\'audit et de rétention terminés avec succès.',
     'audit.purge_dry_run' => '[SIMULATION] Enregistrements éligibles à la purge',
+
+    // ─── Cycle 82: Rétention des journaux opérationnels et purge multi-tenant ───
+    'cli.purge_logs.description' => 'Purger les anciens journaux d\'audit, logs de webhooks, logs d\'emails, exécutions de flows et notifications lues selon les politiques de rétention',
+    'cli.purge_logs.project_not_found' => 'Le projet "%identifier%" est introuvable.',
+    'cli.purge_logs.prefix_dry_run' => '[SIMULATION] Enregistrements éligibles à la purge',
+    'cli.purge_logs.prefix_completed' => 'Nettoyage et rétention des journaux d\'audit et opérationnels terminés',
+    'cli.purge_logs.scoped_to_project' => 'Limité au projet : %name% (%uuid%)',
+    'cli.purge_logs.audit_summary' => '- Journaux d\'audit de plus de %days% jours : %count%',
+    'cli.purge_logs.webhook_summary' => '- Logs de webhooks de plus de %days% jours : %count%',
+    'cli.purge_logs.email_summary' => '- Logs d\'emails de plus de %days% jours : %count%',
+    'cli.purge_logs.automation_summary' => '- Exécutions d\'automatisations de plus de %days% jours : %count%',
+    'cli.purge_logs.notification_summary' => '- Notifications lues de plus de %days% jours : %count%',
+    'cli.purge_logs.total_summary' => '- Total : %total% enregistrements %action%',
+    'cli.purge_logs.identified' => 'identifiés',
+    'cli.purge_logs.purged' => 'purgés',
 ];

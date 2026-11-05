@@ -7,6 +7,7 @@ use App\Entity\User;
 use App\Enum\ProjectMemberStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Symfony\Component\Uid\Uuid;
 
 /**
  * @extends ServiceEntityRepository<Project>
@@ -37,5 +38,32 @@ class ProjectRepository extends ServiceEntityRepository
             ->orderBy('p.name', 'ASC')
             ->getQuery()
             ->getResult();
+    }
+
+    /**
+     * Trouve un projet par son UUID (RFC 4122), son ID numérique ou son nom exact.
+     */
+    public function findByIdentifier(string $identifier): ?Project
+    {
+        $identifier = trim($identifier);
+        if ($identifier === '') {
+            return null;
+        }
+
+        if (Uuid::isValid($identifier)) {
+            $project = $this->findOneBy(['uuid' => Uuid::fromString($identifier)]);
+            if ($project !== null) {
+                return $project;
+            }
+        }
+
+        if (ctype_digit($identifier)) {
+            $project = $this->find((int) $identifier);
+            if ($project !== null) {
+                return $project;
+            }
+        }
+
+        return $this->findOneBy(['name' => $identifier]);
     }
 }

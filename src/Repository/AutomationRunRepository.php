@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\Automation;
 use App\Entity\AutomationRun;
+use App\Entity\Project;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -38,28 +39,40 @@ class AutomationRunRepository extends ServiceEntityRepository
     }
 
     /**
-     * Supprime les exécutions d'automatisation antérieures au seuil de rétention spécifié.
+     * Supprime les exécutions d'automatisation antérieures au seuil de rétention spécifié,
+     * avec filtrage optionnel par projet (tenant).
      */
-    public function deleteOlderThan(\DateTimeImmutable $threshold): int
+    public function deleteOlderThan(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('r')
+        $qb = $this->createQueryBuilder('r')
             ->delete()
             ->where('r.startedAt < :threshold')
-            ->setParameter('threshold', $threshold)
-            ->getQuery()
-            ->execute();
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $qb->andWhere('r.automation IN (SELECT auto.id FROM App\Entity\Automation auto WHERE auto.project = :project)')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->execute();
     }
 
     /**
-     * Compte les exécutions d'automatisation antérieures au seuil de rétention (mode dry-run).
+     * Compte les exécutions d'automatisation antérieures au seuil de rétention (mode dry-run),
+     * avec filtrage optionnel par projet (tenant).
      */
-    public function countOlderThan(\DateTimeImmutable $threshold): int
+    public function countOlderThan(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('r')
+        $qb = $this->createQueryBuilder('r')
             ->select('COUNT(r.id)')
             ->where('r.startedAt < :threshold')
-            ->setParameter('threshold', $threshold)
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $qb->andWhere('r.automation IN (SELECT auto.id FROM App\Entity\Automation auto WHERE auto.project = :project)')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 }

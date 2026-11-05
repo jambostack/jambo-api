@@ -3552,4 +3552,19 @@ return [
     'flow.action.send_notification.description' => 'Creates an internal notification in the system',
     'audit.retention_purged' => 'Audit and log retention cleanup completed successfully.',
     'audit.purge_dry_run' => '[DRY RUN] Records eligible for purge',
+
+    // ─── Cycle 82: Operational Log Retention & Tenant-Scoped Purge ───
+    'cli.purge_logs.description' => 'Purge old audit logs, webhook logs, email logs, automation runs, and read notifications according to retention policies',
+    'cli.purge_logs.project_not_found' => 'Project "%identifier%" was not found.',
+    'cli.purge_logs.prefix_dry_run' => '[DRY RUN] Records eligible for purge',
+    'cli.purge_logs.prefix_completed' => 'Audit and operational log retention cleanup completed',
+    'cli.purge_logs.scoped_to_project' => 'Scoped to project: %name% (%uuid%)',
+    'cli.purge_logs.audit_summary' => '- Audit logs older than %days% days: %count%',
+    'cli.purge_logs.webhook_summary' => '- Webhook logs older than %days% days: %count%',
+    'cli.purge_logs.email_summary' => '- Email logs older than %days% days: %count%',
+    'cli.purge_logs.automation_summary' => '- Automation runs older than %days% days: %count%',
+    'cli.purge_logs.notification_summary' => '- Read notifications older than %days% days: %count%',
+    'cli.purge_logs.total_summary' => '- Total: %total% records %action%',
+    'cli.purge_logs.identified' => 'identified',
+    'cli.purge_logs.purged' => 'purged',
 ];

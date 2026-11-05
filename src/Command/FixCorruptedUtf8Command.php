@@ -44,7 +44,7 @@ class FixCorruptedUtf8Command extends Command
         $limit  = (int) $input->getOption('limit');
 
         // Probleme : U+FFFD en UTF-8 = 0xEF 0xBF 0xBD
-        $isSqlite = $this->connection->getDatabasePlatform() instanceof \Doctrine\DBAL\Platforms\SqlitePlatform;
+        $isSqlite = $this->connection->getDatabasePlatform() instanceof \Doctrine\DBAL\Platforms\SQLitePlatform;
         if ($isSqlite) {
             $sql = "SELECT id, text_value FROM content_field_value WHERE instr(text_value, '\u{FFFD}') > 0 ORDER BY id";
         } else {

@@ -50,7 +50,7 @@ class Cycle53RealtimeMercureSecurityTest extends WebTestCase
         return $project;
     }
 
-    private function addMember(User $user, Project $project, string $memberEmail = null): ProjectMember
+    private function addMember(User $user, Project $project, ?string $memberEmail = null): ProjectMember
     {
         $em     = self::getContainer()->get(EntityManagerInterface::class);
         $member = new ProjectMember();

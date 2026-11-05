@@ -2,6 +2,7 @@
 
 namespace App\Repository;
 
+use App\Entity\Project;
 use App\Entity\Webhook;
 use App\Entity\WebhookLog;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
@@ -41,28 +42,40 @@ class WebhookLogRepository extends ServiceEntityRepository
     }
 
     /**
-     * Supprime les logs de webhook antérieurs au seuil de rétention spécifié.
+     * Supprime les logs de webhook antérieurs au seuil de rétention spécifié,
+     * avec filtrage optionnel par projet (tenant).
      */
-    public function deleteOlderThan(\DateTimeImmutable $threshold): int
+    public function deleteOlderThan(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('l')
+        $qb = $this->createQueryBuilder('l')
             ->delete()
             ->where('l.createdAt < :threshold')
-            ->setParameter('threshold', $threshold)
-            ->getQuery()
-            ->execute();
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $qb->andWhere('l.webhook IN (SELECT w.id FROM App\Entity\Webhook w WHERE w.project = :project)')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->execute();
     }
 
     /**
-     * Compte les logs de webhook antérieurs au seuil de rétention (mode dry-run).
+     * Compte les logs de webhook antérieurs au seuil de rétention (mode dry-run),
+     * avec filtrage optionnel par projet (tenant).
      */
-    public function countOlderThan(\DateTimeImmutable $threshold): int
+    public function countOlderThan(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('l')
+        $qb = $this->createQueryBuilder('l')
             ->select('COUNT(l.id)')
             ->where('l.createdAt < :threshold')
-            ->setParameter('threshold', $threshold)
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $qb->andWhere('l.webhook IN (SELECT w.id FROM App\Entity\Webhook w WHERE w.project = :project)')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 }

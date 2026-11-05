@@ -69,28 +69,40 @@ class AuditLogRepository extends ServiceEntityRepository
     }
 
     /**
-     * Supprime les logs d'audit antérieurs au seuil de rétention spécifié.
+     * Supprime les logs d'audit antérieurs au seuil de rétention spécifié,
+     * avec filtrage optionnel par projet (tenant).
      */
-    public function deleteOlderThan(\DateTimeImmutable $threshold): int
+    public function deleteOlderThan(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('a')
+        $qb = $this->createQueryBuilder('a')
             ->delete()
             ->where('a.createdAt < :threshold')
-            ->setParameter('threshold', $threshold)
-            ->getQuery()
-            ->execute();
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $qb->andWhere('a.project = :project')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->execute();
     }
 
     /**
-     * Compte les logs d'audit antérieurs au seuil de rétention (mode dry-run).
+     * Compte les logs d'audit antérieurs au seuil de rétention (mode dry-run),
+     * avec filtrage optionnel par projet (tenant).
      */
-    public function countOlderThan(\DateTimeImmutable $threshold): int
+    public function countOlderThan(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('a')
+        $qb = $this->createQueryBuilder('a')
             ->select('COUNT(a.id)')
             ->where('a.createdAt < :threshold')
-            ->setParameter('threshold', $threshold)
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $qb->andWhere('a.project = :project')
+               ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 }

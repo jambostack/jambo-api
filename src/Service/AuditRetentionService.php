@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Entity\Project;
 use App\Repository\AuditLogRepository;
 use App\Repository\AutomationRunRepository;
 use App\Repository\EmailLogRepository;
@@ -32,9 +33,10 @@ class AuditRetentionService
     ) {}
 
     /**
-     * Purge ou compte (si $dryRun = true) les logs selon les durées de rétention spécifiées.
+     * Purge ou compte (si $dryRun = true) les logs selon les durées de rétention spécifiées,
+     * avec filtrage optionnel par tenant/projet.
      *
-     * @return array{audit: int, webhook: int, email: int, automation: int, notification: int, total: int, dry_run: bool}
+     * @return array{audit: int, webhook: int, email: int, automation: int, notification: int, total: int, dry_run: bool, project_id: int|null, project_uuid: string|null}
      */
     public function purgeLogs(
         int $auditDays = self::DEFAULT_AUDIT_DAYS,
@@ -43,6 +45,7 @@ class AuditRetentionService
         int $automationDays = self::DEFAULT_AUTOMATION_DAYS,
         bool $dryRun = false,
         int $notificationDays = self::DEFAULT_NOTIFICATION_DAYS,
+        ?Project $project = null,
     ): array {
         $now = new \DateTimeImmutable();
         $auditThreshold        = $now->modify(sprintf('-%d days', max(1, $auditDays)));
@@ -52,17 +55,17 @@ class AuditRetentionService
         $notificationThreshold = $now->modify(sprintf('-%d days', max(1, $notificationDays)));
 
         if ($dryRun) {
-            $auditCount        = $this->auditRepo->countOlderThan($auditThreshold);
-            $webhookCount      = $this->webhookRepo->countOlderThan($webhookThreshold);
-            $emailCount        = $this->emailRepo->countOlderThan($emailThreshold);
-            $automationCount   = $this->automationRepo->countOlderThan($automationThreshold);
-            $notificationCount = $this->notificationRepo !== null ? $this->notificationRepo->countReadOlderThan($notificationThreshold) : 0;
+            $auditCount        = $this->auditRepo->countOlderThan($auditThreshold, $project);
+            $webhookCount      = $this->webhookRepo->countOlderThan($webhookThreshold, $project);
+            $emailCount        = $this->emailRepo->countOlderThan($emailThreshold, $project);
+            $automationCount   = $this->automationRepo->countOlderThan($automationThreshold, $project);
+            $notificationCount = $this->notificationRepo !== null ? $this->notificationRepo->countReadOlderThan($notificationThreshold, $project) : 0;
         } else {
-            $auditCount        = $this->auditRepo->deleteOlderThan($auditThreshold);
-            $webhookCount      = $this->webhookRepo->deleteOlderThan($webhookThreshold);
-            $emailCount        = $this->emailRepo->deleteOlderThan($emailThreshold);
-            $automationCount   = $this->automationRepo->deleteOlderThan($automationThreshold);
-            $notificationCount = $this->notificationRepo !== null ? $this->notificationRepo->deleteReadOlderThan($notificationThreshold) : 0;
+            $auditCount        = $this->auditRepo->deleteOlderThan($auditThreshold, $project);
+            $webhookCount      = $this->webhookRepo->deleteOlderThan($webhookThreshold, $project);
+            $emailCount        = $this->emailRepo->deleteOlderThan($emailThreshold, $project);
+            $automationCount   = $this->automationRepo->deleteOlderThan($automationThreshold, $project);
+            $notificationCount = $this->notificationRepo !== null ? $this->notificationRepo->deleteReadOlderThan($notificationThreshold, $project) : 0;
 
             $this->logger->info('Audit, operational log and notification retention purge executed', [
                 'audit_purged'        => $auditCount,
@@ -70,6 +73,8 @@ class AuditRetentionService
                 'email_purged'        => $emailCount,
                 'automation_purged'   => $automationCount,
                 'notification_purged' => $notificationCount,
+                'project_id'          => $project?->id,
+                'project_uuid'        => $project?->uuid?->toRfc4122(),
             ]);
         }
 
@@ -83,6 +88,8 @@ class AuditRetentionService
             'notification' => $notificationCount,
             'total'        => $total,
             'dry_run'      => $dryRun,
+            'project_id'   => $project?->id,
+            'project_uuid' => $project?->uuid?->toRfc4122(),
         ];
     }
 }

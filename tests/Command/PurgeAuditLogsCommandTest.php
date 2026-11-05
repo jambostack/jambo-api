@@ -19,15 +19,18 @@ class PurgeAuditLogsCommandTest extends TestCase
                 webhookDays: 14,
                 emailDays: 14,
                 automationDays: 14,
-                dryRun: false
+                dryRun: false,
+                notificationDays: 60,
+                project: null
             )
             ->willReturn([
-                'audit'      => 10,
-                'webhook'    => 5,
-                'email'      => 3,
-                'automation' => 8,
-                'total'      => 26,
-                'dry_run'    => false,
+                'audit'        => 10,
+                'webhook'      => 5,
+                'email'        => 3,
+                'automation'   => 8,
+                'notification' => 0,
+                'total'        => 26,
+                'dry_run'      => false,
             ]);
 
         $command = new PurgeAuditLogsCommand($service);
@@ -42,7 +45,7 @@ class PurgeAuditLogsCommandTest extends TestCase
 
         $this->assertSame(0, $status);
         $output = $tester->getDisplay();
-        $this->assertStringContainsString('Audit and log retention cleanup completed', $output);
+        $this->assertStringContainsString('Audit and operational log retention cleanup completed', $output);
         $this->assertStringContainsString('Audit logs older than 60 days: 10', $output);
         $this->assertStringContainsString('Webhook logs older than 14 days: 5', $output);
         $this->assertStringContainsString('Email logs older than 14 days: 3', $output);
@@ -60,15 +63,18 @@ class PurgeAuditLogsCommandTest extends TestCase
                 webhookDays: 30,
                 emailDays: 30,
                 automationDays: 30,
-                dryRun: true
+                dryRun: true,
+                notificationDays: 60,
+                project: null
             )
             ->willReturn([
-                'audit'      => 42,
-                'webhook'    => 12,
-                'email'      => 7,
-                'automation' => 15,
-                'total'      => 76,
-                'dry_run'    => true,
+                'audit'        => 42,
+                'webhook'      => 12,
+                'email'        => 7,
+                'automation'   => 15,
+                'notification' => 0,
+                'total'        => 76,
+                'dry_run'      => true,
             ]);
 
         $command = new PurgeAuditLogsCommand($service);

@@ -3552,4 +3552,19 @@ return [
     'flow.action.send_notification.description' => 'Crea una notificación interna en el sistema',
     'audit.retention_purged' => 'Limpieza y retención de registros de auditoría completada con éxito.',
     'audit.purge_dry_run' => '[SIMULACIÓN] Registros aptos para purga',
+
+    // ─── Cycle 82: Retención de registros operativos y purga multi-tenant ───
+    'cli.purge_logs.description' => 'Purgar registros de auditoría antiguos, registros de webhooks, correos electrónicos, ejecuciones de automatización y notificaciones leídas según las políticas de retención',
+    'cli.purge_logs.project_not_found' => 'No se encontró el proyecto "%identifier%".',
+    'cli.purge_logs.prefix_dry_run' => '[SIMULACIÓN] Registros aptos para purga',
+    'cli.purge_logs.prefix_completed' => 'Limpieza y retención de registros de auditoría y operacionales completada',
+    'cli.purge_logs.scoped_to_project' => 'Limitado al proyecto: %name% (%uuid%)',
+    'cli.purge_logs.audit_summary' => '- Registros de auditoría con más de %days% días: %count%',
+    'cli.purge_logs.webhook_summary' => '- Registros de webhooks con más de %days% días: %count%',
+    'cli.purge_logs.email_summary' => '- Registros de correos con más de %days% días: %count%',
+    'cli.purge_logs.automation_summary' => '- Ejecuciones de automatización con más de %days% días: %count%',
+    'cli.purge_logs.notification_summary' => '- Notificaciones leídas con más de %days% días: %count%',
+    'cli.purge_logs.total_summary' => '- Total: %total% registros %action%',
+    'cli.purge_logs.identified' => 'identificados',
+    'cli.purge_logs.purged' => 'purgados',
 ];

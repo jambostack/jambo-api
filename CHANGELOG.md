@@ -7,6 +7,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.146] — 2026-11-05
+
+### Security, Multi-tenant Isolation & I18n Hardening — Operational Log Retention & Tenant-Scoped Purge (Cycle #82)
+- **Tenant-Scoped Operational Log Retention & Purge**:
+  - Enhanced `AuditRetentionService::purgeLogs()` with optional tenant/project filtering (`?Project $project = null`).
+  - Added project filtering and context tracking in logging: `project_id` and `project_uuid` recorded for all retention purge runs.
+  - Hardened `AuditLogRepository`, `EmailLogRepository`, `WebhookLogRepository`, `AutomationRunRepository`, and `NotificationRepository` with optional tenant scoping in `deleteOlderThan` and `countOlderThan`.
+  - Scoped webhook logs and automation runs via DQL subqueries matching parent entity project relations (`l.webhook IN (SELECT w.id FROM App\Entity\Webhook w WHERE w.project = :project)` and `r.automation IN (SELECT auto.id FROM App\Entity\Automation auto WHERE auto.project = :project)`).
+  - Scoped read notifications via dual-link pattern matching (`link LIKE %projectUuid%` or `link LIKE %/projects/{projectId}/%`).
+- **Command & CLI Hardening (`app:purge-audit-logs`)**:
+  - Added `-p, --project` option to `PurgeAuditLogsCommand` allowing operators to safely execute log retention purge for an isolated tenant by UUID, ID, or name.
+  - Added `--notification-days` option for read notification cleanup (defaults to 60 days).
+  - Integrated `ProjectRepository::findByIdentifier()` with strict error handling if tenant is nonexistent (`cli.purge_logs.project_not_found`).
+  - Full compliance with strict I18N rule: eliminated all hardcoded strings in command execution output, using Symfony Translator and localized dictionary entries.
+- **Doctrine DBAL 5 & PHP 8.4/8.5 Compatibility**:
+  - Replaced deprecated case-mismatched `\Doctrine\DBAL\Platforms\SqlitePlatform` with canonical `\Doctrine\DBAL\Platforms\SQLitePlatform` in `ContentPurgeCommand` and `FixCorruptedUtf8Command`.
+  - Fixed implicit nullable parameter `$memberEmail` deprecation in `Cycle53RealtimeMercureSecurityTest`.
+- **Localization (i18n)**:
+  - Added 13 localized translation keys across all 4 system languages (`translations/messages.{en,fr,es,ar}.php`).
+- **Validation**:
+  - Added `Cycle82OperationalLogRetentionAndTenantPurgeTest` testing tenant-scoped purges, dry-run simulations, project routing, and strict multilingual completeness.
+
 ## [1.26.145] — 2026-11-05
 
 ### Security, Multi-tenant Isolation & I18n Hardening — Audit Logs & Notifications Integrity (Cycle #81)

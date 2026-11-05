@@ -93,7 +93,7 @@ class ContentPurgeCommand extends Command
         $input = trim(substr($input, 0, 64));
         if (strlen($input) >= 6) {
             $conn = $this->em->getConnection();
-            $isSqlite = $conn->getDatabasePlatform() instanceof \Doctrine\DBAL\Platforms\SqlitePlatform;
+            $isSqlite = $conn->getDatabasePlatform() instanceof \Doctrine\DBAL\Platforms\SQLitePlatform;
             $castExpr = $isSqlite ? "hex(uuid)" : "CAST(uuid AS TEXT)";
             $escaped = addcslashes(strtolower($input), '%_');
             $rows = $conn->fetchAllAssociative(

@@ -97,31 +97,45 @@ class NotificationRepository extends ServiceEntityRepository
     }
 
     /**
-     * Compte les notifications lues créées avant une certaine date.
+     * Compte les notifications lues créées avant une certaine date,
+     * avec filtrage optionnel par projet (tenant).
      */
-    public function countReadOlderThan(\DateTimeImmutable $threshold): int
+    public function countReadOlderThan(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('n')
+        $qb = $this->createQueryBuilder('n')
             ->select('COUNT(n.id)')
             ->where('n.readAt IS NOT NULL')
             ->andWhere('n.createdAt < :threshold')
-            ->setParameter('threshold', $threshold)
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $projectUuid = $project->uuid?->toRfc4122() ?? '';
+            $projectId = $project->id ? (string) $project->id : '';
+            $this->applyProjectFilter($qb, $projectUuid, $projectId);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
     /**
-     * Supprime les notifications lues créées avant une certaine date pour libérer l'espace.
+     * Supprime les notifications lues créées avant une certaine date pour libérer l'espace,
+     * avec filtrage optionnel par projet (tenant).
      */
-    public function deleteReadOlderThan(\DateTimeImmutable $threshold): int
+    public function deleteReadOlderThan(\DateTimeImmutable $threshold, ?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('n')
+        $qb = $this->createQueryBuilder('n')
             ->delete()
             ->where('n.readAt IS NOT NULL')
             ->andWhere('n.createdAt < :threshold')
-            ->setParameter('threshold', $threshold)
-            ->getQuery()
-            ->execute();
+            ->setParameter('threshold', $threshold);
+
+        if ($project !== null) {
+            $projectUuid = $project->uuid?->toRfc4122() ?? '';
+            $projectId = $project->id ? (string) $project->id : '';
+            $this->applyProjectFilter($qb, $projectUuid, $projectId);
+        }
+
+        return (int) $qb->getQuery()->execute();
     }
 
     private function applyProjectFilter(\Doctrine\ORM\QueryBuilder $qb, string $projectUuid, string $projectId): void

@@ -3554,4 +3554,19 @@ return [
     'flow.action.send_notification.description' => 'ينشئ إشعارًا داخليًا في النظام',
     'audit.retention_purged' => 'اكتمل تنظيف سجلات التدقيق والاحتفاظ بنجاح.',
     'audit.purge_dry_run' => '[تشغيل تجريبي] سجلات مؤهلة للحذف',
+
+    // ─── Cycle 82: Operational Log Retention & Tenant-Scoped Purge ───
+    'cli.purge_logs.description' => 'تطهير سجلات التدقيق القديمة وسجلات خطافات الويب والبريد الإلكتروني والتشغيل الآلي والإشعارات المقروءة وفق سياسات الاحتفاظ',
+    'cli.purge_logs.project_not_found' => 'المشروع "%identifier%" غير موجود.',
+    'cli.purge_logs.prefix_dry_run' => '[تشغيل تجريبي] السجلات المؤهلة للتطهير',
+    'cli.purge_logs.prefix_completed' => 'اكتمل تنظيف سجلات التدقيق والعمليات التشغيلية بنجاح',
+    'cli.purge_logs.scoped_to_project' => 'مخصص للمشروع: %name% (%uuid%)',
+    'cli.purge_logs.audit_summary' => '- سجلات التدقيق الأقدم من %days% يومًا: %count%',
+    'cli.purge_logs.webhook_summary' => '- سجلات خطافات الويب الأقدم من %days% يومًا: %count%',
+    'cli.purge_logs.email_summary' => '- سجلات البريد الإلكتروني الأقدم من %days% يومًا: %count%',
+    'cli.purge_logs.automation_summary' => '- تشغيلات الأتمتة الأقدم من %days% يومًا: %count%',
+    'cli.purge_logs.notification_summary' => '- الإشعارات المقروءة الأقدم من %days% يومًا: %count%',
+    'cli.purge_logs.total_summary' => '- الإجمالي: %total% سجل %action%',
+    'cli.purge_logs.identified' => 'تم تحديدها',
+    'cli.purge_logs.purged' => 'تم تطهيرها',
 ];
