@@ -7,6 +7,34 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.96] — 2026-11-05
+
+### AppSettingsController, RedirectController & FormController Hardening & Strict I18N
+- **AppSettingsController Hardening**:
+  - Injected Symfony `TranslatorInterface` and extracted all hardcoded error/status strings across AI model loading and app settings persistence (`app_settings.admin.*`).
+  - Added structured machine-readable error codes (`UNKNOWN_PROVIDER`, `OLLAMA_URL_NOT_CONFIGURED`, `INVALID_OLLAMA_URL`, `OLLAMA_SCHEME_FORBIDDEN`, `OLLAMA_METADATA_FORBIDDEN`, `USERINFO_FORBIDDEN`, `APP_NAME_TOO_LONG`, `APP_NAME_INVALID`, `APP_NAME_XSS_DETECTED`, `INVALID_PROVIDER_URL`, `INVALID_OIDC_ISSUER`, `INVALID_OIDC_NAME`, `DEMO_MODE_DISABLED`).
+  - Strengthened anti-SSRF defenses on Ollama endpoint resolving: strictly rejected cloud metadata IP (`169.254.169.254`, `100.100.100.200`), AWS IMDS IPv6 (`[fd00:ec2::254]`, `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `instance-data`), and evasive IP notations (dword integer `2852039166`, hex `0xa9fea9fe`, octal `0251.0372.0251.0372`).
+  - Blocked embedded credentials / userinfo in provider URLs (`user:pass@host`).
+  - Hardened `fetchUrl`: added response size capping (max 2MB) with curl buffer streaming and abort handler to prevent OOM denial-of-service.
+  - Added strict input sanitization on app name (max 100 chars, no control characters, anti-XSS protection).
+  - Hardened OIDC providers update: validated name (max 128 chars, anti-XSS) and issuer URL (must be valid HTTP/HTTPS and not target cloud metadata).
+- **RedirectController Hardening**:
+  - Added strict RFC 4122 UUID validation on `resolveProject` preventing invalid queries and returning clean localized 404 responses.
+  - Added structured machine-readable error codes across all redirect endpoints.
+  - Enhanced Open Redirect protection: blocked leading backslash evasion (`\evil.com`), URL-encoded protocol-relative evasion (`%2f%2fevil.com`, `%5c`), single-slash scheme evasion (`http:evil.com`), and path traversal sequences (`..`) in relative redirect targets (`redirect.admin.path_traversal_forbidden`).
+- **FormController Hardening**:
+  - Added strict RFC 4122 UUID validation on `resolveProject` with clean localized 404 responses.
+  - Added request payload bounding (max 512KB) on form creation and updates to prevent resource exhaustion (HTTP 413 `form.admin.payload_too_large`).
+  - Added structured machine-readable error codes across all form endpoints.
+  - Hardened form settings validation: extended anti-SSRF protections to `webhookUrl` in addition to `redirectUrl`.
+  - Sanitized submission spam filters against unexpected values.
+- **Strict I18N Parity**:
+  - Added 22 new translation keys across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+  - Strict 100% dictionary key parity maintained (2,476 keys across each of the 4 languages, 0 differences).
+- **Quality Assurance**:
+  - Created `Cycle41HardeningTest` with 13 tests and 72 assertions covering all new defenses.
+  - All unit, integration, and admin test suites passing 100% (65/65 admin tests, 55/55 cycle test suites).
+
 ## [1.26.95] — 2026-11-05
 
 ### ContentAiStreamController, ShareController, PublicShareController & InsightsController Hardening & Strict I18N

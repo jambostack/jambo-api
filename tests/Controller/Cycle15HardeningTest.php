@@ -204,9 +204,10 @@ class Cycle15HardeningTest extends WebTestCase
         file_put_contents($tempSvg, '<svg onload="alert(document.cookie)"></svg>');
         $uploadedFile = new UploadedFile($tempSvg, 'exploit.svg', 'image/svg+xml', null, true);
 
-        $request = Request::create('/api/proj-uuid/files', 'POST', [], [], ['file' => $uploadedFile]);
+        $projUuid = \Symfony\Component\Uid\Uuid::v4()->toRfc4122();
+        $request = Request::create('/api/' . $projUuid . '/files', 'POST', [], [], ['file' => $uploadedFile]);
 
-        $response = $controller->upload($request, 'proj-uuid');
+        $response = $controller->upload($request, $projUuid);
         $this->assertSame(422, $response->getStatusCode());
         $data = json_decode((string) $response->getContent(), true);
         $this->assertStringContainsString('dangerous inline event handler', $data['error']);

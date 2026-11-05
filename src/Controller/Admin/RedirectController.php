@@ -49,7 +49,7 @@ class RedirectController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('redirect.admin.project_not_found', [], 'Project not found.')], 404);
+            return $this->json(['error' => $this->trans('redirect.admin.project_not_found', [], 'Project not found.'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $project);
 
@@ -82,7 +82,7 @@ class RedirectController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('redirect.admin.project_not_found', [], 'Project not found.')], 404);
+            return $this->json(['error' => $this->trans('redirect.admin.project_not_found', [], 'Project not found.'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $project);
 
@@ -105,14 +105,14 @@ class RedirectController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('redirect.admin.project_not_found', [], 'Project not found.')], 404);
+            return $this->json(['error' => $this->trans('redirect.admin.project_not_found', [], 'Project not found.'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('redirect.admin.invalid_json', [], 'Invalid JSON payload.')], 400);
+            return $this->json(['error' => $this->trans('redirect.admin.invalid_json', [], 'Invalid JSON payload.'), 'code' => 'INVALID_JSON'], 400);
         }
 
         $fromPath = trim((string) ($data['fromPath'] ?? ''));
@@ -126,13 +126,13 @@ class RedirectController extends AbstractController
 
         $httpCode = (int) ($data['httpCode'] ?? 301);
         if (!\in_array($httpCode, [301, 302, 307, 308], true)) {
-            return $this->json(['error' => $this->trans('redirect.admin.invalid_http_code', [], 'Invalid HTTP redirect code. Allowed codes: 301, 302, 307, 308.')], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.invalid_http_code', [], 'Invalid HTTP redirect code. Allowed codes: 301, 302, 307, 308.'), 'code' => 'INVALID_HTTP_CODE'], 422);
         }
 
         $existing = $this->redirectRepo->findByProject($project);
         foreach ($existing as $ex) {
             if ($ex->fromPath === $fromPath && $ex->isPattern === $isPattern) {
-                return $this->json(['error' => $this->trans('redirect.admin.from_path_already_exists', [], 'A redirect rule for this source path already exists in this project.')], 422);
+                return $this->json(['error' => $this->trans('redirect.admin.from_path_already_exists', [], 'A redirect rule for this source path already exists in this project.'), 'code' => 'FROM_PATH_ALREADY_EXISTS'], 422);
             }
         }
 
@@ -148,10 +148,10 @@ class RedirectController extends AbstractController
         // Détection de boucle et limitation de profondeur de chaîne
         $chainAnalysis = $this->chainDetector->analyzeChain($redirect, $existing);
         if ($chainAnalysis['hasLoop']) {
-            return $this->json(['error' => $this->trans('redirect.admin.loop_detected', [], 'A redirect loop was detected (fromPath directly or indirectly redirects to itself).')], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.loop_detected', [], 'A redirect loop was detected (fromPath directly or indirectly redirects to itself).'), 'code' => 'LOOP_DETECTED'], 422);
         }
         if ($chainAnalysis['isTooLong']) {
-            return $this->json(['error' => $this->trans('redirect.admin.chain_depth_exceeded', ['%max%' => (string) RedirectChainDetector::MAX_CHAIN_HOPS], sprintf('The redirect chain exceeds the maximum allowed depth of %d hops.', RedirectChainDetector::MAX_CHAIN_HOPS))], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.chain_depth_exceeded', ['%max%' => (string) RedirectChainDetector::MAX_CHAIN_HOPS], sprintf('The redirect chain exceeds the maximum allowed depth of %d hops.', RedirectChainDetector::MAX_CHAIN_HOPS)), 'code' => 'CHAIN_DEPTH_EXCEEDED'], 422);
         }
 
         $this->em->persist($redirect);
@@ -167,7 +167,7 @@ class RedirectController extends AbstractController
     {
         $redirect = $this->redirectRepo->find($id);
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.')], 404);
+            return $this->json(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.'), 'code' => 'REDIRECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $redirect->project);
 
@@ -181,14 +181,14 @@ class RedirectController extends AbstractController
     {
         $redirect = $this->redirectRepo->find($id);
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.')], 404);
+            return $this->json(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.'), 'code' => 'REDIRECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $redirect->project);
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('redirect.admin.invalid_json', [], 'Invalid JSON payload.')], 400);
+            return $this->json(['error' => $this->trans('redirect.admin.invalid_json', [], 'Invalid JSON payload.'), 'code' => 'INVALID_JSON'], 400);
         }
 
         $fromPath = array_key_exists('fromPath', $data) ? trim((string) $data['fromPath']) : $redirect->fromPath;
@@ -203,7 +203,7 @@ class RedirectController extends AbstractController
         if (array_key_exists('httpCode', $data)) {
             $code = (int) $data['httpCode'];
             if (!\in_array($code, [301, 302, 307, 308], true)) {
-                return $this->json(['error' => $this->trans('redirect.admin.invalid_http_code', [], 'Invalid HTTP redirect code. Allowed codes: 301, 302, 307, 308.')], 422);
+                return $this->json(['error' => $this->trans('redirect.admin.invalid_http_code', [], 'Invalid HTTP redirect code. Allowed codes: 301, 302, 307, 308.'), 'code' => 'INVALID_HTTP_CODE'], 422);
             }
             $redirect->httpCode = $code;
         }
@@ -215,7 +215,7 @@ class RedirectController extends AbstractController
 
         foreach ($existing as $ex) {
             if ($ex->fromPath === $fromPath && $ex->isPattern === $isPattern) {
-                return $this->json(['error' => $this->trans('redirect.admin.from_path_already_exists', [], 'A redirect rule for this source path already exists in this project.')], 422);
+                return $this->json(['error' => $this->trans('redirect.admin.from_path_already_exists', [], 'A redirect rule for this source path already exists in this project.'), 'code' => 'FROM_PATH_ALREADY_EXISTS'], 422);
             }
         }
 
@@ -230,10 +230,10 @@ class RedirectController extends AbstractController
         // Détection de boucle et limitation de profondeur de chaîne
         $chainAnalysis = $this->chainDetector->analyzeChain($redirect, $existing);
         if ($chainAnalysis['hasLoop']) {
-            return $this->json(['error' => $this->trans('redirect.admin.loop_detected', [], 'A redirect loop was detected (fromPath directly or indirectly redirects to itself).')], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.loop_detected', [], 'A redirect loop was detected (fromPath directly or indirectly redirects to itself).'), 'code' => 'LOOP_DETECTED'], 422);
         }
         if ($chainAnalysis['isTooLong']) {
-            return $this->json(['error' => $this->trans('redirect.admin.chain_depth_exceeded', ['%max%' => (string) RedirectChainDetector::MAX_CHAIN_HOPS], sprintf('The redirect chain exceeds the maximum allowed depth of %d hops.', RedirectChainDetector::MAX_CHAIN_HOPS))], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.chain_depth_exceeded', ['%max%' => (string) RedirectChainDetector::MAX_CHAIN_HOPS], sprintf('The redirect chain exceeds the maximum allowed depth of %d hops.', RedirectChainDetector::MAX_CHAIN_HOPS)), 'code' => 'CHAIN_DEPTH_EXCEEDED'], 422);
         }
 
         $redirect->updatedBy = $this->getUser();
@@ -250,7 +250,7 @@ class RedirectController extends AbstractController
     {
         $redirect = $this->redirectRepo->find($id);
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.')], 404);
+            return $this->json(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.'), 'code' => 'REDIRECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $redirect->project);
 
@@ -267,7 +267,7 @@ class RedirectController extends AbstractController
     {
         $redirect = $this->redirectRepo->find($id);
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.')], 404);
+            return $this->json(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.'), 'code' => 'REDIRECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $redirect->project);
 
@@ -282,6 +282,10 @@ class RedirectController extends AbstractController
 
     private function resolveProject(string $projectUuid): ?\App\Entity\Project
     {
+        if (!Uuid::isValid($projectUuid)) {
+            return null;
+        }
+
         try {
             return $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
@@ -292,30 +296,40 @@ class RedirectController extends AbstractController
     private function validateRedirectPaths(string &$fromPath, string &$toPath, bool $isPattern): ?JsonResponse
     {
         if ($fromPath === '' || $toPath === '') {
-            return $this->json(['error' => $this->trans('redirect.admin.paths_required', [], 'Both fromPath and toPath are required.')], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.paths_required', [], 'Both fromPath and toPath are required.'), 'code' => 'PATHS_REQUIRED'], 422);
         }
 
         if (strlen($fromPath) > 512) {
-            return $this->json(['error' => $this->trans('redirect.admin.from_path_too_long', [], 'fromPath must not exceed 512 characters.')], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.from_path_too_long', [], 'fromPath must not exceed 512 characters.'), 'code' => 'FROM_PATH_TOO_LONG'], 422);
         }
 
         if (strlen($toPath) > 512) {
-            return $this->json(['error' => $this->trans('redirect.admin.to_path_too_long', [], 'toPath must not exceed 512 characters.')], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.to_path_too_long', [], 'toPath must not exceed 512 characters.'), 'code' => 'TO_PATH_TOO_LONG'], 422);
         }
 
         if (preg_match('/[\r\n\x00-\x1F\x7F]/', $fromPath)) {
-            return $this->json(['error' => $this->trans('redirect.admin.from_path_control_chars', [], 'fromPath contains invalid control or newline characters.')], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.from_path_control_chars', [], 'fromPath contains invalid control or newline characters.'), 'code' => 'FROM_PATH_CONTROL_CHARS'], 422);
         }
 
         if (preg_match('/[\r\n\x00-\x1F\x7F]/', $toPath)) {
-            return $this->json(['error' => $this->trans('redirect.admin.to_path_control_chars', [], 'toPath contains invalid control or newline characters.')], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.to_path_control_chars', [], 'toPath contains invalid control or newline characters.'), 'code' => 'TO_PATH_CONTROL_CHARS'], 422);
         }
 
         $cleanTo = trim($toPath);
         $lowerTo = strtolower($cleanTo);
+        $decodedTo = rawurldecode($cleanTo);
 
-        if (str_starts_with($cleanTo, '//') || str_starts_with($cleanTo, '/\\') || str_starts_with($cleanTo, '\\\\') || str_starts_with($cleanTo, '\\/')) {
-            return $this->json(['error' => $this->trans('redirect.admin.protocol_relative_forbidden', [], 'Protocol-relative URLs starting with // or backslashes are not allowed.')], 422);
+        if (
+            str_starts_with($cleanTo, '//') ||
+            str_starts_with($cleanTo, '/\\') ||
+            str_starts_with($cleanTo, '\\\\') ||
+            str_starts_with($cleanTo, '\\/') ||
+            str_starts_with($cleanTo, '\\') ||
+            str_starts_with($decodedTo, '//') ||
+            str_starts_with($decodedTo, '\\') ||
+            str_starts_with($decodedTo, '/\\')
+        ) {
+            return $this->json(['error' => $this->trans('redirect.admin.protocol_relative_forbidden', [], 'Protocol-relative URLs starting with // or backslashes are not allowed.'), 'code' => 'PROTOCOL_RELATIVE_FORBIDDEN'], 422);
         }
 
         if (
@@ -326,18 +340,23 @@ class RedirectController extends AbstractController
             str_starts_with($lowerTo, 'ftp:') ||
             str_starts_with($lowerTo, 'blob:')
         ) {
-            return $this->json(['error' => $this->trans('redirect.admin.dangerous_scheme', [], 'Dangerous URI schemes (javascript:, data:, vbscript:) are not allowed.')], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.dangerous_scheme', [], 'Dangerous URI schemes (javascript:, data:, vbscript:) are not allowed.'), 'code' => 'DANGEROUS_SCHEME'], 422);
         }
 
         if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $cleanTo, $matches)) {
             $scheme = strtolower(rtrim($matches[0], ':'));
             if (!in_array($scheme, ['http', 'https'], true)) {
-                return $this->json(['error' => $this->trans('redirect.admin.invalid_scheme', ['%scheme%' => $scheme], sprintf('Invalid URI scheme "%s": only http and https are allowed.', $scheme))], 422);
+                return $this->json(['error' => $this->trans('redirect.admin.invalid_scheme', ['%scheme%' => $scheme], sprintf('Invalid URI scheme "%s": only http and https are allowed.', $scheme)), 'code' => 'INVALID_SCHEME'], 422);
+            }
+
+            // Reject URLs with missing double slashes like http:evil.com or https:evil.com
+            if (!preg_match('#^https?://#i', $cleanTo)) {
+                return $this->json(['error' => $this->trans('redirect.admin.invalid_scheme', ['%scheme%' => $scheme], sprintf('Invalid URI scheme "%s": only http and https are allowed.', $scheme)), 'code' => 'INVALID_SCHEME'], 422);
             }
 
             // Reject credentials / userinfo in target URL
             if (parse_url($cleanTo, PHP_URL_USER) !== null || parse_url($cleanTo, PHP_URL_PASS) !== null) {
-                return $this->json(['error' => $this->trans('redirect.admin.userinfo_forbidden', [], 'Credentials or userinfo in target URL are forbidden.')], 422);
+                return $this->json(['error' => $this->trans('redirect.admin.userinfo_forbidden', [], 'Credentials or userinfo in target URL are forbidden.'), 'code' => 'USERINFO_FORBIDDEN'], 422);
             }
 
             // Anti-SSRF check on host
@@ -345,24 +364,29 @@ class RedirectController extends AbstractController
             if ($host !== null && trim($host) !== '') {
                 $reason = null;
                 if (!$this->ssrfProtection->isSafeHost($host, $reason)) {
-                    return $this->json(['error' => $this->trans('redirect.admin.ssrf_detected', ['%host%' => $host], 'Target redirect URL points to a restricted or private address (SSRF protection).')], 422);
+                    return $this->json(['error' => $this->trans('redirect.admin.ssrf_detected', ['%host%' => $host], 'Target redirect URL points to a restricted or private address (SSRF protection).'), 'code' => 'SSRF_DETECTED'], 422);
                 }
             }
 
             // Port restriction: only standard web ports allowed
             $port = parse_url($cleanTo, PHP_URL_PORT);
             if ($port !== null && !in_array($port, [80, 443, 8080, 8443], true)) {
-                return $this->json(['error' => $this->trans('redirect.admin.invalid_port', ['%port%' => (string) $port], sprintf('Target port %s is restricted.', $port))], 422);
+                return $this->json(['error' => $this->trans('redirect.admin.invalid_port', ['%port%' => (string) $port], sprintf('Target port %s is restricted.', $port)), 'code' => 'INVALID_PORT'], 422);
+            }
+        } else {
+            // Path traversal in relative target paths
+            if (str_contains($cleanTo, '/../') || str_ends_with($cleanTo, '/..') || str_starts_with($cleanTo, '../') || $cleanTo === '..') {
+                return $this->json(['error' => $this->trans('redirect.admin.path_traversal_forbidden', [], 'Path traversal sequences (..) are not allowed in redirect paths.'), 'code' => 'PATH_TRAVERSAL_FORBIDDEN'], 422);
             }
         }
 
         if ($isPattern) {
             if (strlen($fromPath) > 256) {
-                return $this->json(['error' => $this->trans('redirect.admin.regex_too_long', [], 'Regular expression pattern for fromPath must not exceed 256 characters.')], 422);
+                return $this->json(['error' => $this->trans('redirect.admin.regex_too_long', [], 'Regular expression pattern for fromPath must not exceed 256 characters.'), 'code' => 'REGEX_TOO_LONG'], 422);
             }
             $testRegex = '#' . str_replace('#', '\#', $fromPath) . '#';
             if (@preg_match($testRegex, '') === false) {
-                return $this->json(['error' => $this->trans('redirect.admin.regex_invalid', [], 'Invalid regular expression syntax for fromPath pattern.')], 422);
+                return $this->json(['error' => $this->trans('redirect.admin.regex_invalid', [], 'Invalid regular expression syntax for fromPath pattern.'), 'code' => 'REGEX_INVALID'], 422);
             }
         }
 
@@ -375,7 +399,7 @@ class RedirectController extends AbstractController
         }
 
         if ($fromPath === $toPath) {
-            return $this->json(['error' => $this->trans('redirect.admin.self_redirect', [], 'A redirect cannot point to itself.')], 422);
+            return $this->json(['error' => $this->trans('redirect.admin.self_redirect', [], 'A redirect cannot point to itself.'), 'code' => 'SELF_REDIRECT'], 422);
         }
 
         return null;

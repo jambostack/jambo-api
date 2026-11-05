@@ -20,6 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Component\Uid\Uuid;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[IsGranted('ROLE_USER')]
@@ -55,7 +56,7 @@ class FormController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('form.admin.project_not_found', [], 'Project not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.project_not_found', [], 'Project not found.'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $project);
 
@@ -83,24 +84,28 @@ class FormController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('form.admin.project_not_found', [], 'Project not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.project_not_found', [], 'Project not found.'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $project);
+
+        if (strlen($request->getContent()) > 524288) {
+            return $this->json(['error' => $this->trans('form.admin.payload_too_large', [], 'Form payload exceeds maximum size limit (512 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('form.admin.invalid_json', [], 'Invalid JSON payload.')], 400);
+            return $this->json(['error' => $this->trans('form.admin.invalid_json', [], 'Invalid JSON payload.'), 'code' => 'INVALID_JSON'], 400);
         }
 
         // Valider la définition des champs
         $fields = $data['fields'] ?? [];
         if (!is_array($fields) || count($fields) > 100) {
-            return $this->json(['error' => $this->trans('form.admin.fields_must_be_array', [], 'Fields must be an array of at most 100 fields.')], 422);
+            return $this->json(['error' => $this->trans('form.admin.fields_must_be_array', [], 'Fields must be an array of at most 100 fields.'), 'code' => 'FIELDS_MUST_BE_ARRAY'], 422);
         }
         $validation = $this->formBuilder->validateDefinition($fields);
         if (empty($validation['valid'])) {
-            return $this->json(['error' => $this->trans('form.admin.invalid_field_definition', [], 'Invalid field definition.'), 'field_errors' => $validation['errors'] ?? []], 422);
+            return $this->json(['error' => $this->trans('form.admin.invalid_field_definition', [], 'Invalid field definition.'), 'code' => 'INVALID_FIELD_DEFINITION', 'field_errors' => $validation['errors'] ?? []], 422);
         }
 
         $fieldSecError = $this->validateFieldsSecurity($fields);
@@ -110,13 +115,13 @@ class FormController extends AbstractController
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
-            return $this->json(['error' => $this->trans('form.admin.name_required', [], 'Form name is required.')], 422);
+            return $this->json(['error' => $this->trans('form.admin.name_required', [], 'Form name is required.'), 'code' => 'NAME_REQUIRED'], 422);
         }
         if (mb_strlen($name) > 255 || preg_match('/[\r\n\x00-\x1F\x7F]/', $name)) {
-            return $this->json(['error' => $this->trans('form.admin.name_invalid', [], 'Form name must not exceed 255 characters and cannot contain control characters.')], 422);
+            return $this->json(['error' => $this->trans('form.admin.name_invalid', [], 'Form name must not exceed 255 characters and cannot contain control characters.'), 'code' => 'NAME_INVALID'], 422);
         }
         if (str_contains($name, '<') || str_contains($name, '>') || $this->containsXssPayload($name)) {
-            return $this->json(['error' => $this->trans('form.admin.name_xss_detected', [], 'Form name contains disallowed HTML tags or script elements.')], 422);
+            return $this->json(['error' => $this->trans('form.admin.name_xss_detected', [], 'Form name contains disallowed HTML tags or script elements.'), 'code' => 'NAME_XSS_DETECTED'], 422);
         }
 
         $slug = trim((string) ($data['slug'] ?? ''));
@@ -133,16 +138,16 @@ class FormController extends AbstractController
         $steps = $data['steps'] ?? null;
         if ($steps !== null) {
             if (!is_array($steps) || count($steps) > 50) {
-                return $this->json(['error' => $this->trans('form.admin.steps_invalid', [], 'Form steps must be an array of at most 50 steps.')], 422);
+                return $this->json(['error' => $this->trans('form.admin.steps_invalid', [], 'Form steps must be an array of at most 50 steps.'), 'code' => 'STEPS_INVALID'], 422);
             }
             if ($this->arrayContainsXss($steps)) {
-                return $this->json(['error' => $this->trans('form.admin.step_xss_detected', [], 'Form steps contain disallowed HTML or script elements (anti-XSS protection).')], 422);
+                return $this->json(['error' => $this->trans('form.admin.step_xss_detected', [], 'Form steps contain disallowed HTML or script elements (anti-XSS protection).'), 'code' => 'STEP_XSS_DETECTED'], 422);
             }
         }
 
         $settings = $data['settings'] ?? [];
         if (!is_array($settings)) {
-            return $this->json(['error' => $this->trans('form.admin.settings_invalid', [], 'Form settings must be an array and not exceed 64KB.')], 422);
+            return $this->json(['error' => $this->trans('form.admin.settings_invalid', [], 'Form settings must be an array and not exceed 64KB.'), 'code' => 'SETTINGS_INVALID'], 422);
         }
         $settingsError = $this->validateSettings($settings);
         if ($settingsError !== null) {
@@ -175,7 +180,7 @@ class FormController extends AbstractController
     {
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $form->project);
 
@@ -189,26 +194,30 @@ class FormController extends AbstractController
     {
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $form->project);
+
+        if (strlen($request->getContent()) > 524288) {
+            return $this->json(['error' => $this->trans('form.admin.payload_too_large', [], 'Form payload exceeds maximum size limit (512 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('form.admin.invalid_json', [], 'Invalid JSON payload.')], 400);
+            return $this->json(['error' => $this->trans('form.admin.invalid_json', [], 'Invalid JSON payload.'), 'code' => 'INVALID_JSON'], 400);
         }
 
         if (array_key_exists('name', $data)) {
             $newName = trim((string) $data['name']);
             if ($newName === '') {
-                return $this->json(['error' => $this->trans('form.admin.name_empty', [], 'Form name cannot be empty.')], 422);
+                return $this->json(['error' => $this->trans('form.admin.name_empty', [], 'Form name cannot be empty.'), 'code' => 'NAME_EMPTY'], 422);
             }
             if (mb_strlen($newName) > 255 || preg_match('/[\r\n\x00-\x1F\x7F]/', $newName)) {
-                return $this->json(['error' => $this->trans('form.admin.name_invalid', [], 'Form name must not exceed 255 characters and cannot contain control characters.')], 422);
+                return $this->json(['error' => $this->trans('form.admin.name_invalid', [], 'Form name must not exceed 255 characters and cannot contain control characters.'), 'code' => 'NAME_INVALID'], 422);
             }
             if (str_contains($newName, '<') || str_contains($newName, '>') || $this->containsXssPayload($newName)) {
-                return $this->json(['error' => $this->trans('form.admin.name_xss_detected', [], 'Form name contains disallowed HTML tags or script elements.')], 422);
+                return $this->json(['error' => $this->trans('form.admin.name_xss_detected', [], 'Form name contains disallowed HTML tags or script elements.'), 'code' => 'NAME_XSS_DETECTED'], 422);
             }
             $form->name = $newName;
         }
@@ -216,25 +225,25 @@ class FormController extends AbstractController
         if (array_key_exists('slug', $data)) {
             $newSlug = trim((string) $data['slug']);
             if ($newSlug === '') {
-                return $this->json(['error' => $this->trans('form.admin.slug_empty', [], 'Form slug cannot be empty.')], 422);
+                return $this->json(['error' => $this->trans('form.admin.slug_empty', [], 'Form slug cannot be empty.'), 'code' => 'SLUG_EMPTY'], 422);
             }
             if (strlen($newSlug) > 128 || !preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $newSlug)) {
-                return $this->json(['error' => $this->trans('form.admin.slug_invalid', [], 'Form slug must be lowercase alphanumeric with hyphens (max 128 characters).')], 422);
+                return $this->json(['error' => $this->trans('form.admin.slug_invalid', [], 'Form slug must be lowercase alphanumeric with hyphens (max 128 characters).'), 'code' => 'SLUG_INVALID'], 422);
             }
             $existing = $this->formRepo->findOneBy(['project' => $form->project, 'slug' => $newSlug]);
             if ($existing !== null && $existing->id !== $form->id) {
-                return $this->json(['error' => $this->trans('form.admin.slug_already_exists', [], 'A form with this slug already exists in this project.')], 422);
+                return $this->json(['error' => $this->trans('form.admin.slug_already_exists', [], 'A form with this slug already exists in this project.'), 'code' => 'SLUG_ALREADY_EXISTS'], 422);
             }
             $form->slug = $newSlug;
         }
 
         if (array_key_exists('fields', $data)) {
             if (!is_array($data['fields']) || count($data['fields']) > 100) {
-                return $this->json(['error' => $this->trans('form.admin.fields_must_be_array', [], 'Fields must be an array of at most 100 fields.')], 422);
+                return $this->json(['error' => $this->trans('form.admin.fields_must_be_array', [], 'Fields must be an array of at most 100 fields.'), 'code' => 'FIELDS_MUST_BE_ARRAY'], 422);
             }
             $validation = $this->formBuilder->validateDefinition($data['fields']);
             if (empty($validation['valid'])) {
-                return $this->json(['error' => $this->trans('form.admin.invalid_field_definition', [], 'Invalid field definition.'), 'field_errors' => $validation['errors'] ?? []], 422);
+                return $this->json(['error' => $this->trans('form.admin.invalid_field_definition', [], 'Invalid field definition.'), 'code' => 'INVALID_FIELD_DEFINITION', 'field_errors' => $validation['errors'] ?? []], 422);
             }
             $fieldSecError = $this->validateFieldsSecurity($data['fields']);
             if ($fieldSecError !== null) {
@@ -246,10 +255,10 @@ class FormController extends AbstractController
         if (array_key_exists('steps', $data)) {
             if ($data['steps'] !== null) {
                 if (!is_array($data['steps']) || count($data['steps']) > 50) {
-                    return $this->json(['error' => $this->trans('form.admin.steps_invalid', [], 'Form steps must be an array of at most 50 steps.')], 422);
+                    return $this->json(['error' => $this->trans('form.admin.steps_invalid', [], 'Form steps must be an array of at most 50 steps.'), 'code' => 'STEPS_INVALID'], 422);
                 }
                 if ($this->arrayContainsXss($data['steps'])) {
-                    return $this->json(['error' => $this->trans('form.admin.step_xss_detected', [], 'Form steps contain disallowed HTML or script elements (anti-XSS protection).')], 422);
+                    return $this->json(['error' => $this->trans('form.admin.step_xss_detected', [], 'Form steps contain disallowed HTML or script elements (anti-XSS protection).'), 'code' => 'STEP_XSS_DETECTED'], 422);
                 }
             }
             $form->steps = $data['steps'];
@@ -257,7 +266,7 @@ class FormController extends AbstractController
 
         if (array_key_exists('settings', $data)) {
             if (!is_array($data['settings'])) {
-                return $this->json(['error' => $this->trans('form.admin.settings_invalid', [], 'Form settings must be an array and not exceed 64KB.')], 422);
+                return $this->json(['error' => $this->trans('form.admin.settings_invalid', [], 'Form settings must be an array and not exceed 64KB.'), 'code' => 'SETTINGS_INVALID'], 422);
             }
             $settingsError = $this->validateSettings($data['settings']);
             if ($settingsError !== null) {
@@ -278,7 +287,7 @@ class FormController extends AbstractController
     {
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $form->project);
 
@@ -298,13 +307,16 @@ class FormController extends AbstractController
     {
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $form->project);
 
         $page = max(1, (int) $request->query->get('page', 1));
         $perPage = min(100, max(1, (int) $request->query->get('per_page', 25)));
         $spamFilter = $request->query->get('spam'); // 'spam', 'ham', or omit for all
+        if ($spamFilter !== null && !in_array($spamFilter, ['spam', 'ham'], true)) {
+            $spamFilter = null;
+        }
 
         $total = $this->submissionRepo->countByForm($form, $spamFilter);
         $items = $this->submissionRepo->findPaginatedByForm($form, $page, $perPage, $spamFilter);
@@ -332,11 +344,14 @@ class FormController extends AbstractController
     {
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $form->project);
 
         $spamFilter = $request->query->get('spam'); // 'spam', 'ham', or omit for all
+        if ($spamFilter !== null && !in_array($spamFilter, ['spam', 'ham'], true)) {
+            $spamFilter = null;
+        }
 
         // Extraire la liste ordonnée des noms / labels de champs
         $fieldKeys = [];
@@ -430,13 +445,13 @@ class FormController extends AbstractController
     {
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $form->project);
 
         $submission = $this->submissionRepo->find($submissionId);
         if (!$submission || $submission->form?->id !== $form->id) {
-            return $this->json(['error' => $this->trans('form.admin.submission_not_found', [], 'Submission not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.submission_not_found', [], 'Submission not found.'), 'code' => 'SUBMISSION_NOT_FOUND'], 404);
         }
 
         return $this->json([
@@ -458,13 +473,13 @@ class FormController extends AbstractController
     {
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $form->project);
 
         $submission = $this->submissionRepo->find($submissionId);
         if (!$submission || $submission->form?->id !== $form->id) {
-            return $this->json(['error' => $this->trans('form.admin.submission_not_found', [], 'Submission not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.submission_not_found', [], 'Submission not found.'), 'code' => 'SUBMISSION_NOT_FOUND'], 404);
         }
 
         $this->em->remove($submission);
@@ -480,23 +495,23 @@ class FormController extends AbstractController
     {
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
-            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $form->project);
 
         $submission = $this->submissionRepo->find($submissionId);
         if (!$submission || $submission->form?->id !== $form->id) {
-            return $this->json(['error' => $this->trans('form.admin.submission_not_found', [], 'Submission not found.')], 404);
+            return $this->json(['error' => $this->trans('form.admin.submission_not_found', [], 'Submission not found.'), 'code' => 'SUBMISSION_NOT_FOUND'], 404);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('form.admin.invalid_json', [], 'Invalid JSON payload.')], 400);
+            return $this->json(['error' => $this->trans('form.admin.invalid_json', [], 'Invalid JSON payload.'), 'code' => 'INVALID_JSON'], 400);
         }
 
         if (!array_key_exists('isRead', $data) && !array_key_exists('isSpam', $data)) {
-            return $this->json(['error' => $this->trans('form.admin.submission_update_invalid', [], 'No valid submission attributes provided for update.')], 422);
+            return $this->json(['error' => $this->trans('form.admin.submission_update_invalid', [], 'No valid submission attributes provided for update.'), 'code' => 'SUBMISSION_UPDATE_INVALID'], 422);
         }
 
         if (array_key_exists('isRead', $data)) {
@@ -581,58 +596,61 @@ class FormController extends AbstractController
                         'form.admin.field_name_invalid',
                         ['%name%' => (string) $fieldName],
                         sprintf('Field name "%s" is invalid. Only alphanumeric characters, dashes, dots and underscores are allowed (max 64 characters).', $fieldName)
-                    )
+                    ),
+                    'code' => 'FIELD_NAME_INVALID',
                 ], 422);
             }
         }
 
         if ($this->arrayContainsXss($fields)) {
-            return $this->json(['error' => $this->trans('form.admin.field_xss_detected', [], 'Form fields contain disallowed HTML or script elements (anti-XSS protection).')], 422);
+            return $this->json(['error' => $this->trans('form.admin.field_xss_detected', [], 'Form fields contain disallowed HTML or script elements (anti-XSS protection).'), 'code' => 'FIELD_XSS_DETECTED'], 422);
         }
 
         return null;
     }
 
     /**
-     * Validates form settings against XSS and SSRF (if redirectUrl is provided).
+     * Validates form settings against XSS and SSRF (if redirectUrl or webhookUrl is provided).
      */
     private function validateSettings(array $settings): ?JsonResponse
     {
         if (strlen(json_encode($settings)) > 65536) {
-            return $this->json(['error' => $this->trans('form.admin.settings_invalid', [], 'Form settings must be an array and not exceed 64KB.')], 422);
+            return $this->json(['error' => $this->trans('form.admin.settings_invalid', [], 'Form settings must be an array and not exceed 64KB.'), 'code' => 'SETTINGS_INVALID'], 422);
         }
 
-        // If redirectUrl is configured, check for safe URL and anti-SSRF first
-        if (isset($settings['redirectUrl']) && is_string($settings['redirectUrl']) && trim($settings['redirectUrl']) !== '') {
-            $redirectUrl = trim($settings['redirectUrl']);
-            $lower = strtolower($redirectUrl);
+        // If redirectUrl or webhookUrl is configured, check for safe URL and anti-SSRF first
+        foreach (['redirectUrl', 'webhookUrl', 'webhook_url'] as $urlKey) {
+            if (isset($settings[$urlKey]) && is_string($settings[$urlKey]) && trim($settings[$urlKey]) !== '') {
+                $targetUrl = trim($settings[$urlKey]);
+                $lower = strtolower($targetUrl);
 
-            if (str_starts_with($redirectUrl, '//') || str_starts_with($redirectUrl, '/\\') || str_starts_with($redirectUrl, '\\\\')) {
-                return $this->json(['error' => $this->trans('form.admin.settings_unsafe_redirect_url', [], 'Form settings redirect URL is unsafe or uses a forbidden scheme.')], 422);
-            }
-
-            if (str_starts_with($lower, 'javascript:') || str_starts_with($lower, 'data:') || str_starts_with($lower, 'vbscript:')) {
-                return $this->json(['error' => $this->trans('form.admin.settings_unsafe_redirect_url', [], 'Form settings redirect URL is unsafe or uses a forbidden scheme.')], 422);
-            }
-
-            if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $redirectUrl, $matches)) {
-                $scheme = strtolower(rtrim($matches[0], ':'));
-                if (!in_array($scheme, ['http', 'https'], true)) {
-                    return $this->json(['error' => $this->trans('form.admin.settings_unsafe_redirect_url', [], 'Form settings redirect URL is unsafe or uses a forbidden scheme.')], 422);
+                if (str_starts_with($targetUrl, '//') || str_starts_with($targetUrl, '/\\') || str_starts_with($targetUrl, '\\\\')) {
+                    return $this->json(['error' => $this->trans('form.admin.settings_unsafe_redirect_url', [], 'Form settings redirect URL is unsafe or uses a forbidden scheme.'), 'code' => 'SETTINGS_UNSAFE_URL'], 422);
                 }
 
-                $host = parse_url($redirectUrl, PHP_URL_HOST);
-                if ($host !== null && trim($host) !== '') {
-                    $reason = null;
-                    if (!$this->ssrfProtection->isSafeHost($host, $reason)) {
-                        return $this->json(['error' => $this->trans('form.admin.settings_unsafe_redirect_url', [], 'Form settings redirect URL is unsafe or uses a forbidden scheme.')], 422);
+                if (str_starts_with($lower, 'javascript:') || str_starts_with($lower, 'data:') || str_starts_with($lower, 'vbscript:')) {
+                    return $this->json(['error' => $this->trans('form.admin.settings_unsafe_redirect_url', [], 'Form settings redirect URL is unsafe or uses a forbidden scheme.'), 'code' => 'SETTINGS_UNSAFE_URL'], 422);
+                }
+
+                if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $targetUrl, $matches)) {
+                    $scheme = strtolower(rtrim($matches[0], ':'));
+                    if (!in_array($scheme, ['http', 'https'], true)) {
+                        return $this->json(['error' => $this->trans('form.admin.settings_unsafe_redirect_url', [], 'Form settings redirect URL is unsafe or uses a forbidden scheme.'), 'code' => 'SETTINGS_UNSAFE_URL'], 422);
+                    }
+
+                    $host = parse_url($targetUrl, PHP_URL_HOST);
+                    if ($host !== null && trim($host) !== '') {
+                        $reason = null;
+                        if (!$this->ssrfProtection->isSafeHost($host, $reason)) {
+                            return $this->json(['error' => $this->trans('form.admin.settings_unsafe_redirect_url', [], 'Form settings redirect URL is unsafe or uses a forbidden scheme.'), 'code' => 'SETTINGS_SSRF_DETECTED'], 422);
+                        }
                     }
                 }
             }
         }
 
         if ($this->arrayContainsXss($settings)) {
-            return $this->json(['error' => $this->trans('form.admin.settings_xss_detected', [], 'Form settings contain disallowed HTML or script elements (anti-XSS protection).')], 422);
+            return $this->json(['error' => $this->trans('form.admin.settings_xss_detected', [], 'Form settings contain disallowed HTML or script elements (anti-XSS protection).'), 'code' => 'SETTINGS_XSS_DETECTED'], 422);
         }
 
         return null;
@@ -640,6 +658,10 @@ class FormController extends AbstractController
 
     private function resolveProject(string $projectUuid): ?\App\Entity\Project
     {
+        if (!Uuid::isValid($projectUuid)) {
+            return null;
+        }
+
         try {
             return $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
