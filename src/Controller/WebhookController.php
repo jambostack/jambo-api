@@ -8,6 +8,7 @@ use App\Repository\CollectionRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\WebhookLogRepository;
 use App\Repository\WebhookRepository;
+use App\Service\ApiTokenChecker;
 use App\Service\AuditService;
 use App\Service\Security\SsrfProtectionService;
 use App\Service\WebhookSecretService;
@@ -16,6 +17,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -50,6 +52,8 @@ class WebhookController extends AbstractController
         ?WebhookService $webhookService = null,
         private ?TranslatorInterface $translator = null,
         private ?AuditService $auditService = null,
+        private ?ApiTokenChecker $tokenChecker = null,
+        private ?RequestStack $requestStack = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
         $this->webhookService = $webhookService ?? new WebhookService(
@@ -610,6 +614,26 @@ class WebhookController extends AbstractController
 
         $user = $this->getUser();
         if ($user === null) {
+            $req = $this->requestStack?->getCurrentRequest();
+            if ($req !== null && $this->tokenChecker !== null) {
+                $token = $this->tokenChecker->resolve($req);
+                if ($token !== null && $token->project?->uuid?->toString() === $projectUuid) {
+                    if (in_array($requiredPermission, ['project.manage', 'project.edit'], true)) {
+                        if ($token->can('write') || $token->can('*') || $token->can('manage')) {
+                            return $project;
+                        }
+                    } else {
+                        if ($this->tokenChecker->isAllowedForMethod($token, $req->getMethod())) {
+                            return $project;
+                        }
+                    }
+                    return $this->secureJson([
+                        'error' => $this->trans('webhook.access_denied', [], 'Access denied to this project.'),
+                        'code' => 'ACCESS_DENIED',
+                    ], 403);
+                }
+            }
+
             return $this->secureJson([
                 'error' => $this->trans('webhook.auth_required', [], 'Authentication required to access project webhooks.'),
                 'code' => 'AUTH_REQUIRED',

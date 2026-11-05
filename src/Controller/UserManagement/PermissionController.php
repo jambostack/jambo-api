@@ -19,6 +19,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[IsGranted('ROLE_USER')]
 class PermissionController extends AbstractController
 {
+    public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    public const MAX_BULK_IDS = 100;
+
     public const PROTECTED_PERMISSIONS = [
         'users.manage',
         'roles.manage',
@@ -95,6 +98,11 @@ class PermissionController extends AbstractController
     #[IsGranted('users.manage')]
     public function bulkDelete(Request $request): JsonResponse
     {
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -105,6 +113,16 @@ class PermissionController extends AbstractController
 
         if (empty($ids) || !is_array($ids)) {
             return $this->json(['errors' => ['ids' => [$this->translator->trans('permission.admin.no_permissions_selected')]]], 422);
+        }
+
+        if (count($ids) > self::MAX_BULK_IDS) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.bulk_limit_exceeded', ['%max%' => self::MAX_BULK_IDS])], 422);
+        }
+
+        foreach ($ids as $id) {
+            if (!is_numeric($id) || (int) $id <= 0) {
+                return $this->json(['errors' => ['ids' => [$this->translator->trans('permission.admin.invalid_id')]]], 422);
+            }
         }
 
         /** @var User $currentUser */
@@ -166,6 +184,11 @@ class PermissionController extends AbstractController
     #[IsGranted('users.manage')]
     public function create(Request $request): JsonResponse
     {
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -224,6 +247,11 @@ class PermissionController extends AbstractController
     #[IsGranted('users.manage')]
     public function update(int $id, Request $request): JsonResponse
     {
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
+        }
+
         $permission = $this->permissionRepository->find($id);
         if ($permission === null) {
             return $this->json(['error' => $this->translator->trans('permission.admin.not_found')], 404);

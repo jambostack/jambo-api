@@ -207,6 +207,7 @@ class Cycle34HardeningTest extends WebTestCase
             $this->createStub(FormBuilder::class),
             $this->createStub(SubmitHandler::class),
             null,
+            null,
             $translator
         );
 

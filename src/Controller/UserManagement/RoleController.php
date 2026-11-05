@@ -20,6 +20,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[IsGranted('ROLE_USER')]
 class RoleController extends AbstractController
 {
+    public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    public const MAX_BULK_IDS = 100;
+
     private const PROTECTED_ROLES = [
         'ROLE_SUPER_ADMIN',
         'ROLE_ADMIN',
@@ -89,6 +92,11 @@ class RoleController extends AbstractController
     #[IsGranted('roles.manage')]
     public function bulkDelete(Request $request): JsonResponse
     {
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->translator->trans('role.admin.payload_too_large')], 413);
+        }
+
         if ($_ENV['DEMO_MODE'] ?? false) {
             return $this->json(['error' => $this->translator->trans('role.admin.demo_mode_disabled')], 403);
         }
@@ -103,6 +111,16 @@ class RoleController extends AbstractController
 
         if (empty($ids) || !is_array($ids)) {
             return $this->json(['errors' => ['ids' => [$this->translator->trans('role.admin.no_roles_selected')]]], 422);
+        }
+
+        if (count($ids) > self::MAX_BULK_IDS) {
+            return $this->json(['error' => $this->translator->trans('role.admin.bulk_limit_exceeded', ['%max%' => self::MAX_BULK_IDS])], 422);
+        }
+
+        foreach ($ids as $id) {
+            if (!is_numeric($id) || (int) $id <= 0) {
+                return $this->json(['errors' => ['ids' => [$this->translator->trans('role.admin.invalid_id')]]], 422);
+            }
         }
 
         /** @var User $currentUser */
@@ -155,6 +173,11 @@ class RoleController extends AbstractController
     #[IsGranted('roles.manage')]
     public function create(Request $request): JsonResponse
     {
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->translator->trans('role.admin.payload_too_large')], 413);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -237,6 +260,11 @@ class RoleController extends AbstractController
     #[IsGranted('roles.manage')]
     public function update(int $id, Request $request): JsonResponse
     {
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->translator->trans('role.admin.payload_too_large')], 413);
+        }
+
         $role = $this->roleRepository->find($id);
         if ($role === null) {
             return $this->json(['error' => $this->translator->trans('role.admin.not_found')], 404);

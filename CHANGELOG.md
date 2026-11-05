@@ -7,6 +7,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.121] — 2026-11-05
+
+### Security Hardening on User Management, Bulk Operations Caps, ApiToken Fallback & Zero-Regression Test Suite (Cycle #58)
+- **UserManagement Fortification (`UserController`, `RoleController`, `PermissionController`)**:
+  - Enforced strict payload size caps (`MAX_PAYLOAD_BYTES = 64KB`) across `create()`, `update()`, and `bulkDelete()`, returning 413 `user.admin.payload_too_large`, `role.admin.payload_too_large`, `permission.admin.payload_too_large`.
+  - Enforced strict bulk operation boundary (`MAX_BULK_IDS = 100`) preventing resource exhaustion / memory exhaustion on mass deletion requests, returning 422 `bulk_limit_exceeded`.
+  - Added strict integer ID validation for bulk deletion payloads, returning 422 `invalid_id` on non-numeric or non-positive IDs.
+- **Webhook Controller & ApiToken Fallback (`WebhookController`)**:
+  - Integrated `ApiTokenChecker` and `RequestStack` with lazy optional injection to allow seamless authentication via project-scoped API Tokens (`Authorization: Bearer <secret>`).
+  - Added permission level checks (`project.manage`/`project.edit` requiring `write`/`manage`/`*` abilities, and method-based checks for other routes).
+  - Resolved regression where ApiToken access returned 401 when testing webhook SSRF and test ping.
+- **Test Suite Zero-Regression Alignment**:
+  - Fixed constructor mock in `Cycle34HardeningTest` for `FormPublicController` (added `$formViewLimiter` slot).
+  - Validated full test suite passes with 0 failures, 0 errors.
+- **I18N Parity**:
+  - Added 9 new translation keys (`user.admin.payload_too_large`, `user.admin.bulk_limit_exceeded`, `user.admin.invalid_id`, `role.admin.payload_too_large`, `role.admin.bulk_limit_exceeded`, `role.admin.invalid_id`, `permission.admin.payload_too_large`, `permission.admin.bulk_limit_exceeded`, `permission.admin.invalid_id`) across EN, FR, ES, AR (2,904 keys each, 100% parity).
+- **Testing**:
+  - Created `Cycle58UserManagementHardeningTest` with 12 comprehensive unit/functional security tests (97 assertions).
+
 ## [1.26.120] — 2026-11-05
 
 ### Security Hardening on EndUser Auth API, Progressive Multi-Tier Lockout & Password Complexity (Cycle #57)

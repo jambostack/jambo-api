@@ -2510,6 +2510,15 @@ return [
     // User Admin extra
     'user.admin.name_too_long'                        => 'El nombre de usuario no debe superar 255 caracteres.',
     'user.admin.email_too_long'                       => 'La dirección de correo no debe superar 254 caracteres.',
+    'user.admin.payload_too_large'                    => 'La carga útil del usuario excede el tamaño máximo permitido (64 KB).',
+    'user.admin.bulk_limit_exceeded'                  => 'Se puede eliminar un máximo de %max% usuarios en una sola operación masiva.',
+    'user.admin.invalid_id'                           => 'ID de usuario no válido.',
+    'role.admin.payload_too_large'                    => 'La carga útil del rol excede el tamaño máximo permitido (64 KB).',
+    'role.admin.bulk_limit_exceeded'                  => 'Se puede eliminar un máximo de %max% roles en una sola operación masiva.',
+    'role.admin.invalid_id'                           => 'ID de rol no válido.',
+    'permission.admin.payload_too_large'              => 'La carga útil del permiso excede el tamaño máximo permitido (64 KB).',
+    'permission.admin.bulk_limit_exceeded'            => 'Se puede eliminar un máximo de %max% permisos en una sola operación masiva.',
+    'permission.admin.invalid_id'                     => 'ID de permiso no válido.',
 
     // ── Collection Admin (v1.26.89) ──
     'collection.admin.project_not_found'              => 'Proyecto no encontrado.',

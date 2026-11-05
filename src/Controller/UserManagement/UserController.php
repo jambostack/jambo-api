@@ -20,6 +20,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[IsGranted('ROLE_USER')]
 class UserController extends AbstractController
 {
+    public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    public const MAX_BULK_IDS = 100;
+
     public function __construct(
         private UserRepository $userRepository,
         private RoleRepository $roleRepository,
@@ -86,6 +89,11 @@ class UserController extends AbstractController
     #[IsGranted('users.manage')]
     public function bulkDelete(Request $request): JsonResponse
     {
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->translator->trans('user.admin.payload_too_large')], 413);
+        }
+
         if ($_ENV['DEMO_MODE'] ?? false) {
             return $this->json(['error' => $this->translator->trans('user.admin.demo_mode_disabled')], 403);
         }
@@ -100,6 +108,16 @@ class UserController extends AbstractController
 
         if (empty($ids) || !is_array($ids)) {
             return $this->json(['errors' => ['ids' => [$this->translator->trans('user.admin.no_users_selected')]]], 422);
+        }
+
+        if (count($ids) > self::MAX_BULK_IDS) {
+            return $this->json(['error' => $this->translator->trans('user.admin.bulk_limit_exceeded', ['%max%' => self::MAX_BULK_IDS])], 422);
+        }
+
+        foreach ($ids as $id) {
+            if (!is_numeric($id) || (int) $id <= 0) {
+                return $this->json(['errors' => ['ids' => [$this->translator->trans('user.admin.invalid_id')]]], 422);
+            }
         }
 
         /** @var User $currentUser */
@@ -166,6 +184,11 @@ class UserController extends AbstractController
     #[IsGranted('users.manage')]
     public function create(Request $request): JsonResponse
     {
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->translator->trans('user.admin.payload_too_large')], 413);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -276,6 +299,11 @@ class UserController extends AbstractController
     #[IsGranted('users.manage')]
     public function update(int $id, Request $request): JsonResponse
     {
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->json(['error' => $this->translator->trans('user.admin.payload_too_large')], 413);
+        }
+
         $user = $this->userRepository->find($id);
         if ($user === null) {
             return $this->json(['error' => $this->translator->trans('user.admin.not_found')], 404);

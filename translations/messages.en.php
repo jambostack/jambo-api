@@ -2510,6 +2510,15 @@ return [
     // User Admin extra
     'user.admin.name_too_long'                        => 'User name must not exceed 255 characters.',
     'user.admin.email_too_long'                       => 'Email address must not exceed 254 characters.',
+    'user.admin.payload_too_large'                    => 'User payload exceeds maximum allowed size (64 KB).',
+    'user.admin.bulk_limit_exceeded'                  => 'Maximum of %max% users can be deleted in a single bulk operation.',
+    'user.admin.invalid_id'                           => 'Invalid user ID provided.',
+    'role.admin.payload_too_large'                    => 'Role payload exceeds maximum allowed size (64 KB).',
+    'role.admin.bulk_limit_exceeded'                  => 'Maximum of %max% roles can be deleted in a single bulk operation.',
+    'role.admin.invalid_id'                           => 'Invalid role ID provided.',
+    'permission.admin.payload_too_large'              => 'Permission payload exceeds maximum allowed size (64 KB).',
+    'permission.admin.bulk_limit_exceeded'            => 'Maximum of %max% permissions can be deleted in a single bulk operation.',
+    'permission.admin.invalid_id'                     => 'Invalid permission ID provided.',
 
     // ── Collection Admin (v1.26.89) ──
     'collection.admin.project_not_found'              => 'Project not found.',

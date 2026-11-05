@@ -2512,6 +2512,15 @@ return [
     // User Admin extra
     'user.admin.name_too_long'                        => 'يجب ألا يتجاوز اسم المستخدم 255 حرفاً.',
     'user.admin.email_too_long'                       => 'يجب ألا يتجاوز عنوان البريد الإلكتروني 254 حرفاً.',
+    'user.admin.payload_too_large'                    => 'تتجاوز حمولة المستخدم الحد الأقصى للحجم المسموح به (64 كيلوبايت).',
+    'user.admin.bulk_limit_exceeded'                  => 'يمكن حذف %max% من المستخدمين كحد أقصى في عملية دفعية واحدة.',
+    'user.admin.invalid_id'                           => 'معرف مستخدم غير صالح.',
+    'role.admin.payload_too_large'                    => 'تتجاوز حمولة الدور الحد الأقصى للحجم المسموح به (64 كيلوبايت).',
+    'role.admin.bulk_limit_exceeded'                  => 'يمكن حذف %max% من الأدوار كحد أقصى في عملية دفعية واحدة.',
+    'role.admin.invalid_id'                           => 'معرف دور غير صالح.',
+    'permission.admin.payload_too_large'              => 'تتجاوز حمولة الصلاحية الحد الأقصى للحجم المسموح به (64 كيلوبايت).',
+    'permission.admin.bulk_limit_exceeded'            => 'يمكن حذف %max% من الصلاحيات كحد أقصى في عملية دفعية واحدة.',
+    'permission.admin.invalid_id'                     => 'معرف صلاحية غير صالح.',
 
     // ── Collection Admin (v1.26.89) ──
     'collection.admin.project_not_found'              => 'المشروع غير موجود.',
