@@ -819,12 +819,31 @@ class EndUserAuthController extends AbstractController
         }
 
         $normalizedEmail = strtolower(trim((string) $email));
+        if (strlen($normalizedEmail) > 180 || !filter_var($normalizedEmail, FILTER_VALIDATE_EMAIL)) {
+            return new JsonResponse(['error' => $this->trans('enduser.auth.invalid_email_format', [], 'Invalid email address format.')], 422);
+        }
+
+        $clientIp = $request->getClientIp() ?: '127.0.0.1';
+        $ipSprayKey = 'pw_reset_spray_ip:' . $projectId . ':' . $clientIp;
+        if ($this->lockoutService !== null && $this->lockoutService->isLockedOut($ipSprayKey)) {
+            $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($ipSprayKey);
+            return new JsonResponse([
+                'error' => $this->trans('enduser.auth.reset_ip_locked_out', ['%seconds%' => (string) $retryAfter], "Too many password reset requests from this IP address. Please retry in {$retryAfter} seconds."),
+            ], 429, ['Retry-After' => (string) $retryAfter]);
+        }
+        $this->lockoutService?->recordTieredFailedAttempt($ipSprayKey, [20 => 300, 40 => 900, 60 => 3600]);
+
         $cdKey = 'pw_reset_' . $projectId . '_' . $normalizedEmail;
 
         if ($this->lockoutService !== null && $this->lockoutService->hasCooldown($cdKey)) {
             // Cooldown active: return 200 without duplicate email dispatch to prevent mail-bombing
             return $this->json(['message' => $this->trans('enduser.auth.reset_link_sent', [], 'If the email exists, a reset link has been sent.')]);
         }
+
+        // Passive cleanup of expired reset tokens for this project
+        /** @var PasswordResetTokenRepository $tokenRepo */
+        $tokenRepo = $this->em->getRepository(PasswordResetToken::class);
+        $tokenRepo->deleteExpired($project);
 
         // Always return success to prevent email enumeration
         $endUser = $this->endUserRepository->findOneByProjectAndEmail($project, $normalizedEmail);
@@ -932,9 +951,14 @@ class EndUserAuthController extends AbstractController
         }
         $tokenStr = (string) ($data['token'] ?? '');
         $newPassword = (string) ($data['password'] ?? '');
+        $confirmation = $data['password_confirmation'] ?? null;
 
         if (empty($tokenStr) || empty($newPassword)) {
             return $this->json(['error' => $this->trans('enduser.auth.token_password_required', [], 'Token and password are required')], 422);
+        }
+
+        if ($confirmation !== null && (string) $confirmation !== $newPassword) {
+            return new JsonResponse(['error' => $this->trans('enduser.auth.password_confirmation_mismatch', [], 'Password and password confirmation do not match.')], 422);
         }
 
         if (strlen($tokenStr) !== 64 || !ctype_xdigit($tokenStr)) {
@@ -942,8 +966,9 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => $this->trans('enduser.auth.invalid_reset_token', [], 'Invalid or expired token')], 400);
         }
 
-        $token = $this->em->getRepository(PasswordResetToken::class)
-            ->findOneBy(['token' => $tokenStr, 'project' => $project]);
+        /** @var PasswordResetTokenRepository $tokenRepo */
+        $tokenRepo = $this->em->getRepository(PasswordResetToken::class);
+        $token = $tokenRepo->findOneBy(['token' => $tokenStr, 'project' => $project]);
 
         if (!$token || !hash_equals($token->token, $tokenStr) || $token->isExpired()) {
             $this->lockoutService?->recordTieredFailedAttempt($ipTokenKey, [5 => 300, 10 => 900, 15 => 3600]);
@@ -958,13 +983,13 @@ class EndUserAuthController extends AbstractController
         }
 
         $validator = $this->passwordValidator ?? new PasswordPolicyValidator($this->translator);
-        if ($endUser->password !== null && $this->hasher->isPasswordValid($endUser, $newPassword)) {
-            return $this->json(['error' => $this->trans('enduser.auth.password_same_as_current', [], 'New password must be different from previous password.')], 422);
-        }
-
         $policyResult = $validator->validate($newPassword, $endUser->email, $endUser->username, $project);
         if (!$policyResult['valid']) {
             return $this->json(['error' => $this->trans('enduser.auth.password_too_weak', [], 'Password must be at least 8 characters'), 'details' => $policyResult['errors']], 422);
+        }
+
+        if ($endUser->password !== null && $this->hasher->isPasswordValid($endUser, $newPassword)) {
+            return $this->json(['error' => $this->trans('enduser.auth.password_same_as_current', [], 'New password must be different from previous password.')], 422);
         }
 
         $endUser->password = $this->hasher->hashPassword($endUser, $newPassword);
@@ -973,6 +998,10 @@ class EndUserAuthController extends AbstractController
         $this->sessionRepo?->revokeAllForEndUser($endUser);
         $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
         $this->em->remove($token);
+
+        // Passive cleanup of other expired tokens for this project
+        $tokenRepo->deleteExpired($project);
+
         $this->em->flush();
 
         $this->lockoutService?->clearAttempts('enduser_login:' . $projectId . ':' . strtolower(trim($endUser->email)));

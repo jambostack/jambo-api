@@ -3627,4 +3627,17 @@ return [
     'cli.purge_tokens.msg_shares_purged' => '- Partages publics purgés : %count%',
     'cli.purge_tokens.msg_intents_cleaned' => '- Intentions de téléversement expirées nettoyées : %count%',
     'cli.purge_tokens.msg_intents_purged' => '- Anciennes intentions de téléversement purgées (> %days%j) : %count%',
+
+    // ─── Cycle 85: OAuth & Password Reset Anti-Enumeration & Rate-Limiting ───
+    'project_oauth.error.payload_too_large' => 'Charge utile de la requête trop volumineuse (max 64 Ko).',
+    'project_oauth.error.rate_limited_login' => 'Trop de tentatives de connexion. Veuillez réessayer plus tard.',
+    'project_oauth.error.rate_limited_token' => 'Trop de tentatives d\'échange de jeton. Veuillez réessayer plus tard.',
+    'project_oauth.error.ip_locked_out' => 'Trop de tentatives échouées depuis cette adresse IP. Veuillez réessayer dans %seconds% secondes.',
+    'project_oauth.error.account_locked_out' => 'Trop de tentatives de connexion échouées. Compte temporairement verrouillé pour des raisons de sécurité. Veuillez réessayer dans %seconds% secondes.',
+    'project_oauth.error.account_inactive' => 'Le compte est inactif ou banni.',
+    'project_oauth.error.revoke_rate_limited' => 'Trop de requêtes de révocation de jeton depuis cette adresse IP. Veuillez réessayer dans %seconds% secondes.',
+    'project_oauth.error.server_error' => 'Une erreur interne est survenue lors de l\'autorisation.',
+    'enduser.auth.invalid_email_format' => 'Format d\'adresse e-mail invalide.',
+    'enduser.auth.reset_ip_locked_out' => 'Trop de requêtes de réinitialisation de mot de passe depuis cette adresse IP. Veuillez réessayer dans %seconds% secondes.',
+    'enduser.auth.password_confirmation_mismatch' => 'Le mot de passe et sa confirmation ne correspondent pas.',
 ];

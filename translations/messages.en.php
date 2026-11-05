@@ -3609,4 +3609,17 @@ return [
     'cli.purge_tokens.msg_shares_purged' => '- Public shares purged: %count%',
     'cli.purge_tokens.msg_intents_cleaned' => '- Expired upload intents cleaned up: %count%',
     'cli.purge_tokens.msg_intents_purged' => '- Old upload intents purged (> %days%d): %count%',
+
+    // ─── Cycle 85: OAuth & Password Reset Anti-Enumeration & Rate-Limiting ───
+    'project_oauth.error.payload_too_large' => 'Request payload too large (max 64KB).',
+    'project_oauth.error.rate_limited_login' => 'Too many login attempts. Please retry later.',
+    'project_oauth.error.rate_limited_token' => 'Too many token exchange attempts. Please retry later.',
+    'project_oauth.error.ip_locked_out' => 'Too many failed attempts from this IP address. Please retry in %seconds% seconds.',
+    'project_oauth.error.account_locked_out' => 'Too many failed login attempts. Account temporarily locked for security. Please retry in %seconds% seconds.',
+    'project_oauth.error.account_inactive' => 'Account is inactive or banned.',
+    'project_oauth.error.revoke_rate_limited' => 'Too many token revocation requests from this IP address. Please retry in %seconds% seconds.',
+    'project_oauth.error.server_error' => 'An internal server error occurred during authorization.',
+    'enduser.auth.invalid_email_format' => 'Invalid email address format.',
+    'enduser.auth.reset_ip_locked_out' => 'Too many password reset requests from this IP address. Please retry in %seconds% seconds.',
+    'enduser.auth.password_confirmation_mismatch' => 'Password and password confirmation do not match.',
 ];

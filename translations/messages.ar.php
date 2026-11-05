@@ -3611,4 +3611,17 @@ return [
     'cli.purge_tokens.msg_shares_purged' => '- المشاركات العامة التي تم تطهيرها: %count%',
     'cli.purge_tokens.msg_intents_cleaned' => '- نوايا الرفع منتهية الصلاحية التي تم تنظيفها: %count%',
     'cli.purge_tokens.msg_intents_purged' => '- نوايا الرفع القديمة التي تم تطهيرها (> %days% يوم): %count%',
+
+    // ─── Cycle 85: OAuth & Password Reset Anti-Enumeration & Rate-Limiting ───
+    'project_oauth.error.payload_too_large' => 'حمولة الطلب كبيرة جدًا (الحد الأقصى 64 كيلوبايت).',
+    'project_oauth.error.rate_limited_login' => 'عدد كبير جدًا من محاولات تسجيل الدخول. يرجى المحاولة مرة أخرى لاحقًا.',
+    'project_oauth.error.rate_limited_token' => 'عدد كبير جدًا من محاولات تبادل الرموز. يرجى المحاولة مرة أخرى لاحقًا.',
+    'project_oauth.error.ip_locked_out' => 'عدد كبير جدًا من المحاولات الفاشلة من عنوان IP هذا. يرجى المحاولة مرة أخرى بعد %seconds% ثانية.',
+    'project_oauth.error.account_locked_out' => 'عدد كبير جدًا من محاولات تسجيل الدخول الفاشلة. تم قفل الحساب مؤقتًا لأسباب أمنية. يرجى المحاولة مرة أخرى بعد %seconds% ثانية.',
+    'project_oauth.error.account_inactive' => 'الحساب غير نشط أو محظور.',
+    'project_oauth.error.revoke_rate_limited' => 'عدد كبير جدًا من طلبات إبطال الرموز من عنوان IP هذا. يرجى المحاولة مرة أخرى بعد %seconds% ثانية.',
+    'project_oauth.error.server_error' => 'حدث خطأ داخلي في الخادم أثناء التفويض.',
+    'enduser.auth.invalid_email_format' => 'تنسيق عنوان البريد الإلكتروني غير صالح.',
+    'enduser.auth.reset_ip_locked_out' => 'عدد كبير جدًا من طلبات إعادة تعيين كلمة المرور من عنوان IP هذا. يرجى المحاولة مرة أخرى بعد %seconds% ثانية.',
+    'enduser.auth.password_confirmation_mismatch' => 'كلمة المرور وتأكيد كلمة المرور غير متطابقين.',
 ];

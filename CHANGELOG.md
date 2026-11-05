@@ -7,6 +7,29 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.150] — 2026-11-05
+
+### OAuth Flow Hardening, End-User Password Reset Anti-Enumeration & Multi-Tenant Reset Purge (Cycle #85)
+- **OAuth Authorization Server Security Hardening (`ProjectOAuthController`)**:
+  - Added request payload size limit (max 64KB) on `/authorize`, `/token`, and `/revoke` endpoints (HTTP 413).
+  - Integrated sliding window rate limiting on credential submission during `/authorize` (HTTP 429).
+  - Implemented anti-enumeration timing-safe password evaluation for non-existent users during OAuth login (eliminating email enumeration timing oracles).
+  - Unified account status responses (`project_oauth.error.account_inactive`) preventing internal status enumeration.
+  - Enforced dual account and IP tiered lockout mechanisms (`enduser_login` and `enduser_login_ip`) shared with `EndUserAuthController::login`.
+  - Hardened `/token` and `/revoke` endpoints with tenant-scoped IP lockout tracking (`oauth_token_ip`, `oauth_revoke_ip`) and tiered lockout progression.
+- **End-User Password Reset Anti-Enumeration & Spray Protection (`EndUserAuthController`)**:
+  - Added strict email validation (`FILTER_VALIDATE_EMAIL` and length limit 180 chars) with localized HTTP 422 response.
+  - Implemented IP-level reset spray lockout defense (`pw_reset_spray_ip`) returning HTTP 429 with `Retry-After` headers.
+  - Added passive expired token cleanup on both forgot-password and reset-password actions.
+  - Enforced `password_confirmation` validation matching and optimized password policy verification order to reject weak passwords prior to expensive hash computations.
+- **Multi-Tenant Password Reset Token Scoping (`PasswordResetTokenRepository` & `PurgeExpiredTokensCommand`)**:
+  - Extended `PasswordResetTokenRepository` with optional tenant context (`?Project $project = null`) on `countExpired`, `deleteExpired`, and `findValidByToken`.
+  - Updated `PurgeExpiredTokensCommand` (`app:purge-expired-tokens`) so project-scoped retention runs purge expired reset tokens for that specific project.
+- **Strict 100% I18n Compliance**:
+  - Added 11 new translation keys (`project_oauth.error.*` and `enduser.auth.*`) with 100% parity across all 4 locales (3,326 keys each in English, French, Spanish, and Arabic).
+- **Test Suite Verification**:
+  - Added dedicated test suite `Cycle85OAuthAndPasswordResetHardeningTest` covering payload limits, rate limiters, timing defense, lockout tiers, confirmation mismatch, and repository signatures (16 tests, 81 assertions, 100% pass).
+
 ## [1.26.149] — 2026-11-05
 
 ### Multi-Tenant Token & Session Retention Purge Hardening, PHP 8.5 Warning Elimination & Strict I18n (Cycle #84)

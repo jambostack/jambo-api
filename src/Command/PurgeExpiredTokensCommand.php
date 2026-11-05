@@ -128,7 +128,7 @@ class PurgeExpiredTokensCommand extends Command
             }
 
             if ($isDryRun) {
-                $countReset = $project === null ? $this->resetTokenRepository->countExpired() : 0;
+                $countReset = $this->resetTokenRepository->countExpired($project);
                 $countPat = $project === null ? $this->patRepository->countExpired() : 0;
                 $countApi = $this->apiTokenRepository->countExpired($project);
                 $countRefresh = $this->refreshTokenRepository->countExpired($project);
@@ -136,11 +136,11 @@ class PurgeExpiredTokensCommand extends Command
                 $countSessions = $this->sessionRepository->countInactive($threshold, $project);
 
                 $tableRows = [];
+                $tableRows[] = [
+                    $this->trans('cli.purge_tokens.cat_reset_tokens', [], null, null, 'Password reset tokens'),
+                    $countReset,
+                ];
                 if ($project === null) {
-                    $tableRows[] = [
-                        $this->trans('cli.purge_tokens.cat_reset_tokens', [], null, null, 'Password reset tokens'),
-                        $countReset,
-                    ];
                     $tableRows[] = [
                         $this->trans('cli.purge_tokens.cat_pat_tokens', [], null, null, 'Personal access tokens (PAT)'),
                         $countPat,
@@ -189,7 +189,7 @@ class PurgeExpiredTokensCommand extends Command
                 return Command::SUCCESS;
             }
 
-            $purgedReset = $project === null ? $this->resetTokenRepository->deleteExpired() : 0;
+            $purgedReset = $this->resetTokenRepository->deleteExpired($project);
             $purgedPat = $project === null ? $this->patRepository->deleteExpired() : 0;
             $purgedApi = $this->apiTokenRepository->deleteExpired($project);
             $purgedRefresh = $this->refreshTokenRepository->deleteExpired($project);
@@ -202,8 +202,8 @@ class PurgeExpiredTokensCommand extends Command
             $messages = [
                 $this->trans('cli.purge_tokens.success_title', [], null, null, 'Token and session retention cleanup completed:'),
             ];
+            $messages[] = $this->trans('cli.purge_tokens.msg_reset_purged', ['%count%' => $purgedReset], null, null, "- Password reset tokens purged: {$purgedReset}");
             if ($project === null) {
-                $messages[] = $this->trans('cli.purge_tokens.msg_reset_purged', ['%count%' => $purgedReset], null, null, "- Password reset tokens purged: {$purgedReset}");
                 $messages[] = $this->trans('cli.purge_tokens.msg_pat_purged', ['%count%' => $purgedPat], null, null, "- Personal access tokens (PAT) purged: {$purgedPat}");
             }
             $messages[] = $this->trans('cli.purge_tokens.msg_api_purged', ['%count%' => $purgedApi], null, null, "- Project API tokens purged: {$purgedApi}");

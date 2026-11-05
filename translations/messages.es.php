@@ -3609,4 +3609,17 @@ return [
     'cli.purge_tokens.msg_shares_purged' => '- Recursos compartidos públicos purgados: %count%',
     'cli.purge_tokens.msg_intents_cleaned' => '- Intenciones de subida vencidas limpiadas: %count%',
     'cli.purge_tokens.msg_intents_purged' => '- Intenciones de subida antiguas purgadas (> %days%d): %count%',
+
+    // ─── Cycle 85: OAuth & Password Reset Anti-Enumeration & Rate-Limiting ───
+    'project_oauth.error.payload_too_large' => 'Carga útil de la solicitud demasiado grande (máx. 64 KB).',
+    'project_oauth.error.rate_limited_login' => 'Demasiados intentos de inicio de sesión. Por favor, inténtelo de nuevo más tarde.',
+    'project_oauth.error.rate_limited_token' => 'Demasiados intentos de intercambio de tokens. Por favor, inténtelo de nuevo más tarde.',
+    'project_oauth.error.ip_locked_out' => 'Demasiados intentos fallidos desde esta dirección IP. Por favor, inténtelo de nuevo en %seconds% segundos.',
+    'project_oauth.error.account_locked_out' => 'Demasiados intentos fallidos de inicio de sesión. Cuenta bloqueada temporalmente por seguridad. Por favor, inténtelo de nuevo en %seconds% segundos.',
+    'project_oauth.error.account_inactive' => 'La cuenta está inactiva o suspendida.',
+    'project_oauth.error.revoke_rate_limited' => 'Demasiadas solicitudes de revocación de tokens desde esta dirección IP. Por favor, inténtelo de nuevo en %seconds% segundos.',
+    'project_oauth.error.server_error' => 'Se produjo un error interno del servidor durante la autorización.',
+    'enduser.auth.invalid_email_format' => 'Formato de dirección de correo electrónico no válido.',
+    'enduser.auth.reset_ip_locked_out' => 'Demasiadas solicitudes de restablecimiento de contraseña desde esta dirección IP. Por favor, inténtelo de nuevo en %seconds% segundos.',
+    'enduser.auth.password_confirmation_mismatch' => 'La contraseña y la confirmación de la contraseña no coinciden.',
 ];

@@ -9,11 +9,13 @@ use App\Service\EndUserJwtService;
 use App\Service\ProjectAuthLockoutService;
 use App\Service\ProjectOAuthService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -28,6 +30,8 @@ class ProjectOAuthController extends AbstractController
         private readonly ProjectAuthLockoutService $lockoutService,
         private readonly UserPasswordHasherInterface $passwordHasher,
         private readonly ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.login_limiter')]
+        private readonly ?RateLimiterFactory $loginLimiter = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -41,6 +45,13 @@ class ProjectOAuthController extends AbstractController
     #[Route('/authorize', name: 'authorize', methods: ['GET', 'POST'])]
     public function authorize(string $projectUuid, Request $request): Response
     {
+        if (strlen($request->getContent()) > 65536) {
+            return new JsonResponse([
+                'error' => 'invalid_request',
+                'error_description' => $this->trans('project_oauth.error.payload_too_large', [], 'Request payload too large (max 64KB).'),
+            ], 413);
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
@@ -115,6 +126,26 @@ class ProjectOAuthController extends AbstractController
         // Handle POST credentials or consent actions
         $loginError = null;
         if ($request->isMethod('POST')) {
+            if ($this->loginLimiter !== null) {
+                $limiter = $this->loginLimiter->create($request->getClientIp() ?: '127.0.0.1');
+                if (!$limiter->consume()->isAccepted()) {
+                    $msg = $this->trans('project_oauth.error.rate_limited_login', [], 'Too many login attempts. Please retry later.');
+                    if ($request->getContentTypeFormat() === 'json' || $request->query->get('format') === 'json') {
+                        return new JsonResponse(['error' => 'slow_down', 'error_description' => $msg], 429);
+                    }
+                    return $this->render('oauth/authorize.html.twig', [
+                        'project'               => $project,
+                        'client'                => $client,
+                        'redirect_uri'          => $redirectUri,
+                        'state'                 => $state,
+                        'scope'                 => $scope,
+                        'code_challenge'        => $codeChallenge,
+                        'code_challenge_method' => $codeChallengeMethod,
+                        'login_error'           => $msg,
+                    ], new Response(status: 429));
+                }
+            }
+
             $action = $request->request->get('action', 'authorize');
             if ($action === 'deny') {
                 $sep = str_contains($redirectUri, '?') ? '&' : '?';
@@ -129,20 +160,54 @@ class ProjectOAuthController extends AbstractController
             if ($endUser === null) {
                 $email = trim((string) $request->request->get('email', ''));
                 $password = (string) $request->request->get('password', '');
+                $normalizedEmail = strtolower($email);
+                $clientIp = $request->getClientIp() ?: '127.0.0.1';
+                $projectUuidStr = $project->uuid?->toString() ?? $projectUuid;
 
-                if ($email !== '' && $password !== '') {
-                    $candidate = $this->endUserRepository->findOneByProjectAndEmail($project, $email);
-                    if ($candidate && $this->passwordHasher->isPasswordValid($candidate, $password)) {
-                        if ($candidate->isActive()) {
-                            $endUser = $candidate;
-                        } else {
-                            $loginError = $this->trans('project_oauth.error.account_status', ['%status%' => (string) $candidate->status], 'Account is ' . $candidate->status . '.');
-                        }
-                    } else {
-                        $loginError = $this->trans('project_oauth.error.invalid_credentials', [], 'Invalid credentials.');
+                $accountLockoutKey = 'enduser_login:' . $projectUuidStr . ':' . $normalizedEmail;
+                $ipLockoutKey = 'enduser_login_ip:' . $projectUuidStr . ':' . $clientIp;
+
+                if ($this->lockoutService->isLockedOut($ipLockoutKey)) {
+                    $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($ipLockoutKey);
+                    $loginError = $this->trans('project_oauth.error.ip_locked_out', ['%seconds%' => (string) $retryAfter], "Too many failed attempts from this IP address. Please retry in {$retryAfter} seconds.");
+                    if ($request->getContentTypeFormat() === 'json' || $request->query->get('format') === 'json') {
+                        return new JsonResponse(['error' => 'slow_down', 'error_description' => $loginError], 429, ['Retry-After' => (string) $retryAfter]);
                     }
-                } else {
+                } elseif ($normalizedEmail !== '' && $this->lockoutService->isLockedOut($accountLockoutKey)) {
+                    $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($accountLockoutKey);
+                    $loginError = $this->trans('project_oauth.error.account_locked_out', ['%seconds%' => (string) $retryAfter], "Too many failed login attempts. Account temporarily locked for security. Please retry in {$retryAfter} seconds.");
+                    if ($request->getContentTypeFormat() === 'json' || $request->query->get('format') === 'json') {
+                        return new JsonResponse(['error' => 'slow_down', 'error_description' => $loginError], 429, ['Retry-After' => (string) $retryAfter]);
+                    }
+                } elseif ($normalizedEmail === '' || $password === '') {
                     $loginError = $this->trans('project_oauth.error.credentials_required', [], 'Email and password are required.');
+                } elseif (strlen($normalizedEmail) > 180 || !filter_var($normalizedEmail, FILTER_VALIDATE_EMAIL)) {
+                    // Timing-safe equalization: dummy password check to eliminate timing leak
+                    $dummyUser = new EndUser($project, 'timing-defense@local.internal');
+                    $dummyUser->password = '$2y$13$BIHXwdLFZAOYbWPDBT2n6uUEtB81DTDcRMD.a4VGm0SWZJ48TIjt.';
+                    $this->passwordHasher->isPasswordValid($dummyUser, $password);
+                    $this->lockoutService->recordTieredFailedAttempt($accountLockoutKey);
+                    $this->lockoutService->recordTieredFailedAttempt($ipLockoutKey, [10 => 300, 20 => 900, 30 => 3600]);
+                    $loginError = $this->trans('project_oauth.error.invalid_credentials', [], 'Invalid credentials.');
+                } else {
+                    $candidate = $this->endUserRepository->findOneByProjectAndEmail($project, $normalizedEmail);
+                    if ($candidate === null) {
+                        $dummyUser = new EndUser($project, 'timing-defense@local.internal');
+                        $dummyUser->password = '$2y$13$BIHXwdLFZAOYbWPDBT2n6uUEtB81DTDcRMD.a4VGm0SWZJ48TIjt.';
+                        $this->passwordHasher->isPasswordValid($dummyUser, $password);
+                        $this->lockoutService->recordTieredFailedAttempt($accountLockoutKey);
+                        $this->lockoutService->recordTieredFailedAttempt($ipLockoutKey, [10 => 300, 20 => 900, 30 => 3600]);
+                        $loginError = $this->trans('project_oauth.error.invalid_credentials', [], 'Invalid credentials.');
+                    } elseif (!$this->passwordHasher->isPasswordValid($candidate, $password)) {
+                        $this->lockoutService->recordTieredFailedAttempt($accountLockoutKey);
+                        $this->lockoutService->recordTieredFailedAttempt($ipLockoutKey, [10 => 300, 20 => 900, 30 => 3600]);
+                        $loginError = $this->trans('project_oauth.error.invalid_credentials', [], 'Invalid credentials.');
+                    } elseif (!$candidate->isActive()) {
+                        $loginError = $this->trans('project_oauth.error.account_inactive', [], 'Account is inactive or banned.');
+                    } else {
+                        $this->lockoutService->clearAttempts($accountLockoutKey);
+                        $endUser = $candidate;
+                    }
                 }
             }
         }
@@ -207,6 +272,13 @@ class ProjectOAuthController extends AbstractController
     #[Route('/token', name: 'token', methods: ['POST'])]
     public function token(string $projectUuid, Request $request): JsonResponse
     {
+        if (strlen($request->getContent()) > 65536) {
+            return new JsonResponse([
+                'error' => 'invalid_request',
+                'error_description' => $this->trans('project_oauth.error.payload_too_large', [], 'Request payload too large (max 64KB).'),
+            ], 413);
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
@@ -216,18 +288,34 @@ class ProjectOAuthController extends AbstractController
             return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
         }
 
+        if ($this->loginLimiter !== null) {
+            $limiter = $this->loginLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse([
+                    'error' => 'slow_down',
+                    'error_description' => $this->trans('project_oauth.error.rate_limited_token', [], 'Too many token exchange attempts. Please retry later.'),
+                ], 429);
+            }
+        }
+
         $clientId = $this->getRequestParam($request, 'client_id');
         $clientSecret = $this->getRequestParam($request, 'client_secret');
         $grantType = $this->getRequestParam($request, 'grant_type');
 
         // Vérifier protection lockout sur l'IP cliente
         $clientIp = $request->getClientIp() ?? 'unknown';
-        if ($this->lockoutService->isLockedOut($clientIp)) {
-            $remaining = $this->lockoutService->getRemainingLockoutSeconds($clientIp);
+        $projectUuidStr = $project->uuid?->toString() ?? $projectUuid;
+        $ipLockoutKey = 'oauth_token_ip:' . $projectUuidStr . ':' . $clientIp;
+
+        if ($this->lockoutService->isLockedOut($clientIp) || $this->lockoutService->isLockedOut($ipLockoutKey)) {
+            $remaining = max(
+                $this->lockoutService->getRemainingLockoutSeconds($clientIp),
+                $this->lockoutService->getRemainingLockoutSeconds($ipLockoutKey)
+            );
             return new JsonResponse([
                 'error' => 'slow_down',
                 'error_description' => $this->trans('project_oauth.error.rate_limited', ['%seconds%' => (string) $remaining], "Too many failed attempts. Locked out for {$remaining} seconds."),
-            ], 429);
+            ], 429, ['Retry-After' => (string) $remaining]);
         }
 
         try {
@@ -240,6 +328,7 @@ class ProjectOAuthController extends AbstractController
 
                 $tokens = $this->oauthService->exchangeAuthorizationCode($client, $code, $redirectUri, $codeVerifier);
                 $this->lockoutService->clearAttempts($clientIp);
+                $this->lockoutService->clearAttempts($ipLockoutKey);
                 return new JsonResponse($tokens);
             }
 
@@ -247,6 +336,7 @@ class ProjectOAuthController extends AbstractController
                 $refreshToken = (string) $this->getRequestParam($request, 'refresh_token', '');
                 $tokens = $this->oauthService->refreshAccessToken($client, $refreshToken);
                 $this->lockoutService->clearAttempts($clientIp);
+                $this->lockoutService->clearAttempts($ipLockoutKey);
                 return new JsonResponse($tokens);
             }
 
@@ -257,6 +347,7 @@ class ProjectOAuthController extends AbstractController
 
         } catch (\Throwable $e) {
             $this->lockoutService->recordFailedAttempt($clientIp);
+            $this->lockoutService->recordTieredFailedAttempt($ipLockoutKey, [10 => 300, 20 => 900, 30 => 3600]);
             return new JsonResponse([
                 'error' => 'invalid_grant',
                 'error_description' => $e->getMessage(),
@@ -274,6 +365,16 @@ class ProjectOAuthController extends AbstractController
         }
         if (!$project) {
             return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
+        }
+
+        if ($this->loginLimiter !== null) {
+            $limiter = $this->loginLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse([
+                    'error' => 'slow_down',
+                    'error_description' => $this->trans('project_oauth.error.rate_limited_token', [], 'Too many token exchange attempts. Please retry later.'),
+                ], 429);
+            }
         }
 
         $authHeader = $request->headers->get('Authorization', '');
@@ -315,6 +416,13 @@ class ProjectOAuthController extends AbstractController
     #[Route('/revoke', name: 'revoke', methods: ['POST'])]
     public function revoke(string $projectUuid, Request $request): JsonResponse
     {
+        if (strlen($request->getContent()) > 65536) {
+            return new JsonResponse([
+                'error' => 'invalid_request',
+                'error_description' => $this->trans('project_oauth.error.payload_too_large', [], 'Request payload too large (max 64KB).'),
+            ], 413);
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
@@ -324,6 +432,18 @@ class ProjectOAuthController extends AbstractController
             return new JsonResponse(['error' => 'invalid_client', 'error_description' => $this->trans('project_oauth.error.project_not_found', [], 'Project not found.')], 404);
         }
 
+        $clientIp = $request->getClientIp() ?: '127.0.0.1';
+        $projectUuidStr = $project->uuid?->toString() ?? $projectUuid;
+        $revokeIpKey = 'oauth_revoke_ip:' . $projectUuidStr . ':' . $clientIp;
+
+        if ($this->lockoutService->isLockedOut($revokeIpKey)) {
+            $remaining = $this->lockoutService->getRemainingLockoutSeconds($revokeIpKey);
+            return new JsonResponse([
+                'error' => 'slow_down',
+                'error_description' => $this->trans('project_oauth.error.revoke_rate_limited', ['%seconds%' => (string) $remaining], "Too many token revocation requests from this IP address. Please retry in {$remaining} seconds."),
+            ], 429, ['Retry-After' => (string) $remaining]);
+        }
+
         $clientId = (string) $this->getRequestParam($request, 'client_id', '');
         $clientSecret = $this->getRequestParam($request, 'client_secret');
         $token = (string) $this->getRequestParam($request, 'token', '');
@@ -331,8 +451,10 @@ class ProjectOAuthController extends AbstractController
         try {
             $client = $this->oauthService->validateClient($clientId, $clientSecret);
             $this->oauthService->revokeToken($client, $token);
+            $this->lockoutService->clearAttempts($revokeIpKey);
             return new JsonResponse(['status' => 'revoked']);
         } catch (\Throwable $e) {
+            $this->lockoutService->recordTieredFailedAttempt($revokeIpKey, [10 => 300, 20 => 900, 30 => 3600]);
             return new JsonResponse(['error' => 'invalid_request', 'error_description' => $e->getMessage()], 400);
         }
     }

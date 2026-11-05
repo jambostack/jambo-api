@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\PasswordResetToken;
+use App\Entity\Project;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -16,32 +17,46 @@ class PasswordResetTokenRepository extends ServiceEntityRepository
         parent::__construct($registry, PasswordResetToken::class);
     }
 
-    public function findValidByToken(string $token): ?PasswordResetToken
+    public function findValidByToken(string $token, ?Project $project = null): ?PasswordResetToken
     {
-        $record = $this->findOneBy(['token' => $token]);
+        $criteria = ['token' => $token];
+        if ($project !== null) {
+            $criteria['project'] = $project;
+        }
+        $record = $this->findOneBy($criteria);
         if ($record === null || $record->isExpired()) {
             return null;
         }
         return $record;
     }
 
-    public function countExpired(): int
+    public function countExpired(?Project $project = null): int
     {
-        return (int) $this->createQueryBuilder('t')
+        $qb = $this->createQueryBuilder('t')
             ->select('COUNT(t.id)')
             ->where('t.expiresAt < :now')
-            ->setParameter('now', new \DateTimeImmutable())
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('now', new \DateTimeImmutable());
+
+        if ($project !== null) {
+            $qb->andWhere('t.project = :project')
+                ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
-    public function deleteExpired(): int
+    public function deleteExpired(?Project $project = null): int
     {
-        return $this->createQueryBuilder('t')
+        $qb = $this->createQueryBuilder('t')
             ->delete()
             ->where('t.expiresAt < :now')
-            ->setParameter('now', new \DateTimeImmutable())
-            ->getQuery()
-            ->execute();
+            ->setParameter('now', new \DateTimeImmutable());
+
+        if ($project !== null) {
+            $qb->andWhere('t.project = :project')
+                ->setParameter('project', $project);
+        }
+
+        return (int) $qb->getQuery()->execute();
     }
 }
