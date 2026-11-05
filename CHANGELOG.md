@@ -7,6 +7,35 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.94] — 2026-11-05
+
+### AiController, AuditController & SearchController Hardening, Bounded Payloads, Prompt Injection Defense & Strict I18N
+- **AiController Hardening**:
+  - Injected Symfony `TranslatorInterface` and removed all hardcoded English/French error strings.
+  - Added strict prompt injection defense (`sanitizePromptInput` & `containsDangerousPromptBreakout`) filtering null bytes, bidirectional Trojan Source overrides, neutralizing special LLM delimiter tokens (`<|im_start|>`, `[INST]`, `<<SYS>>`), and rejecting jailbreak patterns with HTTP 400 (`ai.prompt_injection_detected`).
+  - Implemented prompt size bounds: brief (min 3, max 10,000 characters), text (min 3, max 50,000 characters), max words (min 5, max 2,000).
+  - Deep array structure validation for JSON content payloads (max depth 5, max 100 keys, key length max 255 chars, value length max 50,000 chars).
+  - Multi-tenant tenant isolation with project token verification, abilities verification, and cross-project token rejection (HTTP 403).
+  - Defensive error handling: handled transport timeouts (HTTP 504), provider rate limiting (HTTP 429), and missing provider errors (HTTP 503) without leaking provider API keys or internal stack traces.
+- **AuditController Hardening**:
+  - Injected Symfony `TranslatorInterface` with full localization of error responses.
+  - Added strict UUID format validation for project identifiers before executing queries.
+  - Bounded pagination parameters: `limit` capped at 100 (`MAX_PAGE_LIMIT`), `offset` capped at 10,000 (`MAX_OFFSET`) to prevent denial-of-service / memory exhaustion.
+  - Enforced cross-project token isolation with HTTP 403 and read ability verification.
+- **SearchController Hardening**:
+  - Injected Symfony `TranslatorInterface` with localized messages.
+  - Multi-tenant cross-project isolation: validated project tokens and abilities (`read` for search, `manage`/`write` for reindex) with HTTP 403.
+  - Query parameter bounds: `q` query string sanitized of null bytes, required, and capped at 500 characters (`MAX_QUERY_LENGTH`).
+  - Collection and locale format validation via regex (`/^[a-zA-Z0-9_\-]+$/` and `/^[a-zA-Z]{2,4}([-_][a-zA-Z0-9]{2,8})?$/`).
+  - Bounded pagination parameters: `limit` capped at 100, `offset` capped at 10,000.
+  - Rate limiting with localized 429 response for both search and reindex operations.
+- **Strict I18N Parity**:
+  - Added 45 new translation keys (`ai.*`, `audit.*`, `search.*`) across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+  - Strict 100% dictionary key parity maintained (2,433 keys across each of the 4 languages, 0 missing).
+- **Quality Assurance**:
+  - Added comprehensive test suite `tests/Controller/Cycle39HardeningTest.php` (9 tests, 228 assertions).
+  - Full suite passing green (Cycle 38 & Cycle 39: 16 tests, 509 assertions).
+
 ## [1.26.93] — 2026-11-05
 
 ### TusController, CollectionTemplateController & ProjectTemplateController Hardening, Bounded Payloads & Strict I18N

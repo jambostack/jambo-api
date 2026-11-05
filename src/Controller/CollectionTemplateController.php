@@ -136,7 +136,7 @@ class CollectionTemplateController extends AbstractController
     #[Route('/from-collection/{projectUuid}/{collectionSlug}', name: 'save_from_collection', methods: ['POST'])]
     public function saveFromCollection(string $projectUuid, string $collectionSlug, Request $request): JsonResponse
     {
-        if (!Uuid::isValid($projectUuid)) {
+        if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $projectUuid)) {
             return $this->json(['error' => $this->trans('template.project_not_found', [], 'Project not found')], 404);
         }
 
