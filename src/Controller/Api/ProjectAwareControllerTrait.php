@@ -14,13 +14,17 @@ trait ProjectAwareControllerTrait
 {
     private function resolveProject(string $uuid, Request $request, bool $requireManage = false): Project|JsonResponse
     {
+        $notFoundMsg = method_exists($this, 'trans') ? $this->trans('project.not_found', [], 'Project not found') : 'Project not found';
+        $forbiddenMsg = method_exists($this, 'trans') ? $this->trans('common.forbidden', [], 'Forbidden') : 'Forbidden';
+        $managePermMsg = method_exists($this, 'trans') ? $this->trans('project.no_manage_permission', [], 'You do not have permission to manage end-user fields.') : 'You do not have permission to manage end-user fields.';
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $notFoundMsg], 404);
         }
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $notFoundMsg], 404);
         }
 
         // Session auth (admin UI)
@@ -32,7 +36,7 @@ trait ProjectAwareControllerTrait
             $member = $this->memberRepo->findActiveByUserAndProject($user, $project);
             if ($member !== null) {
                 if ($requireManage && $member->role?->hasPermission('project.manage') !== true) {
-                    return $this->json(['error' => 'You do not have permission to manage end-user fields.'], 403);
+                    return $this->json(['error' => $managePermMsg], 403);
                 }
                 return $project;
             }
@@ -43,13 +47,13 @@ trait ProjectAwareControllerTrait
         $token = $this->tokenChecker->resolve($request);
         if ($token !== null && $token->project->uuid?->toString() === $uuid) {
             if ($requireManage && !$token->can('manage') && !$token->can('*')) {
-                return $this->json(['error' => 'You do not have permission to manage end-user fields.'], 403);
+                return $this->json(['error' => $managePermMsg], 403);
             }
             if ($this->tokenChecker->isAllowedForMethod($token, $request->getMethod())) {
                 return $project;
             }
         }
 
-        return $this->json(['error' => 'Forbidden'], 403);
+        return $this->json(['error' => $forbiddenMsg], 403);
     }
 }

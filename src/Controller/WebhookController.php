@@ -10,17 +10,20 @@ use App\Repository\WebhookLogRepository;
 use App\Repository\WebhookRepository;
 use App\Service\Security\SsrfProtectionService;
 use App\Service\WebhookSecretService;
+use App\Service\WebhookService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/projects/{projectUuid}/webhooks', name: 'api_webhook_')]
 class WebhookController extends AbstractController
 {
     private SsrfProtectionService $ssrfProtection;
+    private WebhookService $webhookService;
 
     public function __construct(
         private ProjectRepository $projectRepository,
@@ -31,8 +34,26 @@ class WebhookController extends AbstractController
         private WebhookSecretService $secretService,
         private ?MessageBusInterface $bus = null,
         ?SsrfProtectionService $ssrfProtection = null,
+        ?WebhookService $webhookService = null,
+        private ?TranslatorInterface $translator = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
+        $this->webhookService = $webhookService ?? new WebhookService(
+            $this->webhookRepository,
+            $this->em,
+            new \Symfony\Component\HttpClient\NativeHttpClient(),
+            $this->secretService,
+            $this->ssrfProtection,
+            $this->translator
+        );
+    }
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default !== null ? strtr($default, $parameters) : $id;
     }
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -61,16 +82,16 @@ class WebhookController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON body'], 400);
+            return $this->json(['error' => $this->trans('webhook.invalid_json', [], 'Invalid JSON body')], 400);
         }
 
         if (empty($data['name']) || empty($data['url'])) {
-            return $this->json(['error' => 'name and url are required'], 422);
+            return $this->json(['error' => $this->trans('webhook.name_url_required', [], 'name and url are required')], 422);
         }
 
         $name = trim((string) $data['name']);
         if (strlen($name) > 100) {
-            return $this->json(['error' => 'Webhook name cannot exceed 100 characters'], 422);
+            return $this->json(['error' => $this->trans('webhook.name_too_long', [], 'Webhook name cannot exceed 100 characters')], 422);
         }
 
         $url = trim((string) $data['url']);
@@ -82,7 +103,7 @@ class WebhookController extends AbstractController
         if (!empty($data['secret'])) {
             $customSecret = (string) $data['secret'];
             if (strlen($customSecret) < 16 || strlen($customSecret) > 256) {
-                return $this->json(['error' => 'Webhook secret must be between 16 and 256 characters long'], 422);
+                return $this->json(['error' => $this->trans('webhook.secret_length_invalid', [], 'Webhook secret must be between 16 and 256 characters long')], 422);
             }
             $plainSecret = $customSecret;
         } elseif (!array_key_exists('secret', $data) || !empty($data['auto_generate_secret'])) {
@@ -139,13 +160,13 @@ class WebhookController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON body'], 400);
+            return $this->json(['error' => $this->trans('webhook.invalid_json', [], 'Invalid JSON body')], 400);
         }
 
         if (isset($data['name'])) {
             $name = trim((string) $data['name']);
             if (strlen($name) > 100) {
-                return $this->json(['error' => 'Webhook name cannot exceed 100 characters'], 422);
+                return $this->json(['error' => $this->trans('webhook.name_too_long', [], 'Webhook name cannot exceed 100 characters')], 422);
             }
             $webhook->name = $name;
         }
@@ -165,7 +186,7 @@ class WebhookController extends AbstractController
             } else {
                 $customSecret = (string) $data['secret'];
                 if (strlen($customSecret) < 16 || strlen($customSecret) > 256) {
-                    return $this->json(['error' => 'Webhook secret must be between 16 and 256 characters long'], 422);
+                    return $this->json(['error' => $this->trans('webhook.secret_length_invalid', [], 'Webhook secret must be between 16 and 256 characters long')], 422);
                 }
                 $webhook->secret = $this->secretService->encrypt($customSecret);
             }
@@ -206,7 +227,7 @@ class WebhookController extends AbstractController
         if (!empty($data['secret'])) {
             $customSecret = (string) $data['secret'];
             if (strlen($customSecret) < 16 || strlen($customSecret) > 256) {
-                return $this->json(['error' => 'Webhook secret must be between 16 and 256 characters long'], 422);
+                return $this->json(['error' => $this->trans('webhook.secret_length_invalid', [], 'Webhook secret must be between 16 and 256 characters long')], 422);
             }
             $plainSecret = $customSecret;
         } else {
@@ -218,7 +239,7 @@ class WebhookController extends AbstractController
 
         return $this->json([
             'success'      => true,
-            'message'      => 'Webhook secret rotated successfully',
+            'message'      => $this->trans('webhook.secret_rotated', [], 'Webhook secret rotated successfully'),
             'plain_secret' => $plainSecret,
             'data'         => $this->serialize($webhook),
         ]);
@@ -292,34 +313,21 @@ class WebhookController extends AbstractController
             $this->bus->dispatch(new SendWebhookMessage($webhook->id, 'ping', $payload));
             return $this->json([
                 'success' => true,
-                'message' => 'Test webhook queued successfully',
+                'message' => $this->trans('webhook.test_queued', [], 'Test webhook queued successfully'),
                 'payload' => $payload,
             ]);
         }
 
         return $this->json([
             'success' => false,
-            'message' => 'Message bus is not configured',
+            'message' => $this->trans('webhook.bus_not_configured', [], 'Message bus is not configured'),
             'payload' => $payload,
         ], 503);
     }
 
     private function validateWebhookUrl(string $url): ?string
     {
-        if (strlen($url) > 2048) {
-            return 'Webhook URL cannot exceed 2048 characters';
-        }
-
-        $scheme = parse_url($url, PHP_URL_SCHEME);
-        if (!filter_var($url, FILTER_VALIDATE_URL) || !in_array($scheme, ['https', 'http'], true)) {
-            return 'Webhook URL must be a valid http or https URL';
-        }
-
-        if (!$this->ssrfProtection->isSafeUrl($url, false, $reason)) {
-            return $reason ?? 'Internal and private IP addresses are not allowed for webhooks';
-        }
-
-        return null;
+        return $this->webhookService->validateUrl($url);
     }
 
     private function serialize(Webhook $webhook): array
@@ -341,17 +349,17 @@ class WebhookController extends AbstractController
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('webhook.project_not_found', [], 'Project not found')], 404);
         }
         if ($project === null) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('webhook.project_not_found', [], 'Project not found')], 404);
         }
 
         $user = $this->getUser();
         if ($user instanceof \App\Entity\User) {
             if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
                 if (!$project->hasMember($user)) {
-                    return $this->json(['error' => 'Access denied to this project.'], 403);
+                    return $this->json(['error' => $this->trans('webhook.access_denied', [], 'Access denied to this project.')], 403);
                 }
                 $this->denyAccessUnlessGranted($requiredPermission, $project);
             }
@@ -370,10 +378,10 @@ class WebhookController extends AbstractController
         try {
             $webhook = $this->webhookRepository->findOneBy(['uuid' => $uuid, 'project' => $project]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Webhook not found'], 404);
+            return $this->json(['error' => $this->trans('webhook.not_found', [], 'Webhook not found')], 404);
         }
         if ($webhook === null) {
-            return $this->json(['error' => 'Webhook not found'], 404);
+            return $this->json(['error' => $this->trans('webhook.not_found', [], 'Webhook not found')], 404);
         }
         return $webhook;
     }

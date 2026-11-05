@@ -10,11 +10,17 @@ use Symfony\Component\HttpClient\HttpClient;
 
 class CallWebhookHandler implements FlowNodeHandler
 {
-    private SsrfProtectionService $ssrfProtection;
+    private const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'];
 
-    public function __construct(?SsrfProtectionService $ssrfProtection = null)
-    {
+    private SsrfProtectionService $ssrfProtection;
+    private ?\Symfony\Contracts\HttpClient\HttpClientInterface $httpClient;
+
+    public function __construct(
+        ?SsrfProtectionService $ssrfProtection = null,
+        ?\Symfony\Contracts\HttpClient\HttpClientInterface $httpClient = null,
+    ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
+        $this->httpClient = $httpClient;
     }
 
     public function execute(array $input, FlowContext $ctx): NodeOutput
@@ -23,9 +29,13 @@ class CallWebhookHandler implements FlowNodeHandler
         $inputData = $firstInput instanceof NodeOutput ? $firstInput->data : (is_array($firstInput) ? $firstInput : []);
         $config = $ctx->variables['_node_config'] ?? [];
         $url    = (string) ($config['url'] ?? '');
-        $method = strtoupper($config['method'] ?? 'POST');
+        $method = strtoupper((string) ($config['method'] ?? 'POST'));
         $headers = is_array($config['headers'] ?? null) ? $config['headers'] : [];
         $body    = (string) ($config['body'] ?? '');
+
+        if (!in_array($method, self::ALLOWED_METHODS, true)) {
+            return new NodeOutput(data: ['called' => false, 'url' => $url, 'error' => sprintf('Unsupported HTTP method "%s"', $method)]);
+        }
 
         // Cloisonnement contextuel strict : interpolation sécurisée sans échappement environnement
         $safeVars = $ctx->getSafeVariables();
@@ -42,7 +52,7 @@ class CallWebhookHandler implements FlowNodeHandler
                 'body'    => $body,
             ], idleTimeout: 5.0, maxDuration: 10.0);
 
-            $client = HttpClient::create();
+            $client = $this->httpClient ?? HttpClient::create();
             $response = $client->request($method, $url, $options);
 
             return new NodeOutput(data: [

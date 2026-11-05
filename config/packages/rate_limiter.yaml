@@ -124,6 +124,10 @@ framework:
             policy: sliding_window
             limit: 30
             interval: '60 seconds'
+        social_auth_limiter:
+            policy: sliding_window
+            limit: 15
+            interval: '60 seconds'
 
 when@test:
     framework:
@@ -229,6 +233,10 @@ when@test:
                 limit: 10000
                 interval: '60 seconds'
             comment_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            social_auth_limiter:
                 policy: sliding_window
                 limit: 10000
                 interval: '60 seconds'

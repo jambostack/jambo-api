@@ -7,6 +7,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.83] — 2026-11-05
+
+### Security, Webhook Anti-SSRF, Social Auth Rate Limiting & EndUser Schema Hardening
+- **WebhookService & Outbound SSRF Protection**:
+  - Implemented standalone `WebhookService` consolidating outbound webhook security, SSRF validation, DNS Pinning, 0-redirect enforcement, strict 5s/10s timeouts, and HMAC SHA256 signing.
+  - Refactored `SendWebhookMessageHandler` and `WebhookController` to route validation and dispatch through `WebhookService`.
+  - Added HTTP method validation (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`) and safe options binding in `CallWebhookHandler`.
+  - Replaced all raw strings in `WebhookController` with translatable keys under `webhook.*`.
+- **Targeted Rate Limiting on OAuth Social Endpoints**:
+  - Defined dedicated `social_auth_limiter` (sliding window, 15 req/60s in production, 10,000 req/60s in test).
+  - Applied targeted rate limiting to `/connect/{provider}` in `SocialLoginController` with localized 429 response.
+  - Applied targeted rate limiting to `/api/{projectId}/auth/social/{provider}` GET (`social_url`) and POST (`social_login`) in `EndUserAuthController`.
+- **EndUserSchemaController Hardening & Input Bounds**:
+  - Whitelisted allowed field types (`ALLOWED_TYPES`: 24 supported types) with strict rejection of unsupported/malicious types.
+  - Protected system slugs and attributes (`RESERVED_SLUGS`: 31 reserved identifiers) against creation or hijacking.
+  - Added strict slug format validation (`/^[a-z][a-z0-9_]*$/`) and length limits (max 100 characters).
+  - Bounded field names (max 100 characters, no ASCII control characters).
+  - Enforced deep option validation: max 64KB JSON payload, enumeration choice bounds (max 500 choices, scalar values), number/rating min-max bounds, and target collection relation normalization.
+  - Protected system fields (`isSystem=true`) against unauthorized modification and deletion.
+  - Fully localized all error and status responses using Symfony `TranslatorInterface` with keys under `enduser.schema.*`.
+- **Strict 4-Language Translation Parity**:
+  - Added 40 new localized keys across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+- **Automated Test Suite**:
+  - Expanded test suite to **1,028 tests / 4,230 assertions / 0 failures** (+20 new automated unit and functional tests).
+
+---
+
 ## [1.26.82] — 2026-11-05
 
 ### Security, OAuth RFC 7636 PKCE & Custom Fields Hardening

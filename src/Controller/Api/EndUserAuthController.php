@@ -59,6 +59,8 @@ class EndUserAuthController extends AbstractController
         private ?RateLimiterFactory $registerLimiter = null,
         #[Autowire(service: 'limiter.password_reset_limiter')]
         private ?RateLimiterFactory $passwordResetLimiter = null,
+        #[Autowire(service: 'limiter.social_auth_limiter')]
+        private ?RateLimiterFactory $socialAuthLimiter = null,
         private readonly ?TranslatorInterface $translator = null,
         private ?EndUserCustomFieldsSanitizer $customFieldsSanitizer = null,
     ) {
@@ -856,6 +858,13 @@ class EndUserAuthController extends AbstractController
     #[Route('/social/{provider}', name: 'social_url', methods: ['GET'])]
     public function getSocialUrl(Request $request, string $projectId, string $provider): JsonResponse
     {
+        if ($this->socialAuthLimiter !== null) {
+            $limiter = $this->socialAuthLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_social', [], 'Too many social login requests. Please retry later.')], 429);
+            }
+        }
+
         $project = $this->findProject($projectId);
         if (!$project) {
             return $this->json(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
@@ -926,6 +935,13 @@ class EndUserAuthController extends AbstractController
             $limiter = $this->loginLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (!$limiter->consume()->isAccepted()) {
                 return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_login', [], 'Too many login attempts. Please retry later.')], 429);
+            }
+        }
+
+        if ($this->socialAuthLimiter !== null) {
+            $socialLimiter = $this->socialAuthLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$socialLimiter->consume()->isAccepted()) {
+                return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_social', [], 'Too many social login requests. Please retry later.')], 429);
             }
         }
 
