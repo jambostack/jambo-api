@@ -7,6 +7,41 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.111] — 2026-11-05
+
+### Project Management & Audit Logs Security Hardening, Strict Role Protection, Rate Limiting & I18N Parity
+- **ProjectController Hardening**:
+  - Fixed critical authorization flaw: strictly enforced `project.manage` permission check on `update()`, `delete()`, and `cloneProject()` preventing non-manager members from modifying or deleting projects.
+  - Enforced authentication verification on `create()` and `cloneProject()` preventing null-pointer exceptions and unauthenticated project generation.
+  - Integrated `project_limiter` rate limiter (30 req/min sliding window) protecting `create`, `clone`, and `addMember` against resource exhaustion and invitation flood.
+  - Added strict payload size cap `MAX_PAYLOAD_BYTES = 65536` (64 KB) returning 413 `PAYLOAD_TOO_LARGE`.
+  - Added member quota ceiling `MAX_MEMBERS_LIMIT = 500` per project returning 422 `project.max_members_reached`.
+  - Added strict validation for `name`, `description`, `default_locale`, `locales`, and `disk`.
+  - Enforced standard security headers (`Cache-Control: no-store, no-cache, must-revalidate, private`, `Pragma: no-cache`, `X-Content-Type-Options: nosniff`) across all JSON responses.
+- **AuditController Hardening**:
+  - Integrated `audit_limiter` rate limiter (60 req/min sliding window) across audit endpoints.
+  - Enforced authentication and `ROLE_SUPER_ADMIN` check on `/api/admin/audit-logs/errors` with translated error responses.
+  - Enforced strict query parameter bounds for `limit` and `offset` preventing denial of service.
+  - Enforced standard security headers (`Cache-Control: no-store`, `Pragma: no-cache`, `X-Content-Type-Options: nosniff`).
+- **Rate Limiting & Configuration**:
+  - Registered `project_limiter` and `audit_limiter` in `config/packages/rate_limiter.yaml` for both production and test environments.
+- **Strict I18N Parity**:
+  - Added 11 new translation keys across `en`, `fr`, `es`, `ar` (2842 keys each, 100% parity across all 4 languages).
+
+## [1.26.110] — 2026-11-05
+
+### ApiDocs, PublicApi, Content & Seo Security Hardening, Error Translations & Strict I18N
+- Hardened `ApiDocsController`, `PublicApi`, `ContentController`, and `SeoController`.
+- Enforced strict rate limiting, security headers, and translated error responses.
+- Parity of 2831 translation keys across all 4 languages.
+
+## [1.26.109] — 2026-11-05
+
+### DirectUpload, ImageTransform, Preview & Studio Security Hardening, Rate Limiting & Strict I18N
+- Hardened `DirectUploadController`, `ImageTransformController`, `PreviewController`, and `StudioController`.
+- Enforced rate limiting, memory limits, and security headers.
+- Parity of 2797 translation keys across all 4 languages.
+
 ## [1.26.108] — 2026-11-05
 
 ### Media, MediaFolder, TUS Resumable Upload, Public Embed & SEO Security Hardening, Quotas, Rate Limiting & Strict I18N

@@ -2051,6 +2051,14 @@ return [
     'project.not_found'                        => 'Project not found.',
     'project.access_denied'                    => 'Access denied.',
     'project.access_denied_to_project'         => 'Access denied to this project.',
+    'project.permission_denied'                => 'You do not have permission to manage this project.',
+    'project.rate_limit_exceeded'              => 'Too many project requests. Please retry later.',
+    'project.payload_too_large'                => 'Project payload exceeds maximum allowed size (64 KB).',
+    'project.name_too_long'                    => 'Project name cannot exceed 255 characters.',
+    'project.invalid_default_locale'           => 'Invalid default locale format.',
+    'project.invalid_locales_list'             => 'Locales list must be a valid array of locale codes.',
+    'project.invalid_disk'                     => 'Invalid storage disk specified.',
+    'project.max_members_reached'              => 'Maximum member limit reached for this project (500 max).',
 
     // DirectUploadController
     'direct_upload.rate_limit_exceeded'        => 'Too many direct upload requests. Please retry later.',
@@ -2696,6 +2704,9 @@ return [
     'audit.project_not_found'                         => 'Project not found.',
     'audit.token_project_mismatch'                    => 'Forbidden: token belongs to another project.',
     'audit.token_missing_read_ability'                => 'Forbidden: token missing read ability.',
+    'audit.auth_required'                             => 'Authentication required.',
+    'audit.super_admin_required'                      => 'Super administrator privileges required.',
+    'audit.rate_limit_exceeded'                       => 'Too many audit requests. Please retry later.',
 
     // SearchController
     'search.rate_limit_exceeded'                      => 'Too many search requests. Please retry later.',

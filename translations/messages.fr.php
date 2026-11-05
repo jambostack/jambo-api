@@ -2069,6 +2069,14 @@ return [
     'project.not_found'                        => 'Projet introuvable.',
     'project.access_denied'                    => 'Accès refusé.',
     'project.access_denied_to_project'         => 'Accès refusé à ce projet.',
+    'project.permission_denied'                => 'Vous n\'avez pas la permission de gérer ce projet.',
+    'project.rate_limit_exceeded'              => 'Trop de requêtes relatives aux projets. Veuillez réessayer plus tard.',
+    'project.payload_too_large'                => 'La charge utile du projet dépasse la taille maximale autorisée (64 Ko).',
+    'project.name_too_long'                    => 'Le nom du projet ne peut pas dépasser 255 caractères.',
+    'project.invalid_default_locale'           => 'Format de langue par défaut invalide.',
+    'project.invalid_locales_list'             => 'La liste des langues doit être un tableau valide de codes de langue.',
+    'project.invalid_disk'                     => 'Disque de stockage spécifié invalide.',
+    'project.max_members_reached'              => 'Limite maximale de membres atteinte pour ce projet (500 max).',
 
     // DirectUploadController
     'direct_upload.rate_limit_exceeded'        => 'Trop de requêtes de téléversement direct. Veuillez réessayer plus tard.',
@@ -2714,6 +2722,9 @@ return [
     'audit.project_not_found'                         => 'Projet introuvable.',
     'audit.token_project_mismatch'                    => 'Interdit : le jeton appartient à un autre projet.',
     'audit.token_missing_read_ability'                => 'Interdit : le jeton ne dispose pas des droits de lecture.',
+    'audit.auth_required'                             => 'Authentification requise.',
+    'audit.super_admin_required'                      => 'Privilèges de super administrateur requis.',
+    'audit.rate_limit_exceeded'                       => 'Trop de requêtes d\'audit. Veuillez réessayer plus tard.',
 
     // SearchController
     'search.rate_limit_exceeded'                      => 'Trop de requêtes de recherche. Veuillez réessayer plus tard.',

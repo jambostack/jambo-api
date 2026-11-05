@@ -2051,6 +2051,14 @@ return [
     'project.not_found'                        => 'Proyecto no encontrado.',
     'project.access_denied'                    => 'Acceso denegado.',
     'project.access_denied_to_project'         => 'Acceso denegado a este proyecto.',
+    'project.permission_denied'                => 'No tiene permiso para gestionar este proyecto.',
+    'project.rate_limit_exceeded'              => 'Demasiadas solicitudes de proyectos. Por favor, inténtelo de nuevo más tarde.',
+    'project.payload_too_large'                => 'La carga útil del proyecto supera el tamaño máximo permitido (64 KB).',
+    'project.name_too_long'                    => 'El nombre del proyecto no puede superar los 255 caracteres.',
+    'project.invalid_default_locale'           => 'Formato de idioma predeterminado no válido.',
+    'project.invalid_locales_list'             => 'La lista de idiomas debe ser una lista válida de códigos de idioma.',
+    'project.invalid_disk'                     => 'Disco de almacenamiento especificado no válido.',
+    'project.max_members_reached'              => 'Límite máximo de miembros alcanzado para este proyecto (500 máx.).',
 
     // DirectUploadController
     'direct_upload.rate_limit_exceeded'        => 'Demasiadas solicitudes de subida directa. Por favor, inténtelo de nuevo más tarde.',
@@ -2696,6 +2704,9 @@ return [
     'audit.project_not_found'                         => 'Proyecto no encontrado.',
     'audit.token_project_mismatch'                    => 'Prohibido: el token pertenece a otro proyecto.',
     'audit.token_missing_read_ability'                => 'Prohibido: al token le falta el permiso de lectura.',
+    'audit.auth_required'                             => 'Autenticación requerida.',
+    'audit.super_admin_required'                      => 'Se requieren privilegios de superadministrador.',
+    'audit.rate_limit_exceeded'                       => 'Demasiadas solicitudes de auditoría. Por favor, inténtelo de nuevo más tarde.',
 
     // SearchController
     'search.rate_limit_exceeded'                      => 'Demasiadas solicitudes de búsqueda. Inténtelo de nuevo más tarde.',

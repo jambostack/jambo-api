@@ -2051,6 +2051,14 @@ return [
     'project.not_found'                        => 'المشروع غير موجود.',
     'project.access_denied'                    => 'الوصول مرفوض.',
     'project.access_denied_to_project'         => 'تم رفض الوصول إلى هذا المشروع.',
+    'project.permission_denied'                => 'ليس لديك صلاحية لإدارة هذا المشروع.',
+    'project.rate_limit_exceeded'              => 'طلبات مشاريع كثيرة جداً. يرجى المحاولة مرة أخرى لاحقاً.',
+    'project.payload_too_large'                => 'تتجاوز حمولة المشروع الحجم الأقصى المسموح به (64 كيلوبايت).',
+    'project.name_too_long'                    => 'لا يمكن أن يتجاوز اسم المشروع 255 حرفًا.',
+    'project.invalid_default_locale'           => 'تنسيق اللغة الافتراضية غير صالح.',
+    'project.invalid_locales_list'             => 'يجب أن تكون قائمة اللغات مصفوفة صالحة من رموز اللغات.',
+    'project.invalid_disk'                     => 'قرص التخزين المحدد غير صالح.',
+    'project.max_members_reached'              => 'تم الوصول إلى الحد الأقصى للأعضاء في هذا المشروع (500 كحد أقصى).',
 
     // DirectUploadController
     'direct_upload.rate_limit_exceeded'        => 'طلبات تحميل مباشر كثيرة جداً. يرجى إعادة المحاولة لاحقاً.',
@@ -2698,6 +2706,9 @@ return [
     'audit.project_not_found'                         => 'المشروع غير موجود.',
     'audit.token_project_mismatch'                    => 'ممنوع: الرمز المميز ينتمي إلى مشروع آخر.',
     'audit.token_missing_read_ability'                => 'ممنوع: الرمز المميز يفتقر إلى صلاحية القراءة.',
+    'audit.auth_required'                             => 'المصادقة مطلوبة.',
+    'audit.super_admin_required'                      => 'امتيازات المشرف المتميز مطلوبة.',
+    'audit.rate_limit_exceeded'                       => 'طلبات تدقيق كثيرة جداً. يرجى المحاولة مرة أخرى لاحقاً.',
 
     // SearchController
     'search.rate_limit_exceeded'                      => 'طلبات بحث كثيرة جداً. يرجى المحاولة مرة أخرى لاحقاً.',

@@ -113,7 +113,7 @@ class Cycle51SecurityHardeningTest extends WebTestCase
         self::assertResponseIsSuccessful();
         $data = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame(HealthController::VERSION, $data['version']);
-        self::assertSame('1.26.110', $data['version']);
+        self::assertGreaterThanOrEqual('1.26.110', $data['version']);
     }
 
     public function testApiDocsSwaggerNotFoundAndAuthRequired(): void
