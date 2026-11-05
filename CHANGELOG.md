@@ -7,6 +7,66 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.105] — 2026-11-05
+
+### Settings & Profile Security Hardening, Token Quotas, Mailer Anti-SSRF & Strict I18N Parity
+- **Settings & Profile Security Hardening**:
+  - `ProfileController`:
+    - Rate limiting protection (`profile_limiter` sliding window: 15 req/min).
+    - Payload size ceiling enforcement (max 64 KB).
+    - Input sanitization & bounds: control characters stripped from `name`, strict email validation (`FILTER_VALIDATE_EMAIL`, max 180 chars), unique check.
+    - Account deletion security: mandatory password verification (`$hasher->isPasswordValid()`) for accounts with credentials.
+    - Last superadmin lockout protection: prevents deleting the sole remaining active super administrator (`ROLE_SUPER_ADMIN`).
+    - Full structured audit logging (`profile_update`, `profile_delete`) via `AuditService`.
+  - `PasswordController`:
+    - Rate limiting (`login_limiter` sliding window: 5 req/min) preventing password brute-force probes.
+    - Payload size limit (64 KB).
+    - Audit logging (`password_change`) via `AuditService`.
+    - Strict I18N replacing all hardcoded errors.
+  - `LocaleController`:
+    - Payload size limit (16 KB) and JSON validation.
+    - Open redirect protection: validates referer host against request host.
+    - Audit logging (`locale_change`) via `AuditService`.
+  - `PersonalAccessTokenController`:
+    - Token quota ceiling: strict limit of 50 active PATs per user (`MAX_TOKENS_REACHED`).
+    - Payload bounds (32 KB), name bounds (255 chars, control characters blocked).
+    - Scope whitelist validation (`schema:write`, `projects:write`, `content:write`, `content:read`, `*`).
+    - Audit logging (`pat_create`, `pat_delete`) via `AuditService`.
+- **ProjectSettingsController Hardening & Anti-SSRF**:
+  - **Token Management**:
+    - Rate limiting protection (`token_management_limiter` sliding window: 30 req/min).
+    - Strict quota ceiling: max 50 tokens per project (`MAX_TOKENS_REACHED`).
+    - Name sanitization (max 255 chars, control character rejection).
+    - Abilities whitelist validation (`read`, `create`, `update`, `delete`, `*`).
+    - Future expiration date validation.
+    - Audit logging (`api_token_create`, `api_token_update`, `api_token_delete`).
+  - **SMTP Mailer Hardening & Anti-SSRF**:
+    - Integrated `SsrfProtectionService`: blocks private/internal IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, 169.254.169.254 cloud metadata, IPv6 loopbacks).
+    - SMTP port whitelist enforcement: allowed only 25, 465, 587, 2525.
+    - Encryption protocol whitelist: `tls`, `ssl`, `none`.
+    - `from_name` CRLF injection prevention (`\r`, `\n` blocked).
+    - `from_email` validation format.
+    - Rate-limited test email dispatcher (`mailer_test_limiter` sliding window: 5 req/min) preventing mail relay abuse.
+    - Audit logging (`project_settings_mailer_update`, `project_settings_mailer_test`).
+  - **Localization Settings**:
+    - Locale format regex enforcement (`/^[a-z]{2,3}(-[A-Za-z0-9]+)?$/i`).
+    - Quota ceiling of 50 locales maximum per project.
+    - Prevention of deleting the active default locale.
+    - Cross-validation ensuring `default_locale` is always member of `locales`.
+- **Auxiliary Endpoints Hardening**:
+  - `CaptchaController`: Strict I18N for project not found and rate limit responses.
+  - `ProjectOpenApiController`: Strict I18N for rate limit, not found, and unauthenticated responses.
+  - `AdminApiOpenApiController`: Strict I18N for rate limit response.
+  - `MercureFallbackController`: Strict I18N for rate limit and unavailable hub fallback.
+  - `InvitationController`: Token format and length bounds validation (`/^[A-Za-z0-9_\-]{8,128}$/`), strict I18N for unauthenticated access.
+- **100% Strict I18N Parity**:
+  - Added 77 new translation keys across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+  - Exact total: 2,733 keys per locale (0 diff).
+- **Test Coverage**:
+  - Added `tests/Controller/Settings/SettingsAndProfileSecurityHardeningTest.php` (15 tests, 48 assertions).
+  - Added `tests/Controller/ProjectSettingsHardeningTest.php` (10 tests, 64 assertions).
+  - 100% pass rate across unit and controller hardening suites.
+
 ## [1.26.104] — 2026-11-05
 
 ### OIDC SSO Hardening, Alg-None & CSRF Defense, Unverified Email Mitigation & Strict Auth I18N

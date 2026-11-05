@@ -13,6 +13,7 @@ use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class CaptchaController extends AbstractController
 {
@@ -21,7 +22,19 @@ class CaptchaController extends AbstractController
         private readonly CacheInterface $cache,
         #[Autowire(service: 'limiter.captcha')]
         private readonly RateLimiterFactory $captchaLimiter,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($id, $parameters, 'messages');
+            if ($translated !== $id) {
+                return $translated;
+            }
+        }
+        return $default ?? $id;
+    }
 
     #[Route('/api/{projectUuid}/captcha', name: 'api_captcha', methods: ['GET'],
         requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
@@ -32,13 +45,19 @@ class CaptchaController extends AbstractController
         // Vérifier que le projet existe
         $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $projectUuid]);
         if (!$project) {
-            return new JsonResponse(['error' => 'Projet introuvable'], 404);
+            return new JsonResponse([
+                'error' => $this->trans('captcha.project_not_found', [], 'Project not found.'),
+                'code'  => 'PROJECT_NOT_FOUND',
+            ], 404);
         }
 
         // Rate limiting
         $limiter = $this->captchaLimiter->create($request->getClientIp());
         if (!$limiter->consume()->isAccepted()) {
-            return new JsonResponse(['error' => 'Trop de requêtes. Réessayez plus tard.'], 429);
+            return new JsonResponse([
+                'error' => $this->trans('captcha.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
+                'code'  => 'RATE_LIMIT_EXCEEDED',
+            ], 429);
         }
 
         // Générer le captcha

@@ -132,6 +132,10 @@ framework:
             policy: sliding_window
             limit: 15
             interval: '60 seconds'
+        profile_limiter:
+            policy: sliding_window
+            limit: 15
+            interval: '60 seconds'
 
 when@test:
     framework:
@@ -245,6 +249,10 @@ when@test:
                 limit: 10000
                 interval: '60 seconds'
             oidc_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            profile_limiter:
                 policy: sliding_window
                 limit: 10000
                 interval: '60 seconds'

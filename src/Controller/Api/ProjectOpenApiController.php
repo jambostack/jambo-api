@@ -18,6 +18,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route(
     '/api/{projectId}/openapi.json',
@@ -38,7 +39,19 @@ class ProjectOpenApiController extends AbstractController
         private Security $security,
         #[Autowire(service: 'limiter.openapi_limiter')]
         private ?RateLimiterFactory $openapiLimiter = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($id, $parameters, 'messages');
+            if ($translated !== $id) {
+                return $translated;
+            }
+        }
+        return $default ?? $id;
+    }
 
     public function __invoke(Request $request, string $projectId): Response
     {
@@ -51,21 +64,33 @@ class ProjectOpenApiController extends AbstractController
         if ($this->openapiLimiter !== null) {
             $limiter = $this->openapiLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->corsResponse(new JsonResponse(['error' => 'Too many requests. Please try again later.'], 429));
+                return $this->corsResponse(new JsonResponse([
+                    'error' => $this->trans('project_openapi.rate_limit_exceeded', [], 'Too many requests. Please try again later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429));
             }
         }
 
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
         } catch (\Throwable) {
-            return $this->corsResponse(new JsonResponse(['error' => 'Project not found'], 404));
+            return $this->corsResponse(new JsonResponse([
+                'error' => $this->trans('project_openapi.project_not_found', [], 'Project not found.'),
+                'code'  => 'PROJECT_NOT_FOUND',
+            ], 404));
         }
         if (!$project) {
-            return $this->corsResponse(new JsonResponse(['error' => 'Project not found'], 404));
+            return $this->corsResponse(new JsonResponse([
+                'error' => $this->trans('project_openapi.project_not_found', [], 'Project not found.'),
+                'code'  => 'PROJECT_NOT_FOUND',
+            ], 404));
         }
 
         if (!$this->isAuthorized($request, $project)) {
-            return $this->corsResponse(new JsonResponse(['error' => 'Authentication required'], 401));
+            return $this->corsResponse(new JsonResponse([
+                'error' => $this->trans('project_openapi.auth_required', [], 'Authentication required.'),
+                'code'  => 'AUTH_REQUIRED',
+            ], 401));
         }
 
         $collections   = $this->collectionRepository->findByProject($project);

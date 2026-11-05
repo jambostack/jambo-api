@@ -9,6 +9,8 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
+use Symfony\Contracts\Translation\TranslatorInterface;
+
 /**
  * Spec OpenAPI 3 de l'Admin API (base /admin-api).
  *
@@ -22,7 +24,19 @@ class AdminApiOpenApiController extends AbstractController
     public function __construct(
         #[Autowire(service: 'limiter.openapi_limiter')]
         private readonly ?RateLimiterFactory $openapiLimiter = null,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($id, $parameters, 'messages');
+            if ($translated !== $id) {
+                return $translated;
+            }
+        }
+        return $default ?? $id;
+    }
 
     #[Route('/api/settings/admin-api/openapi.json', name: 'api_settings_admin_api_openapi', methods: ['GET'])]
     #[Route('/admin-api/openapi.json', name: 'admin_api_openapi_spec', methods: ['GET'])]
@@ -31,7 +45,10 @@ class AdminApiOpenApiController extends AbstractController
         if ($this->openapiLimiter !== null) {
             $limiter = $this->openapiLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (false === $limiter->consume(1)->isAccepted()) {
-                return new JsonResponse(['error' => 'Too many requests. Please try again later.'], 429);
+                return new JsonResponse([
+                    'error' => $this->trans('admin_api.openapi.rate_limit_exceeded', [], 'Too many requests. Please try again later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
             }
         }
 

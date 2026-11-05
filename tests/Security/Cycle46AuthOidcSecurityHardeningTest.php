@@ -655,10 +655,10 @@ class Cycle46AuthOidcSecurityHardeningTest extends TestCase
         $es = require __DIR__ . '/../../translations/messages.es.php';
         $ar = require __DIR__ . '/../../translations/messages.ar.php';
 
-        self::assertCount(2656, $en);
-        self::assertCount(2656, $fr);
-        self::assertCount(2656, $es);
-        self::assertCount(2656, $ar);
+        self::assertCount(2733, $en);
+        self::assertCount(2733, $fr);
+        self::assertCount(2733, $es);
+        self::assertCount(2733, $ar);
 
         self::assertEmpty(array_diff_key($en, $fr), 'fr has missing keys compared to en');
         self::assertEmpty(array_diff_key($en, $es), 'es has missing keys compared to en');

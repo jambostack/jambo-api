@@ -43,6 +43,16 @@ class InvitationController extends AbstractController
             }
         }
 
+        if (strlen($token) < 8 || strlen($token) > 128 || !preg_match('/^[A-Za-z0-9_\-]+$/', $token)) {
+            $msg = $this->translator->trans('invitation.invalid_link');
+            if ($wantsJson) {
+                return new JsonResponse(['error' => $msg], 404);
+            }
+            return $this->render('invitation/invalid.html.twig', [
+                'error' => $msg,
+            ]);
+        }
+
         $member = $this->memberRepo->findOneBy(['invitationToken' => $token]);
 
         if ($member === null || $member->status !== ProjectMemberStatus::Pending) {
@@ -72,7 +82,7 @@ class InvitationController extends AbstractController
         $user = $this->getUser();
         if (!$user instanceof User) {
             if ($wantsJson) {
-                return new JsonResponse(['error' => 'Authentication required'], 401);
+                return new JsonResponse(['error' => $this->translator->trans('invitation.auth_required')], 401);
             }
             $redirectUrl = $this->generateUrl('invitation_accept', ['token' => $token]);
             return $this->redirectToRoute('app_login', ['_target_path' => $redirectUrl]);
