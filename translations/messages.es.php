@@ -3135,4 +3135,12 @@ return [
     'auth.2fa.email_intro' => 'Utilice el siguiente código para iniciar sesión:',
     'auth.2fa.email_expires' => 'Este código caduca en 5 minutos.',
     'auth.2fa.email_ignore' => 'Si no ha solicitado este código, ignore este correo.',
+    'content.admin.validation_failed' => 'Error de validación del contenido.',
+    'field.admin.validation_failed' => 'Error de validación del campo.',
+    'collection.admin.validation_failed' => 'Error de validación de la colección.',
+    'direct_upload.too_many_parts' => 'La carga multiparte no puede exceder 10000 partes.',
+    'direct_upload.invalid_part_data' => 'Número de parte o ETag no válido en los datos multiparte.',
+    'direct_upload.filename_required' => 'El nombre de archivo es obligatorio.',
+    'direct_upload.filename_too_long' => 'El nombre de archivo no puede exceder los 255 caracteres.',
+    'tus.invalid_content_length' => 'Encabezado Content-Length no válido.',
 ];

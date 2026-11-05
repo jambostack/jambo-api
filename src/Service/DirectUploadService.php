@@ -41,6 +41,9 @@ class DirectUploadService
             : basename($filename);
 
         $mimeType = $data['mime_type'] ?? 'application/octet-stream';
+        if ($this->uploadValidator !== null) {
+            $mimeType = $this->uploadValidator->validateMimeType($mimeType);
+        }
         $maxBytes = isset($data['max_bytes']) ? (int) $data['max_bytes'] : null;
         if ($maxBytes !== null && $maxBytes > 0 && $this->uploadValidator !== null) {
             $this->uploadValidator->validateSizeAndQuota($project, $maxBytes);

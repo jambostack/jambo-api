@@ -218,7 +218,8 @@ class ContentController extends AbstractController
         $validStatuses = array_merge(array_column($statuses, 'slug'), $systemStatuses);
         $status = $data['status'] ?? 'draft';
         if (!in_array($status, $validStatuses, true)) {
-            return $this->secureJson(['errors' => ['status' => $this->trans('content.admin.invalid_status')], 'code' => 'INVALID_STATUS'], 422);
+            $msg = $this->trans('content.admin.invalid_status');
+            return $this->secureJson(['error' => $msg, 'errors' => ['status' => $msg], 'code' => 'INVALID_STATUS'], 422);
         }
 
         $locale = $data['locale'] ?? $project->defaultLocale;
@@ -248,7 +249,8 @@ class ContentController extends AbstractController
             if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $collection->project) !== null) {
                 $entry->assignedTo = $assignee;
             } elseif ($assignee !== null) {
-                return $this->secureJson(['errors' => ['assigned_to_id' => $this->trans('content.admin.assignee_not_member')], 'code' => 'ASSIGNEE_NOT_MEMBER'], 422);
+                $msg = $this->trans('content.admin.assignee_not_member');
+                return $this->secureJson(['error' => $msg, 'errors' => ['assigned_to_id' => $msg], 'code' => 'ASSIGNEE_NOT_MEMBER'], 422);
             }
         }
 
@@ -257,7 +259,8 @@ class ContentController extends AbstractController
         // Validation des champs avant saveFieldValues
         $validationErrors = $this->validatePayloadFields($collection, $data['fields'] ?? [], $entry);
         if (!empty($validationErrors)) {
-            return $this->secureJson(['errors' => $validationErrors, 'code' => 'VALIDATION_FAILED'], 422);
+            $firstMsg = reset($validationErrors) ?: $this->trans('content.admin.validation_failed');
+            return $this->secureJson(['error' => $firstMsg, 'errors' => $validationErrors, 'code' => 'VALIDATION_FAILED'], 422);
         }
 
         $this->saveFieldValues($entry, $collection, $data['fields'] ?? []);
@@ -327,7 +330,8 @@ class ContentController extends AbstractController
         $validStatuses = array_merge(array_column($statuses, 'slug'), $systemStatuses);
         $status = $data['status'] ?? 'draft';
         if (!in_array($status, $validStatuses, true)) {
-            return $this->secureJson(['errors' => ['status' => $this->trans('content.admin.invalid_status')], 'code' => 'INVALID_STATUS'], 422);
+            $msg = $this->trans('content.admin.invalid_status');
+            return $this->secureJson(['error' => $msg, 'errors' => ['status' => $msg], 'code' => 'INVALID_STATUS'], 422);
         }
 
         if (isset($data['locale'])) {
@@ -353,7 +357,8 @@ class ContentController extends AbstractController
                 if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $entry->collection->project) !== null) {
                     $entry->assignedTo = $assignee;
                 } elseif ($assignee !== null) {
-                    return $this->secureJson(['errors' => ['assigned_to_id' => $this->trans('content.admin.assignee_not_member')], 'code' => 'ASSIGNEE_NOT_MEMBER'], 422);
+                    $msg = $this->trans('content.admin.assignee_not_member');
+                    return $this->secureJson(['error' => $msg, 'errors' => ['assigned_to_id' => $msg], 'code' => 'ASSIGNEE_NOT_MEMBER'], 422);
                 }
             } else {
                 $entry->assignedTo = null;
@@ -364,7 +369,8 @@ class ContentController extends AbstractController
             // Validation des champs avant la transaction
             $validationErrors = $this->validatePayloadFields($entry->collection, $data['fields'], $entry);
             if (!empty($validationErrors)) {
-                return $this->secureJson(['errors' => $validationErrors, 'code' => 'VALIDATION_FAILED'], 422);
+                $firstMsg = reset($validationErrors) ?: $this->trans('content.admin.validation_failed');
+                return $this->secureJson(['error' => $firstMsg, 'errors' => $validationErrors, 'code' => 'VALIDATION_FAILED'], 422);
             }
 
             // Capture l'état courant comme version AVANT d'écraser les champs (EAV)
@@ -448,7 +454,8 @@ class ContentController extends AbstractController
 
         $validationErrors = $this->validatePayloadFields($collection, $fieldData, $clone);
         if (!empty($validationErrors)) {
-            return $this->secureJson(['errors' => $validationErrors], 422);
+            $firstMsg = reset($validationErrors) ?: $this->trans('content.admin.validation_failed');
+            return $this->secureJson(['error' => $firstMsg, 'errors' => $validationErrors, 'code' => 'VALIDATION_FAILED'], 422);
         }
 
         foreach ($source->fieldValues as $fv) {

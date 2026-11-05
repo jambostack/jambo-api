@@ -3153,4 +3153,12 @@ return [
     'auth.2fa.email_intro' => 'Utilisez le code suivant pour vous connecter :',
     'auth.2fa.email_expires' => 'Ce code expire dans 5 minutes.',
     'auth.2fa.email_ignore' => 'Si vous n\'avez pas demandé ce code, ignorez cet email.',
+    'content.admin.validation_failed' => 'Échec de la validation du contenu.',
+    'field.admin.validation_failed' => 'Échec de la validation du champ.',
+    'collection.admin.validation_failed' => 'Échec de la validation de la collection.',
+    'direct_upload.too_many_parts' => 'Le téléversement multipart ne peut pas dépasser 10 000 parties.',
+    'direct_upload.invalid_part_data' => 'Numéro de partie ou ETag invalide dans les données multipart.',
+    'direct_upload.filename_required' => 'Le nom de fichier est requis.',
+    'direct_upload.filename_too_long' => 'Le nom de fichier ne peut pas dépasser 255 caractères.',
+    'tus.invalid_content_length' => 'En-tête Content-Length invalide.',
 ];

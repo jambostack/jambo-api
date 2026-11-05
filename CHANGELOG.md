@@ -7,6 +7,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.116] — 2026-11-05
+
+### Error Response Harmonization, Anti-SSRF & Upload Security Caps (TUS & Direct Upload)
+- **JSON Error Response Harmonization**:
+  - Unified error response schemas across `ContentController`, `CollectionController`, and `FieldController` so all failures consistently provide `error` (translated message), `errors` (detailed field validation map), and uppercase machine-readable `code` (e.g. `INVALID_STATUS`, `VALIDATION_FAILED`, `ASSIGNEE_NOT_MEMBER`, `NAME_REQUIRED`, `NAME_TOO_LONG`, `INVALID_SLUG_FORMAT`, `SLUG_ALREADY_EXISTS`, `INVALID_FIELD_TYPE`, `INVALID_OPTIONS`, `OPTIONS_TOO_LARGE`, `OPTIONS_TOO_DEEP`).
+  - Standardized HTTP status codes: 400 (malformed JSON / missing headers), 404 (not found), 409 (conflict / duplicates), 412 (precondition failed), 413 (payload/chunk too large), 415 (unsupported media type), 422 (unprocessable entity / validation errors), 429 (rate limit exceeded).
+- **DirectUploadController & DirectUploadService Hardening**:
+  - Added strict filename length bound (capped at 255 chars) and non-empty check in intent creation.
+  - Implemented anti-SSRF & anti-injection validation via `UploadSecurityValidator::validateMimeType()` rejecting CRLF header injection, control characters, and dangerous executable MIME types (`text/x-php`, `application/x-executable`, etc.) during intent creation.
+  - Capped multipart completion parts to 10,000 maximum parts and added granular validation of part structures (1 <= `part_number` <= 10000, safe sanitized ETag strings).
+- **TusController & TusServer Security**:
+  - Integrated `errorResponse()` helper ensuring every error response includes `error`, `code`, `Tus-Resumable: 1.0.0`, and security headers (`X-Content-Type-Options: nosniff`, `Cache-Control: no-store`).
+  - Added strict chunk size limits on PATCH validating `Content-Length` against declared remaining bytes and `MAX_TUS_SIZE` (100 MB).
+  - Validated `filetype` metadata using `UploadSecurityValidator::validateMimeType()` to block dangerous executable MIME types.
+  - Capped upload metadata key-value pairs to 50 to prevent CPU DoS.
+- **Strict I18N & Test Suite**:
+  - Maintained 100% dictionary key parity (2,876 keys) across English, French, Spanish, and Arabic for all new error keys.
+  - Added comprehensive `Cycle54HardeningTest` verifying uniform error structures, chunk caps, direct upload validations, and 4-locale translation parity.
+
 ## [1.26.115] — 2026-11-05
 
 ### Realtime/Mercure SSE Hardening, Invitation & Install Audits, Test Matrix & Strict I18N

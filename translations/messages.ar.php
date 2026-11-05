@@ -3137,4 +3137,12 @@ return [
     'auth.2fa.email_intro' => 'استخدم الرمز التالي لتسجيل الدخول:',
     'auth.2fa.email_expires' => 'تنتهي صلاحية هذا الرمز خلال 5 دقائق.',
     'auth.2fa.email_ignore' => 'إذا لم تطلب هذا الرمز، فيرجى تجاهل هذا البريد الإلكتروني.',
+    'content.admin.validation_failed' => 'فشل التحقق من صحة المحتوى.',
+    'field.admin.validation_failed' => 'فشل التحقق من صحة الحقل.',
+    'collection.admin.validation_failed' => 'فشل التحقق من صحة المجموعة.',
+    'direct_upload.too_many_parts' => 'لا يمكن أن يتجاوز التحميل متعدد الأجزاء 10000 جزء.',
+    'direct_upload.invalid_part_data' => 'رقم الجزء أو ETag غير صالح في البيانات متعددة الأجزاء.',
+    'direct_upload.filename_required' => 'اسم الملف مطلوب.',
+    'direct_upload.filename_too_long' => 'لا يمكن أن يتجاوز اسم الملف 255 حرفًا.',
+    'tus.invalid_content_length' => 'ترويسة Content-Length غير صالحة.',
 ];

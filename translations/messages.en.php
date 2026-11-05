@@ -3135,4 +3135,12 @@ return [
     'auth.2fa.email_intro' => 'Use the following code to sign in:',
     'auth.2fa.email_expires' => 'This code expires in 5 minutes.',
     'auth.2fa.email_ignore' => 'If you did not request this code, ignore this email.',
+    'content.admin.validation_failed' => 'Content validation failed.',
+    'field.admin.validation_failed' => 'Field validation failed.',
+    'collection.admin.validation_failed' => 'Collection validation failed.',
+    'direct_upload.too_many_parts' => 'Multipart upload cannot exceed 10000 parts.',
+    'direct_upload.invalid_part_data' => 'Invalid part number or ETag in multipart data.',
+    'direct_upload.filename_required' => 'Filename is required.',
+    'direct_upload.filename_too_long' => 'Filename cannot exceed 255 characters.',
+    'tus.invalid_content_length' => 'Invalid Content-Length header.',
 ];

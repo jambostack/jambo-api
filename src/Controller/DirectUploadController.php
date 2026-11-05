@@ -115,6 +115,20 @@ class DirectUploadController extends AbstractController
             ], 400);
         }
 
+        $filename = trim((string) ($payload['filename'] ?? ''));
+        if ($filename === '') {
+            return $this->jsonResponse([
+                'error' => $this->trans('direct_upload.filename_required', [], 'Filename is required.'),
+                'code' => 'FILENAME_REQUIRED',
+            ], 422);
+        }
+        if (mb_strlen($filename) > 255) {
+            return $this->jsonResponse([
+                'error' => $this->trans('direct_upload.filename_too_long', [], 'Filename cannot exceed 255 characters.'),
+                'code' => 'FILENAME_TOO_LONG',
+            ], 422);
+        }
+
         try {
             // Nettoyage opportuniste des intentions orphelines expirées pour ce projet
             try {
@@ -281,6 +295,28 @@ class DirectUploadController extends AbstractController
                 'error' => $this->trans('direct_upload.parts_invalid', [], 'Parts list must be a valid array.'),
                 'code' => 'PARTS_INVALID',
             ], 422);
+        }
+        if (count($parts) > 10000) {
+            return $this->jsonResponse([
+                'error' => $this->trans('direct_upload.too_many_parts', [], 'Multipart upload cannot exceed 10000 parts.'),
+                'code' => 'TOO_MANY_PARTS',
+            ], 422);
+        }
+        foreach ($parts as $p) {
+            if (!is_array($p)) {
+                return $this->jsonResponse([
+                    'error' => $this->trans('direct_upload.invalid_part_data', [], 'Invalid part number or ETag in multipart data.'),
+                    'code' => 'INVALID_PART_DATA',
+                ], 422);
+            }
+            $pn = (int) ($p['part_number'] ?? $p['PartNumber'] ?? 0);
+            $etag = (string) ($p['etag'] ?? $p['ETag'] ?? '');
+            if ($pn < 1 || $pn > 10000 || $etag === '' || strlen($etag) > 128 || preg_match('/[\x00-\x1F\x7F]/', $etag)) {
+                return $this->jsonResponse([
+                    'error' => $this->trans('direct_upload.invalid_part_data', [], 'Invalid part number or ETag in multipart data.'),
+                    'code' => 'INVALID_PART_DATA',
+                ], 422);
+            }
         }
         if ($fileSize !== null && $fileSize < 0) {
             return $this->jsonResponse([

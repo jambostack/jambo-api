@@ -114,24 +114,29 @@ class CollectionController extends AbstractController
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
-            return $this->secureJson(['errors' => ['name' => $this->trans('collection.admin.name_required')], 'code' => 'NAME_REQUIRED'], 422);
+            $msg = $this->trans('collection.admin.name_required');
+            return $this->secureJson(['error' => $msg, 'errors' => ['name' => $msg], 'code' => 'NAME_REQUIRED'], 422);
         }
         if (mb_strlen($name) > 255) {
-            return $this->secureJson(['errors' => ['name' => $this->trans('collection.admin.name_too_long')], 'code' => 'NAME_TOO_LONG'], 422);
+            $msg = $this->trans('collection.admin.name_too_long');
+            return $this->secureJson(['error' => $msg, 'errors' => ['name' => $msg], 'code' => 'NAME_TOO_LONG'], 422);
         }
 
         if (isset($data['slug'])) {
             $slug = trim((string) $data['slug']);
             if (mb_strlen($slug) > 255) {
-                return $this->secureJson(['errors' => ['slug' => $this->trans('collection.admin.slug_too_long')], 'code' => 'SLUG_TOO_LONG'], 422);
+                $msg = $this->trans('collection.admin.slug_too_long');
+                return $this->secureJson(['error' => $msg, 'errors' => ['slug' => $msg], 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($slug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
-                return $this->secureJson(['errors' => ['slug' => $this->trans('collection.admin.invalid_slug_format')], 'code' => 'INVALID_SLUG_FORMAT'], 422);
+                $msg = $this->trans('collection.admin.invalid_slug_format');
+                return $this->secureJson(['error' => $msg, 'errors' => ['slug' => $msg], 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
         }
 
         if (isset($data['description']) && mb_strlen((string) $data['description']) > 2000) {
-            return $this->secureJson(['errors' => ['description' => $this->trans('collection.admin.description_too_long')], 'code' => 'DESCRIPTION_TOO_LONG'], 422);
+            $msg = $this->trans('collection.admin.description_too_long');
+            return $this->secureJson(['error' => $msg, 'errors' => ['description' => $msg], 'code' => 'DESCRIPTION_TOO_LONG'], 422);
         }
 
         try {
@@ -278,32 +283,38 @@ class CollectionController extends AbstractController
         if (isset($data['name'])) {
             $name = trim((string) $data['name']);
             if ($name === '') {
-                return $this->secureJson(['errors' => ['name' => $this->trans('collection.admin.name_required')], 'code' => 'NAME_REQUIRED'], 422);
+                $msg = $this->trans('collection.admin.name_required');
+                return $this->secureJson(['error' => $msg, 'errors' => ['name' => $msg], 'code' => 'NAME_REQUIRED'], 422);
             }
             if (mb_strlen($name) > 255) {
-                return $this->secureJson(['errors' => ['name' => $this->trans('collection.admin.name_too_long')], 'code' => 'NAME_TOO_LONG'], 422);
+                $msg = $this->trans('collection.admin.name_too_long');
+                return $this->secureJson(['error' => $msg, 'errors' => ['name' => $msg], 'code' => 'NAME_TOO_LONG'], 422);
             }
             $collection->name = NamingConvention::toPascalCase($name);
         }
         if (isset($data['slug'])) {
             $newSlug = trim((string) $data['slug']);
             if (mb_strlen($newSlug) > 255) {
-                return $this->secureJson(['errors' => ['slug' => $this->trans('collection.admin.slug_too_long')], 'code' => 'SLUG_TOO_LONG'], 422);
+                $msg = $this->trans('collection.admin.slug_too_long');
+                return $this->secureJson(['error' => $msg, 'errors' => ['slug' => $msg], 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($newSlug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $newSlug)) {
-                return $this->secureJson(['errors' => ['slug' => $this->trans('collection.admin.invalid_slug_format')], 'code' => 'INVALID_SLUG_FORMAT'], 422);
+                $msg = $this->trans('collection.admin.invalid_slug_format');
+                return $this->secureJson(['error' => $msg, 'errors' => ['slug' => $msg], 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
             $normalizedSlug = NamingConvention::toSnakeCase($newSlug);
             $existing = $this->collectionRepository->findOneByProjectAndSlug($collection->project, $normalizedSlug);
             if ($existing !== null && $existing->id !== $collection->id) {
-                return $this->secureJson(['errors' => ['slug' => $this->trans('collection.admin.slug_already_exists')], 'code' => 'SLUG_ALREADY_EXISTS'], 409);
+                $msg = $this->trans('collection.admin.slug_already_exists');
+                return $this->secureJson(['error' => $msg, 'errors' => ['slug' => $msg], 'code' => 'SLUG_ALREADY_EXISTS'], 409);
             }
             $collection->slug = $normalizedSlug;
         }
         if (array_key_exists('description', $data)) {
             $desc = (string) $data['description'];
             if (mb_strlen($desc) > 2000) {
-                return $this->secureJson(['errors' => ['description' => $this->trans('collection.admin.description_too_long')], 'code' => 'DESCRIPTION_TOO_LONG'], 422);
+                $msg = $this->trans('collection.admin.description_too_long');
+                return $this->secureJson(['error' => $msg, 'errors' => ['description' => $msg], 'code' => 'DESCRIPTION_TOO_LONG'], 422);
             }
             $collection->description = $data['description'];
         }

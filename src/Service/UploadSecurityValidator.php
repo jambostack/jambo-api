@@ -79,6 +79,32 @@ class UploadSecurityValidator
     }
 
     /**
+     * Valide et nettoie un type MIME (anti-injection CRLF, pas d'exécutables ou formats dangereux).
+     */
+    public function validateMimeType(string $mimeType): string
+    {
+        $mime = trim($mimeType);
+        if ($mime === '') {
+            return 'application/octet-stream';
+        }
+
+        if (strlen($mime) > 255 || preg_match('/[\x00-\x1F\x7F]/', $mime)) {
+            throw new \InvalidArgumentException('MIME type contains invalid control characters or exceeds 255 characters.');
+        }
+
+        if (!preg_match('~^[a-zA-Z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+(?:;\s*[a-zA-Z0-9!#$&^_.+-]+=[a-zA-Z0-9!#$&^_.+-]+)*$~', $mime)) {
+            throw new \InvalidArgumentException(sprintf('Invalid MIME type format: "%s".', $mime));
+        }
+
+        $baseMime = strtolower(explode(';', $mime)[0]);
+        if (in_array($baseMime, self::DANGEROUS_MIMES, true)) {
+            throw new \InvalidArgumentException(sprintf('File MIME type "%s" is strictly forbidden.', $baseMime));
+        }
+
+        return $mime;
+    }
+
+    /**
      * Valide le contenu réel du fichier (magic bytes, absence de code PHP injecté, sanitization SVG).
      */
     public function validateFileContent(string $filePath, string $extension): string

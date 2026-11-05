@@ -108,40 +108,49 @@ class FieldController extends AbstractController
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
-            return $this->secureJson(['error' => $this->trans('field.admin.name_required'), 'code' => 'NAME_REQUIRED'], 422);
+            $msg = $this->trans('field.admin.name_required');
+            return $this->secureJson(['error' => $msg, 'errors' => ['name' => $msg], 'code' => 'NAME_REQUIRED'], 422);
         }
         if (mb_strlen($name) > 255) {
-            return $this->secureJson(['error' => $this->trans('field.admin.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
+            $msg = $this->trans('field.admin.name_too_long');
+            return $this->secureJson(['error' => $msg, 'errors' => ['name' => $msg], 'code' => 'NAME_TOO_LONG'], 422);
         }
 
         $type = (string) ($data['type'] ?? '');
         if ($type === '') {
-            return $this->secureJson(['error' => $this->trans('field.admin.type_required'), 'code' => 'TYPE_REQUIRED'], 422);
+            $msg = $this->trans('field.admin.type_required');
+            return $this->secureJson(['error' => $msg, 'errors' => ['type' => $msg], 'code' => 'TYPE_REQUIRED'], 422);
         }
         if (!in_array($type, self::ALLOWED_TYPES, true)) {
-            return $this->secureJson(['error' => $this->trans('field.admin.invalid_type', ['%type%' => $type]), 'code' => 'INVALID_FIELD_TYPE'], 422);
+            $msg = $this->trans('field.admin.invalid_type', ['%type%' => $type]);
+            return $this->secureJson(['error' => $msg, 'errors' => ['type' => $msg], 'code' => 'INVALID_FIELD_TYPE'], 422);
         }
 
         if (isset($data['slug'])) {
             $slug = trim((string) $data['slug']);
             if (mb_strlen($slug) > 255) {
-                return $this->secureJson(['error' => $this->trans('field.admin.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
+                $msg = $this->trans('field.admin.slug_too_long');
+                return $this->secureJson(['error' => $msg, 'errors' => ['slug' => $msg], 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($slug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
-                return $this->secureJson(['error' => $this->trans('field.admin.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
+                $msg = $this->trans('field.admin.invalid_slug_format');
+                return $this->secureJson(['error' => $msg, 'errors' => ['slug' => $msg], 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
         }
 
         if (isset($data['options'])) {
             if (!is_array($data['options'])) {
-                return $this->secureJson(['error' => $this->trans('field.admin.options_invalid'), 'code' => 'INVALID_OPTIONS'], 422);
+                $msg = $this->trans('field.admin.options_invalid');
+                return $this->secureJson(['error' => $msg, 'errors' => ['options' => $msg], 'code' => 'INVALID_OPTIONS'], 422);
             }
             $json = json_encode($data['options']);
             if ($json !== false && strlen($json) > 65536) {
-                return $this->secureJson(['error' => $this->trans('field.admin.options_too_large'), 'code' => 'OPTIONS_TOO_LARGE'], 422);
+                $msg = $this->trans('field.admin.options_too_large');
+                return $this->secureJson(['error' => $msg, 'errors' => ['options' => $msg], 'code' => 'OPTIONS_TOO_LARGE'], 422);
             }
             if ($this->getArrayDepth($data['options']) > 6) {
-                return $this->secureJson(['error' => $this->trans('field.admin.options_too_deep'), 'code' => 'OPTIONS_TOO_DEEP'], 422);
+                $msg = $this->trans('field.admin.options_too_deep');
+                return $this->secureJson(['error' => $msg, 'errors' => ['options' => $msg], 'code' => 'OPTIONS_TOO_DEEP'], 422);
             }
         }
 
@@ -213,37 +222,44 @@ class FieldController extends AbstractController
         if (isset($data['name'])) {
             $name = trim((string) $data['name']);
             if ($name === '') {
-                return $this->secureJson(['error' => $this->trans('field.admin.name_required'), 'code' => 'NAME_REQUIRED'], 422);
+                $msg = $this->trans('field.admin.name_required');
+                return $this->secureJson(['error' => $msg, 'errors' => ['name' => $msg], 'code' => 'NAME_REQUIRED'], 422);
             }
             if (mb_strlen($name) > 255) {
-                return $this->secureJson(['error' => $this->trans('field.admin.name_too_long'), 'code' => 'NAME_TOO_LONG'], 422);
+                $msg = $this->trans('field.admin.name_too_long');
+                return $this->secureJson(['error' => $msg, 'errors' => ['name' => $msg], 'code' => 'NAME_TOO_LONG'], 422);
             }
         }
 
         if (isset($data['type'])) {
             $type = (string) $data['type'];
             if (!in_array($type, self::ALLOWED_TYPES, true)) {
-                return $this->secureJson(['error' => $this->trans('field.admin.invalid_type', ['%type%' => $type]), 'code' => 'INVALID_FIELD_TYPE'], 422);
+                $msg = $this->trans('field.admin.invalid_type', ['%type%' => $type]);
+                return $this->secureJson(['error' => $msg, 'errors' => ['type' => $msg], 'code' => 'INVALID_FIELD_TYPE'], 422);
             }
         }
 
         if (isset($data['slug'])) {
             $slug = trim((string) $data['slug']);
             if (mb_strlen($slug) > 255) {
-                return $this->secureJson(['error' => $this->trans('field.admin.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
+                $msg = $this->trans('field.admin.slug_too_long');
+                return $this->secureJson(['error' => $msg, 'errors' => ['slug' => $msg], 'code' => 'SLUG_TOO_LONG'], 422);
             }
             if ($slug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
-                return $this->secureJson(['error' => $this->trans('field.admin.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
+                $msg = $this->trans('field.admin.invalid_slug_format');
+                return $this->secureJson(['error' => $msg, 'errors' => ['slug' => $msg], 'code' => 'INVALID_SLUG_FORMAT'], 422);
             }
         }
 
         if (isset($data['options']) && is_array($data['options'])) {
             $json = json_encode($data['options']);
             if ($json !== false && strlen($json) > 65536) {
-                return $this->secureJson(['error' => $this->trans('field.admin.options_too_large'), 'code' => 'OPTIONS_TOO_LARGE'], 422);
+                $msg = $this->trans('field.admin.options_too_large');
+                return $this->secureJson(['error' => $msg, 'errors' => ['options' => $msg], 'code' => 'OPTIONS_TOO_LARGE'], 422);
             }
             if ($this->getArrayDepth($data['options']) > 6) {
-                return $this->secureJson(['error' => $this->trans('field.admin.options_too_deep'), 'code' => 'OPTIONS_TOO_DEEP'], 422);
+                $msg = $this->trans('field.admin.options_too_deep');
+                return $this->secureJson(['error' => $msg, 'errors' => ['options' => $msg], 'code' => 'OPTIONS_TOO_DEEP'], 422);
             }
         }
 
