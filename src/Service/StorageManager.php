@@ -62,6 +62,8 @@ class StorageManager
     /** @return array<string, string> profile_uuid => path */
     public function write(string $path, mixed $stream, array $options = []): array
     {
+        $this->validatePathSafety($path);
+
         $filesystems = $this->getFilesystems($options);
         $paths = [];
         $rewindable = is_resource($stream);
@@ -111,6 +113,9 @@ class StorageManager
         }
         foreach ($storagePaths as $uuid => $path) {
             try {
+                if (is_string($path)) {
+                    $this->validatePathSafety($path);
+                }
                 $fs = $this->getFilesystem($uuid);
                 return $fs->readStream($path);
             } catch (\Throwable) {
@@ -178,6 +183,9 @@ class StorageManager
 
     private function buildUrl(string $profileUuid, string $path): string
     {
+        $profileUuid = str_replace(["\r", "\n", "\0"], '', $profileUuid);
+        $path = str_replace(["\r", "\n", "\0"], '', $path);
+
         $profile = $this->profileCache[$profileUuid]
             ?? $this->profileRepo->findOneBy(['uuid' => $profileUuid]);
 
@@ -190,16 +198,37 @@ class StorageManager
         }
 
         if ($profile->baseUrl !== null && $profile->baseUrl !== '') {
-            return rtrim($profile->baseUrl, '/') . '/' . ltrim($path, '/');
+            $baseUrl = str_replace(["\r", "\n", "\0"], '', $profile->baseUrl);
+            return rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
         }
 
         // S3 : virtual hosted-style (compatible toutes régions sauf us-east-1 path-style)
         if ($profile->s3Endpoint !== null && $profile->s3Endpoint !== '') {
             // S3-compatible (R2, MinIO, ...) — path-style
-            return rtrim($profile->s3Endpoint, '/') . '/' . $profile->s3Bucket . '/' . $path;
+            $endpoint = str_replace(["\r", "\n", "\0"], '', $profile->s3Endpoint);
+            return rtrim($endpoint, '/') . '/' . $profile->s3Bucket . '/' . $path;
         }
 
         // AWS natif : virtual hosted-style
         return "https://{$profile->s3Bucket}.s3.{$profile->s3Region}.amazonaws.com/" . $path;
+    }
+
+    private function validatePathSafety(string $path): void
+    {
+        if (str_contains($path, "\0")) {
+            throw new \InvalidArgumentException('Null byte detected in storage path.');
+        }
+
+        if (strlen($path) > 1024) {
+            throw new \InvalidArgumentException('Storage path exceeds maximum allowed length of 1024 characters.');
+        }
+
+        $normalized = str_replace('\\', '/', $path);
+        $segments = explode('/', $normalized);
+        foreach ($segments as $segment) {
+            if ($segment === '..') {
+                throw new \InvalidArgumentException("Path traversal attempt detected in storage path: {$path}");
+            }
+        }
     }
 }

@@ -12,7 +12,7 @@ class NativeTwigSecurityPolicy implements SecurityPolicyInterface
     private SecurityPolicy $policy;
 
     public function __construct(
-        array $allowedTags = ['if', 'for', 'include'],
+        array $allowedTags = ['if', 'for'],
         array $allowedFilters = ['upper', 'lower', 'capitalize', 'trim', 'escape', 'default', 'raw', 'date', 'json_encode', 'slice'],
         array $allowedMethods = [],
         array $allowedProperties = [],

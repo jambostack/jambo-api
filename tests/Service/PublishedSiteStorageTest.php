@@ -92,6 +92,87 @@ class PublishedSiteStorageTest extends TestCase
         $this->storage->publish('proj-uuid', ['assets/../../evil.js' => 'alert(1);']);
     }
 
+    public function testPublishRejectsInvalidProjectUuid(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid project identifier');
+        $this->storage->publish('../evil-proj', ['index.html' => 'test']);
+    }
+
+    public function testPublishRejectsPhpScript(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Forbidden executable file type detected');
+        $this->storage->publish('proj-uuid', ['script.php' => '<?php echo 1;']);
+    }
+
+    public function testPublishRejectsPhtmlScript(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Forbidden executable file type detected');
+        $this->storage->publish('proj-uuid', ['page.phtml' => '<?php echo 1;']);
+    }
+
+    public function testPublishRejectsHtaccess(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Forbidden sensitive file detected');
+        $this->storage->publish('proj-uuid', ['.htaccess' => 'RewriteEngine On']);
+    }
+
+    public function testPublishRejectsDotEnv(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Forbidden sensitive file detected');
+        $this->storage->publish('proj-uuid', ['.env' => 'APP_SECRET=123']);
+    }
+
+    public function testPublishRejectsNullByteInFilename(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Null byte detected in relative path');
+        $this->storage->publish('proj-uuid', ["index.html\0.txt" => 'hello']);
+    }
+
+    public function testPublishRejectsAbsolutePath(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Absolute path not allowed');
+        $this->storage->publish('proj-uuid', ['/etc/index.html' => 'hello']);
+    }
+
+    public function testPublishRejectsTooManyFiles(): void
+    {
+        $files = [];
+        for ($i = 0; $i <= PublishedSiteStorage::MAX_FILES_PER_PUBLICATION; $i++) {
+            $files["file{$i}.txt"] = 'content';
+        }
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Publication exceeds maximum allowed file count');
+        $this->storage->publish('proj-uuid', $files);
+    }
+
+    public function testDeleteProjectSafelyCleansUp(): void
+    {
+        $this->storage->publish('proj-uuid', ['index.html' => 'hello']);
+        $this->assertSame('hello', $this->storage->readFile('proj-uuid', 'index.html'));
+
+        $deleted = $this->storage->deleteProject('proj-uuid');
+        $this->assertTrue($deleted);
+        $this->assertNull($this->storage->readFile('proj-uuid', 'index.html'));
+    }
+
+    public function testReadFileWithInvalidProjectUuidReturnsNull(): void
+    {
+        $this->assertNull($this->storage->readFile('../../../etc', 'passwd'));
+    }
+
+    public function testListFilesWithInvalidProjectUuidReturnsEmpty(): void
+    {
+        $this->assertSame([], $this->storage->listFiles('../../../etc'));
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

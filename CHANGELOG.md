@@ -7,6 +7,24 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.127] — 2026-11-05
+
+### Security Hardening on Static Site Publishing, Storage Manager & Twig Sandbox (Cycle #64)
+- **Static Site Publishing Hardening (`PublishedSiteStorage`)**:
+  - Implemented strict project UUID/identifier validation (`validateProjectUuid`), preventing directory escapes and traversal outside target project repositories.
+  - Added comprehensive sensitive and executable file blocking (`validateRelativePathSecurity`): rejects server-side scripts (`.php`, `.phtml`, `.phar`, `.sh`, `.exe`, `.cgi`, `.py`, `.asp`, `.jsp`, etc.) and sensitive configuration files (`.htaccess`, `.htpasswd`, `web.config`, `.env`, `.git`), preventing RCE and configuration overrides.
+  - Added capacity and resource boundaries: enforced 2,000 maximum files ceiling (`MAX_FILES_PER_PUBLICATION`), 25 MB single file limit (`MAX_SINGLE_FILE_SIZE_BYTES`), and 100 MB total publication limit (`MAX_TOTAL_PUBLICATION_SIZE_BYTES`).
+  - Added strict null-byte rejection (`\0`) and enforced safe permissions (`0644` files, `0755` dirs).
+  - Added clean project teardown method `deleteProject(string $projectUuid)`.
+- **Twig Template Sandbox & DoS Protection (`DynamicTemplateRenderer` & `NativeTwigSecurityPolicy`)**:
+  - Hardened default sandbox security policy in `NativeTwigSecurityPolicy`: dropped `include` from `$allowedTags`, preventing template injection recursion, recursive self-inclusion, and local template enumeration attacks.
+  - Added strict payload size cap (`MAX_TEMPLATE_LENGTH = 65536` / 64 KB) and null-byte rejection in `DynamicTemplateRenderer`, mitigating memory exhaustion and parser bypasses.
+- **Storage Manager Path & CRLF Hardening (`StorageManager`)**:
+  - Enforced defensive path validation (`validatePathSafety`): strictly rejects null bytes, path traversal (`..`), and capped path lengths to 1024 characters.
+  - Added CRLF and null-byte neutralization across `buildUrl()`, preventing HTTP response splitting and header injection attacks on generated media URLs.
+- **Unit Testing & Verification**:
+  - Expanded test suites across `PublishedSiteStorageTest`, `TwigSandboxIntegrationTest`, and added new `StorageManagerHardeningTest` (100% passing).
+
 ## [1.26.126] — 2026-11-05
 
 ### Security Hardening on Forms, Public Submissions, Direct Upload & TUS (Cycle #63)

@@ -6,6 +6,21 @@ namespace App\Service;
 
 class PublishedSiteStorage
 {
+    public const MAX_FILES_PER_PUBLICATION = 2000;
+    public const MAX_SINGLE_FILE_SIZE_BYTES = 26214400; // 25 MB
+    public const MAX_TOTAL_PUBLICATION_SIZE_BYTES = 104857600; // 100 MB
+
+    private const FORBIDDEN_EXTENSIONS = [
+        'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'inc',
+        'sh', 'bash', 'zsh', 'ksh', 'csh', 'bat', 'cmd', 'ps1', 'exe', 'bin',
+        'cgi', 'pl', 'py', 'rb', 'jsp', 'asp', 'aspx', 'shtml',
+    ];
+
+    private const FORBIDDEN_FILENAMES = [
+        '.htaccess', '.htpasswd', 'web.config', '.env', '.env.local',
+        '.git', '.gitignore', '.gitmodules', '.gitlab-ci.yml',
+    ];
+
     public function __construct(
         private readonly string $baseDir
     ) {
@@ -18,6 +33,28 @@ class PublishedSiteStorage
      */
     public function publish(string $projectUuid, array $files): void
     {
+        $this->validateProjectUuid($projectUuid);
+
+        if (count($files) > self::MAX_FILES_PER_PUBLICATION) {
+            throw new \InvalidArgumentException(sprintf('Publication exceeds maximum allowed file count of %d files.', self::MAX_FILES_PER_PUBLICATION));
+        }
+
+        $totalBytes = 0;
+        foreach ($files as $relativePath => $content) {
+            if (!is_string($content)) {
+                throw new \InvalidArgumentException("File content must be a string for {$relativePath}.");
+            }
+            $fileSize = strlen($content);
+            if ($fileSize > self::MAX_SINGLE_FILE_SIZE_BYTES) {
+                throw new \InvalidArgumentException(sprintf('File "%s" exceeds maximum single file size of %d MB.', $relativePath, self::MAX_SINGLE_FILE_SIZE_BYTES / (1024 * 1024)));
+            }
+            $totalBytes += $fileSize;
+        }
+
+        if ($totalBytes > self::MAX_TOTAL_PUBLICATION_SIZE_BYTES) {
+            throw new \InvalidArgumentException(sprintf('Total publication payload exceeds maximum size limit of %d MB.', self::MAX_TOTAL_PUBLICATION_SIZE_BYTES / (1024 * 1024)));
+        }
+
         $projectDir = $this->getProjectDir($projectUuid);
 
         if (is_dir($projectDir)) {
@@ -32,10 +69,12 @@ class PublishedSiteStorage
 
         foreach ($files as $relativePath => $content) {
             $normalizedRelative = str_replace('\\', '/', $relativePath);
-            $parts = explode('/', trim($normalizedRelative, '/'));
-            if (in_array('..', $parts, true) || in_array('.', $parts, true)) {
+            $parts = array_values(array_filter(explode('/', trim($normalizedRelative, '/')), fn($p) => $p !== ''));
+            if (empty($parts) || in_array('..', $parts, true) || in_array('.', $parts, true)) {
                 throw new \InvalidArgumentException("Path traversal attempt detected in relative path: {$relativePath}");
             }
+
+            $this->validateRelativePathSecurity($relativePath);
 
             $filePath = $projectDir . '/' . implode('/', $parts);
             $dir = dirname($filePath);
@@ -49,6 +88,7 @@ class PublishedSiteStorage
             }
 
             file_put_contents($filePath, $content);
+            @chmod($filePath, 0644);
 
             $realFilePath = realpath($filePath);
             if ($realFilePath === false || !str_starts_with($realFilePath, $realProjectDir . DIRECTORY_SEPARATOR)) {
@@ -63,6 +103,14 @@ class PublishedSiteStorage
      */
     public function readFile(string $projectUuid, string $relativePath): ?string
     {
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,64}$/', $projectUuid)) {
+            return null;
+        }
+
+        if (str_contains($relativePath, "\0") || str_contains($relativePath, '..')) {
+            return null;
+        }
+
         $projectDir = $this->getProjectDir($projectUuid);
         $realProjectDir = realpath($projectDir);
 
@@ -70,7 +118,7 @@ class PublishedSiteStorage
             return null;
         }
 
-        $targetPath = $projectDir . '/' . ltrim($relativePath, '/');
+        $targetPath = $projectDir . '/' . ltrim(str_replace('\\', '/', $relativePath), '/');
         $realTargetPath = realpath($targetPath);
 
         if ($realTargetPath === false || !is_file($realTargetPath)) {
@@ -93,6 +141,10 @@ class PublishedSiteStorage
      */
     public function listFiles(string $projectUuid): array
     {
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,64}$/', $projectUuid)) {
+            return [];
+        }
+
         $projectDir = $this->getProjectDir($projectUuid);
         $realProjectDir = realpath($projectDir);
 
@@ -107,15 +159,66 @@ class PublishedSiteStorage
         );
 
         $baseLen = strlen($realProjectDir) + 1;
+        $count = 0;
         /** @var \SplFileInfo $file */
         foreach ($iterator as $file) {
             if ($file->isFile()) {
+                if (++$count > self::MAX_FILES_PER_PUBLICATION) {
+                    break;
+                }
                 $subPath = substr($file->getPathname(), $baseLen);
                 $files[] = str_replace(DIRECTORY_SEPARATOR, '/', $subPath);
             }
         }
 
         return $files;
+    }
+
+    /**
+     * Safely deletes all published assets for a given project.
+     */
+    public function deleteProject(string $projectUuid): bool
+    {
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,64}$/', $projectUuid)) {
+            return false;
+        }
+
+        $projectDir = $this->getProjectDir($projectUuid);
+        if (is_dir($projectDir)) {
+            $this->removeDirectory($projectDir);
+            return true;
+        }
+
+        return false;
+    }
+
+    private function validateProjectUuid(string $projectUuid): void
+    {
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,64}$/', $projectUuid)) {
+            throw new \InvalidArgumentException("Invalid project identifier: {$projectUuid}");
+        }
+    }
+
+    private function validateRelativePathSecurity(string $relativePath): void
+    {
+        if (str_contains($relativePath, "\0")) {
+            throw new \InvalidArgumentException("Null byte detected in relative path: {$relativePath}");
+        }
+
+        $normalized = str_replace('\\', '/', $relativePath);
+        if (str_starts_with($normalized, '/') || preg_match('/^[a-zA-Z]:/', $normalized)) {
+            throw new \InvalidArgumentException("Absolute path not allowed: {$relativePath}");
+        }
+
+        $baseName = strtolower(basename($normalized));
+        if (in_array($baseName, self::FORBIDDEN_FILENAMES, true)) {
+            throw new \InvalidArgumentException("Forbidden sensitive file detected: {$relativePath}");
+        }
+
+        $ext = strtolower(pathinfo($baseName, PATHINFO_EXTENSION));
+        if (in_array($ext, self::FORBIDDEN_EXTENSIONS, true)) {
+            throw new \InvalidArgumentException("Forbidden executable file type detected: {$relativePath}");
+        }
     }
 
     private function getProjectDir(string $projectUuid): string

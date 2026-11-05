@@ -70,4 +70,33 @@ class TwigSandboxIntegrationTest extends KernelTestCase
         $this->expectException(SecurityNotAllowedMethodError::class);
         $renderer->render('{{ obj.malicious() }}', ['obj' => $obj]);
     }
+
+    public function testDynamicTemplateRendererBlocksIncludeTag(): void
+    {
+        self::bootKernel();
+        $renderer = self::getContainer()->get(DynamicTemplateRenderer::class);
+
+        $this->expectException(SecurityNotAllowedTagError::class);
+        $renderer->render('{% include "user_template" %}');
+    }
+
+    public function testDynamicTemplateRendererBlocksOversizedTemplate(): void
+    {
+        self::bootKernel();
+        $renderer = self::getContainer()->get(DynamicTemplateRenderer::class);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Dynamic template exceeds maximum allowed length');
+        $renderer->render(str_repeat('a', DynamicTemplateRenderer::MAX_TEMPLATE_LENGTH + 10));
+    }
+
+    public function testDynamicTemplateRendererBlocksNullBytes(): void
+    {
+        self::bootKernel();
+        $renderer = self::getContainer()->get(DynamicTemplateRenderer::class);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Null byte detected in dynamic template content');
+        $renderer->render("hello\0world");
+    }
 }
