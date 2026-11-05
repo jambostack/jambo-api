@@ -15,7 +15,10 @@ class EndUserImportHandler implements ImportHandlerInterface
     /** @var EndUser[] */
     private array $importedUsers = [];
 
-    public function __construct(private EndUserRepository $endUserRepository) {}
+    public function __construct(
+        private EndUserRepository $endUserRepository,
+        private ?\App\Service\EndUserCustomFieldsSanitizer $sanitizer = null,
+    ) {}
 
     public static function getOptionKey(): string
     {
@@ -42,8 +45,18 @@ class EndUserImportHandler implements ImportHandlerInterface
         }
 
         foreach ($data['end_users'] as $userData) {
-            $oldUuid = $userData['uuid'] ?? null;
-            $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $userData['email']);
+            $rawEmail = trim((string) ($userData['email'] ?? ''));
+            if ($rawEmail === '' || strlen($rawEmail) > 191 || !filter_var($rawEmail, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+
+            $password = (string) ($userData['password'] ?? '');
+            if ($password === '' || strlen($password) > 255) {
+                continue;
+            }
+
+            $oldUuid = isset($userData['uuid']) && is_string($userData['uuid']) ? $userData['uuid'] : null;
+            $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $rawEmail);
 
             if ($existing !== null) {
                 if ($options->strategy === 'skip') {
@@ -55,7 +68,7 @@ class EndUserImportHandler implements ImportHandlerInterface
                 $user = $existing;
                 $newUuid = $existing->uuid?->toString() ?? $oldUuid;
             } else {
-                $user = new EndUser($project, $userData['email']);
+                $user = new EndUser($project, $rawEmail);
                 // Always generate fresh UUIDs for a brand-new project (same reasoning
                 // as ContentImportHandler — global unique constraint on end_user.uuid).
                 $newUuid = ($options->strategy === 'new_uuids' || $options->createNewProject || !$oldUuid)
@@ -69,31 +82,49 @@ class EndUserImportHandler implements ImportHandlerInterface
                 $uuidMap[$oldUuid] = $newUuid;
             }
 
-            $user->password = $userData['password'];
-            $user->username = $userData['username'] ?? null;
-            $user->status = $userData['status'] ?? 'active';
-            $user->tokenVersion = (int) ($userData['token_version'] ?? 1);
+            $user->password = $password;
+            $user->username = isset($userData['username']) ? substr(trim((string) $userData['username']), 0, 191) : null;
+            $user->status = in_array($userData['status'] ?? 'active', ['active', 'inactive', 'pending', 'suspended'], true) ? $userData['status'] : 'active';
+            $user->tokenVersion = max(1, (int) ($userData['token_version'] ?? 1));
 
-            if (isset($userData['created_at'])) {
-                $user->createdAt = new \DateTimeImmutable($userData['created_at']);
+            if (isset($userData['created_at']) && is_string($userData['created_at'])) {
+                try {
+                    $user->createdAt = new \DateTimeImmutable($userData['created_at']);
+                } catch (\Throwable) {}
             }
-            if (isset($userData['updated_at'])) {
-                $user->updatedAt = new \DateTimeImmutable($userData['updated_at']);
+            if (isset($userData['updated_at']) && is_string($userData['updated_at'])) {
+                try {
+                    $user->updatedAt = new \DateTimeImmutable($userData['updated_at']);
+                } catch (\Throwable) {}
             }
 
-            // Étape D: remap media/relation UUIDs stored in customFields
+            // Étape D: assainissement strict et remap media/relation UUIDs stockés dans customFields
             $customFields = $userData['custom_fields'] ?? null;
-            if (is_array($customFields) && !empty($uuidMap)) {
-                foreach ($customFields as $slug => $value) {
-                    if (is_array($value)) {
-                        $customFields[$slug] = array_map(
-                            static fn($v) => is_string($v) && isset($uuidMap[$v]) ? $uuidMap[$v] : $v,
-                            $value,
-                        );
-                    } elseif (is_string($value) && isset($uuidMap[$value])) {
-                        $customFields[$slug] = $uuidMap[$value];
+            if (is_array($customFields)) {
+                if ($this->sanitizer !== null) {
+                    try {
+                        $sanResult = $this->sanitizer->sanitize($customFields);
+                        $customFields = ($sanResult['valid'] && is_array($sanResult['sanitized']))
+                            ? $sanResult['sanitized']
+                            : [];
+                    } catch (\Throwable) {
+                        $customFields = [];
                     }
                 }
+                if (!empty($uuidMap)) {
+                    foreach ($customFields as $slug => $value) {
+                        if (is_array($value)) {
+                            $customFields[$slug] = array_map(
+                                static fn($v) => is_string($v) && isset($uuidMap[$v]) ? $uuidMap[$v] : $v,
+                                $value,
+                            );
+                        } elseif (is_string($value) && isset($uuidMap[$value])) {
+                            $customFields[$slug] = $uuidMap[$value];
+                        }
+                    }
+                }
+            } else {
+                $customFields = null;
             }
             $user->customFields = $customFields;
         }

@@ -7,17 +7,23 @@ use App\Service\TwoFactorService;
 use App\Service\TwoFactorMailer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Writer\PngWriter;
 
 #[Route('/api/settings/security', name: 'settings_security_')]
 class SecurityController extends AbstractController
 {
+    public const MAX_CODE_LENGTH = 64;
+    public const MAX_FAILED_ATTEMPTS = 5;
+
     public function __construct(
         private EntityManagerInterface $em,
         private TwoFactorService $twoFactor,
@@ -25,7 +31,32 @@ class SecurityController extends AbstractController
         private UserPasswordHasherInterface $hasher,
         private RequestStack $requestStack,
         private ?SocialLoginService $socialLogin = null,
+        #[Autowire(service: 'limiter.two_factor_limiter')]
+        private ?RateLimiterFactory $rateLimiter = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($id, $parameters, 'messages');
+            if ($translated !== $id) {
+                return $translated;
+            }
+        }
+        return $default ?? $id;
+    }
+
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->rateLimiter !== null) {
+            $identifier = ($request->getClientIp() ?: '127.0.0.1') . '_' . ($this->getUser()?->getUserIdentifier() ?? 'anon');
+            if (!$this->rateLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->json(['error' => $this->trans('security.2fa.too_many_attempts', [], 'Too many requests. Please wait 60 seconds.')], 429);
+            }
+        }
+        return null;
+    }
 
     #[Route('', name: 'status', methods: ['GET'])]
     public function status(): JsonResponse
@@ -42,14 +73,18 @@ class SecurityController extends AbstractController
     #[Route('/totp/setup', name: 'totp_setup', methods: ['POST'])]
     public function totpSetup(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $user = $this->requireUser();
         if ($user->twoFactorEnabled) {
-            return $this->json(['error' => '2FA already enabled. Disable it first.'], 409);
+            return $this->json(['error' => $this->trans('security.2fa.already_enabled', [], '2FA already enabled. Disable it first.')], 409);
         }
         $data = $this->getJsonData($request);
         $password = (string) ($data['password'] ?? '');
-        if (!$this->hasher->isPasswordValid($user, $password)) {
-            return $this->json(['error' => 'Invalid password.'], 422);
+        if ($password === '' || strlen($password) > 4096 || !$this->hasher->isPasswordValid($user, $password)) {
+            return $this->json(['error' => $this->trans('security.2fa.invalid_password', [], 'Invalid password.')], 422);
         }
 
         $secret = $this->twoFactor->generateSecret();
@@ -78,18 +113,22 @@ class SecurityController extends AbstractController
     #[Route('/totp/confirm', name: 'totp_confirm', methods: ['POST'])]
     public function totpConfirm(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $user = $this->requireUser();
         if ($user->twoFactorEnabled) {
-            return $this->json(['error' => '2FA already enabled.'], 409);
+            return $this->json(['error' => $this->trans('security.2fa.already_enabled', [], '2FA already enabled.')], 409);
         }
         if (!$user->twoFactorSecret || $user->twoFactorMethod !== 'totp') {
-            return $this->json(['error' => 'Run TOTP setup first.'], 400);
+            return $this->json(['error' => $this->trans('security.2fa.totp_setup_required', [], 'Run TOTP setup first.')], 400);
         }
 
         $data = $this->getJsonData($request);
-        $code = (string) ($data['code'] ?? '');
-        if (!$this->twoFactor->verifyTotp($user->twoFactorSecret, $code)) {
-            return $this->json(['error' => 'Invalid code. Please try again.'], 422);
+        $code = trim((string) ($data['code'] ?? ''));
+        if (strlen($code) > self::MAX_CODE_LENGTH || !$this->twoFactor->verifyTotp($user->twoFactorSecret, $code)) {
+            return $this->json(['error' => $this->trans('security.2fa.invalid_code', [], 'Invalid code. Please try again.')], 422);
         }
 
         $backupResult = $this->twoFactor->generateBackupCodes();
@@ -99,7 +138,7 @@ class SecurityController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'message' => '2FA enabled successfully.',
+            'message' => $this->trans('security.2fa.enabled_success', [], '2FA enabled successfully.'),
             'backup_codes' => $backupResult['plaintext'],
         ]);
     }
@@ -107,20 +146,25 @@ class SecurityController extends AbstractController
     #[Route('/email/enable', name: 'email_enable', methods: ['POST'])]
     public function emailEnable(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $user = $this->requireUser();
         if ($user->twoFactorEnabled) {
-            return $this->json(['error' => '2FA already enabled.'], 409);
+            return $this->json(['error' => $this->trans('security.2fa.already_enabled', [], '2FA already enabled.')], 409);
         }
         $data = $this->getJsonData($request);
         $password = (string) ($data['password'] ?? '');
-        if (!$this->hasher->isPasswordValid($user, $password)) {
-            return $this->json(['error' => 'Invalid password.'], 422);
+        if ($password === '' || strlen($password) > 4096 || !$this->hasher->isPasswordValid($user, $password)) {
+            return $this->json(['error' => $this->trans('security.2fa.invalid_password', [], 'Invalid password.')], 422);
         }
 
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $session = $this->requestStack->getCurrentRequest()->getSession();
         $session->set('two_factor_email_code', $code);
         $session->set('two_factor_email_expires', time() + 300);
+        $session->remove('security_email_attempts');
 
         $user->twoFactorSecret = null;
         $user->twoFactorMethod = 'email';
@@ -128,35 +172,49 @@ class SecurityController extends AbstractController
 
         $this->twoFactorMailer->sendCode($user->email, $code, 'JamboAPI');
 
-        return $this->json(['message' => 'Verification code sent to your email.']);
+        return $this->json(['message' => $this->trans('security.2fa.code_sent', [], 'Verification code sent to your email.')]);
     }
 
     #[Route('/email/confirm', name: 'email_confirm', methods: ['POST'])]
     public function emailConfirm(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $user = $this->requireUser();
         if ($user->twoFactorEnabled) {
-            return $this->json(['error' => '2FA already enabled.'], 409);
+            return $this->json(['error' => $this->trans('security.2fa.already_enabled', [], '2FA already enabled.')], 409);
         }
         if ($user->twoFactorMethod !== 'email') {
-            return $this->json(['error' => 'Run email setup first.'], 400);
+            return $this->json(['error' => $this->trans('security.2fa.email_setup_required', [], 'Run email setup first.')], 400);
         }
 
         $data = $this->getJsonData($request);
-        $code = (string) ($data['code'] ?? '');
+        $code = trim((string) ($data['code'] ?? ''));
         $session = $this->requestStack->getCurrentRequest()->getSession();
         $storedCode = $session->get('two_factor_email_code');
-        $expires = $session->get('two_factor_email_expires', 0);
+        $expires = (int) $session->get('two_factor_email_expires', 0);
 
         if (!$storedCode || time() > $expires) {
-            return $this->json(['error' => 'Code expired. Request a new one.'], 422);
+            return $this->json(['error' => $this->trans('security.2fa.code_expired', [], 'Code expired. Request a new one.')], 422);
         }
-        if ($code !== $storedCode) {
-            return $this->json(['error' => 'Invalid code.'], 422);
+
+        if (strlen($code) > self::MAX_CODE_LENGTH || !$this->twoFactor->verifyEmailCode($storedCode, $expires, $code)) {
+            $attempts = ((int) $session->get('security_email_attempts', 0)) + 1;
+            $session->set('security_email_attempts', $attempts);
+            if ($attempts >= self::MAX_FAILED_ATTEMPTS) {
+                $session->remove('two_factor_email_code');
+                $session->remove('two_factor_email_expires');
+                $session->remove('security_email_attempts');
+                return $this->json(['error' => $this->trans('security.2fa.max_attempts_exceeded', [], 'Maximum attempts exceeded. Please restart setup.')], 422);
+            }
+            return $this->json(['error' => $this->trans('security.2fa.invalid_code', [], 'Invalid code.')], 422);
         }
 
         $session->remove('two_factor_email_code');
         $session->remove('two_factor_email_expires');
+        $session->remove('security_email_attempts');
 
         $backupResult = $this->twoFactor->generateBackupCodes();
         $user->twoFactorEnabled = true;
@@ -165,7 +223,7 @@ class SecurityController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'message' => '2FA enabled successfully.',
+            'message' => $this->trans('security.2fa.enabled_success', [], '2FA enabled successfully.'),
             'backup_codes' => $backupResult['plaintext'],
         ]);
     }
@@ -173,15 +231,19 @@ class SecurityController extends AbstractController
     #[Route('/disable', name: 'disable', methods: ['POST'])]
     public function disable(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $user = $this->requireUser();
         if (!$user->twoFactorEnabled) {
-            return $this->json(['error' => '2FA is not enabled.'], 400);
+            return $this->json(['error' => $this->trans('security.2fa.not_enabled', [], '2FA is not enabled.')], 400);
         }
 
         $data = $this->getJsonData($request);
         $password = (string) ($data['password'] ?? '');
-        if (!$this->hasher->isPasswordValid($user, $password)) {
-            return $this->json(['error' => 'Invalid password.'], 422);
+        if ($password === '' || strlen($password) > 4096 || !$this->hasher->isPasswordValid($user, $password)) {
+            return $this->json(['error' => $this->trans('security.2fa.invalid_password', [], 'Invalid password.')], 422);
         }
 
         $user->twoFactorEnabled = false;
@@ -191,15 +253,19 @@ class SecurityController extends AbstractController
         $user->twoFactorConfirmedAt = null;
         $this->em->flush();
 
-        return $this->json(['message' => '2FA disabled successfully.']);
+        return $this->json(['message' => $this->trans('security.2fa.disabled_success', [], '2FA disabled successfully.')]);
     }
 
     #[Route('/backup-codes', name: 'backup_codes', methods: ['POST'])]
-    public function regenerateBackupCodes(): JsonResponse
+    public function regenerateBackupCodes(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $user = $this->requireUser();
         if (!$user->twoFactorEnabled) {
-            return $this->json(['error' => '2FA is not enabled.'], 400);
+            return $this->json(['error' => $this->trans('security.2fa.not_enabled', [], '2FA is not enabled.')], 400);
         }
 
         $backupResult = $this->twoFactor->generateBackupCodes();
@@ -207,7 +273,7 @@ class SecurityController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'message' => 'Backup codes regenerated.',
+            'message' => $this->trans('security.2fa.backup_codes_regenerated', [], 'Backup codes regenerated.'),
             'backup_codes' => $backupResult['plaintext'],
         ]);
     }
@@ -244,45 +310,53 @@ class SecurityController extends AbstractController
     }
 
     #[Route('/social/{provider}/link', name: 'social_link', methods: ['POST'])]
-    public function linkSocialProvider(string $provider): JsonResponse
+    public function linkSocialProvider(string $provider, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         if ($this->socialLogin === null) {
-            return $this->json(['error' => 'Social login is not available'], 500);
+            return $this->json(['error' => $this->trans('security.social.not_available', [], 'Social login is not available')], 500);
         }
 
         if (!in_array($provider, ['google', 'microsoft', 'github', 'gitlab'], true)) {
-            return $this->json(['error' => 'Unknown provider'], 400);
+            return $this->json(['error' => $this->trans('security.social.unknown_provider', [], 'Unknown provider')], 400);
         }
 
         // La liaison réelle se fait via OAuth redirect — ce endpoint est informatif
         return $this->json([
-            'message' => 'Redirect to /connect/' . $provider . ' to link this provider.',
+            'message' => $this->trans('security.social.redirect_link', ['%provider%' => $provider], 'Redirect to /connect/' . $provider . ' to link this provider.'),
             'redirect_url' => '/connect/' . $provider,
         ]);
     }
 
     #[Route('/social/{provider}', name: 'social_unlink', methods: ['DELETE'])]
-    public function unlinkSocialProvider(string $provider): JsonResponse
+    public function unlinkSocialProvider(string $provider, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $user = $this->requireUser();
 
         if ($this->socialLogin === null) {
-            return $this->json(['error' => 'Social login is not available'], 500);
+            return $this->json(['error' => $this->trans('security.social.not_available', [], 'Social login is not available')], 500);
         }
 
         if (!in_array($provider, ['google', 'microsoft', 'github', 'gitlab'], true)) {
-            return $this->json(['error' => 'Unknown provider'], 400);
+            return $this->json(['error' => $this->trans('security.social.unknown_provider', [], 'Unknown provider')], 400);
         }
 
         if (!$this->socialLogin->canUnlinkProvider($user, $provider)) {
             return $this->json([
-                'error' => 'Cannot unlink the last authentication method. Set a password or link another provider first.',
+                'error' => $this->trans('security.social.cannot_unlink_last', [], 'Cannot unlink the last authentication method. Set a password or link another provider first.'),
             ], 400);
         }
 
         $this->socialLogin->unlinkProvider($user, $provider);
 
-        return $this->json(['message' => 'Provider unlinked successfully.']);
+        return $this->json(['message' => $this->trans('security.social.unlinked_success', [], 'Provider unlinked successfully.')]);
     }
 
     private function requireUser(): User

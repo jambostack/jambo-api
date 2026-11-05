@@ -335,6 +335,10 @@ class EndUserAuthController extends AbstractController
             return $this->json(['error' => $this->trans('enduser.auth.user_not_found_inactive', [], 'User not found or inactive')], 401);
         }
 
+        if (strlen($code) > \App\Service\TwoFactorService::MAX_CODE_LENGTH) {
+            return $this->json(['error' => $this->trans('enduser.auth.invalid_code', [], 'Invalid code')], 422);
+        }
+
         // Verify the code
         $valid = false;
         if ($endUser->twoFactorMethod === 'totp') {
@@ -342,7 +346,7 @@ class EndUserAuthController extends AbstractController
         } elseif ($endUser->twoFactorMethod === 'email') {
             // Le JWT contient un hash du code (pas le code en clair)
             $storedHash = $claims['ech'] ?? null;
-            $valid = $storedHash !== null && hash('sha256', $code) === $storedHash;
+            $valid = $this->twoFactorService->verifyEmailHash($storedHash, $code);
         }
 
         // Fallback: backup codes

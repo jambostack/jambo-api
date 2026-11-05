@@ -7,6 +7,37 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.84] — 2026-11-05
+
+### Security, Two-Factor Authentication, Project Export/Import & Strict I18N Hardening
+- **TwoFactorService & Constant-Time Verification**:
+  - Implemented timing-safe `hash_equals` comparison for backup code hashes and email code hashes in `TwoFactorService::verifyAndConsumeBackupCode`, `verifyEmailCode`, and `verifyEmailHash`.
+  - Added strict input length bounds (`MAX_CODE_LENGTH = 64`) and character set validation (`ctype_alnum`) to prevent CPU exhaustion on oversized inputs.
+  - Added robust exception handling around `TOTP::create()` to catch malformed base32 secrets without unhandled 500 errors.
+- **TwoFactorChallengeController Brute-Force & Flood Defense**:
+  - Enforced brute-force attempt bounding per challenge session (`MAX_FAILED_ATTEMPTS = 5`): on 5th consecutive failure, the session is purged to neutralize OTP guessing attacks.
+  - Rate-limited 2FA challenge requests per IP + user ID.
+  - Bounded email resends to `MAX_EMAIL_RESENDS = 3` per challenge session to prevent email flooding.
+  - Replaced hardcoded strings with I18N keys under `auth.2fa.*` (`max_attempts_exceeded`, `max_resends_exceeded`).
+- **Settings/SecurityController Hardening & Localization**:
+  - Secured 2FA endpoints (`totp/setup`, `totp/confirm`, `email/enable`, `email/confirm`, `disable`, `backup-codes`, `social/link`, `social/unlink`) with rate limiting and password length bounds.
+  - Hardened email code confirmation with session attempt counters and constant-time matching.
+  - Replaced all raw English strings with Symfony `TranslatorInterface` translations under `security.2fa.*` and `security.social.*`.
+- **EndUserAuthController 2FA Hardening**:
+  - Replaced non-constant-time hash comparison with `TwoFactorService::verifyEmailHash` using `hash_equals`.
+  - Bounded input code length to `MAX_CODE_LENGTH = 64`.
+- **OWASP ASVS Project Export / Import Hardening**:
+  - Refactored `ProjectExportImportController` with localized responses under `project.export_import.*`.
+  - Added length validation on new project names (`max 150 characters`).
+  - Integrated `EndUserCustomFieldsSanitizer` in `EndUserImportHandler` to scrub imported `custom_fields` against prototype pollution and reserved system keys.
+  - Enforced email format and length validation on imported user records.
+- **Strict 4-Language Translation Parity**:
+  - Added 32 new localized keys across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`).
+- **Automated Test Suite**:
+  - Expanded test suite to **1,046 tests / 4,314 assertions / 0 failures** (+18 new automated unit and functional tests).
+
+---
+
 ## [1.26.83] — 2026-11-05
 
 ### Security, Webhook Anti-SSRF, Social Auth Rate Limiting & EndUser Schema Hardening
