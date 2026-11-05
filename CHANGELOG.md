@@ -7,6 +7,29 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.88] — 2026-11-05
+
+### Granular RBAC, Anti-Privilege Escalation, Audit Trail & Strict UserManagement I18N
+- **UserManagement Hardening (UserController, RoleController, PermissionController)**:
+  - **Granular RBAC & Anti-Privilege Escalation**:
+    - Guarded user promotion and superadmin creation: non-superadmin users cannot create or assign `ROLE_SUPER_ADMIN` accounts.
+    - Guarded user update: non-superadmin callers cannot modify or tamper with `ROLE_SUPER_ADMIN` user accounts (HTTP 403 Forbidden).
+    - Guarded role assignment: delegated administrators cannot assign roles containing permissions beyond their own scope (CWE-269 prevention).
+    - Guarded self-lockout & demotion: last super administrator cannot be demoted or deleted (HTTP 422 Unprocessable Entity).
+    - Guarded role & permission management: protected system roles (`ROLE_SUPER_ADMIN`, `admin`, `super_admin`) and protected system permissions (`users.manage`, `roles.manage`, etc.) cannot be deleted or renamed.
+    - Prevented deletion of roles assigned to active users and permissions assigned to active roles.
+    - Implemented full CRUD and bulk deletion for `PermissionController` with format enforcement (`^[a-z0-9_]+(\.[a-z0-9_]+)*$`) and password verification.
+  - **Audit Trail Integration**:
+    - Integrated `AuditService` across `UserController`, `RoleController`, and `PermissionController`.
+    - Automated secure audit logging on `user_create`, `user_update`, `user_delete`, `user_bulk_delete`, `role_create`, `role_update`, `role_delete`, `role_bulk_delete`, `permission_create`, `permission_update`, `permission_delete`, and `permission_bulk_delete` with automatic credential redaction.
+  - **Strict I18N Elimination of Hardcoded Strings**:
+    - Injected Symfony `TranslatorInterface` across all 3 controllers.
+    - Replaced all raw strings with 48 new translation keys under `user.admin.*`, `role.admin.*`, and `permission.admin.*`.
+    - Maintained exact 4-language parity (EN, FR, ES, AR) across `translations/messages.*.php` (2229 keys each, 0 diffs).
+  - **Tests & Quality Assurance**:
+    - Added dedicated test suite `UserManagementHardeningTest.php` (8 tests, 318 assertions) covering RBAC, anti-escalation, audit logging, system protections, and I18N parity.
+    - Full PHPUnit test suite passed successfully (1116 tests, 4809 assertions, 0 failures).
+
 ## [1.26.87] — 2026-11-05
 
 ### Security Hardening, Trigger Defenses, Inbound Anti-SSRF & Full Automation/Flow I18N

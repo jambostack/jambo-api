@@ -2,19 +2,45 @@
 
 namespace App\Controller\UserManagement;
 
+use App\Entity\Permission;
+use App\Entity\User;
 use App\Repository\PermissionRepository;
+use App\Service\AuditService;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/permissions', name: 'api_permissions_')]
 #[IsGranted('ROLE_USER')]
 class PermissionController extends AbstractController
 {
+    public const PROTECTED_PERMISSIONS = [
+        'users.manage',
+        'roles.manage',
+        'project.manage',
+        'project.create',
+        'collection.create',
+        'collection.update',
+        'collection.delete',
+        'content.create',
+        'content.update',
+        'content.delete',
+        'content.trash',
+        'content.restore',
+        'assets.view',
+    ];
+
     public function __construct(
         private PermissionRepository $permissionRepository,
+        private EntityManagerInterface $em,
+        private UserPasswordHasherInterface $hasher,
+        private TranslatorInterface $translator,
+        private AuditService $auditService,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -65,7 +91,232 @@ class PermissionController extends AbstractController
         ]);
     }
 
-    private function serialize(\App\Entity\Permission $p): array
+    #[Route('/bulk-delete', name: 'bulk_delete', methods: ['POST'], priority: 10)]
+    #[IsGranted('users.manage')]
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        try {
+            $data = $request->toArray();
+        } catch (\Throwable) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.invalid_json')], 400);
+        }
+        $ids      = $data['ids'] ?? [];
+        $password = (string) ($data['password'] ?? '');
+
+        if (empty($ids) || !is_array($ids)) {
+            return $this->json(['errors' => ['ids' => [$this->translator->trans('permission.admin.no_permissions_selected')]]], 422);
+        }
+
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+        if (!$this->hasher->isPasswordValid($currentUser, $password)) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.invalid_password')], 403);
+        }
+
+        $deleted = 0;
+        $deletedIds = [];
+        foreach ($ids as $id) {
+            $permission = $this->permissionRepository->find((int) $id);
+            if ($permission === null || in_array($permission->name, self::PROTECTED_PERMISSIONS, true)) {
+                continue;
+            }
+
+            $isAssigned = (int) $this->em->createQuery(
+                'SELECT COUNT(r.id) FROM App\Entity\Role r JOIN r.permissions p WHERE p.id = :pid'
+            )->setParameter('pid', $permission->id)->getSingleScalarResult() > 0;
+
+            if ($isAssigned) {
+                continue;
+            }
+
+            $this->em->remove($permission);
+            $deletedIds[] = $permission->id;
+            $deleted++;
+        }
+        $this->em->flush();
+
+        if ($deleted > 0) {
+            $this->auditService->log(
+                toolName: 'permission_bulk_delete',
+                project: null,
+                input: ['ids' => $deletedIds, 'count' => $deleted],
+                output: ['deleted' => $deleted],
+                status: 'success',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+        }
+
+        return $this->json(['message' => $this->translator->trans('permission.admin.deleted_success', ['%count%' => $deleted])]);
+    }
+
+    #[Route('/{id}', name: 'show', methods: ['GET'])]
+    public function show(int $id): JsonResponse
+    {
+        $permission = $this->permissionRepository->find($id);
+        if ($permission === null) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.not_found')], 404);
+        }
+
+        return $this->json($this->serialize($permission));
+    }
+
+    #[Route('', name: 'create', methods: ['POST'])]
+    #[IsGranted('users.manage')]
+    public function create(Request $request): JsonResponse
+    {
+        try {
+            $data = $request->toArray();
+        } catch (\Throwable) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.invalid_json')], 400);
+        }
+
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name === '') {
+            return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.name_required')]], 422);
+        }
+
+        if (!preg_match('/^[a-z0-9_]+(\.[a-z0-9_]+)*$/', $name)) {
+            return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.invalid_name_format')]], 422);
+        }
+
+        $existing = $this->permissionRepository->findOneBy(['name' => $name]);
+        if ($existing !== null) {
+            return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.name_exists')]], 422);
+        }
+
+        $permission = new Permission();
+        $permission->name  = $name;
+        $permission->label = trim((string) ($data['label'] ?? $name)) ?: $name;
+        $permission->group = trim((string) ($data['group'] ?? 'custom')) ?: 'custom';
+
+        $this->em->persist($permission);
+        $this->em->flush();
+
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+        $this->auditService->log(
+            toolName: 'permission_create',
+            project: null,
+            input: ['id' => $permission->id, 'name' => $permission->name],
+            output: ['success' => true, 'id' => $permission->id],
+            status: 'success',
+            createdBy: $currentUser->getUserIdentifier(),
+            source: 'user_management'
+        );
+        $this->auditService->flush();
+
+        return $this->json(array_merge($this->serialize($permission), [
+            'message' => $this->translator->trans('permission.admin.created_success'),
+        ]), 201);
+    }
+
+    #[Route('/{id}', name: 'update', methods: ['PUT', 'PATCH'])]
+    #[IsGranted('users.manage')]
+    public function update(int $id, Request $request): JsonResponse
+    {
+        $permission = $this->permissionRepository->find($id);
+        if ($permission === null) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.not_found')], 404);
+        }
+
+        if (in_array($permission->name, self::PROTECTED_PERMISSIONS, true)) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.system_permission_protected')], 422);
+        }
+
+        try {
+            $data = $request->toArray();
+        } catch (\Throwable) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.invalid_json')], 400);
+        }
+
+        if (isset($data['name'])) {
+            $newName = trim((string) $data['name']);
+            if ($newName === '') {
+                return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.name_required')]], 422);
+            }
+            if (!preg_match('/^[a-z0-9_]+(\.[a-z0-9_]+)*$/', $newName)) {
+                return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.invalid_name_format')]], 422);
+            }
+            $existing = $this->permissionRepository->findOneBy(['name' => $newName]);
+            if ($existing !== null && $existing->id !== $permission->id) {
+                return $this->json(['errors' => ['name' => $this->translator->trans('permission.admin.name_exists')]], 422);
+            }
+            $permission->name = $newName;
+        }
+
+        if (isset($data['label'])) {
+            $permission->label = trim((string) $data['label']) ?: $permission->name;
+        }
+        if (isset($data['group'])) {
+            $permission->group = trim((string) $data['group']) ?: 'custom';
+        }
+
+        $this->em->flush();
+
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+        $this->auditService->log(
+            toolName: 'permission_update',
+            project: null,
+            input: ['id' => $permission->id, 'name' => $permission->name],
+            output: ['success' => true, 'id' => $permission->id],
+            status: 'success',
+            createdBy: $currentUser->getUserIdentifier(),
+            source: 'user_management'
+        );
+        $this->auditService->flush();
+
+        return $this->json(array_merge($this->serialize($permission), [
+            'message' => $this->translator->trans('permission.admin.updated_success'),
+        ]));
+    }
+
+    #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
+    #[IsGranted('users.manage')]
+    public function delete(int $id): JsonResponse
+    {
+        $permission = $this->permissionRepository->find($id);
+        if ($permission === null) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.not_found')], 404);
+        }
+
+        if (in_array($permission->name, self::PROTECTED_PERMISSIONS, true)) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.system_permission_protected')], 422);
+        }
+
+        $isAssigned = (int) $this->em->createQuery(
+            'SELECT COUNT(r.id) FROM App\Entity\Role r JOIN r.permissions p WHERE p.id = :pid'
+        )->setParameter('pid', $permission->id)->getSingleScalarResult() > 0;
+
+        if ($isAssigned) {
+            return $this->json(['error' => $this->translator->trans('permission.admin.cannot_delete_assigned')], 422);
+        }
+
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+        $permId = $permission->id;
+        $permName = $permission->name;
+
+        $this->em->remove($permission);
+        $this->em->flush();
+
+        $this->auditService->log(
+            toolName: 'permission_delete',
+            project: null,
+            input: ['id' => $permId, 'name' => $permName],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $currentUser->getUserIdentifier(),
+            source: 'user_management'
+        );
+        $this->auditService->flush();
+
+        return $this->json(['message' => $this->translator->trans('permission.admin.single_deleted_success')]);
+    }
+
+    private function serialize(Permission $p): array
     {
         return [
             'id'    => $p->id,

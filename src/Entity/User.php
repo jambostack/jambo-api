@@ -92,6 +92,11 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         $this->passwordChangedAt = new \DateTimeImmutable();
     }
 
+    public function isSuperAdmin(): bool
+    {
+        return in_array('ROLE_SUPER_ADMIN', $this->getRoles(), true);
+    }
+
     public function hasRole(string $roleName): bool
     {
         foreach ($this->userRoles as $role) {

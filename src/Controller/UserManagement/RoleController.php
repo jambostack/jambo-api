@@ -3,8 +3,10 @@
 namespace App\Controller\UserManagement;
 
 use App\Entity\Role;
+use App\Entity\User;
 use App\Repository\PermissionRepository;
 use App\Repository\RoleRepository;
+use App\Service\AuditService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -12,16 +14,27 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/roles', name: 'api_roles_')]
 #[IsGranted('ROLE_USER')]
 class RoleController extends AbstractController
 {
+    private const PROTECTED_ROLES = [
+        'ROLE_SUPER_ADMIN',
+        'ROLE_ADMIN',
+        'ROLE_USER',
+        'admin',
+        'super_admin',
+    ];
+
     public function __construct(
         private RoleRepository $roleRepository,
         private PermissionRepository $permissionRepository,
         private EntityManagerInterface $em,
         private UserPasswordHasherInterface $hasher,
+        private TranslatorInterface $translator,
+        private AuditService $auditService,
     ) {}
 
     #[Route('', name: 'index', methods: ['GET'])]
@@ -79,33 +92,48 @@ class RoleController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->translator->trans('role.admin.invalid_json')], 400);
         }
         $ids      = $data['ids'] ?? [];
         $password = (string) ($data['password'] ?? '');
 
         if (empty($ids) || !is_array($ids)) {
-            return $this->json(['errors' => ['ids' => ['No roles selected.']]], 422);
+            return $this->json(['errors' => ['ids' => [$this->translator->trans('role.admin.no_roles_selected')]]], 422);
         }
 
-        /** @var \App\Entity\User $currentUser */
+        /** @var User $currentUser */
         $currentUser = $this->getUser();
         if (!$this->hasher->isPasswordValid($currentUser, $password)) {
-            return $this->json(['error' => 'Invalid password'], 403);
+            return $this->json(['error' => $this->translator->trans('role.admin.invalid_password')], 403);
         }
 
         $deleted = 0;
+        $deletedIds = [];
         foreach ($ids as $id) {
             $role = $this->roleRepository->find((int) $id);
-            if ($role === null || $role->users->count() > 0) {
+            if ($role === null || $role->users->count() > 0 || in_array($role->name, self::PROTECTED_ROLES, true)) {
                 continue;
             }
             $this->em->remove($role);
+            $deletedIds[] = $role->id;
             $deleted++;
         }
         $this->em->flush();
 
-        return $this->json(['message' => "$deleted role(s) deleted successfully."]);
+        if ($deleted > 0) {
+            $this->auditService->log(
+                toolName: 'role_bulk_delete',
+                project: null,
+                input: ['ids' => $deletedIds, 'count' => $deleted],
+                output: ['deleted' => $deleted],
+                status: 'success',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+        }
+
+        return $this->json(['message' => $this->translator->trans('role.admin.deleted_success', ['%count%' => $deleted])]);
     }
 
     #[Route('/{id}', name: 'show', methods: ['GET'])]
@@ -113,7 +141,7 @@ class RoleController extends AbstractController
     {
         $role = $this->roleRepository->find($id);
         if ($role === null) {
-            return $this->json(['error' => 'Role not found'], 404);
+            return $this->json(['error' => $this->translator->trans('role.admin.not_found')], 404);
         }
 
         return $this->json($this->serialize($role, true));
@@ -126,30 +154,66 @@ class RoleController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->translator->trans('role.admin.invalid_json')], 400);
         }
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
-            return $this->json(['errors' => ['name' => 'Name is required.']], 422);
+            return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.name_required')]], 422);
+        }
+
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+
+        // Anti-privilege escalation: reserved system role name
+        if (in_array(strtolower($name), ['role_super_admin', 'super_admin', 'admin'], true) && !$currentUser->isSuperAdmin()) {
+            return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.system_role_protected')]], 403);
         }
 
         $existing = $this->roleRepository->findByName($name);
         if ($existing !== null) {
-            return $this->json(['errors' => ['name' => 'Role name already exists.']], 422);
+            return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.name_exists')]], 422);
+        }
+
+        $permissions = $data['permissions'] ?? null;
+        if ($permissions !== null && !is_array($permissions)) {
+            return $this->json(['errors' => ['permissions' => $this->translator->trans('role.admin.permissions_must_be_array')]], 422);
+        }
+
+        // Anti-privilege escalation: cannot assign permissions not possessed
+        if (!empty($permissions) && !$currentUser->isSuperAdmin()) {
+            foreach ($permissions as $permName) {
+                if (!$currentUser->hasPermission((string) $permName)) {
+                    return $this->json(['error' => $this->translator->trans('role.admin.cannot_assign_unowned_permissions')], 403);
+                }
+            }
         }
 
         $role = new Role();
         $role->name  = $name;
-        $role->label = $data['label'] ?? $name;
+        $role->label = trim((string) ($data['label'] ?? $name)) ?: $name;
 
-        $permissions = is_array($data['permissions'] ?? null) ? $data['permissions'] : [];
-        $this->attachPermissions($role, $permissions);
+        if (is_array($permissions)) {
+            $this->attachPermissions($role, $permissions);
+        }
 
         $this->em->persist($role);
         $this->em->flush();
 
-        return $this->json($this->serialize($role, true), 201);
+        $this->auditService->log(
+            toolName: 'role_create',
+            project: null,
+            input: ['id' => $role->id, 'name' => $role->name],
+            output: ['success' => true, 'id' => $role->id],
+            status: 'success',
+            createdBy: $currentUser->getUserIdentifier(),
+            source: 'user_management'
+        );
+        $this->auditService->flush();
+
+        return $this->json(array_merge($this->serialize($role, true), [
+            'message' => $this->translator->trans('role.admin.created_success'),
+        ]), 201);
     }
 
     #[Route('/{id}', name: 'update', methods: ['PUT', 'PATCH'])]
@@ -158,42 +222,73 @@ class RoleController extends AbstractController
     {
         $role = $this->roleRepository->find($id);
         if ($role === null) {
-            return $this->json(['error' => 'Role not found'], 404);
+            return $this->json(['error' => $this->translator->trans('role.admin.not_found')], 404);
+        }
+
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+
+        // System roles cannot be renamed or modified by non-superadmins
+        if (in_array($role->name, self::PROTECTED_ROLES, true) && !$currentUser->isSuperAdmin()) {
+            return $this->json(['error' => $this->translator->trans('role.admin.system_role_protected')], 403);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->translator->trans('role.admin.invalid_json')], 400);
         }
 
         if (isset($data['name'])) {
             $newName = trim((string) $data['name']);
             if ($newName === '') {
-                return $this->json(['errors' => ['name' => 'Name cannot be empty.']], 422);
+                return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.name_cannot_be_empty')]], 422);
             }
             $existing = $this->roleRepository->findByName($newName);
             if ($existing !== null && $existing->id !== $role->id) {
-                return $this->json(['errors' => ['name' => 'Role name already exists.']], 422);
+                return $this->json(['errors' => ['name' => $this->translator->trans('role.admin.name_exists')]], 422);
             }
             $role->name = $newName;
         }
         if (isset($data['label'])) {
-            $role->label = $data['label'];
+            $role->label = trim((string) $data['label']);
         } elseif (isset($data['name'])) {
-            $role->label = $data['name'];
+            $role->label = $role->name;
         }
         if (isset($data['permissions'])) {
             if (!is_array($data['permissions'])) {
-                return $this->json(['errors' => ['permissions' => 'Permissions must be an array.']], 422);
+                return $this->json(['errors' => ['permissions' => $this->translator->trans('role.admin.permissions_must_be_array')]], 422);
             }
+
+            // Anti-privilege escalation: cannot assign permissions not possessed
+            if (!$currentUser->isSuperAdmin()) {
+                foreach ($data['permissions'] as $permName) {
+                    if (!$currentUser->hasPermission((string) $permName)) {
+                        return $this->json(['error' => $this->translator->trans('role.admin.cannot_assign_unowned_permissions')], 403);
+                    }
+                }
+            }
+
             $role->permissions->clear();
             $this->attachPermissions($role, $data['permissions']);
         }
 
         $this->em->flush();
 
-        return $this->json($this->serialize($role, true));
+        $this->auditService->log(
+            toolName: 'role_update',
+            project: null,
+            input: ['id' => $role->id, 'name' => $role->name],
+            output: ['success' => true, 'id' => $role->id],
+            status: 'success',
+            createdBy: $currentUser->getUserIdentifier(),
+            source: 'user_management'
+        );
+        $this->auditService->flush();
+
+        return $this->json(array_merge($this->serialize($role, true), [
+            'message' => $this->translator->trans('role.admin.updated_success'),
+        ]));
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
@@ -202,15 +297,35 @@ class RoleController extends AbstractController
     {
         $role = $this->roleRepository->find($id);
         if ($role === null) {
-            return $this->json(['error' => 'Role not found'], 404);
+            return $this->json(['error' => $this->translator->trans('role.admin.not_found')], 404);
+        }
+
+        if (in_array($role->name, self::PROTECTED_ROLES, true)) {
+            return $this->json(['error' => $this->translator->trans('role.admin.system_role_protected')], 422);
         }
 
         if ($role->users->count() > 0) {
-            return $this->json(['error' => 'Cannot delete a role assigned to users.'], 422);
+            return $this->json(['error' => $this->translator->trans('role.admin.cannot_delete_assigned')], 422);
         }
+
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+        $roleId = $role->id;
+        $roleName = $role->name;
 
         $this->em->remove($role);
         $this->em->flush();
+
+        $this->auditService->log(
+            toolName: 'role_delete',
+            project: null,
+            input: ['id' => $roleId, 'name' => $roleName],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $currentUser->getUserIdentifier(),
+            source: 'user_management'
+        );
+        $this->auditService->flush();
 
         return $this->json(null, 204);
     }
@@ -218,8 +333,8 @@ class RoleController extends AbstractController
     private function attachPermissions(Role $role, array $permissionNames): void
     {
         foreach ($permissionNames as $name) {
-            $permission = $this->permissionRepository->findOneBy(['name' => $name]);
-            if ($permission !== null) {
+            $permission = $this->permissionRepository->findOneBy(['name' => (string) $name]);
+            if ($permission !== null && !$role->permissions->contains($permission)) {
                 $role->permissions->add($permission);
             }
         }
