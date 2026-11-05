@@ -5,10 +5,13 @@ namespace App\Controller;
 use App\Entity\MediaFolder;
 use App\Repository\MediaFolderRepository;
 use App\Repository\ProjectRepository;
+use App\Service\AuditService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\String\Slugger\AsciiSlugger;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -16,10 +19,20 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/projects/{projectUuid}/media-folders', name: 'api_media_folder_')]
 class MediaFolderController extends AbstractController
 {
+    public const MAX_FOLDERS_PER_PROJECT = 200;
+
+    private const SECURITY_HEADERS = [
+        'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        'X-Content-Type-Options' => 'nosniff',
+    ];
+
     public function __construct(
         private EntityManagerInterface $em,
         private ProjectRepository $projectRepository,
         private MediaFolderRepository $folderRepository,
+        #[Autowire(service: 'limiter.media_limiter')]
+        private ?RateLimiterFactory $mediaLimiter = null,
+        private ?AuditService $auditService = null,
         private ?TranslatorInterface $translator = null,
     ) {}
 
@@ -34,12 +47,30 @@ class MediaFolderController extends AbstractController
         return $id;
     }
 
-    #[Route('', name: 'index', methods: ['GET'])]
-    public function index(string $projectUuid): JsonResponse
+    private function checkRateLimit(Request $request): ?JsonResponse
     {
+        if ($this->mediaLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->mediaLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse([
+                    'error' => $this->trans('media_folder.rate_limit_exceeded', [], 'Too many folder requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, self::SECURITY_HEADERS);
+            }
+        }
+        return null;
+    }
+
+    #[Route('', name: 'index', methods: ['GET'])]
+    public function index(string $projectUuid, Request $request): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404);
+            return new JsonResponse(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404, self::SECURITY_HEADERS);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $project);
@@ -47,17 +78,21 @@ class MediaFolderController extends AbstractController
 
         $folders = $this->folderRepository->findByProject($project);
 
-        return $this->json([
+        return new JsonResponse([
             'data' => array_map(fn (MediaFolder $f) => $this->serializeFolder($f), $folders),
-        ]);
+        ], 200, self::SECURITY_HEADERS);
     }
 
     #[Route('/tree', name: 'tree', methods: ['GET'])]
-    public function tree(string $projectUuid): JsonResponse
+    public function tree(string $projectUuid, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404);
+            return new JsonResponse(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404, self::SECURITY_HEADERS);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('project.view', $project);
@@ -65,43 +100,56 @@ class MediaFolderController extends AbstractController
 
         $roots = $this->folderRepository->findTree($project);
 
-        return $this->json([
+        return new JsonResponse([
             'data' => array_map(fn (MediaFolder $f) => $this->serializeTree($f), $roots),
-        ]);
+        ], 200, self::SECURITY_HEADERS);
     }
 
     #[Route('', name: 'store', methods: ['POST'])]
     public function store(string $projectUuid, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404);
+            return new JsonResponse(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404, self::SECURITY_HEADERS);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.create', $project);
         }
 
         if (strlen($request->getContent()) > 16384) {
-            return $this->json(['error' => $this->trans('media_folder.payload_too_large', [], 'Payload too large')], 413);
+            return new JsonResponse(['error' => $this->trans('media_folder.payload_too_large', [], 'Payload too large')], 413, self::SECURITY_HEADERS);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('media_folder.invalid_json', [], 'Invalid JSON body')], 400);
+            return new JsonResponse(['error' => $this->trans('media_folder.invalid_json', [], 'Invalid JSON body')], 400, self::SECURITY_HEADERS);
         }
+
+        $allFolders = $this->folderRepository->findByProject($project);
+        if (count($allFolders) >= self::MAX_FOLDERS_PER_PROJECT) {
+            return new JsonResponse([
+                'error' => $this->trans('media_folder.max_folders_exceeded', ['%max%' => self::MAX_FOLDERS_PER_PROJECT], sprintf('Maximum folder quota reached (limit: %d).', self::MAX_FOLDERS_PER_PROJECT)),
+                'code' => 'MAX_FOLDERS_EXCEEDED',
+            ], 422, self::SECURITY_HEADERS);
+        }
+
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
-            return $this->json(['error' => $this->trans('media_folder.name_required', [], 'Name is required')], 422);
+            return new JsonResponse(['error' => $this->trans('media_folder.name_required', [], 'Name is required')], 422, self::SECURITY_HEADERS);
         }
         if (mb_strlen($name) > 150) {
-            return $this->json(['error' => $this->trans('media_folder.name_too_long', [], 'Name cannot exceed 150 characters')], 422);
+            return new JsonResponse(['error' => $this->trans('media_folder.name_too_long', [], 'Name cannot exceed 150 characters')], 422, self::SECURITY_HEADERS);
         }
         if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
-            return $this->json(['error' => $this->trans('media_folder.name_control_characters', [], 'Name contains forbidden control characters')], 422);
+            return new JsonResponse(['error' => $this->trans('media_folder.name_control_characters', [], 'Name contains forbidden control characters')], 422, self::SECURITY_HEADERS);
         }
         if (str_contains($name, '..') || str_contains($name, '/') || str_contains($name, '\\')) {
-            return $this->json(['error' => $this->trans('media_folder.name_invalid_traversal', [], 'Name cannot contain path traversal sequences or slashes')], 422);
+            return new JsonResponse(['error' => $this->trans('media_folder.name_invalid_traversal', [], 'Name cannot contain path traversal sequences or slashes')], 422, self::SECURITY_HEADERS);
         }
 
         $folder = new MediaFolder();
@@ -113,11 +161,11 @@ class MediaFolderController extends AbstractController
         $parentId = $data['parent_id'] ?? null;
         if ($parentId !== null) {
             if (!is_numeric($parentId) || (int) $parentId <= 0) {
-                return $this->json(['error' => $this->trans('media_folder.invalid_parent_id', [], 'Invalid parent folder ID')], 422);
+                return new JsonResponse(['error' => $this->trans('media_folder.invalid_parent_id', [], 'Invalid parent folder ID')], 422, self::SECURITY_HEADERS);
             }
             $parent = $this->folderRepository->findOneBy(['id' => (int) $parentId, 'project' => $project]);
             if (!$parent || $parent->isDeleted()) {
-                return $this->json(['error' => $this->trans('media_folder.parent_not_found', [], 'Parent folder not found')], 404);
+                return new JsonResponse(['error' => $this->trans('media_folder.parent_not_found', [], 'Parent folder not found')], 404, self::SECURITY_HEADERS);
             }
 
             // Hierarchy depth check (prevent unbounded tree nesting)
@@ -126,7 +174,7 @@ class MediaFolderController extends AbstractController
             while ($ancestor !== null) {
                 $depth++;
                 if ($depth > 15) {
-                    return $this->json(['error' => $this->trans('media_folder.max_depth_exceeded', [], 'Maximum folder hierarchy depth exceeded')], 422);
+                    return new JsonResponse(['error' => $this->trans('media_folder.max_depth_exceeded', [], 'Maximum folder hierarchy depth exceeded')], 422, self::SECURITY_HEADERS);
                 }
                 $ancestor = $ancestor->parent;
             }
@@ -135,9 +183,8 @@ class MediaFolderController extends AbstractController
         }
 
         // Calculer la position max parmi les siblings
-        $all = $this->folderRepository->findByProject($project);
         $maxPos = 0;
-        foreach ($all as $f) {
+        foreach ($allFolders as $f) {
             $fParentId = $f->parent?->id;
             if ($fParentId === ($folder->parent?->id)) {
                 if ($f->position > $maxPos) {
@@ -150,15 +197,21 @@ class MediaFolderController extends AbstractController
         $this->em->persist($folder);
         $this->em->flush();
 
-        return $this->json(['data' => $this->serializeFolder($folder)], 201);
+        $this->auditService?->log('media_folder_create', $project, ['name' => $name, 'parent_id' => $parentId], ['id' => $folder->id], 'success', null, $this->getUser()?->getUserIdentifier(), 'admin_api');
+
+        return new JsonResponse(['data' => $this->serializeFolder($folder)], 201, self::SECURITY_HEADERS);
     }
 
     #[Route('/{id}', name: 'update', methods: ['PUT', 'PATCH'])]
     public function update(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404);
+            return new JsonResponse(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404, self::SECURITY_HEADERS);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.update', $project);
@@ -166,31 +219,31 @@ class MediaFolderController extends AbstractController
 
         $folder = $this->folderRepository->findOneBy(['id' => $id, 'project' => $project]);
         if (!$folder || $folder->isDeleted()) {
-            return $this->json(['error' => $this->trans('media_folder.not_found', [], 'Folder not found')], 404);
+            return new JsonResponse(['error' => $this->trans('media_folder.not_found', [], 'Folder not found')], 404, self::SECURITY_HEADERS);
         }
 
         if (strlen($request->getContent()) > 16384) {
-            return $this->json(['error' => $this->trans('media_folder.payload_too_large', [], 'Payload too large')], 413);
+            return new JsonResponse(['error' => $this->trans('media_folder.payload_too_large', [], 'Payload too large')], 413, self::SECURITY_HEADERS);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('media_folder.invalid_json', [], 'Invalid JSON body')], 400);
+            return new JsonResponse(['error' => $this->trans('media_folder.invalid_json', [], 'Invalid JSON body')], 400, self::SECURITY_HEADERS);
         }
         if (array_key_exists('name', $data)) {
             $name = trim((string) $data['name']);
             if ($name === '') {
-                return $this->json(['error' => $this->trans('media_folder.name_empty', [], 'Name cannot be empty')], 422);
+                return new JsonResponse(['error' => $this->trans('media_folder.name_empty', [], 'Name cannot be empty')], 422, self::SECURITY_HEADERS);
             }
             if (mb_strlen($name) > 150) {
-                return $this->json(['error' => $this->trans('media_folder.name_too_long', [], 'Name cannot exceed 150 characters')], 422);
+                return new JsonResponse(['error' => $this->trans('media_folder.name_too_long', [], 'Name cannot exceed 150 characters')], 422, self::SECURITY_HEADERS);
             }
             if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
-                return $this->json(['error' => $this->trans('media_folder.name_control_characters', [], 'Name contains forbidden control characters')], 422);
+                return new JsonResponse(['error' => $this->trans('media_folder.name_control_characters', [], 'Name contains forbidden control characters')], 422, self::SECURITY_HEADERS);
             }
             if (str_contains($name, '..') || str_contains($name, '/') || str_contains($name, '\\')) {
-                return $this->json(['error' => $this->trans('media_folder.name_invalid_traversal', [], 'Name cannot contain path traversal sequences or slashes')], 422);
+                return new JsonResponse(['error' => $this->trans('media_folder.name_invalid_traversal', [], 'Name cannot contain path traversal sequences or slashes')], 422, self::SECURITY_HEADERS);
             }
             $folder->name = $name;
             $folder->slug = (new AsciiSlugger())->slug($folder->name)->lower()->toString();
@@ -198,15 +251,21 @@ class MediaFolderController extends AbstractController
 
         $this->em->flush();
 
-        return $this->json(['data' => $this->serializeFolder($folder)]);
+        $this->auditService?->log('media_folder_update', $project, ['id' => $id, 'name' => $folder->name], ['id' => $folder->id], 'success', null, $this->getUser()?->getUserIdentifier(), 'admin_api');
+
+        return new JsonResponse(['data' => $this->serializeFolder($folder)], 200, self::SECURITY_HEADERS);
     }
 
     #[Route('/{id}/move', name: 'move', methods: ['PATCH'])]
     public function move(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404);
+            return new JsonResponse(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404, self::SECURITY_HEADERS);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.update', $project);
@@ -214,34 +273,34 @@ class MediaFolderController extends AbstractController
 
         $folder = $this->folderRepository->findOneBy(['id' => $id, 'project' => $project]);
         if (!$folder || $folder->isDeleted()) {
-            return $this->json(['error' => $this->trans('media_folder.not_found', [], 'Folder not found')], 404);
+            return new JsonResponse(['error' => $this->trans('media_folder.not_found', [], 'Folder not found')], 404, self::SECURITY_HEADERS);
         }
 
         if (strlen($request->getContent()) > 16384) {
-            return $this->json(['error' => $this->trans('media_folder.payload_too_large', [], 'Payload too large')], 413);
+            return new JsonResponse(['error' => $this->trans('media_folder.payload_too_large', [], 'Payload too large')], 413, self::SECURITY_HEADERS);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('media_folder.invalid_json', [], 'Invalid JSON body')], 400);
+            return new JsonResponse(['error' => $this->trans('media_folder.invalid_json', [], 'Invalid JSON body')], 400, self::SECURITY_HEADERS);
         }
         if (!array_key_exists('parent_id', $data)) {
-            return $this->json(['error' => $this->trans('media_folder.parent_id_required', [], 'parent_id is required')], 422);
+            return new JsonResponse(['error' => $this->trans('media_folder.parent_id_required', [], 'parent_id is required')], 422, self::SECURITY_HEADERS);
         }
 
         $parentId = $data['parent_id'];
         if ($parentId !== null) {
             if (!is_numeric($parentId) || (int) $parentId <= 0) {
-                return $this->json(['error' => $this->trans('media_folder.invalid_parent_id', [], 'Invalid parent folder ID')], 422);
+                return new JsonResponse(['error' => $this->trans('media_folder.invalid_parent_id', [], 'Invalid parent folder ID')], 422, self::SECURITY_HEADERS);
             }
             // Empêcher le déplacement vers soi-même
             if ((int) $parentId === $folder->id) {
-                return $this->json(['error' => $this->trans('media_folder.cannot_move_into_itself', [], 'Cannot move a folder into itself')], 422);
+                return new JsonResponse(['error' => $this->trans('media_folder.cannot_move_into_itself', [], 'Cannot move a folder into itself')], 422, self::SECURITY_HEADERS);
             }
             $parent = $this->folderRepository->findOneBy(['id' => (int) $parentId, 'project' => $project]);
             if (!$parent || $parent->isDeleted()) {
-                return $this->json(['error' => $this->trans('media_folder.parent_not_found', [], 'Parent folder not found')], 404);
+                return new JsonResponse(['error' => $this->trans('media_folder.parent_not_found', [], 'Parent folder not found')], 404, self::SECURITY_HEADERS);
             }
 
             // Empêcher le déplacement vers un descendant (boucle cyclique) et borner la profondeur
@@ -249,11 +308,11 @@ class MediaFolderController extends AbstractController
             $ancestor = $parent;
             while ($ancestor !== null) {
                 if ($ancestor->id === $folder->id) {
-                    return $this->json(['error' => $this->trans('media_folder.cannot_move_into_descendants', [], 'Cannot move a folder into one of its descendants')], 422);
+                    return new JsonResponse(['error' => $this->trans('media_folder.cannot_move_into_descendants', [], 'Cannot move a folder into one of its descendants')], 422, self::SECURITY_HEADERS);
                 }
                 $depth++;
                 if ($depth > 15) {
-                    return $this->json(['error' => $this->trans('media_folder.max_depth_exceeded', [], 'Maximum folder hierarchy depth exceeded')], 422);
+                    return new JsonResponse(['error' => $this->trans('media_folder.max_depth_exceeded', [], 'Maximum folder hierarchy depth exceeded')], 422, self::SECURITY_HEADERS);
                 }
                 $ancestor = $ancestor->parent;
             }
@@ -265,15 +324,21 @@ class MediaFolderController extends AbstractController
 
         $this->em->flush();
 
-        return $this->json(['data' => $this->serializeFolder($folder)]);
+        $this->auditService?->log('media_folder_move', $project, ['id' => $id, 'parent_id' => $parentId], ['id' => $folder->id], 'success', null, $this->getUser()?->getUserIdentifier(), 'admin_api');
+
+        return new JsonResponse(['data' => $this->serializeFolder($folder)], 200, self::SECURITY_HEADERS);
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
-    public function delete(string $projectUuid, int $id): JsonResponse
+    public function delete(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404);
+            return new JsonResponse(['error' => $this->trans('media_folder.project_not_found', [], 'Project not found')], 404, self::SECURITY_HEADERS);
         }
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.delete', $project);
@@ -281,14 +346,17 @@ class MediaFolderController extends AbstractController
 
         $folder = $this->folderRepository->findOneBy(['id' => $id, 'project' => $project]);
         if (!$folder || $folder->isDeleted()) {
-            return $this->json(['error' => $this->trans('media_folder.not_found', [], 'Folder not found')], 404);
+            return new JsonResponse(['error' => $this->trans('media_folder.not_found', [], 'Folder not found')], 404, self::SECURITY_HEADERS);
         }
 
         // Soft-delete : les enfants et les médias restent, leur FK est SET NULL
+        $folderName = $folder->name;
         $folder->deletedAt = new \DateTimeImmutable();
         $this->em->flush();
 
-        return $this->json(null, 204);
+        $this->auditService?->log('media_folder_delete', $project, ['id' => $id, 'name' => $folderName], null, 'success', null, $this->getUser()?->getUserIdentifier(), 'admin_api');
+
+        return new JsonResponse(null, 204, self::SECURITY_HEADERS);
     }
 
     private function resolveProject(string $projectUuid): ?\App\Entity\Project

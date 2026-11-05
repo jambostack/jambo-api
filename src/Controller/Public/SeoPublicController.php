@@ -8,16 +8,26 @@ use App\Repository\ProjectRepository;
 use App\Service\Security\SsrfProtectionService;
 use App\Service\Seo\SitemapGenerator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 class SeoPublicController extends AbstractController
 {
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'Cache-Control' => 'public, max-age=3600',
+    ];
+
     public function __construct(
         private readonly ProjectRepository $projectRepo,
         private readonly SitemapGenerator $sitemapGenerator,
         private readonly ?SsrfProtectionService $ssrfProtection = null,
+        #[Autowire(service: 'limiter.seo_limiter')]
+        private readonly ?RateLimiterFactory $seoLimiter = null,
         private readonly ?TranslatorInterface $translator = null,
     ) {}
 
@@ -29,10 +39,29 @@ class SeoPublicController extends AbstractController
         return $default ?? $id;
     }
 
+    private function checkRateLimit(Request $request): ?Response
+    {
+        if ($this->seoLimiter !== null) {
+            $limiter = $this->seoLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (false === $limiter->consume(1)->isAccepted()) {
+                return new Response($this->trans('seo.rate_limit_exceeded', [], 'Too many SEO requests. Try again later.'), 429, [
+                    'Content-Type' => 'text/plain',
+                    'Retry-After' => '60',
+                    'X-Content-Type-Options' => 'nosniff',
+                ]);
+            }
+        }
+        return null;
+    }
+
     #[Route('/{projectUuid}/sitemap.xml', name: 'public_sitemap', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
     #[Route('/api/projects/{projectUuid}/sitemap.xml', name: 'api_public_sitemap')]
-    public function sitemap(string $projectUuid): Response
+    public function sitemap(string $projectUuid, Request $request): Response
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
             throw $this->createNotFoundException($this->trans('seo.project_not_found', [], 'Project not found.'));
         }
@@ -48,13 +77,17 @@ class SeoPublicController extends AbstractController
 
         $xml = $this->sitemapGenerator->generateSitemap($project);
 
-        return new Response($xml, 200, ['Content-Type' => 'application/xml']);
+        return new Response($xml, 200, array_merge(['Content-Type' => 'application/xml'], self::SECURITY_HEADERS));
     }
 
     #[Route('/{projectUuid}/sitemap-images.xml', name: 'public_image_sitemap', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
     #[Route('/api/projects/{projectUuid}/sitemap-images.xml', name: 'api_public_image_sitemap')]
-    public function imageSitemap(string $projectUuid): Response
+    public function imageSitemap(string $projectUuid, Request $request): Response
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
             throw $this->createNotFoundException($this->trans('seo.project_not_found', [], 'Project not found.'));
         }
@@ -70,13 +103,17 @@ class SeoPublicController extends AbstractController
 
         $xml = $this->sitemapGenerator->generateImageSitemap($project);
 
-        return new Response($xml, 200, ['Content-Type' => 'application/xml']);
+        return new Response($xml, 200, array_merge(['Content-Type' => 'application/xml'], self::SECURITY_HEADERS));
     }
 
     #[Route('/{projectUuid}/robots.txt', name: 'public_robots', requirements: ['projectUuid' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
     #[Route('/api/projects/{projectUuid}/robots.txt', name: 'api_public_robots')]
-    public function robots(string $projectUuid): Response
+    public function robots(string $projectUuid, Request $request): Response
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $cleanUuid = str_replace(["\r", "\n"], '', $projectUuid);
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $cleanUuid)) {
             throw $this->createNotFoundException($this->trans('seo.project_not_found', [], 'Project not found.'));
@@ -114,6 +151,6 @@ class SeoPublicController extends AbstractController
             $content .= "Sitemap: {$baseUrl}/{$cleanUuid}/sitemap.xml\n";
         }
 
-        return new Response($content, 200, ['Content-Type' => 'text/plain']);
+        return new Response($content, 200, array_merge(['Content-Type' => 'text/plain'], self::SECURITY_HEADERS));
     }
 }

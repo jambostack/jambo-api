@@ -5,25 +5,49 @@ declare(strict_types=1);
 namespace App\Controller\Public;
 
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class EmbedController extends AbstractController
 {
-    #[Route('/forms/embed.js', name: 'public_embed_widget', methods: ['GET'])]
-    public function widget(): Response
+    public function __construct(
+        private readonly ?TranslatorInterface $translator = null,
+    ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
-        $js = $this->buildWidgetJs();
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default ?? $id;
+    }
+
+    #[Route('/forms/embed.js', name: 'public_embed_widget', methods: ['GET'])]
+    public function widget(Request $request): Response
+    {
+        $labels = [
+            'loading' => $this->trans('form.embed.loading', [], 'Loading form…'),
+            'submit' => $this->trans('form.embed.submit', [], 'Submit'),
+            'submitting' => $this->trans('form.embed.submitting', [], 'Submitting…'),
+            'success' => $this->trans('form.embed.success', [], '✅ Form submitted successfully!'),
+            'errorPrefix' => $this->trans('form.embed.error_prefix', [], 'Error: '),
+        ];
+
+        $js = $this->buildWidgetJs($labels);
 
         return new Response($js, 200, [
             'Content-Type' => 'application/javascript; charset=utf-8',
-            'Cache-Control' => 'public, max-age=86400',
+            'Cache-Control' => 'public, max-age=3600',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
-    private function buildWidgetJs(): string
+    private function buildWidgetJs(array $labels): string
     {
-        return <<<'JS'
+        $i18nJson = json_encode($labels, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
+        return <<<JS
 /**
  * Jambo Forms — Widget embarquable
  * Version: 1.0.0
@@ -38,6 +62,8 @@ class EmbedController extends AbstractController
 
 (function () {
     'use strict';
+
+    var I18N = {$i18nJson};
 
     // ── Configuration ────────────────────────────────────────────────────────
     var JAMBO_BASE_URL = document.currentScript
@@ -75,14 +101,14 @@ class EmbedController extends AbstractController
         '  color: #16a34a;',
         '  font-size: 14px;',
         '}',
-    ].join('\n');
+    ].join('\\n');
 
     // ── Injection des styles ─────────────────────────────────────────────────
     var styleEl = document.createElement('style');
     styleEl.textContent = STYLES;
     document.head.appendChild(styleEl);
 
-    // ── PostMessage listener (reçoit la hauteur de l'iframe) ─────────────────
+    // ── PostMessage listener (reçoit la hauteur de l\'iframe) ─────────────────
     window.addEventListener('message', function (event) {
         if (!event.data || event.data.type !== 'jambo-form-height') return;
         var slug = String(event.data.formSlug || '');
@@ -107,12 +133,12 @@ class EmbedController extends AbstractController
         var formUrl = container.getAttribute('data-jambo-form');
         if (!formUrl) return;
         formUrl = formUrl.trim();
-        if (!/^(https?:\/\/|\/)/i.test(formUrl) || /^(javascript:|data:|vbscript:|\/\/)/i.test(formUrl)) return;
+        if (!/^(https?:\\/\\/|\\/)/i.test(formUrl) || /^(javascript:|data:|vbscript:|\\/\\/)/i.test(formUrl)) return;
 
         container.classList.add('jambo-form-container');
 
         // Affichage loading
-        container.innerHTML = '<div class="jambo-loading">Chargement du formulaire…</div>';
+        container.innerHTML = '<div class="jambo-loading">' + escapeHtml(I18N.loading) + '</div>';
 
         // Fetch des données du formulaire
         fetch(formUrl, { headers: { Accept: 'application/json' } })
@@ -125,7 +151,7 @@ class EmbedController extends AbstractController
                 renderForm(container, formUrl, formData);
             })
             .catch(function (err) {
-                container.innerHTML = '<div class="jambo-error">⚠️ ' + err.message + '</div>';
+                container.innerHTML = '<div class="jambo-error">⚠️ ' + escapeHtml(err.message) + '</div>';
             });
     }
 
@@ -170,9 +196,9 @@ class EmbedController extends AbstractController
         html += '<input type="text" name="_website" tabindex="-1" autocomplete="off" />';
         html += '</div>';
 
-        html += '<button type="submit" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 24px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;">Envoyer</button>';
+        html += '<button type="submit" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 24px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;">' + escapeHtml(I18N.submit) + '</button>';
         html += '</form>';
-        html += '<div class="jambo-success" style="display:none;">✅ Formulaire envoyé avec succès !</div>';
+        html += '<div class="jambo-success" style="display:none;">' + escapeHtml(I18N.success) + '</div>';
 
         container.innerHTML = html;
 
@@ -185,7 +211,7 @@ class EmbedController extends AbstractController
             e.preventDefault();
             var btn = formEl.querySelector('button[type="submit"]');
             btn.disabled = true;
-            btn.textContent = 'Envoi en cours…';
+            btn.textContent = I18N.submitting;
 
             var formDataObj = {};
             var inputs = formEl.querySelectorAll('input, select, textarea');
@@ -212,8 +238,8 @@ class EmbedController extends AbstractController
                 })
                 .catch(function (err) {
                     btn.disabled = false;
-                    btn.textContent = 'Envoyer';
-                    alert('Erreur : ' + err.message);
+                    btn.textContent = I18N.submit;
+                    alert(I18N.errorPrefix + err.message);
                 });
         });
     }

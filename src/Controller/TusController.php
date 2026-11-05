@@ -14,6 +14,7 @@ use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
 use App\Repository\ProjectStorageProfileRepository;
 use App\Repository\StorageRuleRepository;
+use App\Service\AuditService;
 use App\Service\MediaSerializer;
 use App\Service\MercurePublisher;
 use App\Service\StorageDriverFactory;
@@ -22,9 +23,11 @@ use App\Service\TusServer;
 use App\Service\UploadSecurityValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Uid\Uuid;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -33,6 +36,11 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class TusController extends AbstractController
 {
     private const MAX_TUS_SIZE = 100 * 1024 * 1024; // 100 MB
+
+    private const SECURITY_HEADERS = [
+        'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        'X-Content-Type-Options' => 'nosniff',
+    ];
 
     public function __construct(
         private readonly TusServer $tusServer,
@@ -46,6 +54,9 @@ class TusController extends AbstractController
         private readonly ProjectMemberRepository $memberRepo,
         private readonly MercurePublisher $mercure,
         private readonly UploadSecurityValidator $uploadValidator,
+        #[Autowire(service: 'limiter.tus_limiter')]
+        private readonly ?RateLimiterFactory $tusLimiter = null,
+        private readonly ?AuditService $auditService = null,
         private readonly ?TranslatorInterface $translator = null,
     ) {}
 
@@ -58,6 +69,20 @@ class TusController extends AbstractController
             return strtr($default, $parameters);
         }
         return $id;
+    }
+
+    private function checkRateLimit(Request $request): ?Response
+    {
+        if ($this->tusLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->tusLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return new JsonResponse([
+                    'error' => $this->trans('tus.rate_limit_exceeded', [], 'Too many upload requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
+            }
+        }
+        return null;
     }
 
     /**
@@ -86,33 +111,41 @@ class TusController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(string $projectUuid, Request $request): Response
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->findProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('tus.project_not_found', [], 'Project not found')], 404, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.project_not_found', [], 'Project not found')], 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
         $this->denyProjectAccess($project, $request);
 
         // Vérifier le header obligatoire TUS 1.0.0
         if ($request->headers->get('Tus-Resumable') !== '1.0.0') {
-            return new Response('', 412, ['Tus-Version' => '1.0.0']);
+            return new Response('', 412, array_merge(['Tus-Version' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         if (!$request->headers->has('Upload-Length')) {
-            return $this->json(['error' => $this->trans('tus.missing_upload_length', [], 'Missing Upload-Length header')], 400, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.missing_upload_length', [], 'Missing Upload-Length header')], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         $rawLength = (string) $request->headers->get('Upload-Length', '0');
         if (!is_numeric($rawLength) || (int) $rawLength <= 0) {
-            return $this->json(['error' => $this->trans('tus.invalid_upload_length', [], 'Invalid or missing Upload-Length')], 400, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.invalid_upload_length', [], 'Invalid or missing Upload-Length')], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         $uploadLength = (int) $rawLength;
         if ($uploadLength > self::MAX_TUS_SIZE) {
-            return $this->json(['error' => $this->trans('tus.upload_length_exceeds_max', ['%max%' => '100MB'], 'Upload-Length exceeds maximum allowed size (100MB)')], 413, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.upload_length_exceeds_max', ['%max%' => '100MB'], 'Upload-Length exceeds maximum allowed size (100MB)')], 413, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         // Parser Upload-Metadata : format "filename BASE64,filetype BASE64[,folder_id BASE64]"
         $metadata = $this->parseMetadata((string) $request->headers->get('Upload-Metadata', ''));
+
+        if (isset($metadata['filename']) && preg_match('/[\x00-\x1F\x7F]/', (string) $metadata['filename'])) {
+            return $this->json(['error' => $this->trans('tus.filename_control_chars', [], 'Uploaded filename contains invalid control characters.')], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
+        }
 
         try {
             if (isset($metadata['filename'])) {
@@ -122,7 +155,7 @@ class TusController extends AbstractController
             $pendingBytes = $this->tusServer->getPendingUploadsSize($projectUuid);
             $this->uploadValidator->validateSizeAndQuota($project, $uploadLength + $pendingBytes);
         } catch (\InvalidArgumentException $e) {
-            return $this->json(['error' => $e->getMessage()], 400, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.validation_failed', ['%error%' => $e->getMessage()], sprintf('TUS upload validation failed: %s.', $e->getMessage()))], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         $uploadId = $this->tusServer->create($projectUuid, $uploadLength, $metadata);
@@ -132,10 +165,10 @@ class TusController extends AbstractController
             'uploadId'    => $uploadId,
         ]);
 
-        return new Response('', 201, [
+        return new Response('', 201, array_merge([
             'Location'      => $location,
             'Tus-Resumable' => '1.0.0',
-        ]);
+        ], self::SECURITY_HEADERS));
     }
 
     /**
@@ -146,35 +179,42 @@ class TusController extends AbstractController
     #[Route('/{uploadId}', name: 'process', methods: ['PATCH'])]
     public function patch(string $projectUuid, string $uploadId, Request $request): Response
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         if ($request->headers->get('Tus-Resumable') !== '1.0.0') {
-            return new Response('', 412, ['Tus-Version' => '1.0.0']);
+            return new Response('', 412, array_merge(['Tus-Version' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         // Protocole TUS 1.0.0 : Content-Type strict
         $contentType = (string) $request->headers->get('Content-Type', '');
         if (!str_starts_with(strtolower($contentType), 'application/offset+octet-stream')) {
-            return $this->json(['error' => $this->trans('tus.invalid_content_type', [], 'Content-Type must be application/offset+octet-stream')], 415, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.invalid_content_type', [], 'Content-Type must be application/offset+octet-stream')], 415, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         $project = $this->findProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('tus.project_not_found', [], 'Project not found')], 404, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.project_not_found', [], 'Project not found')], 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
         $this->denyProjectAccess($project, $request);
 
         if (!$this->isValidUploadId($uploadId) || !$this->tusServer->exists($projectUuid, $uploadId)) {
-            return $this->json(['error' => $this->trans('tus.upload_not_found', [], 'Upload not found')], 404, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.upload_not_found', [], 'Upload not found')], 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         if (!$request->headers->has('Upload-Offset')) {
-            return $this->json(['error' => $this->trans('tus.missing_upload_offset', [], 'Missing Upload-Offset header')], 400, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.missing_upload_offset', [], 'Missing Upload-Offset header')], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         $rawOffset = (string) $request->headers->get('Upload-Offset', '0');
         if (!is_numeric($rawOffset) || (int) $rawOffset < 0) {
-            return $this->json(['error' => $this->trans('tus.invalid_upload_offset', [], 'Invalid Upload-Offset header')], 400, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.invalid_upload_offset', [], 'Invalid Upload-Offset header')], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
         $offset = (int) $rawOffset;
+        if ($offset > self::MAX_TUS_SIZE) {
+            return $this->json(['error' => $this->trans('tus.chunk_out_of_bounds', [], 'TUS chunk offset exceeds upload length.')], 413, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
+        }
 
         // Lire le corps brut comme flux
         $stream = $request->getContent(true); // resource
@@ -182,22 +222,22 @@ class TusController extends AbstractController
         try {
             $newOffset = $this->tusServer->patch($projectUuid, $uploadId, $offset, $stream);
         } catch (TusOffsetMismatchException $e) {
-            return new Response('', 409, [
+            return new Response('', 409, array_merge([
                 'Upload-Offset' => (string) $e->getCurrentOffset(),
                 'Tus-Resumable' => '1.0.0',
-            ]);
+            ], self::SECURITY_HEADERS));
         } catch (TusChunkOutOfBoundsException $e) {
-            return $this->json(['error' => $e->getMessage()], 413, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.chunk_out_of_bounds', [], 'TUS chunk offset exceeds upload length.')], 413, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         } catch (TusConflictException $e) {
-            return $this->json(['error' => $e->getMessage()], 409, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.conflict', [], 'TUS upload conflict detected.')], 409, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         } catch (\RuntimeException $e) {
-            return $this->json(['error' => $e->getMessage()], 404, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.runtime_error', [], 'TUS upload runtime processing error.')], 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
-        return new Response('', 204, [
+        return new Response('', 204, array_merge([
             'Upload-Offset' => (string) $newOffset,
             'Tus-Resumable' => '1.0.0',
-        ]);
+        ], self::SECURITY_HEADERS));
     }
 
     /**
@@ -206,26 +246,29 @@ class TusController extends AbstractController
     #[Route('/{uploadId}', name: 'head', methods: ['HEAD'])]
     public function head(string $projectUuid, string $uploadId, Request $request): Response
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->findProject($projectUuid);
         if (!$project) {
-            return new Response('', 404, ['Tus-Resumable' => '1.0.0']);
+            return new Response('', 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
         $this->denyProjectAccess($project, $request, 'project.view');
 
         if (!$this->isValidUploadId($uploadId) || !$this->tusServer->exists($projectUuid, $uploadId)) {
-            return new Response('', 404, ['Tus-Resumable' => '1.0.0']);
+            return new Response('', 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         $info = $this->tusServer->getInfo($projectUuid, $uploadId);
         $offset = $info['offset'] ?? 0;
         $size   = $info['size'] ?? 0;
 
-        return new Response('', 200, [
+        return new Response('', 200, array_merge([
             'Upload-Offset'       => (string) $offset,
             'Upload-Length'       => (string) $size,
             'Tus-Resumable'       => '1.0.0',
-            'Cache-Control'       => 'no-store',
-        ]);
+        ], self::SECURITY_HEADERS));
     }
 
     /**
@@ -234,17 +277,24 @@ class TusController extends AbstractController
     #[Route('/{uploadId}', name: 'delete', methods: ['DELETE'])]
     public function delete(string $projectUuid, string $uploadId, Request $request): Response
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->findProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('tus.project_not_found', [], 'Project not found')], 404, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.project_not_found', [], 'Project not found')], 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
         $this->denyProjectAccess($project, $request);
 
         if (!$this->isValidUploadId($uploadId) || !$this->tusServer->exists($projectUuid, $uploadId)) {
-            return $this->json(['error' => $this->trans('tus.upload_not_found', [], 'Upload not found')], 404, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.upload_not_found', [], 'Upload not found')], 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
         $this->tusServer->cancel($projectUuid, $uploadId);
-        return new Response('', 204, ['Tus-Resumable' => '1.0.0']);
+
+        $this->auditService?->log('tus_upload_delete', $project, ['upload_id' => $uploadId], null, 'success', null, $this->getUser()?->getUserIdentifier(), 'admin_api');
+
+        return new Response('', 204, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
     }
 
     /**
@@ -254,49 +304,58 @@ class TusController extends AbstractController
     #[Route('/{uploadId}/finalize', name: 'finalize', methods: ['POST'])]
     public function finalize(string $projectUuid, string $uploadId, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse instanceof JsonResponse ? $rateLimitResponse : new JsonResponse(['error' => 'Rate limit exceeded'], 429, self::SECURITY_HEADERS);
+        }
+
         $project = $this->findProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => $this->trans('tus.project_not_found', [], 'Project not found')], 404, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.project_not_found', [], 'Project not found')], 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
         $this->denyProjectAccess($project, $request);
 
         if (!$this->isValidUploadId($uploadId)) {
-            return $this->json(['error' => $this->trans('tus.upload_not_found', [], 'Upload not found')], 404, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['error' => $this->trans('tus.upload_not_found', [], 'Upload not found')], 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         }
 
         $result = $this->tusServer->withLock($projectUuid, $uploadId, function () use ($project, $projectUuid, $uploadId): JsonResponse {
             $info = $this->tusServer->getInfo($projectUuid, $uploadId);
             if ($info === null) {
-                return $this->json(['error' => $this->trans('tus.upload_not_found', [], 'Upload not found')], 404, ['Tus-Resumable' => '1.0.0']);
+                return $this->json(['error' => $this->trans('tus.upload_not_found', [], 'Upload not found')], 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
             }
 
             if ($info['finalized'] ?? false) {
-                return $this->json(['error' => $this->trans('tus.upload_already_finalized', [], 'Upload already finalized')], 409, ['Tus-Resumable' => '1.0.0']);
+                return $this->json(['error' => $this->trans('tus.upload_already_finalized', [], 'Upload already finalized')], 409, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
             }
 
             if ($info['finalizing'] ?? false) {
-                return $this->json(['error' => $this->trans('tus.upload_finalizing_in_progress', [], 'Upload is currently being finalized')], 409, ['Tus-Resumable' => '1.0.0']);
+                return $this->json(['error' => $this->trans('tus.upload_finalizing_in_progress', [], 'Upload is currently being finalized')], 409, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
             }
 
             if (!$this->tusServer->isComplete($projectUuid, $uploadId)) {
-                return $this->json(['error' => $this->trans('tus.upload_incomplete', [], 'Upload is not complete yet')], 400, ['Tus-Resumable' => '1.0.0']);
+                return $this->json(['error' => $this->trans('tus.upload_incomplete', [], 'Upload is not complete yet')], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
             }
 
             $sourcePath = $this->tusServer->getFilePath($projectUuid, $uploadId);
             if (!file_exists($sourcePath)) {
-                return $this->json(['error' => $this->trans('tus.upload_file_missing', [], 'Upload file missing')], 404, ['Tus-Resumable' => '1.0.0']);
+                return $this->json(['error' => $this->trans('tus.upload_file_missing', [], 'Upload file missing')], 404, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
             }
 
             $fileSize = filesize($sourcePath);
             if ($fileSize !== (int) ($info['size'] ?? 0)) {
-                return $this->json(['error' => $this->trans('tus.upload_size_mismatch', [], 'Uploaded file size does not match declared size')], 400, ['Tus-Resumable' => '1.0.0']);
+                return $this->json(['error' => $this->trans('tus.upload_size_mismatch', [], 'Uploaded file size does not match declared size')], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
             }
 
             $metadata = $info['metadata'] ?? [];
+            $rawFilename = $metadata['filename'] ?? 'file';
+            if (preg_match('/[\x00-\x1F\x7F]/', $rawFilename)) {
+                return $this->json(['error' => $this->trans('tus.filename_control_chars', [], 'Uploaded filename contains invalid control characters.')], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
+            }
+
             try {
-                $filename = $this->uploadValidator->sanitizeAndValidateFilename($metadata['filename'] ?? 'file');
+                $filename = $this->uploadValidator->sanitizeAndValidateFilename($rawFilename);
             } catch (\InvalidArgumentException $e) {
-                return $this->json(['error' => $e->getMessage()], 400, ['Tus-Resumable' => '1.0.0']);
+                return $this->json(['error' => $this->trans('tus.validation_failed', ['%error%' => $e->getMessage()], sprintf('TUS upload validation failed: %s.', $e->getMessage()))], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
             }
 
             $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
@@ -307,7 +366,7 @@ class TusController extends AbstractController
             } catch (\InvalidArgumentException $e) {
                 @unlink($sourcePath);
                 $this->tusServer->cleanup($projectUuid, $uploadId);
-                return $this->json(['error' => $e->getMessage()], 400, ['Tus-Resumable' => '1.0.0']);
+                return $this->json(['error' => $this->trans('tus.validation_failed', ['%error%' => $e->getMessage()], sprintf('TUS upload validation failed: %s.', $e->getMessage()))], 400, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
             }
 
             // Marquer en cours de finalisation
@@ -385,14 +444,17 @@ class TusController extends AbstractController
             $serialized = $this->mediaSerializer->serialize($media);
             $this->mercure->mediaUploaded($canonicalProjectUuid, $serialized);
 
+            // Audit log
+            $this->auditService?->log('tus_upload_finalize', $project, ['upload_id' => $uploadId, 'filename' => $filename], ['id' => $media->id], 'success', null, $this->getUser()?->getUserIdentifier(), 'admin_api');
+
             // Marquer finalisé et nettoyer les fichiers temporaires TUS
             $this->tusServer->markFinalized($projectUuid, $uploadId);
             $this->tusServer->cleanup($projectUuid, $uploadId);
 
-            return $this->json(['data' => $serialized], 201, ['Tus-Resumable' => '1.0.0']);
+            return $this->json(['data' => $serialized], 201, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
         });
 
-        return $result ?? $this->json(['error' => $this->trans('tus.upload_busy', [], 'Upload is currently busy')], 409, ['Tus-Resumable' => '1.0.0']);
+        return $result ?? $this->json(['error' => $this->trans('tus.upload_busy', [], 'Upload is currently busy')], 409, array_merge(['Tus-Resumable' => '1.0.0'], self::SECURITY_HEADERS));
     }
 
     // ─── Private ─────────────────────────────────────────────────────────

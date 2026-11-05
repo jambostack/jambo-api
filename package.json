@@ -1,6 +1,6 @@
 {
     "name": "jambostack/jambo-api",
-    "version": "1.26.107",
+    "version": "1.26.108",
     "devDependencies": {
         "@babel/core": "^7.17.0",
         "@babel/preset-env": "^7.16.0",

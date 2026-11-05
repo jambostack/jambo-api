@@ -7,6 +7,34 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.108] — 2026-11-05
+
+### Media, MediaFolder, TUS Resumable Upload, Public Embed & SEO Security Hardening, Quotas, Rate Limiting & Strict I18N
+- **Media Rate Limiting & Security Hardening**:
+  - Integrated `media_limiter` rate limiter (60 req/min sliding window) across `MediaController` endpoints (`index`, `upload`, `update`, `move`, `crop`, `bulkDestroy`, `delete`).
+  - Added ASCII control character rejection on `alt` (`media.alt_control_chars`) and `caption` (`media.caption_control_chars`).
+  - Enforced string bounds on search query (`mb_substr(..., 0, 100)`) preventing regex denial of service.
+  - Enforced strict security headers (`Cache-Control: no-store, no-cache, must-revalidate`, `X-Content-Type-Options: nosniff`).
+  - Integrated structured audit logging (`media_upload`, `media_update`, `media_move`, `media_crop`, `media_bulk_destroy`, `media_delete`) via `AuditService`.
+- **MediaFolder Quota & Security Hardening**:
+  - Integrated `media_limiter` rate limiter across `MediaFolderController` endpoints (`index`, `tree`, `store`, `update`, `move`, `delete`).
+  - Added folder quota ceiling `MAX_FOLDERS_PER_PROJECT = 200` (`media_folder.max_folders_exceeded`) to prevent folder tree flooding.
+  - Integrated structured audit logging (`media_folder_create`, `media_folder_update`, `media_folder_move`, `media_folder_delete`) via `AuditService`.
+  - Enforced security headers (`no-store`, `nosniff`) across all JSON responses.
+- **TUS Resumable Upload Hardening**:
+  - Integrated `tus_limiter` rate limiter (120 req/min sliding window) across `create`, `patch`, `head`, `delete`, and `finalize`.
+  - Added ASCII control character rejection on metadata filename (`tus.filename_control_chars`).
+  - Added offset boundary check (`offset > MAX_TUS_SIZE`) returning 413 `tus.chunk_out_of_bounds`.
+  - Standardized exception responses with strict translated keys (`tus.chunk_out_of_bounds`, `tus.conflict`, `tus.runtime_error`, `tus.validation_failed`).
+  - Enforced security headers (`no-store`, `nosniff`) on all TUS responses.
+  - Integrated audit logging (`tus_upload_delete`, `tus_upload_finalize`) via `AuditService`.
+- **Public SEO & Embed Widget Hardening**:
+  - Integrated `seo_limiter` rate limiter (30 req/min sliding window) across `sitemap`, `imageSitemap`, and `robots`.
+  - Enforced `X-Content-Type-Options: nosniff` and caching headers on SEO and embed endpoints.
+  - Eliminated hardcoded French strings from `EmbedController` widget by introducing locale-aware translated labels (`form.embed.loading`, `form.embed.submit`, `form.embed.submitting`, `form.embed.success`, `form.embed.error_prefix`).
+- **Strict I18N Parity**:
+  - Added 17 new translation keys across `translations/messages.{en,fr,es,ar}.php` (2768 keys each, 100% parity).
+
 ## [1.26.107] — 2026-11-05
 
 ### AdminApi Security Hardening, Quotas, Rate Limiting & Strict I18N
