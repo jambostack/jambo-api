@@ -192,7 +192,7 @@ class TwoFactorChallengeController extends InertiaController
         $session->remove('two_factor_email_resends');
     }
 
-    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    protected function trans(string $id, array $parameters = [], ?string $default = null): string
     {
         if (isset($this->translator)) {
             $translated = $this->translator->trans($id, $parameters, 'messages');

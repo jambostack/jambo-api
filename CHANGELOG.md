@@ -7,6 +7,43 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.104] — 2026-11-05
+
+### OIDC SSO Hardening, Alg-None & CSRF Defense, Unverified Email Mitigation & Strict Auth I18N
+- **OIDC SSO & Algorithm Confusion Hardening**:
+  - `OidcProviderManager`:
+    - Strict algorithm validation blocking `alg: "none"` and enforcing exact algorithm match against configured `idTokenSigningAlg` to prevent algorithm confusion attacks (RFC 7519 / OIDC Core 1.0).
+    - Mandatory non-empty `sub` claim verification.
+    - Verified email claim extraction and enforcement (`email_verified !== false`).
+    - Validated email address format (`filter_var(..., FILTER_VALIDATE_EMAIL)`).
+    - Direct `$clientId` parameter binding in `buildAuthorizationUrl()` eliminating fragile URL regex substitutions.
+    - State payload signing with HMAC-SHA256 and session binding for CSRF replay protection.
+  - `OidcAuthenticator`:
+    - Enforced mandatory active session and strict CSRF state validation with single-use session consumption (`oidc_state`, `oidc_code_verifier`, `oidc_nonce`).
+    - Anti-Account Takeover protection rejecting unverified email addresses (`email_verified === false`) or malformed emails during admin account linking.
+    - Sanitized display names stripping ASCII control characters (`\x00-\x1F\x7F`) with fallback to safe default.
+    - Sanitized avatar URL with protocol whitelist (`https://`).
+    - Localized exception reporting via `CustomUserMessageAuthenticationException`.
+  - `OidcController`:
+    - Added rate limiting protection (`oidc_limiter` sliding window: 15 req/min) on `/oidc/start/{providerId}`.
+    - Provider identifier regex validation (`/^[a-zA-Z0-9_\-]{1,64}$/`) preventing directory traversal or path injection.
+    - Full internationalization of unknown/disabled provider exceptions via `TranslatorInterface`.
+- **Authentication Controllers Hardening & Strict I18N Parity**:
+  - `ConfirmablePasswordController`: Integrated rate limiting (`login_limiter`) preventing brute-force password confirmation; replaced hardcoded error strings with `trans()`.
+  - `PasswordResetLinkController`: Replaced hardcoded status and validation messages with localized keys.
+  - `NewPasswordController`: Replaced all hardcoded error/length/mismatch strings with localized keys.
+  - `RegisteredUserController`: Replaced all hardcoded validation and duplicate error strings with localized keys.
+  - `InertiaController`: Centralized protected `trans()` helper across all Inertia-backed controllers.
+- **100% Strict I18N Parity**:
+  - Added 25 new translation keys across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`):
+    - `oidc.*`: rate limits, unknown provider, missing parameters, session expiration, invalid state, unsupported end-user, invalid id token, invalid email, unverified email.
+    - `auth.confirm_password.*`: auth required, rate limits, invalid JSON, incorrect password.
+    - `auth.password_reset.*`: rate limits, invalid email, email sent status, invalid/expired link, length, mismatch, user not found, same as current.
+    - `auth.register.*`: rate limits, invalid JSON, passwords mismatch, email in use.
+  - Exact key count: 2,656 keys per locale (0 diff).
+- **Test Coverage**:
+  - Added comprehensive `Cycle46AuthOidcSecurityHardeningTest` with 15 tests and 154 assertions covering OIDC algorithm confusion defense, CSRF single-use state, unverified email account linking rejection, name sanitization, and I18N parity (1,341 total tests).
+
 ## [1.26.103] — 2026-11-05
 
 ### OAuth / Social Auth Hardening, PKCE Protection, CSP Directives & Admin Session Isolation

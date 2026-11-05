@@ -13,6 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class NewPasswordController extends InertiaController
 {
@@ -32,7 +33,7 @@ class NewPasswordController extends InertiaController
 
         if ($resetToken === null) {
             return $this->inertia($request, 'auth/reset-password', [
-                'error' => 'This password reset link is invalid or has expired.',
+                'error' => $this->trans('auth.password_reset.invalid_or_expired_link', [], 'This password reset link is invalid or has expired.'),
             ]);
         }
 
@@ -50,7 +51,7 @@ class NewPasswordController extends InertiaController
             if (!$limiter->consume()->isAccepted()) {
                 return $this->inertia($request, 'auth/reset-password', [
                     'token' => $token,
-                    'errors' => ['token' => 'Too many requests. Please retry later.'],
+                    'errors' => ['token' => $this->trans('auth.password_reset.rate_limit_exceeded', [], 'Too many requests. Please retry later.')],
                 ]);
             }
         }
@@ -60,7 +61,7 @@ class NewPasswordController extends InertiaController
         if ($resetToken === null) {
             return $this->inertia($request, 'auth/reset-password', [
                 'token' => $token,
-                'errors' => ['token' => 'This password reset link is invalid or has expired.'],
+                'errors' => ['token' => $this->trans('auth.password_reset.invalid_or_expired_link', [], 'This password reset link is invalid or has expired.')],
             ]);
         }
 
@@ -76,7 +77,7 @@ class NewPasswordController extends InertiaController
             return $this->inertia($request, 'auth/reset-password', [
                 'token' => $token,
                 'email' => $resetToken->email,
-                'errors' => ['password' => 'Password must be between 8 and 4096 characters.'],
+                'errors' => ['password' => $this->trans('auth.password_reset.length_invalid', [], 'Password must be between 8 and 4096 characters.')],
             ]);
         }
 
@@ -84,7 +85,7 @@ class NewPasswordController extends InertiaController
             return $this->inertia($request, 'auth/reset-password', [
                 'token' => $token,
                 'email' => $resetToken->email,
-                'errors' => ['password_confirmation' => 'Passwords do not match.'],
+                'errors' => ['password_confirmation' => $this->trans('auth.password_reset.passwords_do_not_match', [], 'Passwords do not match.')],
             ]);
         }
 
@@ -93,7 +94,7 @@ class NewPasswordController extends InertiaController
             return $this->inertia($request, 'auth/reset-password', [
                 'token' => $token,
                 'email' => $resetToken->email,
-                'errors' => ['email' => 'User not found.'],
+                'errors' => ['email' => $this->trans('auth.password_reset.user_not_found', [], 'User not found.')],
             ]);
         }
 
@@ -111,7 +112,7 @@ class NewPasswordController extends InertiaController
             return $this->inertia($request, 'auth/reset-password', [
                 'token' => $token,
                 'email' => $resetToken->email,
-                'errors' => ['password' => 'New password must be different from current password.'],
+                'errors' => ['password' => $this->trans('auth.password_reset.same_as_current', [], 'New password must be different from current password.')],
             ]);
         }
 

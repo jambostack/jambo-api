@@ -90,8 +90,9 @@ class OidcProviderManager
 
         $state = $this->signPayload($payload);
 
-        // Stocker code_verifier + nonce en session pour vérification au callback
+        // Stocker state + code_verifier + nonce en session pour vérification au callback
         $session = $this->requestStack->getSession();
+        $session->set('oidc_state', $state);
         $session->set('oidc_code_verifier', $codeVerifier);
         $session->set('oidc_nonce', $nonce);
 
@@ -157,10 +158,11 @@ class OidcProviderManager
         string $codeChallenge,
         string $state,
         string $nonce,
+        string $clientId = '',
     ): string {
         $params = [
             'response_type' => 'code',
-            'client_id' => '', // sera rempli par l'appelant
+            'client_id' => $clientId,
             'redirect_uri' => $redirectUri,
             'scope' => implode(' ', $config->scopesSupported),
             'state' => $state,
@@ -169,7 +171,8 @@ class OidcProviderManager
             'code_challenge_method' => 'S256',
         ];
 
-        return $config->authorizationEndpoint.'?'.http_build_query($params);
+        $separator = str_contains($config->authorizationEndpoint, '?') ? '&' : '?';
+        return $config->authorizationEndpoint . $separator . http_build_query($params);
     }
 
     // ─── Token Exchange ─────────────────────────────────────────────────
@@ -213,7 +216,7 @@ class OidcProviderManager
 
     // ─── ID Token Validation ────────────────────────────────────────────
 
-    /** @return array{sub: string, email: string, name: string, picture: ?string} */
+    /** @return array{sub: string, email: string, name: string, picture: ?string, email_verified: ?bool, claims: array<string, mixed>} */
     public function validateIdToken(
         string $idToken,
         OidcConfig $config,
@@ -226,8 +229,22 @@ class OidcProviderManager
             throw new \RuntimeException('Invalid id_token format.');
         }
 
+        $header = json_decode(base64_decode(strtr($parts[0], '-_', '+/')), true);
+        if (!$header || !is_array($header)) {
+            throw new \RuntimeException('Invalid id_token header.');
+        }
+
+        $alg = $header['alg'] ?? null;
+        if (empty($alg) || strtolower((string) $alg) === 'none') {
+            throw new \RuntimeException('Algorithm "none" is not permitted in id_token.');
+        }
+
+        if ($alg !== $config->idTokenSigningAlg) {
+            throw new \RuntimeException('id_token algorithm mismatch.');
+        }
+
         $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
-        if (!$payload) {
+        if (!$payload || !is_array($payload)) {
             throw new \RuntimeException('Invalid id_token payload.');
         }
 
@@ -267,11 +284,31 @@ class OidcProviderManager
             throw new \RuntimeException('Unsupported id_token signing algorithm: '.$config->idTokenSigningAlg.'. Only HS256 is supported in v1.');
         }
 
+        $sub = trim((string) ($payload['sub'] ?? ''));
+        if ($sub === '') {
+            throw new \RuntimeException('id_token sub claim cannot be empty.');
+        }
+
+        $email = strtolower(trim((string) ($payload['email'] ?? '')));
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new \RuntimeException('Invalid email address format in id_token.');
+        }
+
+        $emailVerified = null;
+        if (array_key_exists('email_verified', $payload)) {
+            $emailVerified = (bool) $payload['email_verified'];
+            if ($emailVerified === false) {
+                throw new \RuntimeException('The email address from OIDC provider is not verified.');
+            }
+        }
+
         return [
-            'sub' => (string) ($payload['sub'] ?? ''),
-            'email' => (string) ($payload['email'] ?? ''),
+            'sub' => $sub,
+            'email' => $email,
             'name' => (string) ($payload['name'] ?? ($payload['preferred_username'] ?? '')),
             'picture' => $payload['picture'] ?? null,
+            'email_verified' => $emailVerified,
+            'claims' => $payload,
         ];
     }
 

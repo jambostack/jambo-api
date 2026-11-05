@@ -48,6 +48,14 @@ abstract class InertiaController extends AbstractController
         $this->appSettingsRepository = $appSettingsRepository;
     }
 
+    protected function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if (isset($this->translator)) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default !== null ? strtr($default, $parameters) : $id;
+    }
+
     protected function inertia(Request $request, string $component, array $props = []): Response
     {
         // Shared props available on every page

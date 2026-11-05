@@ -6,10 +6,13 @@ use App\Security\Oidc\OidcProviderManager;
 use App\Repository\AppSettingsRepository;
 use App\Service\WebhookSecretService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class OidcController extends AbstractController
 {
@@ -18,11 +21,37 @@ class OidcController extends AbstractController
         private AppSettingsRepository $appSettingsRepo,
         private WebhookSecretService $secretService,
         private UrlGeneratorInterface $urlGenerator,
+        #[Autowire(service: 'limiter.oidc_limiter')]
+        private ?RateLimiterFactory $oidcLimiter = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters);
+        }
+        return $default !== null ? strtr($default, $parameters) : $id;
+    }
 
     #[Route('/oidc/start/{providerId}', name: 'oidc_start')]
     public function start(string $providerId, Request $request): Response
     {
+        if ($this->oidcLimiter !== null) {
+            $limiter = $this->oidcLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            if (!$limiter->consume()->isAccepted()) {
+                return new Response(
+                    $this->trans('oidc.rate_limit_exceeded', [], 'Too many OIDC login attempts. Please retry later.'),
+                    429,
+                    ['Retry-After' => 60]
+                );
+            }
+        }
+
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,64}$/', $providerId)) {
+            throw $this->createNotFoundException($this->trans('oidc.provider_not_found', [], 'Unknown or disabled OIDC provider.'));
+        }
+
         // Determiner si c'est admin ou end-user
         $adminProviders = $this->getAdminProviders();
 
@@ -44,7 +73,7 @@ class OidcController extends AbstractController
         }
 
         if (!$provider) {
-            throw $this->createNotFoundException('Unknown or disabled OIDC provider.');
+            throw $this->createNotFoundException($this->trans('oidc.provider_not_found', [], 'Unknown or disabled OIDC provider.'));
         }
 
         // Decrypter le secret si chiffre
@@ -60,11 +89,13 @@ class OidcController extends AbstractController
 
         $challenge = $this->oidcManager->computeCodeChallenge($result['codeVerifier']);
         $authUrl = $this->oidcManager->buildAuthorizationUrl(
-            $config, $redirectUri, $challenge, $result['state'], $result['nonce'],
+            $config,
+            $redirectUri,
+            $challenge,
+            $result['state'],
+            $result['nonce'],
+            $clientId,
         );
-
-        // Injecter le client_id dans l'URL
-        $authUrl = preg_replace('/client_id=/', 'client_id=' . urlencode($clientId), $authUrl);
 
         return $this->redirect($authUrl);
     }

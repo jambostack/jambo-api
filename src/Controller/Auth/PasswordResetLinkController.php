@@ -15,6 +15,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/forgot-password')]
 class PasswordResetLinkController extends InertiaController
@@ -43,7 +44,7 @@ class PasswordResetLinkController extends InertiaController
         $limiter = $this->passwordResetLimiter->create($request->getClientIp());
         if (!$limiter->consume()->isAccepted()) {
             return $this->inertia($request, 'auth/forgot-password', [
-                'error' => 'Too many requests. Please try again later.',
+                'error' => $this->trans('auth.password_reset.rate_limit_exceeded', [], 'Too many requests. Please try again later.'),
             ]);
         }
 
@@ -55,7 +56,7 @@ class PasswordResetLinkController extends InertiaController
 
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return $this->inertia($request, 'auth/forgot-password', [
-                'errors' => ['email' => 'Adresse email invalide.'],
+                'errors' => ['email' => $this->trans('auth.password_reset.invalid_email', [], 'Invalid email address.')],
             ]);
         }
 
@@ -99,7 +100,7 @@ class PasswordResetLinkController extends InertiaController
         }
 
         return $this->inertia($request, 'auth/forgot-password', [
-            'status' => 'Si cette adresse correspond à un compte, un email contenant le lien de réinitialisation vous a été envoyé.',
+            'status' => $this->trans('auth.password_reset.email_sent_status', [], 'If this address corresponds to an account, an email with a reset link has been sent.'),
         ]);
     }
 }

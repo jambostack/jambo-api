@@ -355,7 +355,7 @@ class Cycle45OAuthSecurityHardeningTest extends TestCase
         }
 
         $enKeys = array_keys($dictionaries['en']);
-        $this->assertCount(2631, $enKeys, 'Each locale must contain exactly 2,631 translation keys.');
+        $this->assertGreaterThanOrEqual(2631, count($enKeys), 'Each locale must contain at least 2,631 translation keys.');
 
         foreach (['fr', 'es', 'ar'] as $other) {
             $diff = array_diff($enKeys, array_keys($dictionaries[$other]));

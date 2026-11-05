@@ -14,6 +14,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class RegisteredUserController extends InertiaController
 {
@@ -40,13 +41,13 @@ class RegisteredUserController extends InertiaController
     {
         $limiter = $this->registerLimiter->create($request->getClientIp());
         if (!$limiter->consume()->isAccepted()) {
-            return $this->json(['error' => 'Too many requests. Please try again later.'], 429);
+            return $this->json(['error' => $this->trans('auth.register.rate_limit_exceeded', [], 'Too many requests. Please try again later.')], 429);
         }
 
         try {
             $data = $request->getPayload()->all();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON body'], 400);
+            return $this->json(['error' => $this->trans('auth.register.invalid_json', [], 'Invalid JSON body')], 400);
         }
 
         $errors = $this->validator->validate($data, new Assert\Collection([
@@ -61,11 +62,11 @@ class RegisteredUserController extends InertiaController
         }
 
         if ($data['password'] !== $data['password_confirmation']) {
-            return $this->json(['errors' => ['password_confirmation' => 'Passwords do not match.']], 422);
+            return $this->json(['errors' => ['password_confirmation' => $this->trans('auth.register.passwords_do_not_match', [], 'Passwords do not match.')]], 422);
         }
 
         if ($this->em->getRepository(User::class)->findOneBy(['email' => $data['email']]) !== null) {
-            return $this->json(['errors' => ['email' => 'This email is already in use.']], 422);
+            return $this->json(['errors' => ['email' => $this->trans('auth.register.email_in_use', [], 'This email is already in use.')]], 422);
         }
 
         $pwdValidator = new PasswordPolicyValidator();
