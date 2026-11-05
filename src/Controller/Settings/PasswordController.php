@@ -21,6 +21,11 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class PasswordController extends AbstractController
 {
     private const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
 
     public function __construct(
         private readonly EntityManagerInterface $em,
@@ -32,6 +37,11 @@ class PasswordController extends AbstractController
         private readonly ?AuditService $auditService = null,
     ) {
         $this->passwordValidator ??= new PasswordPolicyValidator();
+    }
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -51,7 +61,7 @@ class PasswordController extends AbstractController
         if ($this->passwordLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
             if (false === $this->passwordLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('settings.password.rate_limit_exceeded', [], 'Too many password update attempts. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
                 ], 429);
@@ -59,7 +69,7 @@ class PasswordController extends AbstractController
         }
 
         if ($_ENV['DEMO_MODE'] ?? false) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'errors' => ['current_password' => $this->trans('settings.password.demo_disabled', [], 'Password changes are disabled in demo mode.')],
             ], 403);
         }
@@ -67,14 +77,14 @@ class PasswordController extends AbstractController
         /** @var User|null $user */
         $user = $this->getUser();
         if (!$user instanceof User) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.password.unauthenticated', [], 'Unauthenticated.'),
                 'code'  => 'UNAUTHENTICATED',
             ], 401);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.password.payload_too_large', [], 'Payload exceeds maximum size.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -83,7 +93,7 @@ class PasswordController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.password.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -98,18 +108,18 @@ class PasswordController extends AbstractController
         $rotationResult = $validator->validateRotation($currentPassword, $newPassword, $user, $this->hasher);
         if (!$rotationResult['valid']) {
             $errorKey = str_contains($rotationResult['error'] ?? '', 'different') ? 'password' : 'current_password';
-            return new JsonResponse(['errors' => [$errorKey => $rotationResult['error']]], 422);
+            return $this->secureJson(['errors' => [$errorKey => $rotationResult['error']]], 422);
         }
 
         // 2. Correspondance de confirmation
         if ($newPassword !== $confirmation) {
-            return new JsonResponse(['errors' => ['password_confirmation' => $this->trans('settings.password.mismatch', [], 'Passwords do not match.')]], 422);
+            return $this->secureJson(['errors' => ['password_confirmation' => $this->trans('settings.password.mismatch', [], 'Passwords do not match.')]], 422);
         }
 
         // 3. Politique de complexité et de sécurité du compte administrateur / membre
         $valResult = $validator->validateAdminPassword($newPassword, $user->email, $user->name);
         if (!$valResult['valid']) {
-            return new JsonResponse(['errors' => ['password' => $valResult['errors'][0]]], 422);
+            return $this->secureJson(['errors' => ['password' => $valResult['errors'][0]]], 422);
         }
 
         $user->password = $this->hasher->hashPassword($user, $newPassword);
@@ -128,7 +138,7 @@ class PasswordController extends AbstractController
         $this->auditService?->flush();
 
         if (str_contains((string) $request->headers->get('Accept'), 'application/json')) {
-            return new JsonResponse(['success' => true]);
+            return $this->secureJson(['success' => true]);
         }
 
         return $this->redirectToRoute('settings_password', [], 303);

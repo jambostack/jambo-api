@@ -22,6 +22,11 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class ProfileController extends AbstractController
 {
     private const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
 
     public function __construct(
         private readonly UserRepository $userRepository,
@@ -32,6 +37,11 @@ class ProfileController extends AbstractController
         private readonly ?TranslatorInterface $translator = null,
         private readonly ?AuditService $auditService = null,
     ) {}
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
@@ -49,7 +59,7 @@ class ProfileController extends AbstractController
         if ($this->profileLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
             if (false === $this->profileLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('settings.profile.rate_limit_exceeded', [], 'Too many profile requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
                 ], 429);
@@ -68,13 +78,13 @@ class ProfileController extends AbstractController
 
         $user = $this->getUser();
         if (!$user instanceof User) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.profile.unauthenticated', [], 'Unauthenticated.'),
                 'code'  => 'UNAUTHENTICATED',
             ], 401);
         }
 
-        return new JsonResponse([
+        return $this->secureJson([
             'id'    => $user->id,
             'name'  => $user->name,
             'email' => $user->email,
@@ -89,7 +99,7 @@ class ProfileController extends AbstractController
         }
 
         if ($_ENV['DEMO_MODE'] ?? false) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.profile.demo_disabled', [], 'Account modification/deletion is disabled in demo mode.'),
                 'code'  => 'DEMO_MODE',
             ], 403);
@@ -97,14 +107,14 @@ class ProfileController extends AbstractController
 
         $user = $this->getUser();
         if (!$user instanceof User) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.profile.unauthenticated', [], 'Unauthenticated.'),
                 'code'  => 'UNAUTHENTICATED',
             ], 401);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.profile.payload_too_large', [], 'Profile payload exceeds maximum size.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -113,7 +123,7 @@ class ProfileController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.profile.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -122,17 +132,17 @@ class ProfileController extends AbstractController
         if (isset($data['name'])) {
             $name = trim((string) $data['name']);
             if ($name === '') {
-                return new JsonResponse([
+                return $this->secureJson([
                     'errors' => ['name' => $this->trans('settings.profile.name_required', [], 'Name is required.')],
                 ], 422);
             }
             if (mb_strlen($name) > 255) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'errors' => ['name' => $this->trans('settings.profile.name_too_long', [], 'Name cannot exceed 255 characters.')],
                 ], 422);
             }
             if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'errors' => ['name' => $this->trans('settings.profile.name_control_chars', [], 'Name contains invalid control characters.')],
                 ], 422);
             }
@@ -142,17 +152,17 @@ class ProfileController extends AbstractController
         if (isset($data['email'])) {
             $newEmail = strtolower(trim((string) $data['email']));
             if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'errors' => ['email' => $this->trans('settings.profile.email_required', [], 'Valid email address is required.')],
                 ], 422);
             }
             if (strlen($newEmail) > 180) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'errors' => ['email' => $this->trans('settings.profile.email_too_long', [], 'Email address cannot exceed 180 characters.')],
                 ], 422);
             }
             if ($newEmail !== strtolower((string) $user->email) && $this->userRepository->findByEmail($newEmail) !== null) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'errors' => ['email' => $this->trans('settings.profile.email_taken', [], 'Email already taken.')],
                 ], 422);
             }
@@ -173,7 +183,7 @@ class ProfileController extends AbstractController
         $this->auditService?->flush();
 
         if (str_contains((string) $request->headers->get('Accept'), 'application/json')) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'success' => true,
                 'data' => [
                     'id'    => $user->id,
@@ -194,7 +204,7 @@ class ProfileController extends AbstractController
         }
 
         if ($_ENV['DEMO_MODE'] ?? false) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.profile.demo_disabled', [], 'Account modification/deletion is disabled in demo mode.'),
                 'code'  => 'DEMO_MODE',
             ], 403);
@@ -202,7 +212,7 @@ class ProfileController extends AbstractController
 
         $user = $this->getUser();
         if (!$user instanceof User) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.profile.unauthenticated', [], 'Unauthenticated.'),
                 'code'  => 'UNAUTHENTICATED',
             ], 401);
@@ -223,14 +233,14 @@ class ProfileController extends AbstractController
 
             $password = (string) ($data['password'] ?? $data['current_password'] ?? '');
             if ($password === '') {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('settings.profile.password_required', [], 'Current password is required to delete account.'),
                     'code'  => 'PASSWORD_REQUIRED',
                 ], 422);
             }
 
             if ($this->hasher !== null && !$this->hasher->isPasswordValid($user, $password)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('settings.profile.invalid_password', [], 'Current password is invalid.'),
                     'code'  => 'INVALID_PASSWORD',
                 ], 422);
@@ -244,7 +254,7 @@ class ProfileController extends AbstractController
             )->setParameter('role', '%ROLE_SUPER_ADMIN%')->getSingleScalarResult();
 
             if ($count <= 1) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('settings.profile.cannot_delete_last_admin', [], 'Cannot delete account: at least one active super administrator must remain.'),
                     'code'  => 'LAST_ADMIN_PROTECTION',
                 ], 403);
@@ -266,7 +276,7 @@ class ProfileController extends AbstractController
         $this->em->flush();
 
         if (str_contains((string) $request->headers->get('Accept'), 'application/json')) {
-            return new JsonResponse(['success' => true]);
+            return $this->secureJson(['success' => true]);
         }
 
         return $this->redirectToRoute('app_login', [], 303);

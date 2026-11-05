@@ -54,6 +54,8 @@ class AdminApiOpenApiController extends AbstractController
 
         $response = new JsonResponse($this->buildSpec());
         $response->headers->set('Cache-Control', 'private, max-age=60, must-revalidate');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('X-Frame-Options', 'DENY');
         return $response;
     }
 

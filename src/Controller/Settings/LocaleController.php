@@ -19,12 +19,22 @@ class LocaleController extends AbstractController
 {
     private const ALLOWED_LOCALES = ['en', 'fr', 'es', 'ar'];
     private const MAX_PAYLOAD_BYTES = 16384; // 16 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
 
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ?TranslatorInterface $translator = null,
         private readonly ?AuditService $auditService = null,
     ) {}
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
@@ -41,7 +51,7 @@ class LocaleController extends AbstractController
     public function update(Request $request): Response
     {
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.locale.payload_too_large', [], 'Payload exceeds maximum size.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -50,7 +60,7 @@ class LocaleController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.locale.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -59,7 +69,7 @@ class LocaleController extends AbstractController
         $locale = $data['locale'] ?? null;
 
         if (!in_array($locale, self::ALLOWED_LOCALES, true)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.locale.invalid_locale', [], 'Invalid locale.'),
                 'code'  => 'INVALID_LOCALE',
             ], 422);
@@ -67,7 +77,7 @@ class LocaleController extends AbstractController
 
         $user = $this->getUser();
         if (!$user instanceof User) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.locale.unauthenticated', [], 'Unauthenticated.'),
                 'code'  => 'UNAUTHENTICATED',
             ], 401);
@@ -88,7 +98,7 @@ class LocaleController extends AbstractController
         $this->auditService?->flush();
 
         if (str_contains((string) $request->headers->get('Accept'), 'application/json')) {
-            return new JsonResponse(['success' => true, 'locale' => $locale]);
+            return $this->secureJson(['success' => true, 'locale' => $locale]);
         }
 
         $referer = $request->headers->get('referer', '/');

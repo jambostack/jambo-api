@@ -67,6 +67,7 @@ security:
         - { path: ^/register, roles: PUBLIC_ACCESS }
         - { path: ^/forgot-password, roles: PUBLIC_ACCESS }
         - { path: ^/reset-password, roles: PUBLIC_ACCESS }
+        - { path: ^/two-factor-challenge, roles: PUBLIC_ACCESS }
         - { path: ^/install, roles: PUBLIC_ACCESS }
         - { path: ^/invitation, roles: PUBLIC_ACCESS }
         - { path: ^/mcp, roles: PUBLIC_ACCESS }

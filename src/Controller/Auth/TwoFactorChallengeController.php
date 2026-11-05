@@ -5,8 +5,9 @@ use App\Controller\InertiaController;
 use App\Entity\User;
 use App\Service\TwoFactorService;
 use App\Service\TwoFactorMailer;
-use Symfony\Component\HttpFoundation\Request;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -21,6 +22,13 @@ class TwoFactorChallengeController extends InertiaController
     public const MAX_FAILED_ATTEMPTS = 5;
     public const MAX_EMAIL_RESENDS = 3;
 
+    private const MAX_PAYLOAD_BYTES = 16384; // 16 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private TwoFactorService $twoFactor,
         private TwoFactorMailer $twoFactorMailer,
@@ -30,6 +38,11 @@ class TwoFactorChallengeController extends InertiaController
         #[Autowire(service: 'limiter.two_factor_limiter')]
         private RateLimiterFactory $twoFactorLimiter,
     ) {}
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
 
     #[Route('/two-factor-challenge', name: 'two_factor_challenge', methods: ['GET'])]
     public function show(Request $request): Response
@@ -53,6 +66,12 @@ class TwoFactorChallengeController extends InertiaController
     #[Route('/two-factor-challenge', name: 'two_factor_challenge_verify', methods: ['POST'])]
     public function verify(Request $request): Response
     {
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->inertia($request, 'auth/two-factor-challenge', [
+                'error' => 'auth.2fa.payload_too_large',
+            ], 413);
+        }
+
         $session = $request->getSession();
 
         if (!$session->has('two_factor_user_id') || !$session->has('two_factor_expires')) {
@@ -142,12 +161,12 @@ class TwoFactorChallengeController extends InertiaController
         $userId = (string) $session->get('two_factor_user_id');
         $limiter = $this->twoFactorLimiter->create(($request->getClientIp() ?: '127.0.0.1') . '_email_' . $userId);
         if (!$limiter->consume()->isAccepted()) {
-            return $this->json(['error' => $this->trans('auth.2fa.too_many_attempts', [], 'Too many attempts. Please wait 60 seconds.')], 429);
+            return $this->secureJson(['error' => $this->trans('auth.2fa.too_many_attempts', [], 'Too many attempts. Please wait 60 seconds.')], 429);
         }
 
         $resends = (int) $session->get('two_factor_email_resends', 0);
         if ($resends >= self::MAX_EMAIL_RESENDS) {
-            return $this->json(['error' => $this->trans('auth.2fa.max_resends_exceeded', [], 'Maximum email resend limit reached.')], 429);
+            return $this->secureJson(['error' => $this->trans('auth.2fa.max_resends_exceeded', [], 'Maximum email resend limit reached.')], 429);
         }
 
         $user = $this->getUserById((int) $userId);
@@ -162,7 +181,7 @@ class TwoFactorChallengeController extends InertiaController
         $session->set('two_factor_email_resends', $resends + 1);
         $this->twoFactorMailer->sendCode($user->email, $code, 'JamboAPI');
 
-        return $this->json(['message' => $this->trans('auth.2fa.code_sent', [], 'Code sent.')]);
+        return $this->secureJson(['message' => $this->trans('auth.2fa.code_sent', [], 'Code sent.')]);
     }
 
     private function handleFailedAttempt($session, Request $request): Response

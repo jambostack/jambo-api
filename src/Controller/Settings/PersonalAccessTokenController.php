@@ -32,6 +32,11 @@ class PersonalAccessTokenController extends AbstractController
     /** Scopes proposés / acceptés côté UI. */
     private const ALLOWED_SCOPES = ['schema:write', 'projects:write', 'content:write', 'content:read', '*'];
     private const MAX_PAYLOAD_BYTES = 32768; // 32 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
 
     public function __construct(
         private readonly PersonalAccessTokenRepository $repo,
@@ -42,6 +47,11 @@ class PersonalAccessTokenController extends AbstractController
         private readonly ?TranslatorInterface $translator = null,
         private readonly ?AuditService $auditService = null,
     ) {}
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
@@ -64,7 +74,7 @@ class PersonalAccessTokenController extends AbstractController
 
         $tokens = $this->repo->findByUser($user);
 
-        return new JsonResponse(['data' => array_map($this->serialize(...), $tokens)]);
+        return $this->secureJson(['data' => array_map($this->serialize(...), $tokens)]);
     }
 
     #[Route('', name: 'create', methods: ['POST'])]
@@ -78,7 +88,7 @@ class PersonalAccessTokenController extends AbstractController
         if ($this->tokenLimiter !== null) {
             $identifier = $user->getUserIdentifier();
             if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('settings.pat.rate_limit_exceeded', [], 'Too many token requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
                 ], 429);
@@ -87,14 +97,14 @@ class PersonalAccessTokenController extends AbstractController
 
         $existingTokens = $this->repo->findByUser($user);
         if (count($existingTokens) >= 50) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'errors' => ['name' => $this->trans('settings.pat.max_limit_reached', [], 'Maximum token limit reached (50 tokens max).')],
                 'code'   => 'MAX_TOKENS_REACHED',
             ], 422);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.pat.payload_too_large', [], 'Payload exceeds maximum size.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -103,7 +113,7 @@ class PersonalAccessTokenController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.pat.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -111,19 +121,19 @@ class PersonalAccessTokenController extends AbstractController
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
-            return new JsonResponse([
+            return $this->secureJson([
                 'errors' => ['name' => $this->trans('settings.pat.name_required', [], 'Token name is required.')],
                 'code'   => 'NAME_REQUIRED',
             ], 422);
         }
         if (mb_strlen($name) > 255) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'errors' => ['name' => $this->trans('settings.pat.name_too_long', [], 'Token name must not exceed 255 characters.')],
                 'code'   => 'NAME_TOO_LONG',
             ], 422);
         }
         if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'errors' => ['name' => $this->trans('settings.pat.name_control_chars', [], 'Token name contains invalid control characters.')],
                 'code'   => 'NAME_CONTROL_CHARS',
             ], 422);
@@ -131,7 +141,7 @@ class PersonalAccessTokenController extends AbstractController
 
         $rawScopes = $data['scopes'] ?? ['schema:write'];
         if (!is_array($rawScopes) || empty($rawScopes)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'errors' => ['scopes' => $this->trans('settings.pat.scopes_required', [], 'Scopes must be a non-empty array.')],
                 'code'   => 'SCOPES_REQUIRED',
             ], 422);
@@ -140,7 +150,7 @@ class PersonalAccessTokenController extends AbstractController
         foreach ($rawScopes as $s) {
             if (!is_string($s) || !in_array($s, self::ALLOWED_SCOPES, true)) {
                 $scopeStr = is_scalar($s) ? (string) $s : gettype($s);
-                return new JsonResponse([
+                return $this->secureJson([
                     'errors' => ['scopes' => $this->trans('settings.pat.invalid_scope', [
                         '%scope%'   => $scopeStr,
                         '%allowed%' => implode(', ', self::ALLOWED_SCOPES),
@@ -157,13 +167,13 @@ class PersonalAccessTokenController extends AbstractController
             try {
                 $expiresAt = new \DateTimeImmutable((string) $data['expires_at']);
             } catch (\Exception) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'errors' => ['expires_at' => $this->trans('settings.pat.invalid_expires_at', [], 'Invalid expiration date format.')],
                     'code'   => 'INVALID_EXPIRES_AT',
                 ], 422);
             }
             if ($expiresAt <= new \DateTimeImmutable()) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'errors' => ['expires_at' => $this->trans('settings.pat.expires_future', [], 'Expiration date must be in the future.')],
                     'code'   => 'EXPIRES_MUST_BE_FUTURE',
                 ], 422);
@@ -194,7 +204,7 @@ class PersonalAccessTokenController extends AbstractController
         $this->auditService?->flush();
 
         // Le jeton en clair n'est renvoyé qu'à la création — jamais stocké en clair.
-        return new JsonResponse(['data' => [...$this->serialize($token), 'token' => $plain]], 201);
+        return $this->secureJson(['data' => [...$this->serialize($token), 'token' => $plain]], 201);
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
@@ -207,7 +217,7 @@ class PersonalAccessTokenController extends AbstractController
 
         $token = $this->repo->find($id);
         if (!$token || $token->user !== $user) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.pat.not_found', [], 'Token not found.'),
                 'code'  => 'TOKEN_NOT_FOUND',
             ], 404);
@@ -230,14 +240,14 @@ class PersonalAccessTokenController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     private function requireUser(): User|JsonResponse
     {
         $user = $this->getUser();
         if (!$user instanceof User) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('settings.pat.unauthenticated', [], 'Unauthenticated.'),
                 'code'  => 'UNAUTHENTICATED',
             ], 401);

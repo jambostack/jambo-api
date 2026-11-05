@@ -56,7 +56,7 @@ abstract class InertiaController extends AbstractController
         return $default !== null ? strtr($default, $parameters) : $id;
     }
 
-    protected function inertia(Request $request, string $component, array $props = []): Response
+    protected function inertia(Request $request, string $component, array $props = [], int $status = 200): Response
     {
         // Shared props available on every page
         $props = array_merge($this->sharedProps(), $props);
@@ -75,14 +75,16 @@ abstract class InertiaController extends AbstractController
         ];
 
         if ($request->headers->has('X-Inertia')) {
-            return new JsonResponse($page, 200, [
-                'X-Inertia'          => 'true',
-                'Vary'               => 'X-Inertia',
-                'X-Inertia-Location' => $request->getRequestUri(),
+            return new JsonResponse($page, $status, [
+                'X-Inertia'              => 'true',
+                'Vary'                   => 'X-Inertia',
+                'X-Inertia-Location'     => $request->getRequestUri(),
+                'X-Content-Type-Options' => 'nosniff',
+                'X-Frame-Options'        => 'DENY',
             ]);
         }
 
-        return $this->render('app.html.twig', ['page' => $page]);
+        return $this->render('app.html.twig', ['page' => $page], new Response('', $status));
     }
 
     private function sharedProps(): array

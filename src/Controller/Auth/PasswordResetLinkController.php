@@ -20,6 +20,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/forgot-password')]
 class PasswordResetLinkController extends InertiaController
 {
+    private const MAX_PAYLOAD_BYTES = 16384; // 16 KB
+
     public function __construct(
         private UserRepository $userRepository,
         private PasswordResetTokenRepository $tokenRepository,
@@ -38,6 +40,12 @@ class PasswordResetLinkController extends InertiaController
     #[Route('', name: 'app_forgot_password_store', methods: ['POST'])]
     public function store(Request $request): Response
     {
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->inertia($request, 'auth/forgot-password', [
+                'error' => $this->trans('auth.password_reset.payload_too_large', [], 'Payload exceeds maximum allowed size (16 KB).'),
+            ], 413);
+        }
+
         // Passive purge of expired tokens on each reset request
         $this->tokenRepository->deleteExpired();
 
@@ -78,20 +86,30 @@ class PasswordResetLinkController extends InertiaController
                 UrlGeneratorInterface::ABSOLUTE_URL
             );
 
+            $subject = $this->trans('auth.password_reset.email_subject', [], 'Réinitialisation de votre mot de passe Jambo');
+            $heading = $this->trans('auth.password_reset.email_heading', [], 'Réinitialisation de mot de passe');
+            $body = $this->trans('auth.password_reset.email_body', [], 'Vous avez demandé la réinitialisation de votre mot de passe Jambo.');
+            $button = $this->trans('auth.password_reset.email_button', [], 'Réinitialiser mon mot de passe');
+            $footer = $this->trans('auth.password_reset.email_footer', [], 'Ce lien expire dans 1 heure. Si vous n\'êtes pas à l\'origine de cette demande, ignorez cet email.');
+
             try {
                 $this->mailer->send(
                     (new Email())
                         ->from('noreply@jambostack.site')
                         ->to($email)
-                        ->subject('Réinitialisation de votre mot de passe Jambo')
+                        ->subject($subject)
                         ->html(sprintf(
                             '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:20px">
-                            <h2>Réinitialisation de mot de passe</h2>
-                            <p>Vous avez demandé la réinitialisation de votre mot de passe Jambo.</p>
-                            <p><a href="%s" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Réinitialiser mon mot de passe</a></p>
-                            <p style="color:#666;font-size:14px">Ce lien expire dans 1 heure. Si vous n\'êtes pas à l\'origine de cette demande, ignorez cet email.</p>
+                            <h2>%s</h2>
+                            <p>%s</p>
+                            <p><a href="%s" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">%s</a></p>
+                            <p style="color:#666;font-size:14px">%s</p>
                             </body></html>',
-                            $resetUrl
+                            htmlspecialchars($heading),
+                            htmlspecialchars($body),
+                            htmlspecialchars($resetUrl),
+                            htmlspecialchars($button),
+                            htmlspecialchars($footer)
                         ))
                 );
             } catch (\Throwable) {

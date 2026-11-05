@@ -33,6 +33,11 @@ class ProjectSettingsController extends AbstractController
     private const MAX_PAYLOAD_BYTES = 65536; // 64 KB
     private const MAX_PROJECT_TOKENS = 50;
     private const MAX_LOCALES_COUNT = 50;
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
 
     private readonly SsrfProtectionService $ssrfProtection;
 
@@ -57,6 +62,11 @@ class ProjectSettingsController extends AbstractController
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
     }
 
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
     private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
         if ($this->translator !== null) {
@@ -79,7 +89,7 @@ class ProjectSettingsController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.payload_too_large', [], 'Payload exceeds maximum size limit.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -88,7 +98,7 @@ class ProjectSettingsController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -96,14 +106,14 @@ class ProjectSettingsController extends AbstractController
 
         if (isset($data['locales'])) {
             if (!is_array($data['locales'])) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.locales_must_be_array', [], 'Locales must be a valid list.'),
                     'code'  => 'INVALID_LOCALES',
                 ], 422);
             }
 
             if (count($data['locales']) > self::MAX_LOCALES_COUNT) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.max_locales_exceeded', [], 'Maximum number of locales reached (50 max).'),
                     'code'  => 'MAX_LOCALES_EXCEEDED',
                 ], 422);
@@ -112,7 +122,7 @@ class ProjectSettingsController extends AbstractController
             $newLocales = [];
             foreach ($data['locales'] as $loc) {
                 if (!is_string($loc) || !preg_match(self::LOCALE_REGEX, trim($loc))) {
-                    return new JsonResponse([
+                    return $this->secureJson([
                         'error' => $this->trans('project_settings.invalid_locale_format', [], 'Invalid locale format.'),
                         'code'  => 'INVALID_LOCALE_FORMAT',
                     ], 422);
@@ -131,7 +141,7 @@ class ProjectSettingsController extends AbstractController
         if (isset($data['default_locale'])) {
             $defaultLoc = trim((string) $data['default_locale']);
             if (!in_array($defaultLoc, $project->locales, true)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.default_locale_missing', [], 'default_locale must be present in the locales list.'),
                     'code'  => 'DEFAULT_LOCALE_NOT_IN_LIST',
                 ], 422);
@@ -152,7 +162,7 @@ class ProjectSettingsController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse(['defaultLocale' => $project->defaultLocale, 'locales' => $project->locales]);
+        return $this->secureJson(['defaultLocale' => $project->defaultLocale, 'locales' => $project->locales]);
     }
 
     #[Route('/locales', name: 'locale_add', methods: ['POST'])]
@@ -164,7 +174,7 @@ class ProjectSettingsController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.payload_too_large', [], 'Payload exceeds maximum size limit.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -173,7 +183,7 @@ class ProjectSettingsController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -181,21 +191,21 @@ class ProjectSettingsController extends AbstractController
 
         $locale = isset($data['locale']) ? trim((string) $data['locale']) : null;
         if (!$locale) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.locale_required', [], 'locale is required.'),
                 'code'  => 'LOCALE_REQUIRED',
             ], 422);
         }
 
         if (!preg_match(self::LOCALE_REGEX, $locale)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.invalid_locale_format', [], 'Invalid locale format.'),
                 'code'  => 'INVALID_LOCALE_FORMAT',
             ], 422);
         }
 
         if (count($project->locales) >= self::MAX_LOCALES_COUNT && !in_array($locale, $project->locales, true)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.max_locales_exceeded', [], 'Maximum number of locales reached (50 max).'),
                 'code'  => 'MAX_LOCALES_EXCEEDED',
             ], 422);
@@ -206,7 +216,7 @@ class ProjectSettingsController extends AbstractController
             $this->em->flush();
         }
 
-        return new JsonResponse($this->serializeLocales($project));
+        return $this->secureJson($this->serializeLocales($project));
     }
 
     #[Route('/locale', name: 'locale_set_default', methods: ['PUT'])]
@@ -218,7 +228,7 @@ class ProjectSettingsController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.payload_too_large', [], 'Payload exceeds maximum size limit.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -227,7 +237,7 @@ class ProjectSettingsController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -235,14 +245,14 @@ class ProjectSettingsController extends AbstractController
 
         $locale = isset($data['locale']) ? trim((string) $data['locale']) : null;
         if (!$locale) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.locale_required', [], 'locale is required.'),
                 'code'  => 'LOCALE_REQUIRED',
             ], 422);
         }
 
         if (!in_array($locale, $project->locales, true)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.locale_not_found', [], 'Locale not in project locales list.'),
                 'code'  => 'LOCALE_NOT_FOUND',
             ], 422);
@@ -251,7 +261,7 @@ class ProjectSettingsController extends AbstractController
         $project->defaultLocale = $locale;
         $this->em->flush();
 
-        return new JsonResponse($this->serializeLocales($project));
+        return $this->secureJson($this->serializeLocales($project));
     }
 
     #[Route('/locales/{locale}', name: 'locale_delete', methods: ['DELETE'])]
@@ -263,7 +273,7 @@ class ProjectSettingsController extends AbstractController
         }
 
         if ($locale === $project->defaultLocale) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.cannot_delete_default_locale', [], 'Cannot delete the default locale.'),
                 'code'  => 'CANNOT_DELETE_DEFAULT_LOCALE',
             ], 422);
@@ -272,7 +282,7 @@ class ProjectSettingsController extends AbstractController
         $project->locales = array_values(array_filter($project->locales, fn ($l) => $l !== $locale));
         $this->em->flush();
 
-        return new JsonResponse($this->serializeLocales($project));
+        return $this->secureJson($this->serializeLocales($project));
     }
 
     private function serializeLocales(Project $project): array
@@ -295,7 +305,7 @@ class ProjectSettingsController extends AbstractController
 
         $members = $this->memberRepo->findByProject($project);
 
-        return new JsonResponse([
+        return $this->secureJson([
             'data' => array_map(fn ($m) => [
                 'id'        => $m->id,
                 'user'      => $m->user ? [
@@ -328,7 +338,7 @@ class ProjectSettingsController extends AbstractController
 
         $tokens = $this->apiTokenRepository->findByProject($project);
 
-        return new JsonResponse([
+        return $this->secureJson([
             'data' => array_map(fn ($t) => [
                 'id'         => $t->id,
                 'name'       => $t->name,
@@ -351,7 +361,7 @@ class ProjectSettingsController extends AbstractController
         if ($this->tokenLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
             if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
                 ], 429);
@@ -360,14 +370,14 @@ class ProjectSettingsController extends AbstractController
 
         $existingCount = count($this->apiTokenRepository->findByProject($project));
         if ($existingCount >= self::MAX_PROJECT_TOKENS) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.token_max_limit_reached', [], 'Maximum token limit reached for this project (50 tokens max).'),
                 'code'  => 'MAX_TOKENS_REACHED',
             ], 422);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.payload_too_large', [], 'Payload exceeds maximum size limit.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -376,7 +386,7 @@ class ProjectSettingsController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -384,19 +394,19 @@ class ProjectSettingsController extends AbstractController
 
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.token_name_required', [], 'Token name is required.'),
                 'code'  => 'NAME_REQUIRED',
             ], 422);
         }
         if (mb_strlen($name) > 255) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.token_name_too_long', [], 'Token name must not exceed 255 characters.'),
                 'code'  => 'NAME_TOO_LONG',
             ], 422);
         }
         if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.token_name_control_chars', [], 'Token name contains invalid control characters.'),
                 'code'  => 'NAME_CONTROL_CHARS',
             ], 422);
@@ -404,7 +414,7 @@ class ProjectSettingsController extends AbstractController
 
         $rawAbilities = $data['abilities'] ?? ['read'];
         if (!is_array($rawAbilities)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.token_invalid_abilities', [], 'Abilities must be an array of valid permissions (read, create, update, delete, *).'),
                 'code'  => 'INVALID_ABILITIES',
             ], 422);
@@ -412,7 +422,7 @@ class ProjectSettingsController extends AbstractController
         $abilities = [];
         foreach ($rawAbilities as $ab) {
             if (!is_string($ab) || !in_array($ab, self::ALLOWED_ABILITIES, true)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.token_invalid_abilities', [], 'Abilities must be an array of valid permissions (read, create, update, delete, *).'),
                     'code'  => 'INVALID_ABILITIES',
                 ], 422);
@@ -426,13 +436,13 @@ class ProjectSettingsController extends AbstractController
             try {
                 $expiresAt = new \DateTimeImmutable((string) $data['expires_at']);
             } catch (\Exception) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.token_invalid_expires_at', [], 'Invalid expiration date format.'),
                     'code'  => 'INVALID_EXPIRES_AT',
                 ], 422);
             }
             if ($expiresAt <= new \DateTimeImmutable()) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.token_expires_future', [], 'Expiration date must be in the future.'),
                     'code'  => 'EXPIRES_MUST_BE_FUTURE',
                 ], 422);
@@ -463,7 +473,7 @@ class ProjectSettingsController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse([
+        return $this->secureJson([
             'id'         => $token->id,
             'name'       => $token->name,
             'token'      => $plainToken, // Only shown once
@@ -482,14 +492,14 @@ class ProjectSettingsController extends AbstractController
 
         $token = $this->apiTokenRepository->findOneBy(['id' => $id, 'project' => $project]);
         if ($token === null) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.token_not_found', [], 'Token not found.'),
                 'code'  => 'TOKEN_NOT_FOUND',
             ], 404);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.payload_too_large', [], 'Payload exceeds maximum size limit.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -498,7 +508,7 @@ class ProjectSettingsController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -507,19 +517,19 @@ class ProjectSettingsController extends AbstractController
         if (isset($data['name'])) {
             $name = trim((string) $data['name']);
             if ($name === '') {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.token_name_required', [], 'Token name is required.'),
                     'code'  => 'NAME_REQUIRED',
                 ], 422);
             }
             if (mb_strlen($name) > 255) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.token_name_too_long', [], 'Token name must not exceed 255 characters.'),
                     'code'  => 'NAME_TOO_LONG',
                 ], 422);
             }
             if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.token_name_control_chars', [], 'Token name contains invalid control characters.'),
                     'code'  => 'NAME_CONTROL_CHARS',
                 ], 422);
@@ -529,7 +539,7 @@ class ProjectSettingsController extends AbstractController
 
         if (isset($data['abilities'])) {
             if (!is_array($data['abilities'])) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.token_invalid_abilities', [], 'Abilities must be an array of valid permissions (read, create, update, delete, *).'),
                     'code'  => 'INVALID_ABILITIES',
                 ], 422);
@@ -537,7 +547,7 @@ class ProjectSettingsController extends AbstractController
             $abilities = [];
             foreach ($data['abilities'] as $ab) {
                 if (!is_string($ab) || !in_array($ab, self::ALLOWED_ABILITIES, true)) {
-                    return new JsonResponse([
+                    return $this->secureJson([
                         'error' => $this->trans('project_settings.token_invalid_abilities', [], 'Abilities must be an array of valid permissions (read, create, update, delete, *).'),
                         'code'  => 'INVALID_ABILITIES',
                     ], 422);
@@ -560,7 +570,7 @@ class ProjectSettingsController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse([
+        return $this->secureJson([
             'id'        => $token->id,
             'name'      => $token->name,
             'abilities' => $token->abilities,
@@ -589,7 +599,7 @@ class ProjectSettingsController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse(['public_api' => $project->publicApi]);
+        return $this->secureJson(['public_api' => $project->publicApi]);
     }
 
     #[Route('/tokens/{id}', name: 'tokens_delete', methods: ['DELETE'])]
@@ -602,7 +612,7 @@ class ProjectSettingsController extends AbstractController
 
         $token = $this->apiTokenRepository->findOneBy(['id' => $id, 'project' => $project]);
         if ($token === null) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.token_not_found', [], 'Token not found.'),
                 'code'  => 'TOKEN_NOT_FOUND',
             ], 404);
@@ -625,7 +635,7 @@ class ProjectSettingsController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     // ─── Token-aware resolver (shared by JWT TTL + Mailer) ─────────────────
@@ -634,7 +644,7 @@ class ProjectSettingsController extends AbstractController
     private function resolveWithTokenFallback(string $projectUuid, Request $request): Project|JsonResponse
     {
         if (!preg_match(self::UUID_REGEX, $projectUuid)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.project_not_found', [], 'Project not found.'),
                 'code'  => 'PROJECT_NOT_FOUND',
             ], 404);
@@ -643,13 +653,13 @@ class ProjectSettingsController extends AbstractController
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.project_not_found', [], 'Project not found.'),
                 'code'  => 'PROJECT_NOT_FOUND',
             ], 404);
         }
         if ($project === null) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.project_not_found', [], 'Project not found.'),
                 'code'  => 'PROJECT_NOT_FOUND',
             ], 404);
@@ -668,7 +678,7 @@ class ProjectSettingsController extends AbstractController
             return $project;
         }
 
-        return new JsonResponse([
+        return $this->secureJson([
             'error' => $this->trans('project_settings.access_denied', [], 'Access denied.'),
             'code'  => 'ACCESS_DENIED',
         ], 403);
@@ -684,7 +694,7 @@ class ProjectSettingsController extends AbstractController
             return $project;
         }
 
-        return new JsonResponse([
+        return $this->secureJson([
             'jwt_access_ttl'  => $project->jwtAccessTtl,
             'jwt_refresh_ttl' => $project->jwtRefreshTtl,
             'defaults' => [
@@ -704,7 +714,7 @@ class ProjectSettingsController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.payload_too_large', [], 'Payload exceeds maximum size limit.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -713,7 +723,7 @@ class ProjectSettingsController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -742,7 +752,7 @@ class ProjectSettingsController extends AbstractController
         $finalAccess  = $project->jwtAccessTtl ?? EndUserJwtService::DEFAULT_ACCESS_TTL;
         $finalRefresh = $project->jwtRefreshTtl ?? EndUserJwtService::DEFAULT_REFRESH_TTL;
         if ($finalRefresh < $finalAccess) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.jwt_refresh_must_gte_access', [
                     '%refresh%' => $finalRefresh,
                     '%access%'  => $finalAccess,
@@ -764,7 +774,7 @@ class ProjectSettingsController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse([
+        return $this->secureJson([
             'jwt_access_ttl'  => $project->jwtAccessTtl,
             'jwt_refresh_ttl' => $project->jwtRefreshTtl,
         ]);
@@ -787,7 +797,7 @@ class ProjectSettingsController extends AbstractController
         }
 
         if ($ttl < 60) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.jwt_ttl_min', [
                     '%label%' => $label,
                 ], sprintf('jwt_%s_ttl must be at least 60 seconds.', $label)),
@@ -796,7 +806,7 @@ class ProjectSettingsController extends AbstractController
         }
 
         if ($ttl > EndUserJwtService::MAX_TTL) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.jwt_ttl_max', [
                     '%label%' => $label,
                     '%max%'   => EndUserJwtService::MAX_TTL,
@@ -820,10 +830,10 @@ class ProjectSettingsController extends AbstractController
 
         $settings = $this->mailerSettingsRepo->findByProject($project);
         if ($settings === null) {
-            return new JsonResponse(['data' => null]);
+            return $this->secureJson(['data' => null]);
         }
 
-        return new JsonResponse(['data' => [
+        return $this->secureJson(['data' => [
             'host'       => $settings->host,
             'port'       => $settings->port,
             'username'   => $settings->username,
@@ -843,7 +853,7 @@ class ProjectSettingsController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.payload_too_large', [], 'Payload exceeds maximum size limit.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
@@ -859,7 +869,7 @@ class ProjectSettingsController extends AbstractController
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
             ], 400);
@@ -869,7 +879,7 @@ class ProjectSettingsController extends AbstractController
             $host = trim((string) $body['host']);
             $reason = null;
             if (!$this->ssrfProtection->isSafeHost($host, $reason)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.mailer_ssrf_detected', [], 'Invalid mail host: private or reserved network addresses are not allowed.'),
                     'code'  => 'SSRF_DETECTED',
                 ], 400);
@@ -880,7 +890,7 @@ class ProjectSettingsController extends AbstractController
         if (isset($body['port'])) {
             $port = (int) $body['port'];
             if (!in_array($port, [25, 465, 587, 2525], true)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.mailer_port_invalid', [], 'Invalid port: only SMTP ports allowed (25, 465, 587, 2525).'),
                     'code'  => 'INVALID_PORT',
                 ], 400);
@@ -891,7 +901,7 @@ class ProjectSettingsController extends AbstractController
         if (isset($body['username'])) {
             $username = trim((string) $body['username']);
             if (mb_strlen($username) > 255 || preg_match('/[\x00-\x1F\x7F]/', $username)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.mailer_username_invalid', [], 'Username contains invalid characters or exceeds 255 characters.'),
                     'code'  => 'INVALID_USERNAME',
                 ], 422);
@@ -902,7 +912,7 @@ class ProjectSettingsController extends AbstractController
         if (isset($body['encryption'])) {
             $enc = (string) $body['encryption'];
             if (!in_array($enc, ['tls', 'ssl', 'none'], true)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.mailer_encryption_invalid', [], 'Invalid encryption: must be tls, ssl, or none.'),
                     'code'  => 'INVALID_ENCRYPTION',
                 ], 400);
@@ -913,7 +923,7 @@ class ProjectSettingsController extends AbstractController
         if (isset($body['from_email'])) {
             $fromEmail = strtolower(trim((string) $body['from_email']));
             if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL) || strlen($fromEmail) > 180) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.mailer_email_invalid', [], 'Invalid from_email address format.'),
                     'code'  => 'INVALID_EMAIL',
                 ], 422);
@@ -924,7 +934,7 @@ class ProjectSettingsController extends AbstractController
         if (isset($body['from_name'])) {
             $fromName = trim((string) $body['from_name']);
             if (mb_strlen($fromName) > 255 || preg_match('/[\r\n\x00-\x1F\x7F]/', $fromName)) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.mailer_name_crlf', [], 'from_name contains invalid characters or newlines.'),
                     'code'  => 'CRLF_DETECTED',
                 ], 422);
@@ -954,7 +964,7 @@ class ProjectSettingsController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse(['data' => [
+        return $this->secureJson(['data' => [
             'host'       => $settings->host,
             'port'       => $settings->port,
             'username'   => $settings->username,
@@ -976,7 +986,7 @@ class ProjectSettingsController extends AbstractController
         if ($this->mailerTestLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
             if (!$this->mailerTestLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('project_settings.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
                 ], 429);
@@ -985,7 +995,7 @@ class ProjectSettingsController extends AbstractController
 
         $settings = $this->mailerSettingsRepo->findByProject($project);
         if ($settings === null || !$settings->enabled) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.mailer_not_configured', [], 'Mailer not configured or disabled.'),
                 'code'  => 'MAILER_DISABLED',
             ], 422);
@@ -1000,7 +1010,7 @@ class ProjectSettingsController extends AbstractController
             );
         } catch (\RuntimeException $e) {
             $this->logger->error('Mailer test failed', ['project' => $projectUuid, 'exception' => $e]);
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.mailer_test_failed', [], 'Failed to send test email. Check your SMTP configuration and try again.'),
                 'code'  => 'MAILER_SEND_FAILED',
             ], 422);
@@ -1017,13 +1027,13 @@ class ProjectSettingsController extends AbstractController
         );
         $this->auditService?->flush();
 
-        return new JsonResponse(['sent' => true]);
+        return $this->secureJson(['sent' => true]);
     }
 
     private function resolveProject(string $projectUuid): Project|JsonResponse
     {
         if (!preg_match(self::UUID_REGEX, $projectUuid)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.project_not_found', [], 'Project not found.'),
                 'code'  => 'PROJECT_NOT_FOUND',
             ], 404);
@@ -1032,13 +1042,13 @@ class ProjectSettingsController extends AbstractController
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
         } catch (\Throwable) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.project_not_found', [], 'Project not found.'),
                 'code'  => 'PROJECT_NOT_FOUND',
             ], 404);
         }
         if ($project === null) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.project_not_found', [], 'Project not found.'),
                 'code'  => 'PROJECT_NOT_FOUND',
             ], 404);
@@ -1046,7 +1056,7 @@ class ProjectSettingsController extends AbstractController
 
         $user = $this->getUser();
         if ($user === null || (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true) && !$project->hasMember($user))) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project_settings.access_denied', [], 'Access denied.'),
                 'code'  => 'ACCESS_DENIED',
             ], 403);

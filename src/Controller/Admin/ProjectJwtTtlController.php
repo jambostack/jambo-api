@@ -15,10 +15,23 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[IsGranted('IS_AUTHENTICATED_FULLY')]
 class ProjectJwtTtlController extends AbstractController
 {
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+    private const MAX_PAYLOAD_BYTES = 16384; // 16 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
 
     #[Route('/api/admin/projects/{uuid}/jwt-ttl', name: 'admin_project_jwt_ttl_get', methods: ['GET'])]
     public function getJwtTtl(string $uuid): JsonResponse
@@ -28,7 +41,7 @@ class ProjectJwtTtlController extends AbstractController
             return $project;
         }
 
-        return new JsonResponse([
+        return $this->secureJson([
             'jwt_access_ttl'  => $project->jwtAccessTtl,
             'jwt_refresh_ttl' => $project->jwtRefreshTtl,
             'defaults' => [
@@ -47,10 +60,14 @@ class ProjectJwtTtlController extends AbstractController
             return $project;
         }
 
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('project.jwt_ttl.payload_too_large', [], 'Payload exceeds maximum size limit (16 KB).')], 413);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('project.invalid_json')], 400);
+            return $this->secureJson(['error' => $this->trans('project.invalid_json')], 400);
         }
 
         $accessVal  = $data['jwt_access_ttl'] ?? null;
@@ -75,7 +92,7 @@ class ProjectJwtTtlController extends AbstractController
         $finalAccess  = EndUserJwtService::resolveTtl($project->jwtAccessTtl, EndUserJwtService::DEFAULT_ACCESS_TTL);
         $finalRefresh = EndUserJwtService::resolveTtl($project->jwtRefreshTtl, EndUserJwtService::DEFAULT_REFRESH_TTL);
         if ($finalRefresh < $finalAccess) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => sprintf(
                     $this->trans('project.jwt_refresh_lt_access'),
                     $finalRefresh, $finalAccess,
@@ -90,13 +107,17 @@ class ProjectJwtTtlController extends AbstractController
 
     private function findProject(string $uuid): Project|JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return $this->secureJson(['error' => $this->trans('project.not_found')], 404);
+        }
+
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('project.not_found')], 404);
+            return $this->secureJson(['error' => $this->trans('project.not_found')], 404);
         }
         if ($project === null) {
-            return new JsonResponse(['error' => $this->trans('project.not_found')], 404);
+            return $this->secureJson(['error' => $this->trans('project.not_found')], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $project);
         return $project;
@@ -109,7 +130,7 @@ class ProjectJwtTtlController extends AbstractController
         }
 
         if (!is_numeric($val) && !is_int($val)) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project.jwt_ttl.invalid_format'),
             ], 422);
         }
@@ -121,14 +142,14 @@ class ProjectJwtTtlController extends AbstractController
 
         if ($ttl < 60) {
             $key = $label === 'access' ? 'project.jwt_access_ttl_min' : 'project.jwt_refresh_ttl_min';
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans($key),
             ], 422);
         }
 
         if ($ttl > EndUserJwtService::MAX_TTL) {
             $key = $label === 'access' ? 'project.jwt_access_ttl_max' : 'project.jwt_refresh_ttl_max';
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => sprintf(
                     $this->trans($key),
                     EndUserJwtService::MAX_TTL,
@@ -139,8 +160,12 @@ class ProjectJwtTtlController extends AbstractController
         return $ttl;
     }
 
-    private function trans(string $id, array $parameters = []): string
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
-        return $this->translator?->trans($id, $parameters, 'messages') ?? $id;
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+
+        return $default ?? $id;
     }
 }

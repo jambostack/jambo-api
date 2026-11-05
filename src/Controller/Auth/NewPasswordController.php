@@ -17,6 +17,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class NewPasswordController extends InertiaController
 {
+    private const MAX_PAYLOAD_BYTES = 16384; // 16 KB
+
     public function __construct(
         private PasswordResetTokenRepository $tokenRepository,
         private UserRepository $userRepository,
@@ -46,6 +48,13 @@ class NewPasswordController extends InertiaController
     #[Route('/reset-password/{token}', name: 'app_reset_password_store', methods: ['POST'])]
     public function store(Request $request, string $token): Response
     {
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->inertia($request, 'auth/reset-password', [
+                'token' => $token,
+                'errors' => ['token' => $this->trans('auth.password_reset.payload_too_large', [], 'Payload exceeds maximum allowed size (16 KB).')],
+            ], 413);
+        }
+
         if ($this->passwordResetLimiter !== null) {
             $limiter = $this->passwordResetLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (!$limiter->consume()->isAccepted()) {

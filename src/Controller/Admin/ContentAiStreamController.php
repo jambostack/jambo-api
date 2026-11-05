@@ -20,6 +20,16 @@ class ContentAiStreamController extends AbstractController
     public const MIN_INPUT_LENGTH = 3;
     public const ALLOWED_ACTIONS = ['summarize', 'expand', 'rewrite', 'fix_grammar', 'translate', 'improve'];
 
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+    private const STREAM_HEADERS = [
+        'Content-Type'           => 'text/event-stream',
+        'Cache-Control'          => 'no-cache, no-store, must-revalidate',
+        'Connection'             => 'keep-alive',
+        'X-Accel-Buffering'      => 'no',
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+    ];
+
     public function __construct(
         private readonly ProjectRepository $projectRepository,
         private readonly AiContentService $aiService,
@@ -57,11 +67,18 @@ class ContentAiStreamController extends AbstractController
                 return new StreamedResponse(function () {
                     echo "data: " . json_encode(['error' => $this->trans('ai_stream.rate_limit_exceeded', [], 'Too many AI stream requests. Please retry later.')]) . "\n\n";
                     flush();
-                }, 429, ['Content-Type' => 'text/event-stream']);
+                }, 429, self::STREAM_HEADERS);
             }
         }
 
         if ($projectUuid !== null) {
+            if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+                return new StreamedResponse(function () {
+                    echo "data: " . json_encode(['error' => $this->trans('ai_stream.project_not_found', [], 'Project not found')]) . "\n\n";
+                    flush();
+                }, 404, self::STREAM_HEADERS);
+            }
+
             try {
                 $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
             } catch (\Throwable) {
@@ -71,7 +88,7 @@ class ContentAiStreamController extends AbstractController
                 return new StreamedResponse(function () {
                     echo "data: " . json_encode(['error' => $this->trans('ai_stream.project_not_found', [], 'Project not found')]) . "\n\n";
                     flush();
-                }, 404, ['Content-Type' => 'text/event-stream']);
+                }, 404, self::STREAM_HEADERS);
             }
             if ($request->attributes->get('_project') !== $project) {
                 $this->checkAccess('content.create', $project);
@@ -89,7 +106,7 @@ class ContentAiStreamController extends AbstractController
             return new StreamedResponse(function () {
                 echo "data: " . json_encode(['error' => $this->trans('ai_stream.input_empty', [], 'Input text is empty')]) . "\n\n";
                 flush();
-            }, 400, ['Content-Type' => 'text/event-stream']);
+            }, 400, self::STREAM_HEADERS);
         }
 
         $text = $this->sanitizePromptInput($rawText);
@@ -98,14 +115,14 @@ class ContentAiStreamController extends AbstractController
             return new StreamedResponse(function () {
                 echo "data: " . json_encode(['error' => $this->trans('ai_stream.input_too_long', ['%max%' => '30,000'], 'Input text exceeds maximum allowed length of 30,000 characters.')]) . "\n\n";
                 flush();
-            }, 400, ['Content-Type' => 'text/event-stream']);
+            }, 400, self::STREAM_HEADERS);
         }
 
         if ($this->containsDangerousPromptBreakout($text)) {
             return new StreamedResponse(function () {
                 echo "data: " . json_encode(['error' => $this->trans('ai_stream.prompt_injection_detected', [], 'Prompt rejected: potentially harmful prompt injection detected.')]) . "\n\n";
                 flush();
-            }, 400, ['Content-Type' => 'text/event-stream']);
+            }, 400, self::STREAM_HEADERS);
         }
 
         $rawTone = (string) ($payload['tone'] ?? 'professional');
@@ -170,10 +187,9 @@ class ContentAiStreamController extends AbstractController
             flush();
         });
 
-        $response->headers->set('Content-Type', 'text/event-stream');
-        $response->headers->set('Cache-Control', 'no-cache, no-transform');
-        $response->headers->set('Connection', 'keep-alive');
-        $response->headers->set('X-Accel-Buffering', 'no');
+        foreach (self::STREAM_HEADERS as $headerName => $headerVal) {
+            $response->headers->set($headerName, $headerVal);
+        }
 
         return $response;
     }

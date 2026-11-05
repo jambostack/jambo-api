@@ -6,6 +6,7 @@ use App\Controller\InertiaController;
 use App\Entity\User;
 use App\Service\Security\PasswordPolicyValidator;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -18,6 +19,13 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class RegisteredUserController extends InertiaController
 {
+    private const MAX_PAYLOAD_BYTES = 16384; // 16 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private EntityManagerInterface $em,
         private UserPasswordHasherInterface $hasher,
@@ -25,6 +33,11 @@ class RegisteredUserController extends InertiaController
         #[Autowire(service: 'limiter.register_limiter')]
         private RateLimiterFactory $registerLimiter,
     ) {}
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
 
     #[Route('/register', name: 'app_register', methods: ['GET'])]
     public function create(Request $request): Response
@@ -41,13 +54,17 @@ class RegisteredUserController extends InertiaController
     {
         $limiter = $this->registerLimiter->create($request->getClientIp());
         if (!$limiter->consume()->isAccepted()) {
-            return $this->json(['error' => $this->trans('auth.register.rate_limit_exceeded', [], 'Too many requests. Please try again later.')], 429);
+            return $this->secureJson(['error' => $this->trans('auth.register.rate_limit_exceeded', [], 'Too many requests. Please try again later.')], 429);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('auth.register.payload_too_large', [], 'Payload exceeds maximum allowed size (16 KB).')], 413);
         }
 
         try {
             $data = $request->getPayload()->all();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('auth.register.invalid_json', [], 'Invalid JSON body')], 400);
+            return $this->secureJson(['error' => $this->trans('auth.register.invalid_json', [], 'Invalid JSON body')], 400);
         }
 
         $errors = $this->validator->validate($data, new Assert\Collection([
@@ -58,21 +75,21 @@ class RegisteredUserController extends InertiaController
         ]));
 
         if (count($errors) > 0) {
-            return $this->json(['errors' => $this->formatErrors($errors)], 422);
+            return $this->secureJson(['errors' => $this->formatErrors($errors)], 422);
         }
 
         if ($data['password'] !== $data['password_confirmation']) {
-            return $this->json(['errors' => ['password_confirmation' => $this->trans('auth.register.passwords_do_not_match', [], 'Passwords do not match.')]], 422);
+            return $this->secureJson(['errors' => ['password_confirmation' => $this->trans('auth.register.passwords_do_not_match', [], 'Passwords do not match.')]], 422);
         }
 
         if ($this->em->getRepository(User::class)->findOneBy(['email' => $data['email']]) !== null) {
-            return $this->json(['errors' => ['email' => $this->trans('auth.register.email_in_use', [], 'This email is already in use.')]], 422);
+            return $this->secureJson(['errors' => ['email' => $this->trans('auth.register.email_in_use', [], 'This email is already in use.')]], 422);
         }
 
         $pwdValidator = new PasswordPolicyValidator();
         $pwdResult = $pwdValidator->validateAdminPassword($data['password'], $data['email'], $data['name']);
         if (!$pwdResult['valid']) {
-            return $this->json(['errors' => ['password' => $pwdResult['errors'][0]]], 422);
+            return $this->secureJson(['errors' => ['password' => $pwdResult['errors'][0]]], 422);
         }
 
         $user = new User();

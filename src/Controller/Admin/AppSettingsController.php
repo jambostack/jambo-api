@@ -21,6 +21,13 @@ use Vich\UploaderBundle\Handler\UploadHandler;
 #[Route('/admin/api/app-settings', name: 'admin_app_settings_')]
 class AppSettingsController extends AbstractController
 {
+    private const MAX_JSON_PAYLOAD_BYTES = 524288; // 512 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     private readonly SsrfProtectionService $ssrfProtection;
 
     public function __construct(
@@ -41,6 +48,11 @@ class AppSettingsController extends AbstractController
             return $this->translator->trans($id, $parameters);
         }
         return $default ?? $id;
+    }
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -72,7 +84,7 @@ class AppSettingsController extends AbstractController
     {
         $allowed = array_keys(self::PROVIDER_ENDPOINTS);
         if (!\in_array($provider, $allowed, true)) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('app_settings.admin.unknown_provider', [], 'Unknown provider'),
                 'code' => 'UNKNOWN_PROVIDER',
             ], 400);
@@ -86,25 +98,25 @@ class AppSettingsController extends AbstractController
 
         // Perplexity — liste statique
         if ($meta['auth'] === 'static') {
-            return $this->json(['models' => self::PERPLEXITY_MODELS]);
+            return $this->secureJson(['models' => self::PERPLEXITY_MODELS]);
         }
 
         // Ollama — endpoint local
         if ($provider === 'ollama') {
             if (empty($baseUrl)) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('app_settings.admin.ollama_url_not_configured', [], 'Ollama URL not configured'),
                     'code' => 'OLLAMA_URL_NOT_CONFIGURED',
                 ], 422);
             }
             if (!filter_var($baseUrl, FILTER_VALIDATE_URL) || strlen($baseUrl) > 2048) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('app_settings.admin.invalid_ollama_url', [], 'Invalid Ollama URL'),
                     'code' => 'INVALID_OLLAMA_URL',
                 ], 422);
             }
             if (preg_match('/[\r\n\x00-\x1F\x7F]/', $baseUrl)) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('app_settings.admin.invalid_ollama_url', [], 'Invalid Ollama URL'),
                     'code' => 'INVALID_OLLAMA_URL',
                 ], 422);
@@ -112,20 +124,20 @@ class AppSettingsController extends AbstractController
             $parsed = parse_url($baseUrl);
             $scheme = strtolower($parsed['scheme'] ?? '');
             if (!in_array($scheme, ['http', 'https'], true)) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('app_settings.admin.ollama_scheme_forbidden', [], 'Only http and https schemes are allowed for Ollama'),
                     'code' => 'OLLAMA_SCHEME_FORBIDDEN',
                 ], 422);
             }
             if (isset($parsed['user']) || isset($parsed['pass'])) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('app_settings.admin.invalid_ollama_url', [], 'Invalid Ollama URL'),
                     'code' => 'USERINFO_FORBIDDEN',
                 ], 422);
             }
             $host = strtolower($parsed['host'] ?? '');
             if ($this->isCloudMetadataOrForbiddenHost($host)) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('app_settings.admin.ollama_metadata_forbidden', [], 'Ollama URL cannot target cloud metadata or reserved infrastructure'),
                     'code' => 'OLLAMA_METADATA_FORBIDDEN',
                 ], 403);
@@ -134,25 +146,25 @@ class AppSettingsController extends AbstractController
             $url = rtrim($baseUrl, '/') . '/api/tags';
             $raw = $this->fetchUrl($url, [], 6);
             if ($raw === null) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('app_settings.admin.could_not_reach_ollama', ['%url%' => $baseUrl], 'Could not reach Ollama at ' . $baseUrl),
                     'code' => 'OLLAMA_UNREACHABLE',
                 ], 502);
             }
             $data = json_decode($raw, true);
             if (!is_array($data)) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('app_settings.admin.unexpected_ollama_response', [], 'Unexpected response from Ollama'),
                     'code' => 'OLLAMA_UNEXPECTED_RESPONSE',
                 ], 502);
             }
             $models = array_column($data['models'] ?? [], 'name');
-            return $this->json(['models' => $models]);
+            return $this->secureJson(['models' => $models]);
         }
 
         // Providers à clé API
         if (empty($key)) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('app_settings.admin.key_not_configured', ['%provider%' => $provider], 'API key not configured for ' . $provider),
                 'code' => 'API_KEY_NOT_CONFIGURED',
             ], 422);
@@ -172,7 +184,7 @@ class AppSettingsController extends AbstractController
 
         $raw = $this->fetchUrl($url, $headers, 10);
         if ($raw === null) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('app_settings.admin.provider_api_unreachable', [], 'Provider API unreachable'),
                 'code' => 'PROVIDER_API_UNREACHABLE',
             ], 502);
@@ -180,7 +192,7 @@ class AppSettingsController extends AbstractController
 
         $data = json_decode($raw, true);
         if (!is_array($data)) {
-            return $this->json([
+            return $this->secureJson([
                 'error' => $this->trans('app_settings.admin.unexpected_provider_response', [], 'Unexpected response from provider'),
                 'code' => 'PROVIDER_UNEXPECTED_RESPONSE',
             ], 502);
@@ -204,7 +216,7 @@ class AppSettingsController extends AbstractController
 
         sort($models);
 
-        return $this->json(['models' => $models]);
+        return $this->secureJson(['models' => $models]);
     }
 
     public function isCloudMetadataOrForbiddenHost(string $host): bool
@@ -318,7 +330,7 @@ class AppSettingsController extends AbstractController
     {
         $settings = $this->repository->getOrCreate();
 
-        return $this->json($this->serialize($settings));
+        return $this->secureJson($this->serialize($settings));
     }
 
     #[Route('', name: 'update', methods: ['POST'])]
@@ -330,10 +342,17 @@ class AppSettingsController extends AbstractController
         // Handle JSON fields
         $jsonData = null;
         if ($request->getContentTypeFormat() === 'json') {
+            if (strlen($request->getContent()) > self::MAX_JSON_PAYLOAD_BYTES) {
+                return $this->secureJson([
+                    'error' => $this->trans('app_settings.admin.payload_too_large', [], 'Payload exceeds maximum allowed size (512 KB).'),
+                    'code' => 'PAYLOAD_TOO_LARGE',
+                ], 413);
+            }
+
             try {
                 $jsonData = $request->toArray();
             } catch (\Throwable) {
-                return $this->json([
+                return $this->secureJson([
                     'error' => $this->trans('app_settings.admin.invalid_json_body', [], 'Invalid JSON body'),
                     'code' => 'INVALID_JSON',
                 ], 400);
@@ -341,19 +360,19 @@ class AppSettingsController extends AbstractController
             if (isset($jsonData['appName']) && trim((string) $jsonData['appName']) !== '') {
                 $name = trim((string) $jsonData['appName']);
                 if (mb_strlen($name) > 100) {
-                    return $this->json([
+                    return $this->secureJson([
                         'errors' => ['appName' => $this->trans('app_settings.admin.app_name_too_long', [], 'App name must not exceed 100 characters')],
                         'code' => 'APP_NAME_TOO_LONG',
                     ], 422);
                 }
                 if (preg_match('/[\r\n\x00-\x1F\x7F]/', $name)) {
-                    return $this->json([
+                    return $this->secureJson([
                         'errors' => ['appName' => $this->trans('app_settings.admin.app_name_control_chars', [], 'App name contains invalid control characters')],
                         'code' => 'APP_NAME_INVALID',
                     ], 422);
                 }
                 if (str_contains($name, '<') || str_contains($name, '>') || preg_match('/<\s*script/i', $name)) {
-                    return $this->json([
+                    return $this->secureJson([
                         'errors' => ['appName' => $this->trans('app_settings.admin.app_name_xss_detected', [], 'App name contains disallowed HTML tags or script elements')],
                         'code' => 'APP_NAME_XSS_DETECTED',
                     ], 422);
@@ -380,7 +399,7 @@ class AppSettingsController extends AbstractController
             }
 
             if ($_ENV['DEMO_MODE'] ?? false) {
-                return $this->json([
+                return $this->secureJson([
                     'errors' => [$formField => $this->trans('app_settings.admin.demo_mode_disabled', [], 'Logo/icon changes are disabled in demo mode.')],
                     'code' => 'DEMO_MODE_DISABLED',
                 ], 403);
@@ -389,7 +408,7 @@ class AppSettingsController extends AbstractController
             $allowIco = ($formField === 'favicon');
             $error = $this->validateImageFile($file, $allowIco);
             if ($error !== null) {
-                return $this->json(['errors' => [$formField => $error]], 422);
+                return $this->secureJson(['errors' => [$formField => $error]], 422);
             }
 
             // Assainir les SVG uploadés (XSS via <script> dans les logos)
@@ -431,7 +450,7 @@ class AppSettingsController extends AbstractController
                         $rawUrl = trim((string) $p['url']);
                         if ($rawUrl !== '') {
                             if (strlen($rawUrl) > 2048 || !filter_var($rawUrl, FILTER_VALIDATE_URL) || preg_match('/[\r\n\x00-\x1F\x7F]/', $rawUrl)) {
-                                return $this->json([
+                                return $this->secureJson([
                                     'errors' => ['aiProviders' => $this->trans('app_settings.admin.invalid_provider_url', [], 'Invalid or forbidden provider URL')],
                                     'code' => 'INVALID_PROVIDER_URL',
                                 ], 422);
@@ -439,14 +458,14 @@ class AppSettingsController extends AbstractController
                             $parsedUrl = parse_url($rawUrl);
                             $scheme = strtolower($parsedUrl['scheme'] ?? '');
                             if (!in_array($scheme, ['http', 'https'], true)) {
-                                return $this->json([
+                                return $this->secureJson([
                                     'errors' => ['aiProviders' => $this->trans('app_settings.admin.invalid_provider_url', [], 'Invalid or forbidden provider URL')],
                                     'code' => 'INVALID_PROVIDER_URL',
                                 ], 422);
                             }
                             $host = strtolower($parsedUrl['host'] ?? '');
                             if ($this->isCloudMetadataOrForbiddenHost($host)) {
-                                return $this->json([
+                                return $this->secureJson([
                                     'errors' => ['aiProviders' => $this->trans('app_settings.admin.ollama_metadata_forbidden', [], 'Ollama URL cannot target cloud metadata or reserved infrastructure')],
                                     'code' => 'OLLAMA_METADATA_FORBIDDEN',
                                 ], 422);
@@ -513,7 +532,7 @@ class AppSettingsController extends AbstractController
                     if (array_key_exists('name', $p)) {
                         $pName = trim((string) $p['name']);
                         if (mb_strlen($pName) > 128 || preg_match('/[\r\n\x00-\x1F\x7F]/', $pName) || str_contains($pName, '<') || str_contains($pName, '>')) {
-                            return $this->json([
+                            return $this->secureJson([
                                 'errors' => ['oidcProviders' => $this->trans('app_settings.admin.invalid_oidc_name', [], 'OIDC provider name is invalid or contains disallowed characters')],
                                 'code' => 'INVALID_OIDC_NAME',
                             ], 422);
@@ -524,7 +543,7 @@ class AppSettingsController extends AbstractController
                         $rawIssuer = trim((string) $p['issuer']);
                         if ($rawIssuer !== '') {
                             if (strlen($rawIssuer) > 2048 || !filter_var($rawIssuer, FILTER_VALIDATE_URL) || preg_match('/[\r\n\x00-\x1F\x7F]/', $rawIssuer)) {
-                                return $this->json([
+                                return $this->secureJson([
                                     'errors' => ['oidcProviders' => $this->trans('app_settings.admin.invalid_oidc_issuer', [], 'Invalid or forbidden OIDC issuer URL')],
                                     'code' => 'INVALID_OIDC_ISSUER',
                                 ], 422);
@@ -532,14 +551,14 @@ class AppSettingsController extends AbstractController
                             $parsedIssuer = parse_url($rawIssuer);
                             $scheme = strtolower($parsedIssuer['scheme'] ?? '');
                             if (!in_array($scheme, ['http', 'https'], true)) {
-                                return $this->json([
+                                return $this->secureJson([
                                     'errors' => ['oidcProviders' => $this->trans('app_settings.admin.invalid_oidc_issuer', [], 'Invalid or forbidden OIDC issuer URL')],
                                     'code' => 'INVALID_OIDC_ISSUER',
                                 ], 422);
                             }
                             $host = strtolower($parsedIssuer['host'] ?? '');
                             if ($this->isCloudMetadataOrForbiddenHost($host)) {
-                                return $this->json([
+                                return $this->secureJson([
                                     'errors' => ['oidcProviders' => $this->trans('app_settings.admin.invalid_oidc_issuer', [], 'Invalid or forbidden OIDC issuer URL')],
                                     'code' => 'INVALID_OIDC_ISSUER',
                                 ], 422);
@@ -578,7 +597,7 @@ class AppSettingsController extends AbstractController
             $this->cache->delete('app_settings_data');
         }
 
-        return $this->json($this->serialize($settings));
+        return $this->secureJson($this->serialize($settings));
     }
 
     private function validateImageFile(UploadedFile $file, bool $allowIco = false): ?string

@@ -7,6 +7,24 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.113] — 2026-11-05
+
+### Admin, Settings & Auth Controllers Security Hardening, RBAC & Strict I18N
+- **Admin & Settings Security Hardening (`SECURITY_HEADERS`)**:
+  - Enforced `SECURITY_HEADERS` (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Cache-Control: no-store`) across all Admin and Settings controllers: `FormController`, `RedirectController`, `AppSettingsController`, `ProjectStorageController`, `ProjectJwtTtlController`, `ProjectMailerSettingsController`, `ContentAiStreamController`, `ProjectSettingsController`, `SecurityController`, `ProfileController`, `PasswordController`, `PersonalAccessTokenController`, `LocaleController`, and `AdminApiOpenApiController`.
+  - Added strict payload size limits across all administrative mutating endpoints (`FormController::updateSubmission`, `RedirectController::create` & `update`, `AppSettingsController::update`, `ProjectStorageController` profiles and rules, `ProjectJwtTtlController`, `ProjectMailerSettingsController`, `SecurityController` 2FA setup and confirmation endpoints).
+  - Enforced strict UUID RFC 4122 regex validation before database resolution in `FormController`, `RedirectController`, `ProjectStorageController`, `ProjectJwtTtlController`, `ProjectMailerSettingsController`, and `ContentAiStreamController`.
+  - Protected `ContentAiStreamController` streamed responses with security headers and tenant access checks.
+- **Auth & 2FA Security Hardening**:
+  - Enforced security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`) on Inertia responses and JSON responses across `ConfirmablePasswordController`, `RegisteredUserController`, `TwoFactorChallengeController`, `PasswordResetLinkController`, `NewPasswordController`.
+  - Added strict payload size limits (16 KB) on registration, password confirmation, password reset links, new passwords, and 2FA challenge verification.
+  - Fixed 2FA challenge flow access control in `security.yaml` by ensuring `^/two-factor-challenge` allows `PUBLIC_ACCESS` during the intermediate step before session creation.
+  - Refactored `TwoFactorMailer` and `PasswordResetLinkController` to eliminate hardcoded email subjects and HTML bodies, integrating Symfony Translator with fallback.
+- **Strict I18N Parity**:
+  - Added payload error translation keys (`redirect.admin.payload_too_large`, `app_settings.admin.payload_too_large`, `project.storage.payload_too_large`, `project.jwt_ttl.payload_too_large`, `security.2fa.payload_too_large`, `auth.*`) across `translations/messages.{en,fr,es,ar}.php` maintaining 100% 4-language parity.
+- **Automated Test Suites**:
+  - Added dedicated test suites `Cycle52AdminSecurityHardeningTest` (8 tests, 80 assertions) and `Cycle52AuthSecurityHardeningTest` (7 tests, 86 assertions) with 100% pass rate.
+
 ## [1.26.112] — 2026-11-05
 
 ### Core API & Controller Security Hardening, Security Headers, Strict I18N Parity

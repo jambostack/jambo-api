@@ -21,6 +21,14 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[IsGranted('IS_AUTHENTICATED_FULLY')]
 class ProjectStorageController extends AbstractController
 {
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+    private const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ProjectStorageProfileRepository $profileRepo,
@@ -30,6 +38,11 @@ class ProjectStorageController extends AbstractController
         private readonly ?RateLimiterFactory $storageTestLimiter = null,
         private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
 
     // ── Stratégie ──────────────────────────────────────────────────────
 
@@ -41,7 +54,7 @@ class ProjectStorageController extends AbstractController
             return $project;
         }
 
-        return new JsonResponse([
+        return $this->secureJson([
             'strategy' => $project->storageStrategy,
             'profiles' => array_map(
                 fn (ProjectStorageProfile $p) => $p->toArray(),
@@ -69,16 +82,20 @@ class ProjectStorageController extends AbstractController
             return $project;
         }
 
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON')], 400);
+            return $this->secureJson(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON')], 400);
         }
 
         if (isset($body['strategy'])) {
             $strategy = (string) $body['strategy'];
             if (!in_array($strategy, ['default_only', 'mirror_all', 'rules'], true)) {
-                return new JsonResponse(['error' => $this->trans('project.storage.invalid_strategy', [], 'Invalid strategy.')], 400);
+                return $this->secureJson(['error' => $this->trans('project.storage.invalid_strategy', [], 'Invalid strategy.')], 400);
             }
             $project->storageStrategy = $strategy;
         }
@@ -98,10 +115,14 @@ class ProjectStorageController extends AbstractController
             return $project;
         }
 
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON')], 400);
+            return $this->secureJson(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON')], 400);
         }
 
         $profile = $this->hydrateProfile(new ProjectStorageProfile(), $body, $project);
@@ -116,7 +137,7 @@ class ProjectStorageController extends AbstractController
         $this->em->persist($profile);
         $this->em->flush();
 
-        return new JsonResponse(['data' => $profile->toArray()], 201);
+        return $this->secureJson(['data' => $profile->toArray()], 201);
     }
 
     #[Route('/api/admin/projects/{uuid}/storage/profiles/{id}', name: 'admin_project_storage_profile_update', methods: ['PUT'])]
@@ -129,13 +150,17 @@ class ProjectStorageController extends AbstractController
 
         $profile = $this->profileRepo->find($id);
         if ($profile === null || $profile->project->id !== $project->id) {
-            return new JsonResponse(['error' => $this->trans('project.storage.profile_not_found', [], 'Profile not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('project.storage.profile_not_found', [], 'Profile not found.')], 404);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON')], 400);
+            return $this->secureJson(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON')], 400);
         }
 
         $res = $this->hydrateProfile($profile, $body, $project);
@@ -149,7 +174,7 @@ class ProjectStorageController extends AbstractController
 
         $this->em->flush();
 
-        return new JsonResponse(['data' => $profile->toArray()]);
+        return $this->secureJson(['data' => $profile->toArray()]);
     }
 
     #[Route('/api/admin/projects/{uuid}/storage/profiles/{id}/test', name: 'admin_project_storage_profile_test', methods: ['POST'])]
@@ -163,13 +188,13 @@ class ProjectStorageController extends AbstractController
         if ($this->storageTestLimiter !== null) {
             $limiter = $this->storageTestLimiter->create($request->getClientIp() ?: '127.0.0.1');
             if (!$limiter->consume()->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('project.storage.too_many_tests', [], 'Too many test requests. Please retry later.')], 429);
+                return $this->secureJson(['error' => $this->trans('project.storage.too_many_tests', [], 'Too many test requests. Please retry later.')], 429);
             }
         }
 
         $profile = $this->profileRepo->find($id);
         if ($profile === null || $profile->project->id !== $project->id) {
-            return new JsonResponse(['error' => $this->trans('project.storage.profile_not_found', [], 'Profile not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('project.storage.profile_not_found', [], 'Profile not found.')], 404);
         }
 
         try {
@@ -177,16 +202,16 @@ class ProjectStorageController extends AbstractController
             $testFileName = '.jambo_test_' . bin2hex(random_bytes(8)) . '.txt';
             $filesystem->write($testFileName, 'ping');
             if (!$filesystem->fileExists($testFileName)) {
-                return new JsonResponse(['error' => $this->trans('project.storage.test_read_failed', [], 'Storage test failed: written file was not readable.')], 422);
+                return $this->secureJson(['error' => $this->trans('project.storage.test_read_failed', [], 'Storage test failed: written file was not readable.')], 422);
             }
             $filesystem->delete($testFileName);
 
-            return new JsonResponse([
+            return $this->secureJson([
                 'success' => true,
                 'message' => $this->trans('project.storage.test_success', ['%driver%' => $profile->driver], sprintf('Storage driver "%s" tested successfully.', $profile->driver)),
             ]);
         } catch (\Throwable $e) {
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('project.storage.test_failed', ['%message%' => $e->getMessage()], 'Storage test failed: ' . $e->getMessage()),
             ], 422);
         }
@@ -201,22 +226,22 @@ class ProjectStorageController extends AbstractController
         }
 
         if ($this->profileRepo->countByProject($project) <= 1) {
-            return new JsonResponse(['error' => $this->trans('project.storage.cannot_delete_last_profile', [], 'Cannot delete the last storage profile.')], 422);
+            return $this->secureJson(['error' => $this->trans('project.storage.cannot_delete_last_profile', [], 'Cannot delete the last storage profile.')], 422);
         }
 
         $profile = $this->profileRepo->find($id);
         if ($profile === null || $profile->project->id !== $project->id) {
-            return new JsonResponse(['error' => $this->trans('project.storage.profile_not_found', [], 'Profile not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('project.storage.profile_not_found', [], 'Profile not found.')], 404);
         }
 
         if ($profile->isDefault) {
-            return new JsonResponse(['error' => $this->trans('project.storage.cannot_delete_default_profile', [], 'Cannot delete the default profile. Set another profile as default first.')], 422);
+            return $this->secureJson(['error' => $this->trans('project.storage.cannot_delete_default_profile', [], 'Cannot delete the default profile. Set another profile as default first.')], 422);
         }
 
         $this->em->remove($profile);
         $this->em->flush();
 
-        return new JsonResponse(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     // ── Règles CRUD ────────────────────────────────────────────────────
@@ -229,10 +254,14 @@ class ProjectStorageController extends AbstractController
             return $project;
         }
 
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON')], 400);
+            return $this->secureJson(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON')], 400);
         }
 
         $rule = $this->hydrateRule(new StorageRule(), $body, $project);
@@ -243,7 +272,7 @@ class ProjectStorageController extends AbstractController
         $this->em->persist($rule);
         $this->em->flush();
 
-        return new JsonResponse($this->serializeRule($rule), 201);
+        return $this->secureJson($this->serializeRule($rule), 201);
     }
 
     #[Route('/api/admin/projects/{uuid}/storage/rules/{id}', name: 'admin_project_storage_rule_update', methods: ['PUT'])]
@@ -256,13 +285,17 @@ class ProjectStorageController extends AbstractController
 
         $rule = $this->ruleRepo->find($id);
         if ($rule === null || $rule->project->id !== $project->id) {
-            return new JsonResponse(['error' => $this->trans('project.storage.rule_not_found', [], 'Rule not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('project.storage.rule_not_found', [], 'Rule not found.')], 404);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
         try {
             $body = $request->toArray();
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON')], 400);
+            return $this->secureJson(['error' => $this->trans('project.invalid_json', [], 'Invalid JSON')], 400);
         }
 
         $result = $this->hydrateRule($rule, $body, $project);
@@ -271,7 +304,7 @@ class ProjectStorageController extends AbstractController
         }
         $this->em->flush();
 
-        return new JsonResponse($this->serializeRule($rule));
+        return $this->secureJson($this->serializeRule($rule));
     }
 
     #[Route('/api/admin/projects/{uuid}/storage/rules/{id}', name: 'admin_project_storage_rule_delete', methods: ['DELETE'])]
@@ -284,26 +317,30 @@ class ProjectStorageController extends AbstractController
 
         $rule = $this->ruleRepo->find($id);
         if ($rule === null || $rule->project->id !== $project->id) {
-            return new JsonResponse(['error' => $this->trans('project.storage.rule_not_found', [], 'Rule not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('project.storage.rule_not_found', [], 'Rule not found.')], 404);
         }
 
         $this->em->remove($rule);
         $this->em->flush();
 
-        return new JsonResponse(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     // ─── Private helpers ────────────────────────────────────────────────
 
     private function findProject(string $uuid): Project|JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return $this->secureJson(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
+        }
+
         try {
             $project = $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
         } catch (\Throwable) {
-            return new JsonResponse(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
         }
         if ($project === null) {
-            return new JsonResponse(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('project.not_found', [], 'Project not found')], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $project);
 
@@ -324,14 +361,14 @@ class ProjectStorageController extends AbstractController
         if (isset($body['name'])) {
             $name = trim((string) $body['name']);
             if ($name === '' || mb_strlen($name) > 100 || preg_match('/[\x00-\x1F\x7F]/', $name)) {
-                return new JsonResponse(['error' => $this->trans('project.storage.invalid_profile_name', [], 'Invalid profile name: must be between 1 and 100 characters without control characters.')], 422);
+                return $this->secureJson(['error' => $this->trans('project.storage.invalid_profile_name', [], 'Invalid profile name: must be between 1 and 100 characters without control characters.')], 422);
             }
             $p->name = $name;
         }
         if (isset($body['driver'])) {
             $driver = (string) $body['driver'];
             if (!in_array($driver, ['local', 's3'], true)) {
-                return new JsonResponse(['error' => $this->trans('project.storage.invalid_driver', ['%driver%' => $driver], "Invalid storage driver: $driver. Allowed: local, s3.")], 422);
+                return $this->secureJson(['error' => $this->trans('project.storage.invalid_driver', ['%driver%' => $driver], "Invalid storage driver: $driver. Allowed: local, s3.")], 422);
             }
             $p->driver = $driver;
         }
@@ -347,21 +384,21 @@ class ProjectStorageController extends AbstractController
         if (isset($body['s3_key'])) {
             $key = trim((string) $body['s3_key']);
             if (mb_strlen($key) > 255 || preg_match('/[\x00-\x1F\x7F]/', $key)) {
-                return new JsonResponse(['error' => $this->trans('project.storage.invalid_s3_key', [], 'Invalid S3 access key: must not exceed 255 characters without control characters.')], 422);
+                return $this->secureJson(['error' => $this->trans('project.storage.invalid_s3_key', [], 'Invalid S3 access key: must not exceed 255 characters without control characters.')], 422);
             }
             $p->s3Key = $key;
         }
         if (isset($body['s3_region'])) {
             $region = trim((string) $body['s3_region']);
             if (mb_strlen($region) > 64 || ($region !== '' && !preg_match('/^[a-z0-9-]+$/i', $region))) {
-                return new JsonResponse(['error' => $this->trans('project.storage.invalid_s3_region', [], 'Invalid S3 region: must not exceed 64 characters and contain only alphanumeric characters and hyphens.')], 422);
+                return $this->secureJson(['error' => $this->trans('project.storage.invalid_s3_region', [], 'Invalid S3 region: must not exceed 64 characters and contain only alphanumeric characters and hyphens.')], 422);
             }
             $p->s3Region = $region;
         }
         if (isset($body['s3_bucket'])) {
             $bucket = trim((string) $body['s3_bucket']);
             if (mb_strlen($bucket) > 63 || ($bucket !== '' && !preg_match('/^[a-z0-9.\-_]+$/i', $bucket))) {
-                return new JsonResponse(['error' => $this->trans('project.storage.invalid_s3_bucket', [], 'Invalid S3 bucket name: must be between 1 and 63 valid DNS characters.')], 422);
+                return $this->secureJson(['error' => $this->trans('project.storage.invalid_s3_bucket', [], 'Invalid S3 bucket name: must be between 1 and 63 valid DNS characters.')], 422);
             }
             $p->s3Bucket = $bucket;
         }
@@ -369,12 +406,12 @@ class ProjectStorageController extends AbstractController
             $endpoint = trim((string) $body['s3_endpoint']);
             if ($endpoint !== '') {
                 if (mb_strlen($endpoint) > 2048) {
-                    return new JsonResponse(['error' => $this->trans('project.storage.invalid_s3_endpoint', [], 'Invalid S3 endpoint URL: must be a valid public HTTP/HTTPS URL.')], 422);
+                    return $this->secureJson(['error' => $this->trans('project.storage.invalid_s3_endpoint', [], 'Invalid S3 endpoint URL: must be a valid public HTTP/HTTPS URL.')], 422);
                 }
                 try {
                     $this->driverFactory->validateS3Endpoint($endpoint);
                 } catch (\Throwable) {
-                    return new JsonResponse(['error' => $this->trans('project.storage.invalid_s3_endpoint', [], 'Invalid S3 endpoint URL: must be a valid public HTTP/HTTPS URL.')], 422);
+                    return $this->secureJson(['error' => $this->trans('project.storage.invalid_s3_endpoint', [], 'Invalid S3 endpoint URL: must be a valid public HTTP/HTTPS URL.')], 422);
                 }
             }
             $p->s3Endpoint = $endpoint !== '' ? $endpoint : null;
@@ -386,10 +423,10 @@ class ProjectStorageController extends AbstractController
             $baseUrl = trim((string) $body['base_url']);
             if ($baseUrl !== '') {
                 if (mb_strlen($baseUrl) > 2048 || preg_match('/[\x00-\x1F\x7F]/', $baseUrl)) {
-                    return new JsonResponse(['error' => $this->trans('project.storage.invalid_base_url', [], 'Invalid base URL: must not exceed 2048 characters and must be a valid URL or path.')], 422);
+                    return $this->secureJson(['error' => $this->trans('project.storage.invalid_base_url', [], 'Invalid base URL: must not exceed 2048 characters and must be a valid URL or path.')], 422);
                 }
                 if (!str_starts_with($baseUrl, '/') && !filter_var($baseUrl, FILTER_VALIDATE_URL)) {
-                    return new JsonResponse(['error' => $this->trans('project.storage.invalid_base_url', [], 'Invalid base URL: must not exceed 2048 characters and must be a valid URL or path.')], 422);
+                    return $this->secureJson(['error' => $this->trans('project.storage.invalid_base_url', [], 'Invalid base URL: must not exceed 2048 characters and must be a valid URL or path.')], 422);
                 }
             }
             $p->baseUrl = $baseUrl !== '' ? $baseUrl : null;
@@ -398,7 +435,7 @@ class ProjectStorageController extends AbstractController
             $rootPath = trim((string) $body['root_path']);
             if ($rootPath !== '') {
                 if (mb_strlen($rootPath) > 500 || str_contains($rootPath, "\0") || str_contains($rootPath, '..')) {
-                    return new JsonResponse(['error' => $this->trans('project.storage.invalid_root_path', [], 'Invalid root path: directory traversal (..) or control characters are not allowed.')], 422);
+                    return $this->secureJson(['error' => $this->trans('project.storage.invalid_root_path', [], 'Invalid root path: directory traversal (..) or control characters are not allowed.')], 422);
                 }
             }
             $p->rootPath = $rootPath !== '' ? $rootPath : null;
@@ -407,7 +444,7 @@ class ProjectStorageController extends AbstractController
         if (!empty($body['s3_secret'] ?? '')) {
             $secret = (string) $body['s3_secret'];
             if (mb_strlen($secret) > 1024) {
-                return new JsonResponse(['error' => $this->trans('project.storage.s3_secret_too_long', [], 'S3 secret key must not exceed 1024 characters.')], 422);
+                return $this->secureJson(['error' => $this->trans('project.storage.s3_secret_too_long', [], 'S3 secret key must not exceed 1024 characters.')], 422);
             }
             $p->s3Secret = $this->driverFactory->encrypt($secret);
         }
@@ -422,7 +459,7 @@ class ProjectStorageController extends AbstractController
         if (isset($body['mime_type_pattern'])) {
             $mime = trim((string) $body['mime_type_pattern']);
             if ($mime !== '' && (mb_strlen($mime) > 100 || preg_match('/[\x00-\x1F\x7F]/', $mime))) {
-                return new JsonResponse(['error' => $this->trans('project.storage.invalid_mime_pattern', [], 'Invalid MIME type pattern: must not exceed 100 characters.')], 422);
+                return $this->secureJson(['error' => $this->trans('project.storage.invalid_mime_pattern', [], 'Invalid MIME type pattern: must not exceed 100 characters.')], 422);
             }
             $r->mimeTypePattern = $mime !== '' ? $mime : null;
         }
@@ -431,7 +468,7 @@ class ProjectStorageController extends AbstractController
             if ($ext !== '') {
                 $ext = ltrim($ext, '.');
                 if (mb_strlen($ext) > 20 || !preg_match('/^[a-z0-9]+$/i', $ext)) {
-                    return new JsonResponse(['error' => $this->trans('project.storage.invalid_extension', [], 'Invalid extension: must not exceed 20 alphanumeric characters.')], 422);
+                    return $this->secureJson(['error' => $this->trans('project.storage.invalid_extension', [], 'Invalid extension: must not exceed 20 alphanumeric characters.')], 422);
                 }
             }
             $r->extension = $ext !== '' ? strtolower($ext) : null;
@@ -440,7 +477,7 @@ class ProjectStorageController extends AbstractController
             $maxSize = $body['max_size'];
             if ($maxSize !== null && $maxSize !== '') {
                 if (!is_numeric($maxSize) || (int) $maxSize < 0 || (int) $maxSize > 10737418240) {
-                    return new JsonResponse(['error' => $this->trans('project.storage.invalid_max_size', [], 'Invalid max size: must be a positive integer not exceeding 10GB.')], 422);
+                    return $this->secureJson(['error' => $this->trans('project.storage.invalid_max_size', [], 'Invalid max size: must be a positive integer not exceeding 10GB.')], 422);
                 }
                 $r->maxSize = (int) $maxSize;
             } else {
@@ -461,7 +498,7 @@ class ProjectStorageController extends AbstractController
                 $profile = null;
             }
             if ($profile === null) {
-                return new JsonResponse(['error' => $this->trans('project.storage.profile_not_found_for_project', [], 'Storage profile not found for this project.')], 422);
+                return $this->secureJson(['error' => $this->trans('project.storage.profile_not_found_for_project', [], 'Storage profile not found for this project.')], 422);
             }
             $r->storageProfile = $profile;
         }

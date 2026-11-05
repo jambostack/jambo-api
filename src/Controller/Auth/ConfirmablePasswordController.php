@@ -4,6 +4,7 @@ namespace App\Controller\Auth;
 
 use App\Controller\InertiaController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -14,11 +15,23 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class ConfirmablePasswordController extends InertiaController
 {
+    private const MAX_PAYLOAD_BYTES = 16384; // 16 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private UserPasswordHasherInterface $hasher,
         #[Autowire(service: 'limiter.login_limiter')]
         private ?RateLimiterFactory $loginLimiter = null,
     ) {}
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
 
     #[Route('/confirm-password', name: 'app_confirm_password', methods: ['GET'])]
     public function show(Request $request): Response
@@ -31,24 +44,28 @@ class ConfirmablePasswordController extends InertiaController
     {
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
-            return $this->json(['error' => $this->trans('auth.confirm_password.auth_required', [], 'Authentication required')], 401);
+            return $this->secureJson(['error' => $this->trans('auth.confirm_password.auth_required', [], 'Authentication required')], 401);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('auth.confirm_password.payload_too_large', [], 'Payload exceeds maximum allowed size (16 KB).')], 413);
         }
 
         if ($this->loginLimiter !== null) {
             $identifier = ($request->getClientIp() ?: '127.0.0.1') . '_' . $user->id;
             if (!$this->loginLimiter->create($identifier)->consume()->isAccepted()) {
-                return $this->json(['error' => $this->trans('auth.confirm_password.rate_limit_exceeded', [], 'Too many confirmation attempts. Please retry later.')], 429);
+                return $this->secureJson(['error' => $this->trans('auth.confirm_password.rate_limit_exceeded', [], 'Too many confirmation attempts. Please retry later.')], 429);
             }
         }
 
         try {
             $password = $request->getPayload()->getString('password');
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('auth.confirm_password.invalid_json', [], 'Invalid JSON body')], 400);
+            return $this->secureJson(['error' => $this->trans('auth.confirm_password.invalid_json', [], 'Invalid JSON body')], 400);
         }
 
         if (!$this->hasher->isPasswordValid($user, $password)) {
-            return $this->json(['errors' => ['password' => $this->trans('auth.confirm_password.incorrect_password', [], 'The provided password was incorrect.')]], 422);
+            return $this->secureJson(['errors' => ['password' => $this->trans('auth.confirm_password.incorrect_password', [], 'The provided password was incorrect.')]], 422);
         }
 
         // Mark session as password-confirmed
