@@ -1982,6 +1982,8 @@ return [
     'deployment.invalid_run_url_scheme' => 'Esquema de URL de ejecución no válido: solo se permite http y https.',
     'deployment.invalid_run_url_ssrf' => 'URL de ejecución no válida: dirección privada o reservada rechazada por seguridad.',
     'deployment.invalid_image_reference' => 'Referencia de imagen no válida.',
+    'deployment.invalid_json' => 'Carga útil JSON no válida.',
+    'deployment.secret_too_short' => 'El secreto del webhook de despliegue es demasiado corto (mín. 16 caracteres).',
     'comment.entry_not_found' => 'Entrada no encontrada.',
     'comment.auth_required' => 'Autenticación requerida.',
     'comment.access_denied' => 'Acceso denegado.',
@@ -2645,6 +2647,11 @@ return [
     'template.project_not_found'                      => 'Proyecto no encontrado',
     'template.collection_not_found'                   => 'Colección no encontrada',
     'template.deleted_successfully'                   => 'Plantilla eliminada con éxito',
+    'template.admin_required'                         => 'Se requieren privilegios de administrador.',
+    'template.access_denied'                          => 'Acceso denegado.',
+    'template.max_templates_exceeded'                 => 'Número máximo de plantillas alcanzado (%max%).',
+    'template.field_invalid_type'                     => 'El campo %name% tiene un tipo no compatible: %type%.',
+    'template.field_options_too_large'                => 'Opciones de campo demasiado grandes (máx. 32KB).',
 
     // AiController
     'ai.rate_limit_exceeded'                          => 'Demasiadas solicitudes de IA. Inténtelo de nuevo más tarde.',
@@ -2707,6 +2714,7 @@ return [
     'public_share.error.invalid'                      => 'Enlace compartido no válido o inexistente.',
     'public_share.error.expired'                      => 'Este enlace compartido ha caducado.',
     'public_share.error.too_many_requests'            => 'Demasiadas solicitudes. Inténtelo de nuevo más tarde.',
+    'public_share.error.unsupported_format'           => 'El formato de respuesta solicitado no es compatible.',
     'share.rate_limit_exceeded'                       => 'Demasiadas solicitudes de compartición. Inténtelo de nuevo más tarde.',
     'share.project_not_found'                         => 'Proyecto no encontrado.',
     'share.auth_required'                             => 'Autenticación requerida.',

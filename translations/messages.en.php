@@ -1982,6 +1982,8 @@ return [
     'deployment.invalid_run_url_scheme' => 'Invalid run URL scheme: only http and https allowed.',
     'deployment.invalid_run_url_ssrf' => 'Invalid run URL: private or restricted address rejected for security.',
     'deployment.invalid_image_reference' => 'Invalid image reference.',
+    'deployment.invalid_json' => 'Invalid JSON payload.',
+    'deployment.secret_too_short' => 'Deployment webhook secret is too short (min 16 characters).',
     'comment.entry_not_found' => 'Entry not found.',
     'comment.auth_required' => 'Authentication required.',
     'comment.access_denied' => 'Access denied.',
@@ -2645,6 +2647,11 @@ return [
     'template.project_not_found'                      => 'Project not found',
     'template.collection_not_found'                   => 'Collection not found',
     'template.deleted_successfully'                   => 'Template deleted successfully',
+    'template.admin_required'                         => 'Admin privileges required.',
+    'template.access_denied'                          => 'Access denied.',
+    'template.max_templates_exceeded'                 => 'Maximum number of templates reached (%max%).',
+    'template.field_invalid_type'                     => 'Field %name% has an unsupported type: %type%.',
+    'template.field_options_too_large'                => 'Field options payload too large (max 32KB).',
 
     // AiController
     'ai.rate_limit_exceeded'                          => 'Too many AI requests. Please retry later.',
@@ -2707,6 +2714,7 @@ return [
     'public_share.error.invalid'                      => 'Invalid or non-existent shared link.',
     'public_share.error.expired'                      => 'This shared link has expired.',
     'public_share.error.too_many_requests'            => 'Too many requests. Please try again later.',
+    'public_share.error.unsupported_format'           => 'Requested response format is not supported.',
     'share.rate_limit_exceeded'                       => 'Too many share requests. Try again later.',
     'share.project_not_found'                         => 'Project not found.',
     'share.auth_required'                             => 'Authentication required.',

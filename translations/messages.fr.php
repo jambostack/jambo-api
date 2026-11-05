@@ -2000,6 +2000,8 @@ return [
     'deployment.invalid_run_url_scheme' => 'Schéma d\'exécution invalide : seuls http et https sont autorisés.',
     'deployment.invalid_run_url_ssrf' => 'URL d\'exécution invalide : adresse privée ou réservée rejetée par sécurité.',
     'deployment.invalid_image_reference' => 'Référence d\'image invalide.',
+    'deployment.invalid_json' => 'Charge utile JSON invalide.',
+    'deployment.secret_too_short' => 'Le secret de webhook de déploiement est trop court (min 16 caractères).',
     'comment.entry_not_found' => 'Entrée introuvable.',
     'comment.auth_required' => 'Authentification requise.',
     'comment.access_denied' => 'Accès refusé.',
@@ -2663,6 +2665,11 @@ return [
     'template.project_not_found'                      => 'Projet introuvable',
     'template.collection_not_found'                   => 'Collection introuvable',
     'template.deleted_successfully'                   => 'Modèle supprimé avec succès',
+    'template.admin_required'                         => 'Privilèges administrateur requis.',
+    'template.access_denied'                          => 'Accès refusé.',
+    'template.max_templates_exceeded'                 => 'Nombre maximal de modèles atteint (%max%).',
+    'template.field_invalid_type'                     => 'Le champ %name% a un type non pris en charge : %type%.',
+    'template.field_options_too_large'                => 'Options de champ trop volumineuses (max 32 Ko).',
 
     // AiController
     'ai.rate_limit_exceeded'                          => 'Trop de requêtes IA. Veuillez réessayer plus tard.',
@@ -2725,6 +2732,7 @@ return [
     'public_share.error.invalid'                      => 'Lien de partage invalide ou inexistant.',
     'public_share.error.expired'                      => 'Ce lien de partage a expiré.',
     'public_share.error.too_many_requests'            => 'Trop de requêtes. Veuillez réessayer plus tard.',
+    'public_share.error.unsupported_format'           => 'Le format de réponse demandé n\'est pas pris en charge.',
     'share.rate_limit_exceeded'                       => 'Trop de requêtes de partage. Veuillez réessayer plus tard.',
     'share.project_not_found'                         => 'Projet introuvable.',
     'share.auth_required'                             => 'Authentification requise.',

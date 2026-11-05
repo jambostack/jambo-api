@@ -7,6 +7,36 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.100] — 2026-11-05
+
+### Deployment Webhooks, Public Share Enumeration Protection & Collection Template RBAC
+- **DeploymentController Hardening**:
+  - Webhook secret anti-timing attack protection with constant-time HMAC comparison via `hash_equals()`.
+  - Enforced strict payload size boundary (`1MB`), JSON structure validation, and disabled webhook signaling when `DEPLOY_WEBHOOK_SECRET` is unset or empty.
+  - Strict git commit SHA hex validation (`/^[a-fA-F0-9]{4,40}$/`).
+  - Strict git branch name format checking according to git ref specifications: blocked control characters, CRLF, path traversal (`..`), double slashes (`//`), leading/trailing slashes or dots, and reserved ref characters (`~`, `^`, `:`, `?`, `*`, `[`, `\`, `@{`).
+  - Restricted preview URL and run URL bounds to 500 characters, validated schemes (`http`, `https`), and integrated `SsrfProtectionService` validation.
+  - OCI container image reference format validation (`^[a-zA-Z0-9_\-\.\/@:]+$`, max 500 characters).
+  - Sanitized deployment error message fields, stripping non-printable control characters while preserving formatting (`\n`, `\r`, `\t`).
+  - Integrated `AuditService` logging for deployment hook execution.
+  - Applied strict security response headers (`Cache-Control: no-store, no-cache, must-revalidate, private`, `Pragma: no-cache`, `X-Content-Type-Options: nosniff`).
+- **PublicShareController Hardening**:
+  - Strict token format validation (length between 8 and 128 characters, character set restricted to `[A-Za-z0-9_\-]`).
+  - Anti-enumeration protection: returned uniform HTTP 404 with error key `invalid` for unknown shares, revoked shares, deleted content entries, soft-deleted collections, and cross-project tenant mismatches.
+  - Explicit HTTP 410 with error key `expired` maintained for expired links.
+  - Format validation allowing only `html` and `json`, rejecting unauthorized extensions with uniform 404.
+  - Applied strict security headers across all success and error responses: `Cache-Control: no-store, no-cache, must-revalidate, private`, `Pragma: no-cache`, `Expires: 0`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`.
+- **CollectionTemplateController Hardening**:
+  - Enforced mandatory `ROLE_ADMIN` / `ROLE_SUPER_ADMIN` check on `saveFromCollection()`, preventing non-admin project members from creating global templates.
+  - Added global template quota protection (`MAX_TEMPLATES_COUNT = 200`) on both `create()` and `saveFromCollection()` to prevent DoS / storage exhaustion.
+  - Enforced strict field type validation against `FieldController::ALLOWED_TYPES`, returning HTTP 422 with `INVALID_FIELD_TYPE` for unauthorized types.
+  - Bounded field options payload size (max 32KB JSON) to prevent memory exhaustion / payload flooding.
+  - Integrated `AuditService` audit logs on template creation, template cloning from collection, and template deletion.
+  - Added strict security headers on all responses.
+- **I18N Parity & PHPUnit Test Coverage**:
+  - Added translations for `template.admin_required`, `template.access_denied`, `template.max_templates_exceeded`, `template.field_invalid_type`, `template.field_options_too_large`, `deployment.invalid_json`, `deployment.secret_too_short`, and `public_share.error.unsupported_format` with 100% strict parity across `en`, `fr`, `es`, `ar`.
+  - Added comprehensive `Cycle45HardeningTest` suite (16 tests, 96 assertions).
+
 ## [1.26.99] — 2026-11-05
 
 ### ImageTransform, Preview & MCP Hardening, Strict I18N & UUID Full-Spectrum Compatibility

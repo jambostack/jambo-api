@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\Deployment;
 use App\Repository\DeploymentRepository;
 use App\Repository\ProjectRepository;
+use App\Service\AuditService;
 use App\Service\Security\SsrfProtectionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -25,6 +26,18 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  */
 class DeploymentController extends AbstractController
 {
+    public const MAX_PAYLOAD_BYTES = 1048576; // 1MB
+    public const MAX_BRANCH_LENGTH = 100;
+    public const MAX_URL_LENGTH = 500;
+    public const MAX_IMAGE_LENGTH = 500;
+    public const MAX_ERROR_LENGTH = 2048;
+
+    private const SECURITY_HEADERS = [
+        'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        'Pragma' => 'no-cache',
+        'X-Content-Type-Options' => 'nosniff',
+    ];
+
     private SsrfProtectionService $ssrfProtection;
 
     public function __construct(
@@ -35,6 +48,7 @@ class DeploymentController extends AbstractController
         private ?RateLimiterFactory $hookLimiter = null,
         private ?TranslatorInterface $translator = null,
         ?SsrfProtectionService $ssrfProtection = null,
+        private ?AuditService $auditService = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
     }
@@ -56,7 +70,12 @@ class DeploymentController extends AbstractController
     #[Route('/api/system/info', name: 'system_info', methods: ['GET'])]
     public function systemInfo(): JsonResponse
     {
-        $rootDir = $this->getParameter('kernel.project_dir');
+        try {
+            $rootDir = (string) $this->getParameter('kernel.project_dir');
+        } catch (\Throwable) {
+            $rootDir = dirname(__DIR__, 2);
+        }
+
         $versionFile = $rootDir . '/VERSION';
         if (is_file($versionFile)) {
             $version = trim((string) file_get_contents($versionFile));
@@ -74,7 +93,7 @@ class DeploymentController extends AbstractController
             'branch'   => $_ENV['GIT_BRANCH'] ?? null,
             'built_at' => $_ENV['BUILT_AT'] ?? null,
             // 'environment' and 'php' intentionally omitted to reduce information disclosure surface.
-        ]);
+        ], 200, self::SECURITY_HEADERS);
     }
 
     #[Route('/api/deployments', name: 'deployments_index', methods: ['GET'])]
@@ -84,14 +103,14 @@ class DeploymentController extends AbstractController
             return new JsonResponse([
                 'error' => $this->trans('deployment.auth_required', [], 'Authentication required.'),
                 'code' => 'AUTH_REQUIRED',
-            ], 401);
+            ], 401, self::SECURITY_HEADERS);
         }
 
         if (!$this->isGranted('ROLE_SUPER_ADMIN') && !$this->isGranted('ROLE_ADMIN')) {
             return new JsonResponse([
                 'error' => $this->trans('deployment.access_denied', [], 'Access denied.'),
                 'code' => 'ACCESS_DENIED',
-            ], 403);
+            ], 403, self::SECURITY_HEADERS);
         }
 
         $limit = min(100, max(1, $request->query->getInt('limit', 25)));
@@ -99,7 +118,7 @@ class DeploymentController extends AbstractController
 
         return new JsonResponse([
             'data' => array_map(fn (Deployment $d) => $this->serialize($d), $deployments),
-        ]);
+        ], 200, self::SECURITY_HEADERS);
     }
 
     /**
@@ -117,43 +136,49 @@ class DeploymentController extends AbstractController
                 return new JsonResponse([
                     'error' => $this->trans('deployment.too_many_requests', [], 'Too many deployment hook requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, self::SECURITY_HEADERS);
             }
         }
 
         $secret = $_ENV['DEPLOY_WEBHOOK_SECRET'] ?? '';
-        if ($secret === '') {
+        if (!is_string($secret) || $secret === '') {
             return new JsonResponse([
                 'error' => $this->trans('deployment.webhook_disabled', [], 'Deployment webhook disabled: DEPLOY_WEBHOOK_SECRET not configured.'),
                 'code' => 'WEBHOOK_DISABLED',
-            ], 503);
+            ], 503, self::SECURITY_HEADERS);
         }
 
         $payload = $request->getContent();
-        if (strlen($payload) > 1048576) {
+        if (strlen($payload) > self::MAX_PAYLOAD_BYTES) {
             return new JsonResponse([
                 'error' => $this->trans('deployment.payload_too_large', [], 'Payload too large (max 1MB).'),
                 'code' => 'PAYLOAD_TOO_LARGE',
-            ], 413);
+            ], 413, self::SECURITY_HEADERS);
         }
 
-        $signature = $request->headers->get('X-Jambo-Signature', '');
+        $signature = (string) $request->headers->get('X-Jambo-Signature', '');
         if (!str_starts_with($signature, 'sha256=')) {
             return new JsonResponse([
                 'error' => $this->trans('deployment.signature_missing', [], 'Signature header missing.'),
                 'code' => 'SIGNATURE_MISSING',
-            ], 401);
+            ], 401, self::SECURITY_HEADERS);
         }
         $expected = 'sha256=' . hash_hmac('sha256', $payload, $secret);
         if (!hash_equals($expected, $signature)) {
             return new JsonResponse([
                 'error' => $this->trans('deployment.signature_invalid', [], 'Invalid signature.'),
                 'code' => 'SIGNATURE_INVALID',
-            ], 401);
+            ], 401, self::SECURITY_HEADERS);
         }
 
         $decoded = json_decode($payload, true);
-        $data = is_array($decoded) ? $decoded : [];
+        if (!is_array($decoded)) {
+            return new JsonResponse([
+                'error' => $this->trans('deployment.invalid_json', [], 'Invalid JSON payload.'),
+                'code' => 'INVALID_JSON',
+            ], 400, self::SECURITY_HEADERS);
+        }
+        $data = $decoded;
 
         $environment = in_array($data['environment'] ?? '', [
             Deployment::ENV_PREVIEW,
@@ -174,40 +199,44 @@ class DeploymentController extends AbstractController
             return new JsonResponse([
                 'error' => $this->trans('deployment.invalid_commit_sha', [], 'Invalid commit SHA format.'),
                 'code' => 'INVALID_COMMIT_SHA',
-            ], 422);
+            ], 422, self::SECURITY_HEADERS);
         }
 
         $branch = isset($data['branch']) ? trim((string) $data['branch']) : null;
-        if ($branch !== null) {
-            if (strlen($branch) > 100 || preg_match('/[\r\n\x00-\x1F\x7F]/', $branch)) {
+        if ($branch !== null && $branch !== '') {
+            if (strlen($branch) > self::MAX_BRANCH_LENGTH
+                || preg_match('/[\r\n\x00-\x1F\x7F~^:?*\[\]\\\]|\.\.|\/\/|^[\/\.\-]|[\/\.]$|@\{/', $branch)
+            ) {
                 return new JsonResponse([
                     'error' => $this->trans('deployment.invalid_branch', [], 'Invalid branch name.'),
                     'code' => 'INVALID_BRANCH',
-                ], 422);
+                ], 422, self::SECURITY_HEADERS);
             }
+        } else {
+            $branch = null;
         }
 
         $previewUrl = null;
         if (!empty($data['preview_url'])) {
             $pUrl = trim((string) $data['preview_url']);
-            if (strlen($pUrl) > 2048 || preg_match('/[\r\n\x00-\x1F\x7F]/', $pUrl) || !filter_var($pUrl, FILTER_VALIDATE_URL)) {
+            if (strlen($pUrl) > self::MAX_URL_LENGTH || preg_match('/[\r\n\x00-\x1F\x7F]/', $pUrl) || !filter_var($pUrl, FILTER_VALIDATE_URL)) {
                 return new JsonResponse([
                     'error' => $this->trans('deployment.invalid_preview_url', [], 'Invalid preview URL.'),
                     'code' => 'INVALID_PREVIEW_URL',
-                ], 422);
+                ], 422, self::SECURITY_HEADERS);
             }
             $pScheme = strtolower((string) parse_url($pUrl, PHP_URL_SCHEME));
             if (!in_array($pScheme, ['http', 'https'], true)) {
                 return new JsonResponse([
                     'error' => $this->trans('deployment.invalid_preview_url_scheme', [], 'Invalid preview URL scheme: only http and https allowed.'),
                     'code' => 'INVALID_PREVIEW_URL_SCHEME',
-                ], 422);
+                ], 422, self::SECURITY_HEADERS);
             }
             if (!$this->validateSafeUrl($pUrl)) {
                 return new JsonResponse([
                     'error' => $this->trans('deployment.invalid_preview_url_ssrf', [], 'Invalid preview URL: private or restricted address rejected for security.'),
                     'code' => 'INVALID_PREVIEW_URL_SSRF',
-                ], 422);
+                ], 422, self::SECURITY_HEADERS);
             }
             $previewUrl = $pUrl;
         }
@@ -215,24 +244,24 @@ class DeploymentController extends AbstractController
         $runUrl = null;
         if (!empty($data['run_url'])) {
             $rUrl = trim((string) $data['run_url']);
-            if (strlen($rUrl) > 2048 || preg_match('/[\r\n\x00-\x1F\x7F]/', $rUrl) || !filter_var($rUrl, FILTER_VALIDATE_URL)) {
+            if (strlen($rUrl) > self::MAX_URL_LENGTH || preg_match('/[\r\n\x00-\x1F\x7F]/', $rUrl) || !filter_var($rUrl, FILTER_VALIDATE_URL)) {
                 return new JsonResponse([
                     'error' => $this->trans('deployment.invalid_run_url', [], 'Invalid run URL.'),
                     'code' => 'INVALID_RUN_URL',
-                ], 422);
+                ], 422, self::SECURITY_HEADERS);
             }
             $rScheme = strtolower((string) parse_url($rUrl, PHP_URL_SCHEME));
             if (!in_array($rScheme, ['http', 'https'], true)) {
                 return new JsonResponse([
                     'error' => $this->trans('deployment.invalid_run_url_scheme', [], 'Invalid run URL scheme: only http and https allowed.'),
                     'code' => 'INVALID_RUN_URL_SCHEME',
-                ], 422);
+                ], 422, self::SECURITY_HEADERS);
             }
             if (!$this->validateSafeUrl($rUrl)) {
                 return new JsonResponse([
                     'error' => $this->trans('deployment.invalid_run_url_ssrf', [], 'Invalid run URL: private or restricted address rejected for security.'),
                     'code' => 'INVALID_RUN_URL_SSRF',
-                ], 422);
+                ], 422, self::SECURITY_HEADERS);
             }
             $runUrl = $rUrl;
         }
@@ -240,18 +269,22 @@ class DeploymentController extends AbstractController
         $imageRef = null;
         if (isset($data['image'])) {
             $img = trim((string) $data['image']);
-            if (strlen($img) > 500 || preg_match('/[\r\n\x00-\x1F\x7F]/', $img)) {
+            if (strlen($img) > self::MAX_IMAGE_LENGTH
+                || preg_match('/[\r\n\x00-\x1F\x7F]/', $img)
+                || !preg_match('/^[a-zA-Z0-9_\-\.\/@:]+$/', $img)
+            ) {
                 return new JsonResponse([
                     'error' => $this->trans('deployment.invalid_image_reference', [], 'Invalid image reference.'),
                     'code' => 'INVALID_IMAGE_REFERENCE',
-                ], 422);
+                ], 422, self::SECURITY_HEADERS);
             }
             $imageRef = $img !== '' ? $img : null;
         }
 
         $errorMessage = null;
         if (isset($data['error'])) {
-            $errorMessage = substr((string) $data['error'], 0, 2048);
+            $sanitizedErr = preg_replace('/[^\P{C}\n\r\t]/u', '', (string) $data['error']);
+            $errorMessage = substr($sanitizedErr, 0, self::MAX_ERROR_LENGTH);
         }
 
         $deployment = new Deployment();
@@ -269,20 +302,40 @@ class DeploymentController extends AbstractController
         }
 
         if (!empty($data['project_uuid'])) {
-            try {
-                $project = $this->projects->findOneBy(['uuid' => $data['project_uuid']]);
-                if ($project) {
-                    $deployment->project = $project;
+            $pUuid = trim((string) $data['project_uuid']);
+            if (preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $pUuid)) {
+                try {
+                    $project = $this->projects->findOneBy(['uuid' => $pUuid]);
+                    if ($project) {
+                        $deployment->project = $project;
+                    }
+                } catch (\Throwable) {
+                    // Ignore malformed project uuid
                 }
-            } catch (\Throwable) {
-                // Ignore malformed project uuid
             }
         }
 
         $this->em->persist($deployment);
         $this->em->flush();
 
-        return new JsonResponse(['data' => $this->serialize($deployment)], 201);
+        $this->auditService?->log(
+            toolName: 'deployment_hook',
+            project: $deployment->project,
+            input: [
+                'environment' => $deployment->environment,
+                'branch' => $deployment->branch,
+                'commit_sha' => $deployment->commitSha,
+            ],
+            output: [
+                'uuid' => $deployment->uuid->toRfc4122(),
+                'status' => $deployment->status,
+            ],
+            status: $deployment->status === Deployment::STATUS_FAILED ? 'failure' : 'success',
+            errorMessage: $deployment->errorMessage,
+            source: 'webhook',
+        );
+
+        return new JsonResponse(['data' => $this->serialize($deployment)], 201, self::SECURITY_HEADERS);
     }
 
     private function serialize(Deployment $d): array

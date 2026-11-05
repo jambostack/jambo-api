@@ -1982,6 +1982,8 @@ return [
     'deployment.invalid_run_url_scheme' => 'مخطط رابط التشغيل غير صالح: يُسمح فقط بـ http و https.',
     'deployment.invalid_run_url_ssrf' => 'رابط التشغيل غير صالح: تم رفض العنوان الخاص أو المحجوز لدواعي الأمان.',
     'deployment.invalid_image_reference' => 'مرجع الصورة غير صالح.',
+    'deployment.invalid_json' => 'حمولة JSON غير صالحة.',
+    'deployment.secret_too_short' => 'سر خطاف النشر قصير جداً (16 حرفاً على الأقل).',
     'comment.entry_not_found' => 'المدخلة غير موجودة.',
     'comment.auth_required' => 'المصادقة مطلوبة.',
     'comment.access_denied' => 'تم رفض الوصول.',
@@ -2647,6 +2649,11 @@ return [
     'template.project_not_found'                      => 'المشروع غير موجود',
     'template.collection_not_found'                   => 'المجموعة غير موجودة',
     'template.deleted_successfully'                   => 'تم حذف القالب بنجاح',
+    'template.admin_required'                         => 'امتيازات المسؤول مطلوبة.',
+    'template.access_denied'                          => 'تم رفض الوصول.',
+    'template.max_templates_exceeded'                 => 'تم الوصول إلى الحد الأقصى لعدد القوالب (%max%).',
+    'template.field_invalid_type'                     => 'الحقل %name% يحتوي على نوع غير مدعوم: %type%.',
+    'template.field_options_too_large'                => 'خيارات الحقل كبيرة جداً (الحد الأقصى 32 كيلوبايت).',
 
     // AiController
     'ai.rate_limit_exceeded'                          => 'طلبات كثيرة جداً للذكاء الاصطناعي. يرجى إعادة المحاولة لاحقاً.',
@@ -2709,6 +2716,7 @@ return [
     'public_share.error.invalid'                      => 'رابط المشاركة غير صالح أو غير موجود.',
     'public_share.error.expired'                      => 'انتهت صلاحية رابط المشاركة هذا.',
     'public_share.error.too_many_requests'            => 'عدد كبير جداً من الطلبات. يرجى إعادة المحاولة لاحقاً.',
+    'public_share.error.unsupported_format'           => 'تنسيق الاستجابة المطلوب غير مدعوم.',
     'share.rate_limit_exceeded'                       => 'عدد كبير جداً من طلبات المشاركة. يرجى المحاولة لاحقاً.',
     'share.project_not_found'                         => 'المشروع غير موجود.',
     'share.auth_required'                             => 'المصادقة مطلوبة.',
