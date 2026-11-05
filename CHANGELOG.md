@@ -7,6 +7,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.130] — 2026-11-05
+
+### Security Hardening on Realtime, SEO, Redirects, Export/Import & Strict i18n (Cycle #67)
+- **Realtime, SEO & Redirects Hardening (Phase 81)**:
+  - `MercurePublisher`: Localized fallback titles (`realtime.untitled`, `realtime.file`) across all 4 locales (`en`, `fr`, `es`, `ar`). Enforced fallback file size rotation & truncation (`MAX_REALTIME_FILE_BYTES = 5 MB`, retaining 250 most recent lines) to prevent disk exhaustion when Mercure Hub is unavailable.
+  - `SeoAnalyzer`: Full internationalization of all SEO evaluation criteria labels, advice suggestions, and warnings via `TranslatorInterface`. Enforced input size bounds (`MAX_SCANNED_TEXT_BYTES = 500 KB`) on scanned EAV content to protect against ReDoS and high memory allocations in word count, links, and alt tag evaluations.
+  - `SeoPdfExporter`: Multilingual PDF generation with dynamic locale resolution, complete UI localization, and bidirectional layout support (RTL layout for Arabic). Configured strict Dompdf security options (`isRemoteEnabled = false`).
+  - `SeoController`: Hardened `bulkUpdate` route by enforcing `content.update` permission check, payload size limit (64 KB), maximum batch size (100 entries), and rigorous sanitization on metadata fields (`canonicalUrl` scheme validation, CRLF/null byte rejection, slug sanitization, and string length capping). Added scanning ceiling in `scores` (`MAX_SCORES_LIMIT = 500`).
+  - `HreflangGenerator`: Neutralized CRLF injection, null bytes, and XSS breakout vectors across preview base URLs, collection slugs, entry slugs, and locale tokens.
+  - `LinkChecker` & `RedirectResolver`: Filtered out soft-deleted content entries in link scanning, bounded scanned text to 250 KB per field, and protected redirect pattern regexes against oversized patterns (> 500 chars) and ReDoS.
+- **Export & Import Security Hardening (Phase 82)**:
+  - `MediaExportHandler`: Hardened media binary exports with path traversal and null-byte defenses, symlink resolution rejection, canonical upload root boundary verification (`realpath`), maximum entity ceiling (`MAX_MEDIA_ENTITIES = 1000`), and total cumulative export size budget (`MAX_TOTAL_MEDIA_BYTES = 250 MB`).
+  - `ProjectExporter`: Replaced predictable identifiers with cryptographically secure tokens (`bin2hex(random_bytes(16))`), enforced restrictive directory permissions (`0700`), integrated automatic stale temporary directory cleanup (`cleanStaleTempDirs`), and bounded archive generation to 5,000 files and 250 MB.
+  - `SettingsExportHandler` & `SettingsImportHandler`: Removed internal database integer identifiers (`role?->id`, `user?->id`) from exported settings to prevent schema leakage. Enforced strict validation and limits on `default_locale` format and `locales` array bounds.
+- **Multilingual Parity (Strict i18n Rule)**:
+  - Added 46 new translation keys across English (`messages.en.php`), French (`messages.fr.php`), Spanish (`messages.es.php`), and Arabic (`messages.ar.php`).
+- **Unit Testing**:
+  - Added comprehensive test suites: `tests/Service/Cycle67HardeningTest.php` (12 tests) and `tests/Controller/Api/SeoControllerHardeningTest.php` (4 tests).
+  - 100% passing rate across full test suite (1,645 tests, 10,102+ assertions).
+
 ## [1.26.129] — 2026-11-05
 
 ### Security Hardening on Async Messenger Flows, Workers & HTTP Error Headers (Cycle #66)

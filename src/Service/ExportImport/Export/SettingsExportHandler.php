@@ -17,17 +17,17 @@ class SettingsExportHandler implements ExportHandlerInterface
         $members = [];
         foreach ($project->projectMembers as $member) {
             $members[] = [
-                'email'  => $member->email,
-                'status' => $member->status->value,
-                'role'   => $member->role?->id,
-                'user'   => $member->user?->id,
+                'email'     => $member->email,
+                'status'    => $member->status->value,
+                'role_name' => $member->role?->name,
+                'user_uuid' => $member->user?->uuid?->toString(),
             ];
         }
 
         $data = json_encode([
             'default_locale' => $project->defaultLocale,
             'locales'        => $project->locales,
-            'public_api'     => $project->publicApi,
+            'public_api'     => (bool) $project->publicApi,
             'members'        => $members,
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 

@@ -27,6 +27,10 @@ class LinkChecker
      */
     public function scanEntry(ContentEntry $entry): array
     {
+        if (method_exists($entry, 'isDeleted') && $entry->isDeleted()) {
+            return [];
+        }
+
         $links = [];
 
         foreach ($entry->fieldValues as $fieldValue) {
@@ -37,6 +41,11 @@ class LinkChecker
             $text = $fieldValue->textValue;
             if ($text === null || $text === '') {
                 continue;
+            }
+
+            // Bound content scanned to 250 KB per field value to prevent regex ReDoS / high CPU
+            if (strlen($text) > 250000) {
+                $text = substr($text, 0, 250000);
             }
 
             $links = array_merge($links, $this->extractLinks($text));
@@ -53,10 +62,12 @@ class LinkChecker
     public function checkLinks(Project $project): array
     {
         $entries = $this->entryRepository->findBy(['project' => $project]);
-        $allSlugs = $this->buildSlugIndex($entries);
+        // Filter out soft-deleted entries
+        $activeEntries = array_values(array_filter($entries, fn (ContentEntry $e) => !(method_exists($e, 'isDeleted') && $e->isDeleted())));
+        $allSlugs = $this->buildSlugIndex($activeEntries);
         $results = [];
 
-        foreach ($entries as $entry) {
+        foreach ($activeEntries as $entry) {
             $scanned = $this->scanEntry($entry);
 
             foreach ($scanned as $link) {

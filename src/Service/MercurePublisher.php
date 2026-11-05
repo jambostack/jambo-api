@@ -4,6 +4,7 @@ namespace App\Service;
 
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Publie des événements temps réel.
@@ -20,10 +21,21 @@ use Symfony\Component\Mercure\Update;
  */
 class MercurePublisher
 {
+    public const MAX_REALTIME_FILE_BYTES = 5242880; // 5 MB
+
     public function __construct(
         private readonly string $projectDir,
         private ?HubInterface $hub = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return $default ?? $id;
+    }
 
     /**
      * Publie un événement sur le hub Mercure (primaire).
@@ -73,6 +85,18 @@ class MercurePublisher
         }
 
         $path = $dir . '/' . $projectUuid . '.jsonl';
+
+        // Rotate or truncate if file exceeds maximum size limit
+        if (file_exists($path) && (filesize($path) ?: 0) > self::MAX_REALTIME_FILE_BYTES) {
+            $lines = @file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            if (is_array($lines) && count($lines) > 500) {
+                $retained = array_slice($lines, -250);
+                file_put_contents($path, implode("\n", $retained) . "\n", LOCK_EX);
+            } else {
+                @unlink($path);
+            }
+        }
+
         file_put_contents($path, $payload . "\n", FILE_APPEND | LOCK_EX);
     }
 
@@ -94,12 +118,13 @@ class MercurePublisher
     /** Un contenu a été créé, mis à jour ou supprimé */
     public function contentChanged(string $projectUuid, string $action, array $entry, ?string $title = null): void
     {
+        $defaultTitle = $this->trans('realtime.untitled', [], 'Untitled');
         $this->publish($projectUuid, [
             'event' => "entry.{$action}",
             'data'  => [
                 'action' => $action,
                 'entry'  => $entry,
-                'title'  => $title ?? ($entry['name'] ?? 'Sans titre'),
+                'title'  => $title ?? ($entry['name'] ?? $defaultTitle),
                 'time'   => time(),
             ],
         ]);
@@ -108,11 +133,12 @@ class MercurePublisher
     /** Un upload média est terminé */
     public function mediaUploaded(string $projectUuid, array $media): void
     {
+        $defaultTitle = $this->trans('realtime.file', [], 'File');
         $this->publish($projectUuid, [
             'event' => 'media.uploaded',
             'data'  => [
                 'media' => $media,
-                'title' => $media['original_filename'] ?? 'Fichier',
+                'title' => $media['original_filename'] ?? $defaultTitle,
                 'time'  => time(),
             ],
         ]);

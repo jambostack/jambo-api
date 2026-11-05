@@ -93,7 +93,11 @@ class RedirectResolver
         // Pattern match
         foreach ($redirects as $redirect) {
             if ($redirect->isPattern) {
-                $escaped = str_replace('#', '\#', $redirect->fromPath);
+                $fromPath = (string) $redirect->fromPath;
+                if (strlen($fromPath) > 500) {
+                    continue;
+                }
+                $escaped = str_replace('#', '\#', $fromPath);
                 if (@preg_match('#' . $escaped . '#', $path) === 1) {
                     return $redirect;
                 }
@@ -108,12 +112,17 @@ class RedirectResolver
      */
     private function resolvePattern(string $path, Redirect $redirect): string
     {
-        $escaped = str_replace('#', '\#', $redirect->fromPath);
-        return (string) @preg_replace(
+        $fromPath = (string) $redirect->fromPath;
+        if (strlen($fromPath) > 500) {
+            return $redirect->toPath;
+        }
+        $escaped = str_replace('#', '\#', $fromPath);
+        $res = @preg_replace(
             '#' . $escaped . '#',
             $redirect->toPath,
             $path,
             1,
         );
+        return is_string($res) ? $res : $redirect->toPath;
     }
 }

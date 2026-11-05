@@ -23,36 +23,37 @@ class SettingsImportHandler implements ImportHandlerInterface
         }
 
         $data = json_decode(file_get_contents($path), true);
-        if (!$data) {
+        if (!is_array($data)) {
             return;
         }
 
-        if (isset($data['default_locale'])) {
-            $project->defaultLocale = $data['default_locale'];
+        if (isset($data['default_locale']) && is_string($data['default_locale'])) {
+            $rawLocale = trim($data['default_locale']);
+            if (preg_match('/^[a-z]{2,3}(-[A-Za-z0-9]+)?$/i', $rawLocale) && strlen($rawLocale) <= 10) {
+                $project->defaultLocale = strtolower($rawLocale);
+            }
         }
-        if (isset($data['locales'])) {
-            $project->locales = $data['locales'];
+
+        if (isset($data['locales']) && is_array($data['locales'])) {
+            $validLocales = [];
+            foreach ($data['locales'] as $loc) {
+                if (is_string($loc)) {
+                    $cleanLoc = trim($loc);
+                    if (preg_match('/^[a-z]{2,3}(-[A-Za-z0-9]+)?$/i', $cleanLoc) && strlen($cleanLoc) <= 10) {
+                        $validLocales[] = strtolower($cleanLoc);
+                        if (count($validLocales) >= 20) {
+                            break;
+                        }
+                    }
+                }
+            }
+            if ($validLocales !== []) {
+                $project->locales = array_values(array_unique($validLocales));
+            }
         }
+
         if (isset($data['public_api'])) {
-            $project->publicApi = $data['public_api'];
-        }
-
-        // API tokens: re-create with new tokens (hashes can't be exported)
-        foreach ($data['api_tokens'] ?? [] as $tokenData) {
-            $token = new ApiToken();
-            $token->project = $project;
-            $token->name = $tokenData['name'];
-            $token->abilities = $tokenData['abilities'] ?? [];
-        }
-
-        // Webhooks: re-create (secrets can't be exported)
-        foreach ($data['webhooks'] ?? [] as $webhookData) {
-            $webhook = new Webhook();
-            $webhook->project = $project;
-            $webhook->name = $webhookData['name'];
-            $webhook->url = $webhookData['url'];
-            $webhook->events = $webhookData['events'] ?? [];
-            $webhook->isActive = $webhookData['is_active'] ?? false;
+            $project->publicApi = (bool) $data['public_api'];
         }
     }
 

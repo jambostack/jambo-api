@@ -9,9 +9,13 @@ use App\Service\ExportImport\Export\EndUserExportHandler;
 use App\Service\ExportImport\Export\MediaExportHandler;
 use App\Service\ExportImport\Export\SettingsExportHandler;
 use App\Service\ExportImport\Export\StructureExportHandler;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class ProjectExporter
 {
+    public const MAX_EXPORT_FILES = 5000;
+    public const MAX_EXPORT_BYTES = 262144000; // 250 MB
+
     /** @var array<string, ExportHandlerInterface> */
     private array $handlers;
 
@@ -22,6 +26,7 @@ class ProjectExporter
         private SettingsExportHandler $settingsHandler,
         private EndUserExportHandler $endUserHandler,
         private string $projectDir,
+        private ?TranslatorInterface $translator = null,
     ) {
         $this->handlers = [
             $structureHandler::getOptionKey() => $structureHandler,
@@ -30,6 +35,14 @@ class ProjectExporter
             $settingsHandler::getOptionKey()  => $settingsHandler,
             $endUserHandler::getOptionKey()   => $endUserHandler,
         ];
+    }
+
+    private function trans(string $id, array $parameters = [], ?string $default = null): string
+    {
+        if ($this->translator !== null) {
+            return $this->translator->trans($id, $parameters, 'messages');
+        }
+        return $default ?? $id;
     }
 
     /**
@@ -43,17 +56,50 @@ class ProjectExporter
     {
         $dir = $this->projectDir . '/var/tmp';
         if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
+            mkdir($dir, 0700, true);
         }
         return $dir;
     }
 
+    public function cleanStaleTempDirs(): void
+    {
+        $base = $this->getTempDir();
+        $items = @scandir($base);
+        if ($items === false) {
+            return;
+        }
+
+        $now = time();
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            if (str_starts_with($item, 'jambo-export-') || str_starts_with($item, 'jambo-import-')) {
+                $path = $base . '/' . $item;
+                $mtime = @filemtime($path);
+                // Clean temp files/directories older than 1 hour (3600s)
+                if ($mtime !== false && ($now - $mtime) > 3600) {
+                    if (is_dir($path)) {
+                        try {
+                            $this->removeDir($path);
+                        } catch (\Throwable) {}
+                    } else {
+                        @unlink($path);
+                    }
+                }
+            }
+        }
+    }
+
     public function export(Project $project, ExportOptions $options, string $outputPath): void
     {
-        $tempDir = $this->getTempDir() . '/jambo-export-' . uniqid();
+        $this->cleanStaleTempDirs();
+
+        $token = bin2hex(random_bytes(16));
+        $tempDir = $this->getTempDir() . '/jambo-export-' . $token;
 
         try {
-            if (!mkdir($tempDir, 0777, true) && !is_dir($tempDir)) {
+            if (!mkdir($tempDir, 0700, true) && !is_dir($tempDir)) {
                 throw new \RuntimeException("Cannot create temp dir: $tempDir");
             }
 
@@ -104,7 +150,8 @@ class ProjectExporter
      */
     public function streamExport(Project $project, ExportOptions $options): string
     {
-        $zipPath = $this->getTempDir() . '/jambo-export-' . uniqid() . '.zip';
+        $token = bin2hex(random_bytes(16));
+        $zipPath = $this->getTempDir() . '/jambo-export-' . $token . '.zip';
         $this->export($project, $options, $zipPath);
         return $zipPath;
     }
@@ -135,7 +182,7 @@ class ProjectExporter
     }
 
     /**
-     * Create a ZIP archive from all files in a directory.
+     * Create a ZIP archive from all files in a directory with strict safety limits.
      */
     private function createZip(string $sourceDir, string $outputPath): void
     {
@@ -150,13 +197,35 @@ class ProjectExporter
             \RecursiveIteratorIterator::LEAVES_ONLY,
         );
 
+        $fileCount = 0;
+        $totalBytes = 0;
+
         foreach ($iterator as $file) {
             $localName = substr($file->getPathname(), strlen($sourceDir) + 1);
             $localName = str_replace('\\', '/', $localName);
 
+            // Path traversal guard
+            if (str_contains($localName, '..') || str_starts_with($localName, '/')) {
+                continue;
+            }
+
+            $fileCount++;
+            if ($fileCount > self::MAX_EXPORT_FILES) {
+                $zip->close();
+                @unlink($outputPath);
+                throw new \RuntimeException($this->trans('export.archive.too_many_files', ['%max%' => self::MAX_EXPORT_FILES], sprintf('Too many files to archive in export (max %d).', self::MAX_EXPORT_FILES)));
+            }
+
             if ($file->isDir()) {
                 $zip->addEmptyDir($localName);
             } else {
+                $fileSize = $file->getSize();
+                $totalBytes += $fileSize;
+                if ($totalBytes > self::MAX_EXPORT_BYTES) {
+                    $zip->close();
+                    @unlink($outputPath);
+                    throw new \RuntimeException($this->trans('export.archive.size_exceeded', [], 'Total uncompressed export archive size exceeds limit.'));
+                }
                 $zip->addFile($file->getPathname(), $localName);
             }
         }
