@@ -23,6 +23,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[OA\Tag(name: 'Content')]
 #[Route('/api/{projectId}/{collectionSlug}', name: 'public_api_content_', requirements: ['projectId' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
@@ -42,7 +43,13 @@ class ContentController extends AbstractController
         private \App\Service\FieldValueHydrator $fieldValueHydrator,
         private EavFieldHelperService $fieldValidator,
         private SluggerInterface $slugger,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
 
     #[OA\Get(
         path: '/api/{projectId}/{collectionSlug}',
@@ -74,7 +81,7 @@ class ContentController extends AbstractController
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => 'Collection not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
         }
 
         $locale  = $request->query->getString('locale', $project->defaultLocale);
@@ -131,16 +138,16 @@ class ContentController extends AbstractController
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => 'Collection not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
         }
 
         try {
             $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Entry not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
         if ($entry === null) {
-            return $this->json(['error' => 'Entry not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
 
         return $this->json($this->formatter->formatEntry($entry));
@@ -176,7 +183,7 @@ class ContentController extends AbstractController
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => 'Collection not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
         }
 
         // Vérifier l'authentification : soit token API, soit collection en public_create
@@ -184,15 +191,15 @@ class ContentController extends AbstractController
         $publicCreate = $collection->settings['public_create'] ?? false;
 
         if ($token === null && !$publicCreate) {
-            return $this->json(['error' => 'Authentication required. Provide an API token or enable public_create on the collection.'], 401);
+            return $this->json(['error' => $this->trans('api_content.auth_required', [], 'Authentication required. Provide an API token or enable public_create on the collection.')], 401);
         }
 
         if ($token !== null && $token->project->uuid->toString() !== $projectId) {
-            return $this->json(['error' => 'Forbidden.'], 403);
+            return $this->json(['error' => $this->trans('api_content.forbidden', [], 'Forbidden.')], 403);
         }
 
         if ($token !== null && !$token->can('create')) {
-            return $this->json(['error' => 'Unauthorized. Token requires create ability.'], 401);
+            return $this->json(['error' => $this->trans('api_content.token_create_required', [], 'Unauthorized. Token requires create ability.')], 401);
         }
 
         // Accepter JSON ou multipart/form-data
@@ -206,7 +213,7 @@ class ContentController extends AbstractController
             try {
                 $data = $request->toArray();
             } catch (\Throwable) {
-                return $this->json(['error' => 'Invalid JSON'], 400);
+                return $this->json(['error' => $this->trans('api_content.invalid_json', [], 'Invalid JSON')], 400);
             }
             $uploadedFiles = [];
         }
@@ -240,7 +247,7 @@ class ContentController extends AbstractController
             $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
         }
         if ($entry->status === 'scheduled' && $entry->scheduledAt === null) {
-            return $this->json(['error' => 'scheduledAt is required when status is scheduled.'], 422);
+            return $this->json(['error' => $this->trans('api_content.scheduled_at_required', [], 'scheduledAt is required when status is scheduled.')], 422);
         }
 
         // Si multipart : uploader les fichiers et les remplacer par leurs UUIDs
@@ -380,31 +387,31 @@ class ContentController extends AbstractController
     {
         $token = $this->tokenChecker->resolve($request);
         if ($token === null || !$token->can('create')) {
-            return $this->json(['error' => 'Unauthorized. Token requires write ability.'], 401);
+            return $this->json(['error' => $this->trans('api_content.token_write_required', [], 'Unauthorized. Token requires write ability.')], 401);
         }
 
         if ($token->project->uuid->toString() !== $projectId) {
-            return $this->json(['error' => 'Forbidden.'], 403);
+            return $this->json(['error' => $this->trans('api_content.forbidden', [], 'Forbidden.')], 403);
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($token->project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => 'Collection not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
         }
 
         try {
             $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Entry not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
         if ($entry === null) {
-            return $this->json(['error' => 'Entry not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->trans('api_content.invalid_json', [], 'Invalid JSON')], 400);
         }
 
         if (isset($data['status'])) {
@@ -421,11 +428,11 @@ class ContentController extends AbstractController
             try {
                 $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
             } catch (\Exception) {
-                return $this->json(['error' => 'Format de date scheduledAt invalide.'], 422);
+                return $this->json(['error' => $this->trans('api_content.invalid_scheduled_at', [], 'Format de date scheduledAt invalide.')], 422);
             }
         }
         if ($entry->status === 'scheduled' && $entry->scheduledAt === null) {
-            return $this->json(['error' => 'scheduledAt is required when status is scheduled.'], 422);
+            return $this->json(['error' => $this->trans('api_content.scheduled_at_required', [], 'scheduledAt is required when status is scheduled.')], 422);
         }
         if (isset($data['locale'])) {
             $entry->locale = $data['locale'];
@@ -529,25 +536,25 @@ class ContentController extends AbstractController
     {
         $token = $this->tokenChecker->resolve($request);
         if ($token === null || !$token->can('delete')) {
-            return $this->json(['error' => 'Unauthorized. Token requires delete ability.'], 401);
+            return $this->json(['error' => $this->trans('api_content.token_delete_required', [], 'Unauthorized. Token requires delete ability.')], 401);
         }
 
         if ($token->project->uuid->toString() !== $projectId) {
-            return $this->json(['error' => 'Forbidden.'], 403);
+            return $this->json(['error' => $this->trans('api_content.forbidden', [], 'Forbidden.')], 403);
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($token->project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => 'Collection not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
         }
 
         try {
             $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Entry not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
         if ($entry === null) {
-            return $this->json(['error' => 'Entry not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
 
         $entry->deletedAt = new \DateTimeImmutable();
@@ -561,14 +568,14 @@ class ContentController extends AbstractController
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
         }
         if ($project === null) {
-            return $this->json(['error' => 'Project not found.'], 404);
+            return $this->json(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
         }
 
         if (!$project->publicApi) {
-            return $this->json(['error' => 'Public API access is disabled for this project.'], 403);
+            return $this->json(['error' => $this->trans('api_content.public_disabled', [], 'Public API access is disabled for this project.')], 403);
         }
 
         return $project;

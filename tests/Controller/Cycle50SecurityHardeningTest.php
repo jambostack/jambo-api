@@ -105,7 +105,7 @@ class Cycle50SecurityHardeningTest extends WebTestCase
         $client->request('GET', '/health');
         self::assertResponseIsSuccessful();
         $data = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('1.26.109', $data['version']);
+        self::assertSame(\App\Controller\HealthController::VERSION, $data['version']);
     }
 
     public function testDirectUploadSecurityHeadersAndInvalidUuid(): void

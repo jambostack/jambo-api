@@ -590,7 +590,7 @@ class PageController extends InertiaController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->trans('page.invalid_json', [], 'Invalid JSON')], 400);
         }
         $email = $data['email'] ?? '';
         $password = $data['password'] ?? '';
@@ -598,10 +598,10 @@ class PageController extends InertiaController
         $status = $data['status'] ?? 'active';
 
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return $this->json(['errors' => ['email' => 'Valid email is required']], 422);
+            return $this->json(['errors' => ['email' => $this->trans('page.valid_email_required', [], 'Valid email is required')]], 422);
         }
         if (strlen($password) < 8) {
-            return $this->json(['errors' => ['password' => 'Password must be at least 8 characters']], 422);
+            return $this->json(['errors' => ['password' => $this->trans('page.password_min_length', [], 'Password must be at least 8 characters')]], 422);
         }
         if (!in_array($status, ['active', 'pending'], true)) {
             $status = 'active';
@@ -692,16 +692,16 @@ class PageController extends InertiaController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->trans('page.invalid_json', [], 'Invalid JSON')], 400);
         }
 
         if (isset($data['email']) && $data['email'] !== $endUser->email) {
             if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
-                return $this->json(['errors' => ['email' => 'Valid email is required']], 422);
+                return $this->json(['errors' => ['email' => $this->trans('page.valid_email_required', [], 'Valid email is required')]], 422);
             }
             $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $data['email']);
             if ($existing) {
-                return $this->json(['errors' => ['email' => 'Email already registered in this project']], 422);
+                return $this->json(['errors' => ['email' => $this->trans('page.email_already_registered', [], 'Email already registered in this project')]], 422);
             }
             $endUser->email = $data['email'];
         }
@@ -716,7 +716,7 @@ class PageController extends InertiaController
 
         if (!empty($data['password'])) {
             if (strlen($data['password']) < 8) {
-                return $this->json(['errors' => ['password' => 'Password must be at least 8 characters']], 422);
+                return $this->json(['errors' => ['password' => $this->trans('page.password_min_length', [], 'Password must be at least 8 characters')]], 422);
             }
             $endUser->password = $this->hasher->hashPassword($endUser, $data['password']);
             $endUser->tokenVersion++;
@@ -744,11 +744,11 @@ class PageController extends InertiaController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->trans('page.invalid_json', [], 'Invalid JSON')], 400);
         }
         $newStatus = $data['status'] ?? '';
         if (!in_array($newStatus, ['active', 'banned', 'pending'], true)) {
-            return $this->json(['errors' => ['status' => 'Invalid status']], 422);
+            return $this->json(['errors' => ['status' => $this->trans('page.invalid_status', [], 'Invalid status')]], 422);
         }
 
         $endUser->status = $newStatus;

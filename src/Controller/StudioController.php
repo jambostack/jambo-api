@@ -497,7 +497,7 @@ PROMPT;
         // Fallback sans IA : réponse immédiate enveloppée en SSE pour cohérence
         if ($provider === null) {
             $decoded = json_decode($this->commandFallback($command, $prompt)->getContent(), true);
-            $fallbackData = is_array($decoded) ? $decoded : ['error' => 'Fallback error'];
+            $fallbackData = is_array($decoded) ? $decoded : ['error' => $this->trans('studio.fallback_error', [], 'Fallback error')];
             return new StreamedResponse(function () use ($fallbackData) {
                 while (ob_get_level() > 0) { ob_end_flush(); }
                 ob_implicit_flush(true);
@@ -586,7 +586,7 @@ PROMPT;
                 flush();
             } catch (\Throwable $e) {
                 $this->logger->error('AI chat failed', ['exception' => $e]);
-                echo "data: " . json_encode(['reply' => "Désolé, une erreur est survenue. Réessaie.", 'error' => 'AI chat failed']) . "\n\n";
+                echo "data: " . json_encode(['reply' => $this->trans('studio.ai_chat_error_reply', [], "Désolé, une erreur est survenue. Réessaie."), 'error' => $this->trans('studio.ai_chat_failed', [], 'AI chat failed')]) . "\n\n";
                 flush();
             }
         }, 200, ['Content-Type' => 'text/event-stream', 'Cache-Control' => 'no-cache', 'X-Accel-Buffering' => 'no']);
@@ -1444,7 +1444,7 @@ PROMPT;
                     'error'  => $e->getMessage(),
                     'trace'  => $e->getTraceAsString(),
                 ]);
-                $result = ['error' => 'Internal error executing tool. Check server logs for details.'];
+                $result = ['error' => $this->trans('studio.tool_internal_error', [], 'Internal error executing tool. Check server logs for details.')];
             }
 
             // Prévenir le frontend si une confirmation est nécessaire
@@ -1578,7 +1578,7 @@ PROMPT;
     private function executeCreateCollections(Project $project, array $params): array
     {
         $collections = $params['collections'] ?? [];
-        if (empty($collections)) return ['error' => 'Aucune collection fournie'];
+        if (empty($collections)) return ['error' => $this->trans('studio.no_collections_provided', [], 'Aucune collection fournie')];
 
         $normalized = $this->normalizeSchema($collections);
         $created = 0;
@@ -1642,7 +1642,7 @@ PROMPT;
         $locales = $params['locales'] ?? null; // null = locale par défaut uniquement
 
         if ($collectionSlug === '' || empty($entries)) {
-            return ['error' => 'Collection et entries requis'];
+            return ['error' => $this->trans('studio.collection_and_entries_required', [], 'Collection et entries requis')];
         }
 
         // EndUsers
@@ -1677,15 +1677,15 @@ PROMPT;
                 $this->em->flush();
             } catch (\Throwable $e) {
                 $this->logger?->error('Failed to persist entries in StudioController', ['exception' => $e]);
-                return ['error' => 'Failed to persist entries. Please try again.'];
+                return ['error' => $this->trans('studio.failed_persist_entries', [], 'Failed to persist entries. Please try again.')];
             }
-            return ['created' => $created, 'errors' => $errors, 'note' => 'Mot de passe aleatoire. Utilisateurs crees sans possibilite de connexion directe.'];
+            return ['created' => $created, 'errors' => $errors, 'note' => $this->trans('studio.end_users_created_note', [], 'Mot de passe aleatoire. Utilisateurs crees sans possibilite de connexion directe.')];
         }
 
         // Collection standard
         $collection = $this->em->getRepository(Collection::class)
             ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
-        if (!$collection) return ['error' => "Collection '$collectionSlug' introuvable"];
+        if (!$collection) return ['error' => $this->trans('studio.collection_not_found', ['%collection%' => $collectionSlug], "Collection '$collectionSlug' introuvable")];
 
         $targetLocales = $locales ?? [$project->defaultLocale];
         $created = 0; $errors = 0;
@@ -1716,7 +1716,7 @@ PROMPT;
             $this->em->flush();
         } catch (\Throwable $e) {
             $this->logger?->error('Failed to persist entries in StudioController', ['exception' => $e]);
-            return ['error' => 'Failed to persist entries. Please try again.'];
+            return ['error' => $this->trans('studio.failed_persist_entries', [], 'Failed to persist entries. Please try again.')];
         }
         return ['created' => $created, 'errors' => $errors];
     }
@@ -1727,12 +1727,12 @@ PROMPT;
         $uuids = $params['uuids'] ?? [];
         $patch = $params['patch'] ?? [];
 
-        if (empty($uuids) || empty($patch)) return ['error' => 'uuids et patch requis'];
-        if ($collectionSlug === '') return ['error' => 'Collection requise'];
+        if (empty($uuids) || empty($patch)) return ['error' => $this->trans('studio.uuids_and_patch_required', [], 'uuids et patch requis')];
+        if ($collectionSlug === '') return ['error' => $this->trans('studio.collection_required', [], 'Collection requise')];
 
         $collection = $this->em->getRepository(Collection::class)
             ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
-        if (!$collection) return ['error' => 'Collection introuvable'];
+        if (!$collection) return ['error' => $this->trans('studio.collection_not_found', ['%collection%' => $collectionSlug], 'Collection introuvable')];
 
         // Pré-charger tous les champs (évite N+1 queries)
         $fields = $this->em->getRepository(Field::class)->findByCollection($collection);
@@ -1772,7 +1772,7 @@ PROMPT;
             $this->em->flush();
         } catch (\Throwable $e) {
             $this->logger?->error('Failed to persist entries in StudioController', ['exception' => $e]);
-            return ['error' => 'Failed to persist entries. Please try again.'];
+            return ['error' => $this->trans('studio.failed_persist_entries', [], 'Failed to persist entries. Please try again.')];
         }
         return ['updated' => $updated];
     }
@@ -1782,12 +1782,12 @@ PROMPT;
         $collectionSlug = $params['collection'] ?? '';
         $uuids = $params['uuids'] ?? [];
 
-        if ($collectionSlug === '') return ['error' => 'Collection requise'];
+        if ($collectionSlug === '') return ['error' => $this->trans('studio.collection_required', [], 'Collection requise')];
         if (empty($uuids)) return ['deleted' => 0];
 
         $collection = $this->em->getRepository(Collection::class)
             ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
-        if (!$collection) return ['error' => 'Collection introuvable'];
+        if (!$collection) return ['error' => $this->trans('studio.collection_not_found', ['%collection%' => $collectionSlug], 'Collection introuvable')];
 
         $deleted = 0;
         foreach ($uuids as $uuid) {
@@ -1970,7 +1970,7 @@ PROMPT;
         $locale = $params['locale'] ?? $project->defaultLocale;
         $limit = min(100, $params['limit'] ?? 50);
 
-        if ($collectionSlug === '') return ['error' => 'Collection requise'];
+        if ($collectionSlug === '') return ['error' => $this->trans('studio.collection_required', [], 'Collection requise')];
 
         $collection = $this->em->getRepository(Collection::class)
             ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);

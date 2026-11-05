@@ -10,6 +10,8 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
+use Symfony\Contracts\Translation\TranslatorInterface;
+
 #[OA\Tag(name: 'Project')]
 #[Route('/public-api', name: 'public_api_')]
 class ProjectController extends AbstractController
@@ -17,7 +19,13 @@ class ProjectController extends AbstractController
     public function __construct(
         private ApiTokenChecker $tokenChecker,
         private CollectionRepository $collectionRepository,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
 
     #[OA\Get(
         path: '/public-api',
@@ -45,10 +53,10 @@ class ProjectController extends AbstractController
     {
         $token = $this->tokenChecker->resolve($request);
         if ($token === null) {
-            return $this->json(['error' => 'Unauthorized. Provide a valid Bearer token.'], 401);
+            return $this->json(['error' => $this->trans('api_project.unauthorized', [], 'Unauthorized. Provide a valid Bearer token.')], 401);
         }
         if (!$this->tokenChecker->isAllowedForMethod($token, $request->getMethod())) {
-            return $this->json(['error' => 'Insufficient token abilities.'], 403);
+            return $this->json(['error' => $this->trans('api_project.insufficient_abilities', [], 'Insufficient token abilities.')], 403);
         }
 
         $project = $token->project;

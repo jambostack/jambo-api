@@ -10,6 +10,8 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
+use Symfony\Contracts\Translation\TranslatorInterface;
+
 #[OA\Tag(name: 'Collections')]
 #[Route('/public-api/collections', name: 'public_api_collections_')]
 class CollectionController extends AbstractController
@@ -17,7 +19,13 @@ class CollectionController extends AbstractController
     public function __construct(
         private ApiTokenChecker $tokenChecker,
         private CollectionRepository $collectionRepository,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
 
     #[OA\Get(
         path: '/public-api/collections',
@@ -40,10 +48,10 @@ class CollectionController extends AbstractController
     {
         $token = $this->tokenChecker->resolve($request);
         if ($token === null) {
-            return $this->json(['error' => 'Unauthorized.'], 401);
+            return $this->json(['error' => $this->trans('api_collection.unauthorized', [], 'Unauthorized.')], 401);
         }
         if (!$this->tokenChecker->isAllowedForMethod($token, $request->getMethod())) {
-            return $this->json(['error' => 'Insufficient token abilities.'], 403);
+            return $this->json(['error' => $this->trans('api_collection.insufficient_abilities', [], 'Insufficient token abilities.')], 403);
         }
 
         $page    = max(1, $request->query->getInt('page', 1));
@@ -92,15 +100,15 @@ class CollectionController extends AbstractController
     {
         $token = $this->tokenChecker->resolve($request);
         if ($token === null) {
-            return $this->json(['error' => 'Unauthorized.'], 401);
+            return $this->json(['error' => $this->trans('api_collection.unauthorized', [], 'Unauthorized.')], 401);
         }
         if (!$this->tokenChecker->isAllowedForMethod($token, $request->getMethod())) {
-            return $this->json(['error' => 'Insufficient token abilities.'], 403);
+            return $this->json(['error' => $this->trans('api_collection.insufficient_abilities', [], 'Insufficient token abilities.')], 403);
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($token->project, $slug);
         if ($collection === null) {
-            return $this->json(['error' => 'Collection not found.'], 404);
+            return $this->json(['error' => $this->trans('api_collection.not_found', [], 'Collection not found.')], 404);
         }
 
         return $this->json([

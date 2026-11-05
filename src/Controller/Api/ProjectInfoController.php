@@ -10,6 +10,8 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
+use Symfony\Contracts\Translation\TranslatorInterface;
+
 /**
  * Endpoint public de découverte d'un projet par son UUID :
  *   GET /api/{projectId}
@@ -28,7 +30,13 @@ class ProjectInfoController extends AbstractController
     public function __construct(
         private ProjectRepository $projectRepository,
         private CollectionRepository $collectionRepository,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
 
     #[OA\Get(
         path: '/api/{projectId}',
@@ -60,14 +68,14 @@ class ProjectInfoController extends AbstractController
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found.'], 404);
+            return $this->json(['error' => $this->trans('api_project_info.not_found', [], 'Project not found.')], 404);
         }
         if ($project === null) {
-            return $this->json(['error' => 'Project not found.'], 404);
+            return $this->json(['error' => $this->trans('api_project_info.not_found', [], 'Project not found.')], 404);
         }
 
         if (!$project->publicApi) {
-            return $this->json(['error' => 'Public API access is disabled for this project.'], 403);
+            return $this->json(['error' => $this->trans('api_project_info.public_disabled', [], 'Public API access is disabled for this project.')], 403);
         }
 
         $collections = $this->collectionRepository->findByProject($project);

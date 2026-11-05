@@ -305,7 +305,7 @@ class TusController extends AbstractController
     public function finalize(string $projectUuid, string $uploadId, Request $request): JsonResponse
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
-            return $rateLimitResponse instanceof JsonResponse ? $rateLimitResponse : new JsonResponse(['error' => 'Rate limit exceeded'], 429, self::SECURITY_HEADERS);
+            return $rateLimitResponse instanceof JsonResponse ? $rateLimitResponse : new JsonResponse(['error' => $this->trans('tus.rate_limit_exceeded', [], 'Rate limit exceeded')], 429, self::SECURITY_HEADERS);
         }
 
         $project = $this->findProject($projectUuid);

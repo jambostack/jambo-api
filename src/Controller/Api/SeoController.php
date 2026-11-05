@@ -15,6 +15,8 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
+use Symfony\Contracts\Translation\TranslatorInterface;
+
 #[IsGranted('ROLE_USER')]
 class SeoController extends AbstractController
 {
@@ -24,14 +26,20 @@ class SeoController extends AbstractController
         private readonly ProjectRepository $projectRepo,
         private readonly CollectionRepository $collectionRepo,
         private readonly EntityManagerInterface $em,
+        private readonly ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
 
     #[Route('/admin-api/{projectUuid}/seo/scores', name: 'admin_seo_scores', methods: ['GET'])]
     public function scores(string $projectUuid, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found.'], 404);
+            return $this->json(['error' => $this->trans('admin_seo.project_not_found', [], 'Project not found.')], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $project);
 
@@ -96,14 +104,14 @@ class SeoController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found.'], 404);
+            return $this->json(['error' => $this->trans('admin_seo.project_not_found', [], 'Project not found.')], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $project);
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => 'Invalid JSON'], 400);
+            return $this->json(['error' => $this->trans('admin_seo.invalid_json', [], 'Invalid JSON')], 400);
         }
         $entries = $data['entries'] ?? [];
         $updated = 0;
@@ -143,7 +151,7 @@ class SeoController extends AbstractController
     {
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
-            return $this->json(['error' => 'Project not found.'], 404);
+            return $this->json(['error' => $this->trans('admin_seo.project_not_found', [], 'Project not found.')], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $project);
 
@@ -153,7 +161,7 @@ class SeoController extends AbstractController
             $entry = null;
         }
         if (!$entry) {
-            return $this->json(['error' => 'Entry not found.'], 404);
+            return $this->json(['error' => $this->trans('admin_seo.entry_not_found', [], 'Entry not found.')], 404);
         }
 
         $report = $this->analyzer->audit($entry);

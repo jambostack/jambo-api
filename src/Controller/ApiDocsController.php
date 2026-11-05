@@ -11,6 +11,8 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
+use Symfony\Contracts\Translation\TranslatorInterface;
+
 /**
  * Affiche Swagger UI pour un projet Jambo.
  * GET /api/{projectId}/docs
@@ -23,7 +25,13 @@ class ApiDocsController extends AbstractController
         private ProjectRepository $projectRepository,
         private ?ProjectMemberRepository $memberRepo = null,
         private ?ApiTokenChecker $tokenChecker = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, array $params = [], string $default = ''): string
+    {
+        return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
 
     #[Route('/docs/{projectId}', name: 'api_docs_swagger', methods: ['GET'], priority: 30,
         requirements: ['projectId' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
@@ -32,10 +40,10 @@ class ApiDocsController extends AbstractController
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
         } catch (\Throwable) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('api_docs.project_not_found', [], 'Project not found')], 404);
         }
         if (!$project) {
-            return $this->json(['error' => 'Project not found'], 404);
+            return $this->json(['error' => $this->trans('api_docs.project_not_found', [], 'Project not found')], 404);
         }
 
         // Vérification d'autorisation si l'API du projet n'est pas publique
@@ -56,7 +64,7 @@ class ApiDocsController extends AbstractController
             }
 
             if (!$isAuthorized) {
-                return $this->json(['error' => 'Authentication required'], 401);
+                return $this->json(['error' => $this->trans('api_docs.auth_required', [], 'Authentication required')], 401);
             }
         }
 
