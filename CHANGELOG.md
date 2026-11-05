@@ -7,6 +7,37 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.85] — 2026-11-05
+
+### Security, Admin Project Configuration Hardening & Strict I18N
+- **ProjectMailerSettingsController Complete I18N & Hardening**:
+  - Injected `TranslatorInterface` with fallback mechanism across all mailer configuration and test endpoints.
+  - Replaced all hardcoded error/status strings (previously mixed English/French) with localized keys under `project.mailer.*`.
+  - Enforced strict SSRF validation with detailed safe-host diagnostics via `SsrfProtectionService`.
+  - Localized SMTP test email subject and body across all 4 system languages.
+- **ProjectStorageController SSRF Defense, Input Bounds & I18N**:
+  - Injected `TranslatorInterface` and localized all storage configuration, profile, and rule responses under `project.storage.*`.
+  - Added early SSRF validation on S3 custom endpoints (`s3_endpoint`) at profile creation and update time via `StorageDriverFactory::validateS3Endpoint`, rejecting cloud metadata (`169.254.169.254`), private IP ranges, and loopbacks.
+  - Added input bounds and format constraints:
+    - Profile name: 1-100 characters, no control characters.
+    - S3 access key: max 255 characters, no control characters.
+    - S3 region: max 64 alphanumeric characters and hyphens.
+    - S3 bucket: 1-63 valid DNS label characters.
+    - S3 secret: max 1024 characters before encryption.
+    - Base URL: max 2048 characters, valid URL or relative path.
+    - Root path: max 500 characters, directory traversal (`..`) and null bytes strictly rejected.
+    - Rules: MIME pattern (max 100 chars), extension (max 20 alphanumeric chars), max file size (positive integer up to 10GB).
+- **ProjectJwtTtlController Input Validation & I18N**:
+  - Injected `TranslatorInterface` and aligned error responses with translatable keys under `project.jwt_*` and `project.jwt_ttl.*`.
+  - Added strict numeric scalar validation on incoming TTL values, rejecting malformed types or negative numbers.
+- **Strict 4-Language Translation Parity**:
+  - Added 38 new translation keys across English, French, Spanish, and Arabic dictionaries (`translations/messages.{en,fr,es,ar}.php`), maintaining 100% translation parity (2,109 keys per dictionary, 0 missing).
+- **Automated Test Suite**:
+  - Added 33 new automated controller tests in `tests/Controller/Admin/ProjectJwtTtlControllerTest.php`, `ProjectMailerSettingsControllerTest.php`, and `ProjectStorageControllerTest.php`.
+  - Total test suite expanded to **1,079 tests / 4,393 assertions / 0 failures**.
+
+---
+
 ## [1.26.84] — 2026-11-05
 
 ### Security, Two-Factor Authentication, Project Export/Import & Strict I18N Hardening

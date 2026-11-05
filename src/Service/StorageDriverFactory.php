@@ -70,7 +70,7 @@ class StorageDriverFactory
     /**
      * Valide qu'un endpoint S3 ne pointe pas vers une IP privée, locale ou métadonnées Cloud (SSRF).
      */
-    private function validateS3Endpoint(string $endpoint): void
+    public function validateS3Endpoint(string $endpoint): void
     {
         $parsed = parse_url($endpoint);
         if ($parsed === false || !is_array($parsed)) {
