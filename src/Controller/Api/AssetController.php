@@ -348,6 +348,9 @@ class AssetController extends AbstractController
         $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         $response->headers->set('Access-Control-Allow-Headers', 'Authorization, Content-Type, If-None-Match');
         $response->headers->set('Access-Control-Max-Age', '3600');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('X-Frame-Options', 'DENY');
+        $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
         return $response;
     }
 

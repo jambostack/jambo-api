@@ -15,8 +15,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class PingController extends AbstractController
 {
     private const SECURITY_HEADERS = [
-        'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate',
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
     ];
 
     public function __construct(
@@ -45,6 +46,8 @@ class PingController extends AbstractController
         if ($this->adminApiLimiter !== null) {
             $identifier = $userIdentifier ?? ($request->getClientIp() ?: '127.0.0.1');
             if (!$this->adminApiLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log('admin_api_ping_rate_limit_exceeded', null, ['identifier' => $identifier], null, 'failure', 'Too many ping requests.', $userIdentifier, 'admin_api_ping');
+                $this->auditService?->flush();
                 return new JsonResponse([
                     'error' => $this->trans('admin_api.ping.rate_limit_exceeded', [], 'Too many ping requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',

@@ -30,8 +30,9 @@ class ImportController extends AbstractController
     public const MAX_ENTRIES_PER_COLLECTION = 10000;
 
     private const SECURITY_HEADERS = [
-        'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate',
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
     ];
 
     public function __construct(
@@ -79,8 +80,17 @@ class ImportController extends AbstractController
             return $this->secureJson(['error' => $this->trans('admin_api.import.invalid_uuid', [], 'Invalid project UUID format.')], 422);
         }
 
+        if (!preg_match('/^[a-z0-9_-]{1,64}$/i', $slug)) {
+            return $this->secureJson([
+                'error' => $this->trans('admin_api.collection.invalid_slug_format', [], 'Collection slug can only contain letters, numbers, underscores and hyphens.'),
+                'code'  => 'INVALID_SLUG_FORMAT',
+            ], 422);
+        }
+
         $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?? 'anonymous';
         if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $this->auditService?->log('admin_api_import_rate_limit_exceeded', null, ['identifier' => $identifier], null, 'failure', 'Too many import requests.', $identifier, 'admin_api_import');
+            $this->auditService?->flush();
             return $this->secureJson(['error' => $this->trans('admin_api.import.too_many_requests', [], 'Too many import requests. Please retry later.')], 429);
         }
 
@@ -123,6 +133,14 @@ class ImportController extends AbstractController
         }
 
         // Import via payload JSON
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if ($contentType !== '' && !str_contains(strtolower($contentType), 'application/json')) {
+            return $this->secureJson([
+                'error' => $this->trans('admin_api.invalid_content_type', [], 'Content-Type must be application/json.'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
+        }
+
         $rawContent = $request->getContent();
         if (strlen($rawContent) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->trans('admin_api.import.payload_too_large')], 413);
@@ -278,6 +296,7 @@ class ImportController extends AbstractController
             createdBy: $this->getUser()?->getUserIdentifier() ?? 'pat',
             source: 'admin_api',
         );
+        $this->auditService?->flush();
 
         return $this->secureJson([
             'data' => [
@@ -472,6 +491,7 @@ class ImportController extends AbstractController
             createdBy: $this->getUser()?->getUserIdentifier() ?? 'pat',
             source: 'admin_api',
         );
+        $this->auditService?->flush();
 
         return $this->secureJson([
             'data' => [

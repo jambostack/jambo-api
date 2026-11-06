@@ -18,9 +18,10 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class ProjectController extends AbstractController
 {
     private const SECURITY_HEADERS = [
-        'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
-        'Pragma' => 'no-cache',
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate, private',
+        'Pragma'                 => 'no-cache',
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
     ];
 
     public function __construct(

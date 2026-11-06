@@ -21,6 +21,12 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  */
 class AdminApiOpenApiController extends AbstractController
 {
+    private const SECURITY_HEADERS = [
+        'Cache-Control'          => 'private, max-age=60, must-revalidate',
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+    ];
+
     public function __construct(
         #[Autowire(service: 'limiter.openapi_limiter')]
         private readonly ?RateLimiterFactory $openapiLimiter = null,
@@ -48,15 +54,11 @@ class AdminApiOpenApiController extends AbstractController
                 return new JsonResponse([
                     'error' => $this->trans('admin_api.openapi.rate_limit_exceeded', [], 'Too many requests. Please try again later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, self::SECURITY_HEADERS);
             }
         }
 
-        $response = new JsonResponse($this->buildSpec());
-        $response->headers->set('Cache-Control', 'private, max-age=60, must-revalidate');
-        $response->headers->set('X-Content-Type-Options', 'nosniff');
-        $response->headers->set('X-Frame-Options', 'DENY');
-        return $response;
+        return new JsonResponse($this->buildSpec(), 200, self::SECURITY_HEADERS);
     }
 
     private function buildSpec(): array
