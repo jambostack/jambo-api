@@ -3905,4 +3905,9 @@ return [
     'plugin.endpoint_not_active' => 'Le plugin n\'est pas activé pour ce projet.',
     'plugin.endpoint_invalid_method' => 'Méthode HTTP non autorisée pour l\'appel de plugin (seuls GET, POST, PUT, HEAD sont acceptés).',
     'plugin.endpoint_payload_too_large' => 'Le corps de la requête vers le plugin dépasse la taille maximale autorisée.',
+    'project_oauth.error.invalid_content_type' => 'En-tête Content-Type invalide, application/json ou application/x-www-form-urlencoded attendu.',
+    'project_oauth.error.invalid_grant' => 'Autorisation ou paramètre d\'échange de jeton invalide.',
+    'project_oauth.error.invalid_client' => 'Échec de l\'authentification du client ou identifiants client non valides.',
+    'project_oauth.error.revocation_failed' => 'Échec de la révocation du jeton.',
+    'project_oauth.success.revoked' => 'Jeton révoqué avec succès.',
 ];

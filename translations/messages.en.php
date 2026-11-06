@@ -3887,4 +3887,9 @@ return [
     'plugin.endpoint_not_active' => 'Plugin is not active for this project.',
     'plugin.endpoint_invalid_method' => 'HTTP method not allowed for plugin call (only GET, POST, PUT, HEAD are supported).',
     'plugin.endpoint_payload_too_large' => 'Plugin request body exceeds maximum allowed size.',
+    'project_oauth.error.invalid_content_type' => 'Invalid Content-Type header, application/json or application/x-www-form-urlencoded expected.',
+    'project_oauth.error.invalid_grant' => 'Invalid grant or token exchange parameter.',
+    'project_oauth.error.invalid_client' => 'Client authentication failed or invalid client credentials.',
+    'project_oauth.error.revocation_failed' => 'Token revocation failed.',
+    'project_oauth.success.revoked' => 'Token revoked successfully.',
 ];

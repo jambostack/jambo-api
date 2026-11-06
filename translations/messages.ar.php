@@ -3889,4 +3889,9 @@ return [
     'plugin.endpoint_not_active' => 'المكون الإضافي غير نشط لهذا المشروع.',
     'plugin.endpoint_invalid_method' => 'طريقة HTTP غير مسموح بها لاستدعاء المكون الإضافي (يُقبل فقط GET و POST و PUT و HEAD).',
     'plugin.endpoint_payload_too_large' => 'يتجاوز نص طلب المكون الإضافي الحد الأقصى المسموح به للحجم.',
+    'project_oauth.error.invalid_content_type' => 'رأس Content-Type غير صالح، يُتوقع application/json أو application/x-www-form-urlencoded.',
+    'project_oauth.error.invalid_grant' => 'المنحة أو معلمة تبادل الرمز غير صالحة.',
+    'project_oauth.error.invalid_client' => 'فشل مصادقة العميل أو بيانات اعتماد العميل غير صالحة.',
+    'project_oauth.error.revocation_failed' => 'فشل إبطال الرمز.',
+    'project_oauth.success.revoked' => 'تم إبطال الرمز بنجاح.',
 ];

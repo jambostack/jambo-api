@@ -3887,4 +3887,9 @@ return [
     'plugin.endpoint_not_active' => 'El plugin no está activo para este proyecto.',
     'plugin.endpoint_invalid_method' => 'Método HTTP no permitido para la llamada de plugin (solo se admiten GET, POST, PUT, HEAD).',
     'plugin.endpoint_payload_too_large' => 'El cuerpo de la solicitud del plugin excede el tamaño máximo permitido.',
+    'project_oauth.error.invalid_content_type' => 'Encabezado Content-Type no válido, se esperaba application/json o application/x-www-form-urlencoded.',
+    'project_oauth.error.invalid_grant' => 'Concesión o parámetro de intercambio de token no válido.',
+    'project_oauth.error.invalid_client' => 'Falló la autenticación del cliente o credenciales de cliente no válidas.',
+    'project_oauth.error.revocation_failed' => 'Error al revocar el token.',
+    'project_oauth.success.revoked' => 'Token revocado con éxito.',
 ];
