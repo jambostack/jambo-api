@@ -19,6 +19,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -55,6 +56,8 @@ class WebhookController extends AbstractController
         private ?AuditService $auditService = null,
         private ?ApiTokenChecker $tokenChecker = null,
         private ?RequestStack $requestStack = null,
+        private ?RateLimiterFactory $webhookLimiter = null,
+        private ?RateLimiterFactory $webhookTestLimiter = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
         $this->webhookService = $webhookService ?? new WebhookService(
@@ -80,9 +83,94 @@ class WebhookController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
-    #[Route('', name: 'index', methods: ['GET'])]
-    public function index(string $projectUuid): JsonResponse
+    private function resolveIdentifier(Request $request): string
     {
+        try {
+            $user = $this->getUser();
+            if ($user !== null) {
+                return 'user_' . $user->getUserIdentifier();
+            }
+        } catch (\Throwable) {}
+
+        if ($this->tokenChecker !== null) {
+            try {
+                $token = $this->tokenChecker->resolve($request);
+                if ($token !== null && $token->project?->uuid !== null) {
+                    return 'token_project_' . $token->project->uuid->toRfc4122();
+                }
+            } catch (\Throwable) {}
+        }
+
+        return $request->getClientIp() ?: '127.0.0.1';
+    }
+
+    private function getUserSafeIdentifier(?Request $request = null): string
+    {
+        try {
+            $user = $this->getUser();
+            if ($user !== null) {
+                return $user->getUserIdentifier();
+            }
+        } catch (\Throwable) {}
+
+        if ($request !== null) {
+            return $this->resolveIdentifier($request);
+        }
+
+        return 'system';
+    }
+
+    private function checkWebhookRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->webhookLimiter !== null) {
+            $identifier = $this->resolveIdentifier($request);
+            if (false === $this->webhookLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log(
+                    toolName: 'webhook_rate_limit_exceeded',
+                    project: null,
+                    input: ['identifier' => $identifier],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Webhook management rate limit exceeded',
+                    createdBy: $identifier,
+                    source: 'webhook_management'
+                );
+                $this->auditService?->flush();
+
+                return $this->secureJson([
+                    'error' => $this->trans('webhook.rate_limit_exceeded', [], 'Too many webhook requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+        return null;
+    }
+
+    private function logAccessDenied(?\App\Entity\Project $project, string $projectUuid, string $permission, string $reason): void
+    {
+        $req = $this->requestStack?->getCurrentRequest();
+        $identifier = $req !== null ? $this->resolveIdentifier($req) : 'unknown';
+        $this->auditService?->log(
+            toolName: 'webhook_access_denied',
+            project: $project,
+            input: ['project_uuid' => $projectUuid, 'permission' => $permission, 'reason' => $reason],
+            output: null,
+            status: 'failed',
+            errorMessage: 'Access denied: ' . $reason,
+            createdBy: $identifier,
+            source: 'webhook_management'
+        );
+        $this->auditService?->flush();
+    }
+
+    #[Route('', name: 'index', methods: ['GET'])]
+    public function index(string $projectUuid, ?Request $request = null): JsonResponse
+    {
+        $req = $request ?? $this->requestStack?->getCurrentRequest();
+        if ($req !== null && ($rateLimit = $this->checkWebhookRateLimit($req))) {
+            return $rateLimit;
+        }
+
         $project = $this->resolveProject($projectUuid, 'project.view');
         if ($project instanceof JsonResponse) {
             return $project;
@@ -98,6 +186,10 @@ class WebhookController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(string $projectUuid, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkWebhookRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $project = $this->resolveProject($projectUuid, 'project.manage');
         if ($project instanceof JsonResponse) {
             return $project;
@@ -250,7 +342,7 @@ class WebhookController extends AbstractController
             input: ['name' => $webhook->name, 'url' => $webhook->url, 'events' => $webhook->events],
             output: ['success' => true, 'uuid' => $webhook->uuid?->toRfc4122()],
             status: 'success',
-            createdBy: $this->getUser()?->getUserIdentifier(),
+            createdBy: $this->getUserSafeIdentifier($request),
             source: 'webhook_management'
         );
         $this->auditService?->flush();
@@ -264,8 +356,13 @@ class WebhookController extends AbstractController
     }
 
     #[Route('/{uuid}', name: 'show', methods: ['GET'])]
-    public function show(string $projectUuid, string $uuid): JsonResponse
+    public function show(string $projectUuid, string $uuid, ?Request $request = null): JsonResponse
     {
+        $req = $request ?? $this->requestStack?->getCurrentRequest();
+        if ($req !== null && ($rateLimit = $this->checkWebhookRateLimit($req))) {
+            return $rateLimit;
+        }
+
         $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.view');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
@@ -277,6 +374,10 @@ class WebhookController extends AbstractController
     #[Route('/{uuid}', name: 'update', methods: ['PUT', 'PATCH'])]
     public function update(string $projectUuid, string $uuid, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkWebhookRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
@@ -412,7 +513,7 @@ class WebhookController extends AbstractController
             input: ['uuid' => $webhook->uuid?->toRfc4122(), 'name' => $webhook->name],
             output: ['success' => true],
             status: 'success',
-            createdBy: $this->getUser()?->getUserIdentifier(),
+            createdBy: $this->getUserSafeIdentifier($request),
             source: 'webhook_management'
         );
         $this->auditService?->flush();
@@ -423,6 +524,10 @@ class WebhookController extends AbstractController
     #[Route('/{uuid}/rotate-secret', name: 'rotate_secret', methods: ['POST'])]
     public function rotateSecret(string $projectUuid, string $uuid, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkWebhookRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
@@ -452,6 +557,18 @@ class WebhookController extends AbstractController
         if (!empty($data['secret'])) {
             $customSecret = (string) $data['secret'];
             if (strlen($customSecret) < 16 || strlen($customSecret) > 256) {
+                $this->auditService?->log(
+                    toolName: 'webhook_rotate_secret_rejected',
+                    project: $webhook->project,
+                    input: ['uuid' => $webhook->uuid?->toRfc4122(), 'length' => strlen($customSecret)],
+                    output: ['error' => 'SECRET_LENGTH_INVALID'],
+                    status: 'failed',
+                    errorMessage: 'Webhook secret must be between 16 and 256 characters long',
+                    createdBy: $this->getUserSafeIdentifier($request),
+                    source: 'webhook_management'
+                );
+                $this->auditService?->flush();
+
                 return $this->secureJson([
                     'error' => $this->trans('webhook.secret_length_invalid', [], 'Webhook secret must be between 16 and 256 characters long'),
                     'code' => 'SECRET_LENGTH_INVALID',
@@ -471,7 +588,7 @@ class WebhookController extends AbstractController
             input: ['uuid' => $webhook->uuid?->toRfc4122()],
             output: ['success' => true],
             status: 'success',
-            createdBy: $this->getUser()?->getUserIdentifier(),
+            createdBy: $this->getUserSafeIdentifier($request),
             source: 'webhook_management'
         );
         $this->auditService?->flush();
@@ -485,8 +602,13 @@ class WebhookController extends AbstractController
     }
 
     #[Route('/{uuid}', name: 'delete', methods: ['DELETE'])]
-    public function delete(string $projectUuid, string $uuid): JsonResponse
+    public function delete(string $projectUuid, string $uuid, ?Request $request = null): JsonResponse
     {
+        $req = $request ?? $this->requestStack?->getCurrentRequest();
+        if ($req !== null && ($rateLimit = $this->checkWebhookRateLimit($req))) {
+            return $rateLimit;
+        }
+
         $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
@@ -503,7 +625,7 @@ class WebhookController extends AbstractController
             input: ['uuid' => $webhookUuid],
             output: ['success' => true],
             status: 'success',
-            createdBy: $this->getUser()?->getUserIdentifier(),
+            createdBy: $this->getUserSafeIdentifier($req),
             source: 'webhook_management'
         );
         $this->auditService?->flush();
@@ -514,6 +636,10 @@ class WebhookController extends AbstractController
     #[Route('/{uuid}/logs', name: 'logs', methods: ['GET'])]
     public function logs(string $projectUuid, string $uuid, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkWebhookRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.view');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
@@ -548,6 +674,10 @@ class WebhookController extends AbstractController
     #[Route('/{uuid}/logs/prune', name: 'logs_prune', methods: ['POST', 'DELETE'])]
     public function pruneLogs(string $projectUuid, string $uuid, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkWebhookRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
@@ -570,7 +700,7 @@ class WebhookController extends AbstractController
             input: ['webhook_uuid' => $uuid, 'days' => $days],
             output: ['deleted_count' => $deletedCount],
             status: 'success',
-            createdBy: $this->getUser()?->getUserIdentifier(),
+            createdBy: $this->getUserSafeIdentifier($request),
             source: 'webhook_management'
         );
         $this->auditService?->flush();
@@ -584,8 +714,31 @@ class WebhookController extends AbstractController
     }
 
     #[Route('/{uuid}/test', name: 'test', methods: ['POST'])]
-    public function test(string $projectUuid, string $uuid): JsonResponse
+    public function test(string $projectUuid, string $uuid, ?Request $request = null): JsonResponse
     {
+        $req = $request ?? $this->requestStack?->getCurrentRequest();
+        if ($this->webhookTestLimiter !== null && $req !== null) {
+            $identifier = $this->resolveIdentifier($req);
+            if (false === $this->webhookTestLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log(
+                    toolName: 'webhook_test_rate_limit_exceeded',
+                    project: null,
+                    input: ['webhook_uuid' => $uuid, 'identifier' => $identifier],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Webhook test rate limit exceeded',
+                    createdBy: $identifier,
+                    source: 'webhook_management'
+                );
+                $this->auditService?->flush();
+
+                return $this->secureJson([
+                    'error' => $this->trans('webhook.test_rate_limit_exceeded', [], 'Too many webhook test requests. Please retry in a few moments.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+
         $webhook = $this->resolveWebhook($projectUuid, $uuid, 'project.manage');
         if ($webhook instanceof JsonResponse) {
             return $webhook;
@@ -601,12 +754,36 @@ class WebhookController extends AbstractController
 
         if ($this->bus !== null) {
             $this->bus->dispatch(new SendWebhookMessage($webhook->id, 'ping', $payload, null, 86400, $webhook->project?->uuid?->toRfc4122() ?? $projectUuid));
+
+            $this->auditService?->log(
+                toolName: 'webhook_test',
+                project: $webhook->project,
+                input: ['webhook_uuid' => $webhook->uuid?->toRfc4122(), 'event' => 'ping'],
+                output: ['queued' => true],
+                status: 'success',
+                createdBy: $this->getUserSafeIdentifier($req),
+                source: 'webhook_management'
+            );
+            $this->auditService?->flush();
+
             return $this->secureJson([
                 'success' => true,
                 'message' => $this->trans('webhook.test_queued', [], 'Test webhook queued successfully'),
                 'payload' => $payload,
             ]);
         }
+
+        $this->auditService?->log(
+            toolName: 'webhook_test',
+            project: $webhook->project,
+            input: ['webhook_uuid' => $webhook->uuid?->toRfc4122(), 'event' => 'ping'],
+            output: ['queued' => false, 'error' => 'BUS_NOT_CONFIGURED'],
+            status: 'failed',
+            errorMessage: 'Message bus is not configured',
+            createdBy: $this->getUserSafeIdentifier($req),
+            source: 'webhook_management'
+        );
+        $this->auditService?->flush();
 
         return $this->secureJson([
             'success' => false,
@@ -659,7 +836,11 @@ class WebhookController extends AbstractController
             ], 404);
         }
 
-        $user = $this->getUser();
+        $user = null;
+        try {
+            $user = $this->getUser();
+        } catch (\Throwable) {}
+
         if ($user === null) {
             $req = $this->requestStack?->getCurrentRequest();
             if ($req !== null && $this->tokenChecker !== null) {
@@ -674,6 +855,7 @@ class WebhookController extends AbstractController
                             return $project;
                         }
                     }
+                    $this->logAccessDenied($project, $projectUuid, $requiredPermission, 'token_insufficient_permissions');
                     return $this->secureJson([
                         'error' => $this->trans('webhook.access_denied', [], 'Access denied to this project.'),
                         'code' => 'ACCESS_DENIED',
@@ -690,16 +872,24 @@ class WebhookController extends AbstractController
         if ($user instanceof \App\Entity\User) {
             if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
                 if (!$project->hasMember($user)) {
+                    $this->logAccessDenied($project, $projectUuid, $requiredPermission, 'user_not_project_member');
                     return $this->secureJson([
                         'error' => $this->trans('webhook.access_denied', [], 'Access denied to this project.'),
                         'code' => 'ACCESS_DENIED',
                     ], 403);
                 }
-                $this->denyAccessUnlessGranted($requiredPermission, $project);
+                if (!$this->isGranted($requiredPermission, $project)) {
+                    $this->logAccessDenied($project, $projectUuid, $requiredPermission, 'insufficient_role_permission');
+                    return $this->secureJson([
+                        'error' => $this->trans('webhook.access_denied', [], 'Access denied to this project.'),
+                        'code' => 'ACCESS_DENIED',
+                    ], 403);
+                }
             }
             return $project;
         }
 
+        $this->logAccessDenied($project, $projectUuid, $requiredPermission, 'user_invalid');
         return $this->secureJson([
             'error' => $this->trans('webhook.access_denied', [], 'Access denied to this project.'),
             'code' => 'ACCESS_DENIED',

@@ -3743,6 +3743,8 @@ return [
     'automation.admin.webhook_loop_detected' => 'تم اكتشاف حلقة تكرار لأتمتة خطاف الويب (تجاوز عدد القفزات %max%).',
     'automation.admin.webhook_direct_recursion' => 'تم اكتشاف حلقة تكرار مباشرة لخطاف الويب: نفس المشروع والأتمتة.',
     'webhook.payload_size_exceeded' => 'حجم حمولة خطاف الويب الصادر يتجاوز الحد الأقصى %max% بايت.',
+    'webhook.rate_limit_exceeded' => 'طلبات الويب هوك كثيرة جداً. يُرجى المحاولة لاحقاً.',
+    'webhook.test_rate_limit_exceeded' => 'طلبات اختبار الويب هوك كثيرة جداً. يُرجى المحاولة بعد لحظات.',
     'webhook.prune_success' => 'تم تطهير %count% سجل(سجلات) خطاف الويب الأقدم من %days% يوم(أيام).',
     'webhook.invalid_prune_days' => 'يجب أن تكون أيام الاحتفاظ عدداً صحيحاً بين %min% و %max%.',
     'flow.validator.ssrf_host_forbidden' => 'العقدة %node%: المضيف المستهدف \'%host%\' محظور بواسطة سياسة مكافحة SSRF.',

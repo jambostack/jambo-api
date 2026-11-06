@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.171] — 2026-11-06
+
+### Webhook Subsystem Rate Limiting, Audit Logging & Security Hardening (Cycle #101)
+- **Rate Limiting Protection (`WebhookController`, `config/packages/rate_limiter.yaml`)**:
+  - Implemented `webhook_limiter` (60 req/min sliding window) on general webhook management routes (`index`, `create`, `show`, `update`, `delete`, `logs`, `prune`).
+  - Implemented `webhook_test_limiter` (10 req/min sliding window) specifically on the test outbound dispatch route (`POST /test`) to prevent abuse and outbound resource exhaustion.
+- **Audit Logging Integration (`AuditService`)**:
+  - Added structured audit trails for all critical webhook events: `webhook_rate_limit_exceeded`, `webhook_test_rate_limit_exceeded`, `webhook_access_denied`, `webhook_create`, `webhook_update`, `webhook_rotate_secret`, `webhook_rotate_secret_rejected`, `webhook_delete`, `webhook_logs_prune`, and `webhook_test`.
+  - Added user/token safe identifier resolution (`resolveIdentifier`, `getUserSafeIdentifier`) without throwing exceptions during unauthenticated or background contexts.
+  - Hardened access control handling (`logAccessDenied`) with specific denial reasons (`token_insufficient_permissions`, `user_not_project_member`, `insufficient_role_permission`).
+- **I18n Translation Completeness**:
+  - Added translations for `webhook.rate_limit_exceeded` and `webhook.test_rate_limit_exceeded` in French, English, Spanish, and Arabic dictionaries.
+- **Test Suite Verification**:
+  - Created `Cycle101WebhookHardeningTest` covering access control, secret rotation validation, test ping execution, prune retention, delete, rate limiting, and 4-locale translation completeness (8 tests, 89 assertions).
+
 ## [1.26.170] — 2026-11-06
 
 ### GraphQL AST Depth Hardening, UUID Enforcement, MCP & Search Audit Logging (Cycle #99 & #100)

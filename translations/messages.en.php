@@ -3741,6 +3741,8 @@ return [
     'automation.admin.webhook_loop_detected' => 'Automation webhook recursion loop detected (hop count exceeded %max%).',
     'automation.admin.webhook_direct_recursion' => 'Direct automation webhook recursion loop detected: same project and automation.',
     'webhook.payload_size_exceeded' => 'Outbound webhook payload size exceeds %max% bytes limit.',
+    'webhook.rate_limit_exceeded' => 'Too many webhook requests. Please retry later.',
+    'webhook.test_rate_limit_exceeded' => 'Too many webhook test requests. Please retry in a few moments.',
     'webhook.prune_success' => 'Pruned %count% webhook log(s) older than %days% day(s).',
     'webhook.invalid_prune_days' => 'Retention days must be an integer between %min% and %max%.',
     'flow.validator.ssrf_host_forbidden' => 'Node %node%: target host \'%host%\' is blocked by anti-SSRF policy.',

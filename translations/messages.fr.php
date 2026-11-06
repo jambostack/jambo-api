@@ -3759,6 +3759,8 @@ return [
     'automation.admin.webhook_loop_detected' => 'Boucle de récursion d\'automatisation détectée (nombre de sauts supérieur à %max%).',
     'automation.admin.webhook_direct_recursion' => 'Boucle de récursion directe détectée : même projet et même automatisation.',
     'webhook.payload_size_exceeded' => 'La taille du payload du webhook sortant dépasse la limite de %max% octets.',
+    'webhook.rate_limit_exceeded' => 'Trop de requêtes webhook. Veuillez réessayer plus tard.',
+    'webhook.test_rate_limit_exceeded' => 'Trop de tests de webhook demandés. Veuillez réessayer dans quelques instants.',
     'webhook.prune_success' => '%count% journal(aux) de webhook antérieur(s) à %days% jour(s) purgé(s).',
     'webhook.invalid_prune_days' => 'Le nombre de jours de rétention doit être un entier compris entre %min% et %max%.',
     'flow.validator.ssrf_host_forbidden' => 'Nœud %node% : l\'hôte cible \'%host%\' est interdit par la politique anti-SSRF.',
