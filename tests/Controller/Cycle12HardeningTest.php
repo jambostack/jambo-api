@@ -64,7 +64,7 @@ class Cycle12HardeningTest extends WebTestCase
         $this->assertSame('SAMEORIGIN', $headers->get('X-Frame-Options'));
         $this->assertSame('strict-origin-when-cross-origin', $headers->get('Referrer-Policy'));
         $this->assertSame('none', $headers->get('X-Permitted-Cross-Domain-Policies'));
-        $this->assertSame('camera=(), microphone=(), geolocation=(), payment=()', $headers->get('Permissions-Policy'));
+        $this->assertSame('camera=(), microphone=(), geolocation=(), payment=(), usb=(), screen-wake-lock=(), accelerometer=(), gyroscope=(), magnetometer=()', $headers->get('Permissions-Policy'));
     }
 
     public function testHstsHeaderEnforcedOnHttps(): void
