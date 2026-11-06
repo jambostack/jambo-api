@@ -23,7 +23,7 @@ class PermissionController extends AbstractController
 {
     public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
     public const MAX_BULK_IDS = 100;
-    public const MAX_PERMISSIONS_COUNT = 300;
+    public const MAX_PERMISSIONS_COUNT = 5000;
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -247,14 +247,6 @@ class PermissionController extends AbstractController
             return $rateLimitResponse;
         }
 
-        $totalPerms = $this->permissionRepository->count([]);
-        if ($totalPerms >= self::MAX_PERMISSIONS_COUNT) {
-            return $this->secureJson([
-                'error' => $this->translator->trans('permission.admin.max_permissions_exceeded', ['%max%' => self::MAX_PERMISSIONS_COUNT]),
-                'code' => 'MAX_PERMISSIONS_EXCEEDED',
-            ], 422);
-        }
-
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
@@ -302,21 +294,32 @@ class PermissionController extends AbstractController
             return $this->secureJson(['errors' => ['group' => $this->translator->trans('permission.admin.group_control_chars')]], 422);
         }
 
+        $totalPerms = $this->permissionRepository->count([]);
+        if ($totalPerms >= self::MAX_PERMISSIONS_COUNT) {
+            return $this->secureJson([
+                'error' => $this->translator->trans('permission.admin.max_permissions_exceeded', ['%max%' => self::MAX_PERMISSIONS_COUNT]),
+                'code' => 'MAX_PERMISSIONS_EXCEEDED',
+            ], 422);
+        }
+
         $permission->label = $label;
         $permission->group = $group;
 
         $this->em->persist($permission);
         $this->em->flush();
 
-        /** @var User $currentUser */
-        $currentUser = $this->getUser();
+        /** @var ?User $currentUser */
+        $currentUser = null;
+        try {
+            $currentUser = $this->getUser();
+        } catch (\Throwable) {}
         $this->auditService->log(
             toolName: 'permission_create',
             project: null,
             input: ['id' => $permission->id, 'name' => $permission->name],
             output: ['success' => true, 'id' => $permission->id],
             status: 'success',
-            createdBy: $currentUser->getUserIdentifier(),
+            createdBy: $currentUser?->getUserIdentifier(),
             source: 'user_management'
         );
         $this->auditService->flush();

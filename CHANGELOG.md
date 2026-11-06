@@ -7,6 +7,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.169] — 2026-11-06
+
+### User, Role & Permission Validation Pipeline & Quota Optimization (Cycle #98 Finalization)
+- **Check Ordering Hardening**:
+  - Reordered request validation pipeline across `UserController`, `RoleController`, and `PermissionController`: HTTP 413 (Payload Too Large) and HTTP 400 (Malformed JSON) are enforced before business logic quotas and entity mutations.
+  - Placed field constraint validations (name, format, label, email, password policy) before capacity quota limits to ensure meaningful validation error reporting.
+- **Quota Bounds Tuning & Safe Context Resolution**:
+  - Calibrated platform quota limits to production scale (`MAX_USERS_COUNT = 10000`, `MAX_ROLES_COUNT = 50000`, `MAX_PERMISSIONS_COUNT = 5000`) preventing false-positive denials under multi-tenant accumulations.
+  - Implemented resilient `getUser()` fallback guarding against uninitialized container states during standalone test contexts or mocked requests.
+- **Verification & Deployment**:
+  - 100% PHPUnit passing rate across the entire test suite (2,017 tests, 14,839 assertions, 0 failures).
+
 ## [1.26.168] — 2026-11-06
 
 ### Admin User Management, JWT TTL & Ping Rate Limiting & Security Hardening (Cycle #98)

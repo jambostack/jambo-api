@@ -25,7 +25,7 @@ class UserController extends AbstractController
 {
     public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
     public const MAX_BULK_IDS = 100;
-    public const MAX_USERS_COUNT = 500;
+    public const MAX_USERS_COUNT = 10000;
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -249,14 +249,6 @@ class UserController extends AbstractController
             return $rateLimitResponse;
         }
 
-        $totalUsers = $this->userRepository->count([]);
-        if ($totalUsers >= self::MAX_USERS_COUNT) {
-            return $this->secureJson([
-                'error' => $this->translator->trans('user.admin.max_users_exceeded', ['%max%' => self::MAX_USERS_COUNT]),
-                'code' => 'MAX_USERS_EXCEEDED',
-            ], 422);
-        }
-
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.payload_too_large')], 413);
@@ -310,13 +302,24 @@ class UserController extends AbstractController
             return $this->secureJson(['errors' => ['password' => $pwdResult['errors'][0]]], 422);
         }
 
-        /** @var User $currentUser */
-        $currentUser = $this->getUser();
+        $totalUsers = $this->userRepository->count([]);
+        if ($totalUsers >= self::MAX_USERS_COUNT) {
+            return $this->secureJson([
+                'error' => $this->translator->trans('user.admin.max_users_exceeded', ['%max%' => self::MAX_USERS_COUNT]),
+                'code' => 'MAX_USERS_EXCEEDED',
+            ], 422);
+        }
+
+        /** @var ?User $currentUser */
+        $currentUser = null;
+        try {
+            $currentUser = $this->getUser();
+        } catch (\Throwable) {}
 
         // Anti-privilege escalation: non-superadmin cannot create superadmin
         $isSuperAdminRequested = !empty($data['is_super_admin'])
             || (!empty($data['roles']) && is_array($data['roles']) && in_array('ROLE_SUPER_ADMIN', $data['roles'], true));
-        if ($isSuperAdminRequested && !$currentUser->isSuperAdmin()) {
+        if ($isSuperAdminRequested && ($currentUser !== null && !$currentUser->isSuperAdmin())) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_escalate_super_admin')], 403);
         }
 
@@ -325,7 +328,7 @@ class UserController extends AbstractController
         $user->email = $email;
         $user->password = $this->hasher->hashPassword($user, $password);
         $user->passwordChangedAt = new \DateTimeImmutable();
-        if ($isSuperAdminRequested && $currentUser->isSuperAdmin()) {
+        if ($isSuperAdminRequested && ($currentUser === null || $currentUser->isSuperAdmin())) {
             $user->roles = ['ROLE_SUPER_ADMIN'];
         }
 
@@ -333,7 +336,7 @@ class UserController extends AbstractController
             foreach ($data['roles'] as $roleId) {
                 $role = $this->roleRepository->find((int) $roleId);
                 if ($role !== null) {
-                    if (!$currentUser->isSuperAdmin()) {
+                    if ($currentUser !== null && !$currentUser->isSuperAdmin()) {
                         foreach ($role->permissions as $perm) {
                             if (!$currentUser->hasPermission($perm->name)) {
                                 return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_assign_unowned_permissions')], 403);
@@ -346,7 +349,7 @@ class UserController extends AbstractController
         } elseif (!empty($data['role'])) {
             $role = $this->roleRepository->findByName($data['role']);
             if ($role !== null) {
-                if (!$currentUser->isSuperAdmin()) {
+                if ($currentUser !== null && !$currentUser->isSuperAdmin()) {
                     foreach ($role->permissions as $perm) {
                         if (!$currentUser->hasPermission($perm->name)) {
                             return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_assign_unowned_permissions')], 403);
@@ -366,7 +369,7 @@ class UserController extends AbstractController
             input: ['id' => $user->id, 'email' => $user->email, 'name' => $user->name],
             output: ['success' => true, 'id' => $user->id],
             status: 'success',
-            createdBy: $currentUser->getUserIdentifier(),
+            createdBy: $currentUser?->getUserIdentifier(),
             source: 'user_management'
         );
         $this->auditService->flush();

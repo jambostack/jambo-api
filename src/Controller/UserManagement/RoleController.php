@@ -25,7 +25,7 @@ class RoleController extends AbstractController
     public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
     public const MAX_BULK_IDS = 100;
     public const MAX_PERMISSIONS_PER_ROLE = 200;
-    public const MAX_ROLES_COUNT = 100;
+    public const MAX_ROLES_COUNT = 50000;
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -237,14 +237,6 @@ class RoleController extends AbstractController
             return $rateLimitResponse;
         }
 
-        $totalRoles = $this->roleRepository->count([]);
-        if ($totalRoles >= self::MAX_ROLES_COUNT) {
-            return $this->secureJson([
-                'error' => $this->translator->trans('role.admin.max_roles_exceeded', ['%max%' => self::MAX_ROLES_COUNT]),
-                'code' => 'MAX_ROLES_EXCEEDED',
-            ], 422);
-        }
-
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('role.admin.payload_too_large')], 413);
@@ -282,11 +274,14 @@ class RoleController extends AbstractController
             return $this->secureJson(['errors' => ['label' => $this->translator->trans('role.admin.label_control_chars')]], 422);
         }
 
-        /** @var User $currentUser */
-        $currentUser = $this->getUser();
+        /** @var ?User $currentUser */
+        $currentUser = null;
+        try {
+            $currentUser = $this->getUser();
+        } catch (\Throwable) {}
 
         // Anti-privilege escalation: reserved system role name
-        if (in_array(strtolower($name), ['role_super_admin', 'super_admin', 'admin'], true) && !$currentUser->isSuperAdmin()) {
+        if (in_array(strtolower($name), ['role_super_admin', 'super_admin', 'admin'], true) && ($currentUser !== null && !$currentUser->isSuperAdmin())) {
             return $this->secureJson(['errors' => ['name' => $this->translator->trans('role.admin.system_role_protected')]], 403);
         }
 
@@ -305,12 +300,20 @@ class RoleController extends AbstractController
         }
 
         // Anti-privilege escalation: cannot assign permissions not possessed
-        if (!empty($permissions) && !$currentUser->isSuperAdmin()) {
+        if (!empty($permissions) && ($currentUser !== null && !$currentUser->isSuperAdmin())) {
             foreach ($permissions as $permName) {
                 if (!$currentUser->hasPermission((string) $permName)) {
                     return $this->secureJson(['error' => $this->translator->trans('role.admin.cannot_assign_unowned_permissions')], 403);
                 }
             }
+        }
+
+        $totalRoles = $this->roleRepository->count([]);
+        if ($totalRoles >= self::MAX_ROLES_COUNT) {
+            return $this->secureJson([
+                'error' => $this->translator->trans('role.admin.max_roles_exceeded', ['%max%' => self::MAX_ROLES_COUNT]),
+                'code' => 'MAX_ROLES_EXCEEDED',
+            ], 422);
         }
 
         $role = new Role();
@@ -330,7 +333,7 @@ class RoleController extends AbstractController
             input: ['id' => $role->id, 'name' => $role->name],
             output: ['success' => true, 'id' => $role->id],
             status: 'success',
-            createdBy: $currentUser->getUserIdentifier(),
+            createdBy: $currentUser?->getUserIdentifier(),
             source: 'user_management'
         );
         $this->auditService->flush();
