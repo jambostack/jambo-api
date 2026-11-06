@@ -12,7 +12,7 @@ use OpenApi\Attributes as OA;
 #[OA\Tag(name: 'Health')]
 class HealthController extends AbstractController
 {
-    public const VERSION = '1.26.202';
+    public const VERSION = '1.26.206';
 
     public function __construct(
         private Connection $connection,
@@ -59,9 +59,19 @@ class HealthController extends AbstractController
             ];
         }
 
+        $version = self::VERSION;
+        $projectDir = (string) $this->getParameter('kernel.project_dir');
+        $versionFile = $projectDir . '/VERSION';
+        if (is_file($versionFile)) {
+            $trimmed = trim((string) @file_get_contents($versionFile));
+            if ($trimmed !== '') {
+                $version = $trimmed;
+            }
+        }
+
         return new JsonResponse([
             'status'    => $status,
-            'version'   => self::VERSION,
+            'version'   => $version,
             'timestamp' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
             'checks'    => $checks,
         ], $httpCode);

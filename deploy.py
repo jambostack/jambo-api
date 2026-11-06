@@ -110,6 +110,27 @@ def main():
         ("File permissions hardening", "chmod 600 .env .env.local .env.backup_* 2>/dev/null || true; chmod 700 var var/cache var/log 2>/dev/null || true; chmod 644 public/uploads/.htaccess 2>/dev/null || true"),
     ]
 
+    def sync_frontend_assets():
+        local_build = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'public', 'build')
+        if not os.path.isdir(local_build):
+            return 0
+        print("\n--- [Step: Frontend asset synchronization (rsync)] ---")
+        ssh_opt = "ssh -o BatchMode=yes -o ConnectTimeout=15"
+        if KEY_FILE and os.path.exists(KEY_FILE):
+            ssh_opt += f" -i {KEY_FILE}"
+        rsync_cmd = [
+            "rsync", "-avz", "--delete",
+            "-e", ssh_opt,
+            f"{local_build}/",
+            f"{USER}@{HOST}:{REMOTE}/public/build/",
+        ]
+        proc = subprocess.run(rsync_cmd, capture_output=True, text=True)
+        if proc.returncode == 0:
+            print("  Frontend assets synchronized successfully.")
+        else:
+            print(f"  Notice during asset rsync: {proc.stderr.strip() or proc.stdout.strip()}")
+        return 0
+
     for label, cmd in steps:
         print(f"\n--- [Step: {label}] ---")
         rc = execute_step(cmd)
@@ -118,6 +139,8 @@ def main():
             if ssh:
                 ssh.close()
             sys.exit(1)
+        if label == "Frontend build":
+            sync_frontend_assets()
 
     print("\n========================================================")
     print(" DEPLOYMENT SUCCEEDED!")

@@ -7,6 +7,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.206] — 2026-11-06
+
+### Dynamic Healthcheck Versioning, PHPUnit Stub Modernization & Production Deployment (Cycle #131)
+- **CI / GitHub Actions Green Milestone**:
+  - Full GitHub Actions CI pipeline validated 100% GREEN (run `42226993082` and `42226996410`): Frontend Assets Compilation, PHPUnit & Static Validation (PHP 8.4 on Symfony 8.1 components), and Production Docker Image Build all succeeded with zero failures.
+- **Dynamic Versioning & System Healthcheck (`src/Controller/HealthController.php`, `VERSION`, `composer.json`, `package.json`)**:
+  - Synchronized project version to `1.26.206` across `VERSION`, `composer.json`, `package.json`, and `HealthController::VERSION`.
+  - Upgraded `HealthController` to dynamically inspect `VERSION` file as primary source of truth, ensuring `/api/health` and `/health` never report stale versions after release updates.
+- **Modern PHPUnit 13 Stub Refactoring (`tests/EventSubscriber/SecurityHeadersSubscriberTest.php`)**:
+  - Refactored `HttpKernelInterface` mock to `createStub()`, eliminating PHPUnit mock-without-expectations notices and ensuring standard compliant test suite execution.
+- **Production Deployment Runner Hardening (`deploy.py`)**:
+  - Added automated `sync_frontend_assets()` step using `rsync` over SSH to seamlessly distribute compiled Webpack Encore production assets (`public/build/`) to o2switch shared hosting environments lacking native Node.js/npm.
+  - Deployed release to live production on o2switch `api.jambostack.site` with zero downtime, verified database migrations, and warmed production cache.
+
+---
+
 ## [1.26.202] — 2026-11-06
 
 ### CI PHPUnit Green Suite & Webpack Encore Test Resilience (Cycle #127 / #131)
