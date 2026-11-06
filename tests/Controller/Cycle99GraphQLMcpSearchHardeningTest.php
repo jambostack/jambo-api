@@ -57,6 +57,7 @@ class Cycle99GraphQLMcpSearchHardeningTest extends WebTestCase
         $col->name = 'Articles';
         $col->slug = 'articles';
         $col->project = $this->project;
+        $this->project->collections->add($col);
         $this->em->persist($col);
 
         $field = new Field();
@@ -64,6 +65,7 @@ class Cycle99GraphQLMcpSearchHardeningTest extends WebTestCase
         $field->slug = 'title';
         $field->type = 'text';
         $field->collection = $col;
+        $col->fields->add($field);
         $this->em->persist($field);
 
         $apiToken = new ApiToken();

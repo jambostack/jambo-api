@@ -54,7 +54,7 @@ class NormalizeRelationOptionsCommandTest extends KernelTestCase
         $this->em->flush();
     }
 
-    private function runCommand(array $input = []): CommandTester
+    private function executeNormalizeCommand(array $input = []): CommandTester
     {
         $application = new Application(self::$kernel);
         $command = $application->find('app:normalize-relation-options');
@@ -66,7 +66,7 @@ class NormalizeRelationOptionsCommandTest extends KernelTestCase
 
     public function testLegacyOptionsAreNormalizedInDatabase(): void
     {
-        $tester = $this->runCommand();
+        $tester = $this->executeNormalizeCommand();
         $tester->assertCommandIsSuccessful();
 
         $this->em->clear();
@@ -82,7 +82,7 @@ class NormalizeRelationOptionsCommandTest extends KernelTestCase
 
     public function testDryRunLeavesDatabaseUntouched(): void
     {
-        $tester = $this->runCommand(['--dry-run' => true]);
+        $tester = $this->executeNormalizeCommand(['--dry-run' => true]);
         $tester->assertCommandIsSuccessful();
 
         $this->em->clear();
