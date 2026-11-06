@@ -7,6 +7,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.200] — 2026-11-06
+
+### Asynchronous Batch Import & JSONL/CSV Multi-Tenant Serialization Hardening (Cycle #129)
+- **Asynchronous Batch Import & Multi-Tenant Serialization (`ImportService`, `BatchProcessingController`)**:
+  - Implemented `BatchProcessingController` with dedicated endpoints: `POST /api/projects/{uuid}/batch/{collectionSlug}/import`, `GET /api/projects/{uuid}/batch/{batchId}/status`, and `GET /api/projects/{uuid}/batch/{collectionSlug}/export`.
+  - Added strict multi-tenant boundary validation: verifies that requested collections strictly belong to the authenticated project tenant, rejecting unauthorized cross-tenant operations with HTTP 404 `COLLECTION_NOT_FOUND`.
+  - Added asynchronous background processing via Symfony Messenger (`BatchImportMessage`, `BatchImportMessageHandler`) with auto-routing to the async transport, status persistence in `var/batch/{batchId}.json`, and 202 Accepted responses.
+  - Implemented multi-tenant IDOR defense on batch status retrieval: querying a batch job using a foreign project UUID returns HTTP 404 `BATCH_NOT_FOUND`.
+- **Memory Integrity & Decompression Bomb Protection (`ImportService`)**:
+  - Added comprehensive decompression bomb defense for ZIP and GZIP streams: checks uncompressed-to-compressed ratio (max 100:1), maximum uncompressed payload (100MB), maximum files count (500), and rejects archives exceeding safety thresholds.
+  - Built-in Zip Slip directory traversal blocking (`..`, `\0`, leading `/`, Windows drive paths) and dangerous extension rejection (`.php`, `.sh`, `.exe`, etc.).
+  - Enforced symlink prohibition (mode `0120000`) in uploaded archives.
+  - Implemented chunked entity flush and memory detachment (`detach()`) with periodic garbage collection (`gc_collect_cycles()`) every 50 rows.
+  - Added dynamic memory exhaustion safeguard (`isMemoryNearLimit()`): gracefully terminates batches when memory consumption reaches 85% of PHP `memory_limit` to prevent OOM process termination.
+- **Data Sanitization & Injection Defense (`ImportService`)**:
+  - Implemented CSV formula injection protection: automatically neutralizes cells starting with `=`, `+`, `-`, `@`, `\t`, `\r`.
+  - Enforced control character removal (`[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]`) while preserving standard whitespace.
+  - Added JSONL streaming validation with depth limit protection (`MAX_JSON_DEPTH = 32`) and line-by-line error reporting.
+- **Streaming Multi-Tenant Export (`BatchProcessingController`, `ImportService`)**:
+  - Implemented memory-safe paginated streaming export in CSV and JSONL formats with standard security headers and attachment disposition.
+- **Strict 4-Language i18n Parity (3,819 keys)**:
+  - Added 19 new localized keys across `en`, `fr`, `es`, `ar` for batch import/export errors, memory exhaustion, decompression bombs, and status reports.
+- **Comprehensive Test Suite**:
+  - Added 17 automated tests (55 assertions) in `Cycle129BatchProcessingSecurityTest` validating RBAC, CSV/JSONL import, async execution, status tracking, bomb defenses, Zip Slip, formula escaping, streaming export, and i18n parity.
+
+---
+
 ## [1.26.199] — 2026-11-06
 
 ### Realtime SSE Streaming & Mercure Fallback Multi-Tenant Eavesdropping Protection (Cycle #128)

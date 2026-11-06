@@ -27,3 +27,4 @@ framework:
             App\Message\SendProjectEmailMessage: async
             App\Message\ExecuteAutomationMessage: async
             App\Message\ExecuteSubFlowMessage: async
+            App\Message\BatchImportMessage: async
