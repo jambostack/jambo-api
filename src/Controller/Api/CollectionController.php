@@ -6,25 +6,56 @@ use App\Repository\CollectionRepository;
 use App\Service\ApiTokenChecker;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
-
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[OA\Tag(name: 'Collections')]
 #[Route('/public-api/collections', name: 'public_api_collections_')]
 class CollectionController extends AbstractController
 {
+    public const MAX_SLUG_LENGTH = 128;
+
+    private const SECURITY_HEADERS = [
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate, private',
+        'Pragma'                 => 'no-cache',
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+    ];
+
     public function __construct(
         private ApiTokenChecker $tokenChecker,
         private CollectionRepository $collectionRepository,
         private ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.project_limiter')]
+        private ?RateLimiterFactory $projectLimiter = null,
     ) {}
 
     private function trans(string $key, array $params = [], string $default = ''): string
     {
         return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->projectLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            if (!$this->projectLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('api_collection.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+        return null;
     }
 
     #[OA\Get(
@@ -46,12 +77,16 @@ class CollectionController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $token = $this->tokenChecker->resolve($request);
         if ($token === null) {
-            return $this->json(['error' => $this->trans('api_collection.unauthorized', [], 'Unauthorized.')], 401);
+            return $this->secureJson(['error' => $this->trans('api_collection.unauthorized', [], 'Unauthorized.')], 401);
         }
         if (!$this->tokenChecker->isAllowedForMethod($token, $request->getMethod())) {
-            return $this->json(['error' => $this->trans('api_collection.insufficient_abilities', [], 'Insufficient token abilities.')], 403);
+            return $this->secureJson(['error' => $this->trans('api_collection.insufficient_abilities', [], 'Insufficient token abilities.')], 403);
         }
 
         $page    = max(1, $request->query->getInt('page', 1));
@@ -60,7 +95,7 @@ class CollectionController extends AbstractController
         $collections = $this->collectionRepository->findByProjectPaginated($token->project, $page, $perPage);
         $total       = $this->collectionRepository->countByProject($token->project);
 
-        return $this->json([
+        return $this->secureJson([
             'data' => array_map(fn ($c) => [
                 'name'        => $c->name,
                 'slug'        => $c->slug,
@@ -98,20 +133,28 @@ class CollectionController extends AbstractController
     #[Route('/{slug}', name: 'show', methods: ['GET'])]
     public function show(Request $request, string $slug): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        if (strlen($slug) > self::MAX_SLUG_LENGTH || !preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
+            return $this->secureJson(['error' => $this->trans('api_collection.not_found', [], 'Collection not found.')], 404);
+        }
+
         $token = $this->tokenChecker->resolve($request);
         if ($token === null) {
-            return $this->json(['error' => $this->trans('api_collection.unauthorized', [], 'Unauthorized.')], 401);
+            return $this->secureJson(['error' => $this->trans('api_collection.unauthorized', [], 'Unauthorized.')], 401);
         }
         if (!$this->tokenChecker->isAllowedForMethod($token, $request->getMethod())) {
-            return $this->json(['error' => $this->trans('api_collection.insufficient_abilities', [], 'Insufficient token abilities.')], 403);
+            return $this->secureJson(['error' => $this->trans('api_collection.insufficient_abilities', [], 'Insufficient token abilities.')], 403);
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($token->project, $slug);
         if ($collection === null) {
-            return $this->json(['error' => $this->trans('api_collection.not_found', [], 'Collection not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_collection.not_found', [], 'Collection not found.')], 404);
         }
 
-        return $this->json([
+        return $this->secureJson([
             'name'        => $collection->name,
             'slug'        => $collection->slug,
             'description' => $collection->description,

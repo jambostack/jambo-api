@@ -6,8 +6,7 @@ namespace App\EventListener;
 
 use App\Entity\ContentEntry;
 use App\Entity\SeoRevision;
-use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Event\PreUpdateEventArgs;
+use Doctrine\ORM\Event\OnFlushEventArgs;
 
 /**
  * Crée automatiquement un snapshot SEO (SeoRevision) lorsqu'un champ SEO
@@ -26,44 +25,53 @@ class SeoRevisionListener
         'seoScore',
     ];
 
-    public function __construct(
-        private readonly EntityManagerInterface $em,
-    ) {}
-
-    public function preUpdate(ContentEntry $entry, PreUpdateEventArgs $args): void
+    public function onFlush(OnFlushEventArgs $args): void
     {
-        // Vérifier si au moins un champ SEO a changé
-        $hasSeoChange = false;
-        foreach (self::SEO_FIELDS as $field) {
-            if ($args->hasChangedField($field)) {
-                $hasSeoChange = true;
-                break;
+        $em = $args->getObjectManager();
+        $uow = $em->getUnitOfWork();
+
+        foreach ($uow->getScheduledEntityUpdates() as $entity) {
+            if (!$entity instanceof ContentEntry) {
+                continue;
             }
-        }
 
-        if (!$hasSeoChange) {
-            return;
-        }
-
-        // Éviter de créer des révisions en cascade pour le listener lui-même
-        // (on vérifie qu'on n'est pas déjà en train de persister une SeoRevision)
-        $uow = $this->em->getUnitOfWork();
-        foreach ($uow->getScheduledEntityInsertions() as $entity) {
-            if ($entity instanceof SeoRevision && $entity->entry?->id === $entry->id) {
-                return;
+            $changeSet = $uow->getEntityChangeSet($entity);
+            $hasSeoChange = false;
+            foreach (self::SEO_FIELDS as $field) {
+                if (isset($changeSet[$field])) {
+                    $hasSeoChange = true;
+                    break;
+                }
             }
+
+            if (!$hasSeoChange) {
+                continue;
+            }
+
+            // Éviter de créer des révisions en cascade si déjà planifiée pour cette entité
+            $alreadyScheduled = false;
+            foreach ($uow->getScheduledEntityInsertions() as $inserted) {
+                if ($inserted instanceof SeoRevision && $inserted->entry === $entity) {
+                    $alreadyScheduled = true;
+                    break;
+                }
+            }
+            if ($alreadyScheduled) {
+                continue;
+            }
+
+            $revision = new SeoRevision();
+            $revision->entry = $entity;
+            $revision->metaTitle = $entity->metaTitle;
+            $revision->metaDescription = $entity->metaDescription;
+            $revision->slug = $entity->slug;
+            $revision->canonicalUrl = $entity->canonicalUrl;
+            $revision->ogImage = $entity->ogImage;
+            $revision->seoScore = $entity->seoScore;
+            $revision->changedBy = $entity->updatedBy;
+
+            $em->persist($revision);
+            $uow->computeChangeSet($em->getClassMetadata(SeoRevision::class), $revision);
         }
-
-        $revision = new SeoRevision();
-        $revision->entry = $entry;
-        $revision->metaTitle = $entry->metaTitle;
-        $revision->metaDescription = $entry->metaDescription;
-        $revision->slug = $entry->slug;
-        $revision->canonicalUrl = $entry->canonicalUrl;
-        $revision->ogImage = $entry->ogImage;
-        $revision->seoScore = $entry->seoScore;
-        $revision->changedBy = $entry->updatedBy;
-
-        $this->em->persist($revision);
     }
 }
