@@ -20,6 +20,7 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -165,9 +166,22 @@ class RealtimeController extends AbstractController
             }
         }
 
-        $validation = $this->topicSecurity->validateAndFilterTopics($projectUuid, $requestedTopics);
+        // Determine actor permissions
+        $user = $this->getUser();
+        $userEntity = $user instanceof User ? $user : null;
+        $apiToken = $request->attributes->get('_api_token');
+        if (!$apiToken instanceof ApiToken && $this->tokenChecker !== null) {
+            $apiToken = $this->tokenChecker->resolve($request);
+        }
+        $actor = $userEntity ?? $apiToken;
+
+        $validation = $this->topicSecurity->validateAndFilterTopics($projectUuid, $requestedTopics, $actor);
         if (isset($validation['error'])) {
-            $status = ($validation['code'] ?? null) === 'FORBIDDEN' ? 403 : 422;
+            $status = match ($validation['code'] ?? null) {
+                'FORBIDDEN'            => 403,
+                'COLLECTION_NOT_FOUND' => 404,
+                default                => 422,
+            };
             return $this->secureJson([
                 'error' => $validation['error'],
                 'code'  => $validation['code'] ?? 'VALIDATION_ERROR',
@@ -176,14 +190,7 @@ class RealtimeController extends AbstractController
 
         $subscribeTopics = $validation['topics'];
 
-        // Determine publish permissions
-        $user = $this->getUser();
-        $userEntity = $user instanceof User ? $user : null;
-        $apiToken = $request->attributes->get('_api_token');
-        if (!$apiToken instanceof ApiToken && $this->tokenChecker !== null) {
-            $apiToken = $this->tokenChecker->resolve($request);
-        }
-        $canPublish = $this->topicSecurity->canActorPublish($userEntity ?? $apiToken, $project);
+        $canPublish = $this->topicSecurity->canActorPublish($actor, $project);
 
         $requestedPublish = $request->query->get('publish') ?? $request->request->get('publish');
         $requestedPublishTopics = $request->query->get('publish_topics') ?? $request->request->get('publish_topics');
@@ -201,9 +208,13 @@ class RealtimeController extends AbstractController
                 ], 403);
             }
 
-            $publishValidation = $this->topicSecurity->validateAndFilterTopics($projectUuid, $requestedPublishTopics);
+            $publishValidation = $this->topicSecurity->validateAndFilterTopics($projectUuid, $requestedPublishTopics, $actor);
             if (isset($publishValidation['error'])) {
-                $status = ($publishValidation['code'] ?? null) === 'FORBIDDEN' ? 403 : 422;
+                $status = match ($publishValidation['code'] ?? null) {
+                    'FORBIDDEN'            => 403,
+                    'COLLECTION_NOT_FOUND' => 404,
+                    default                => 422,
+                };
                 return $this->secureJson([
                     'error' => $publishValidation['error'],
                     'code'  => $publishValidation['code'] ?? 'VALIDATION_ERROR',
@@ -432,9 +443,44 @@ class RealtimeController extends AbstractController
             return $error;
         }
 
+        $user = $this->getUser();
+        $userEntity = $user instanceof User ? $user : null;
+        $apiToken = $request->attributes->get('_api_token');
+        if (!$apiToken instanceof ApiToken && $this->tokenChecker !== null) {
+            $apiToken = $this->tokenChecker->resolve($request);
+        }
+        $actor = $userEntity ?? $apiToken;
+
         $since = min(1000000, max(0, (int) $request->query->get('since', '0')));
         $limit = min(100, max(1, (int) $request->query->get('limit', 100)));
         $safeUuid = $project->uuid?->toRfc4122() ?? $projectUuid;
+
+        $filterEvent = $request->query->get('event');
+        $filterTopic = $request->query->get('topic');
+
+        if ($filterEvent !== null) {
+            if (!is_string($filterEvent) || strlen($filterEvent) > 64 || !preg_match('/^[a-zA-Z0-9_\-\.\*]+$/', $filterEvent) || str_contains($filterEvent, "\0")) {
+                return $this->secureJson([
+                    'error' => $this->trans('realtime.invalid_event_name', [], 'Invalid event name format.'),
+                    'code'  => 'INVALID_EVENT_NAME',
+                ], 422);
+            }
+        }
+
+        if ($filterTopic !== null) {
+            $topicValidation = $this->topicSecurity->validateAndFilterTopics($projectUuid, [$filterTopic], $actor);
+            if (isset($topicValidation['error'])) {
+                $status = match ($topicValidation['code'] ?? null) {
+                    'FORBIDDEN'            => 403,
+                    'COLLECTION_NOT_FOUND' => 404,
+                    default                => 422,
+                };
+                return $this->secureJson([
+                    'error' => $topicValidation['error'],
+                    'code'  => $topicValidation['code'] ?? 'VALIDATION_ERROR',
+                ], $status);
+            }
+        }
 
         $projectDir = (string) $this->getParameter('kernel.project_dir');
         $baseRealtimeDir = $projectDir . '/var/realtime';
@@ -446,9 +492,6 @@ class RealtimeController extends AbstractController
 
         $events = [];
         $lastId = $since;
-
-        $filterEvent = $request->query->get('event');
-        $filterTopic = $request->query->get('topic');
 
         if (file_exists($eventFile)) {
             // Guard against traversal
@@ -495,6 +538,152 @@ class RealtimeController extends AbstractController
             'since'  => $lastId,
             'time'   => time(),
         ]);
+    }
+
+    /**
+     * Server-Sent Events (SSE) streaming endpoint for realtime events.
+     */
+    #[Route('/stream', name: 'stream', methods: ['GET'])]
+    #[Route('/sse', name: 'sse', methods: ['GET'])]
+    public function streamEvents(string $projectUuid, Request $request): Response
+    {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return $this->secureJson([
+                'error' => $this->trans('realtime.invalid_project_uuid', [], 'Invalid project UUID format'),
+                'code'  => 'INVALID_PROJECT_UUID',
+            ], 400);
+        }
+
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->secureJson([
+                'error' => $this->trans('realtime.project_not_found', [], 'Project not found'),
+                'code'  => 'PROJECT_NOT_FOUND',
+            ], 404);
+        }
+        if (!$project) {
+            return $this->secureJson([
+                'error' => $this->trans('realtime.project_not_found', [], 'Project not found'),
+                'code'  => 'PROJECT_NOT_FOUND',
+            ], 404);
+        }
+        if ($error = $this->denyProjectAccess($project, $request)) {
+            return $error;
+        }
+
+        $user = $this->getUser();
+        $userEntity = $user instanceof User ? $user : null;
+        $apiToken = $request->attributes->get('_api_token');
+        if (!$apiToken instanceof ApiToken && $this->tokenChecker !== null) {
+            $apiToken = $this->tokenChecker->resolve($request);
+        }
+        $actor = $userEntity ?? $apiToken;
+
+        $filterTopic = $request->query->get('topic');
+        if ($filterTopic !== null) {
+            $topicValidation = $this->topicSecurity->validateAndFilterTopics($projectUuid, [$filterTopic], $actor);
+            if (isset($topicValidation['error'])) {
+                $status = match ($topicValidation['code'] ?? null) {
+                    'FORBIDDEN'            => 403,
+                    'COLLECTION_NOT_FOUND' => 404,
+                    default                => 422,
+                };
+                return $this->secureJson([
+                    'error' => $topicValidation['error'],
+                    'code'  => $topicValidation['code'] ?? 'VALIDATION_ERROR',
+                ], $status);
+            }
+        }
+
+        $filterEvent = $request->query->get('event');
+        if ($filterEvent !== null) {
+            if (!is_string($filterEvent) || strlen($filterEvent) > 64 || !preg_match('/^[a-zA-Z0-9_\-\.\*]+$/', $filterEvent) || str_contains($filterEvent, "\0")) {
+                return $this->secureJson([
+                    'error' => $this->trans('realtime.invalid_event_name', [], 'Invalid event name format.'),
+                    'code'  => 'INVALID_EVENT_NAME',
+                ], 422);
+            }
+        }
+
+        $sinceHeader = $request->headers->get('Last-Event-ID');
+        $since = min(1000000, max(0, (int) ($sinceHeader ?? $request->query->get('since', '0'))));
+        $safeUuid = $project->uuid?->toRfc4122() ?? $projectUuid;
+
+        $projectDir = (string) $this->getParameter('kernel.project_dir');
+        $baseRealtimeDir = $projectDir . '/var/realtime';
+        $eventFile = $baseRealtimeDir . '/' . $safeUuid . '.jsonl';
+
+        $origin = $request->headers->get('Origin');
+        $allowedOrigin = null;
+        if (is_string($origin) && $origin !== '') {
+            $host = $request->getSchemeAndHttpHost();
+            if ($origin === $host) {
+                $allowedOrigin = $origin;
+            }
+        }
+
+        $headers = array_merge(self::SECURITY_HEADERS, [
+            'Content-Type'      => 'text/event-stream',
+            'Cache-Control'     => 'no-cache, no-transform, private',
+            'Connection'        => 'keep-alive',
+            'X-Accel-Buffering' => 'no',
+        ]);
+        if ($allowedOrigin !== null) {
+            $headers['Access-Control-Allow-Origin'] = $allowedOrigin;
+            $headers['Access-Control-Allow-Credentials'] = 'true';
+            $headers['Vary'] = 'Origin';
+        }
+
+        return new StreamedResponse(function () use ($eventFile, $since, $filterEvent, $filterTopic) {
+            echo "retry: 3000\n";
+            echo ": connected\n\n";
+            if (ob_get_level() > 0) {
+                ob_flush();
+            }
+            flush();
+
+            $lastId = $since;
+            if (file_exists($eventFile)) {
+                $lines = @file($eventFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                if (is_array($lines) && count($lines) > $since) {
+                    $end = min(count($lines), $since + 100);
+                    for ($i = $since; $i < $end; $i++) {
+                        $data = json_decode($lines[$i], true);
+                        if ($data !== null) {
+                            $match = true;
+                            if (is_string($filterEvent) && $filterEvent !== '') {
+                                $ev = (string) ($data['event'] ?? '');
+                                $match = str_ends_with($filterEvent, '*') ? str_starts_with($ev, rtrim($filterEvent, '*')) : $ev === $filterEvent;
+                            }
+                            if ($match && is_string($filterTopic) && $filterTopic !== '') {
+                                $match = ($data['topic'] ?? '') === $filterTopic;
+                            }
+                            if ($match) {
+                                echo "id: " . ($i + 1) . "\n";
+                                echo "event: " . ($data['event'] ?? 'message') . "\n";
+                                echo "data: " . json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n\n";
+                                if (ob_get_level() > 0) {
+                                    ob_flush();
+                                }
+                                flush();
+                            }
+                            $lastId = $i + 1;
+                        }
+                    }
+                }
+            }
+
+            echo ": ping " . time() . "\n\n";
+            if (ob_get_level() > 0) {
+                ob_flush();
+            }
+            flush();
+        }, 200, $headers);
     }
 
     /**

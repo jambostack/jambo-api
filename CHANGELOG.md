@@ -7,6 +7,32 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.199] — 2026-11-06
+
+### Realtime SSE Streaming & Mercure Fallback Multi-Tenant Eavesdropping Protection (Cycle #128)
+- **Passive Inter-Tenant Eavesdropping Protection (`MercureFallbackController`)**:
+  - Implemented strict subscriber authentication on `/.well-known/mercure` via Bearer JWT, `mercureAuthorization` cookie, session membership, or API token.
+  - Returns HTTP 401 `AUTH_REQUIRED` for unauthenticated subscriptions and HTTP 403 `ACCESS_DENIED` for unauthorized cross-tenant eavesdropping attempts.
+  - Enforced single-tenant isolation: requests specifying topics spanning multiple distinct projects in a single stream are rejected with HTTP 403 `FORBIDDEN`.
+  - Added strict control character, null byte (`NULL_BYTE_DETECTED`), and invalid topic structure validation.
+- **Strict CORS Origin Hardening (`MercureFallbackController`, `CorsSubscriber`)**:
+  - Excluded `/.well-known/mercure` from wildcard public CORS rules in `CorsSubscriber`.
+  - Preflight `OPTIONS` and streaming `GET` validate incoming `Origin` against server host and trusted origins; untrusted third-party origins receive HTTP 403 `CORS_ORIGIN_DENIED`.
+  - Authorized requests receive matched origin and `Access-Control-Allow-Credentials: true` with `Vary: Origin`.
+- **Native Realtime Server-Sent Events (SSE) Stream (`RealtimeController`)**:
+  - Implemented dedicated native SSE streaming endpoints (`GET /api/projects/{uuid}/realtime/stream` and `/sse`) returning `text/event-stream` with keep-alive, client disconnection detection, reconnect delay, and strict tenant authorization.
+  - Added cross-tenant topic filter blocking (HTTP 403 `FORBIDDEN`) and event name syntax verification (HTTP 422 `INVALID_EVENT_NAME`) on both `/poll` and `/stream`.
+- **Administrative Topic Protection & Collection Containment (`MercureTopicSecurityService`)**:
+  - Restricted sensitive administrative topics (`/audit`, `/security`, `/system`, `/members`, `/settings`) to users with manager/admin privileges or `*` API tokens.
+  - Added project collection existence validation on topic subscriptions (`/collections/{slug}`), rejecting non-existent collections with HTTP 404 `COLLECTION_NOT_FOUND`.
+  - Hardened `verifyToken` against path traversal (`..`, `\\`, `//`) in both `subscribe` and `publish` claims, strictly blocking cross-tenant publish tokens.
+- **Collection Topic Event Propagation (`MercurePublisher`, `MercureEntitySubscriber`)**:
+  - Augmented `contentChanged` and `statusChanged` to dispatch events to collection-specific topics (`projects/{uuid}/collections/{slug}` and `projects/{uuid}/content/{slug}`).
+  - Propagated collection slugs on entity lifecycle events (`postPersist`, `postUpdate`, `preRemove`, `onFlush`, `postFlush`).
+- **I18n Translation Completeness & Testing**:
+  - Added 5 translation keys across all 4 locales (en, fr, es, ar): `realtime.sensitive_topic_denied`, `realtime.collection_not_found`, `mercure.cors_origin_denied`, `mercure.multiple_projects_denied`, and `mercure.auth_required` (3,800 keys per locale).
+  - Created test suite `Cycle128RealtimeSseSecurityTest` (19 tests, 102 assertions).
+
 ## [1.26.171] — 2026-11-06
 
 ### Webhook Subsystem Rate Limiting, Audit Logging & Security Hardening (Cycle #101)

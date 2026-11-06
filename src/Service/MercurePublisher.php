@@ -40,9 +40,16 @@ class MercurePublisher
     /**
      * Publie un événement sur le hub Mercure (primaire).
      * Si le hub est null ou en erreur, écrit dans le fichier JSONL (fallback).
+     *
+     * @param string[] $extraTopics
      */
-    private function publish(string $projectUuid, array $data): void
+    private function publish(string $projectUuid, array $data, array $extraTopics = []): void
     {
+        $defaultTopic = $this->resolveTopic($projectUuid, $data['event'] ?? 'unknown');
+        if (!isset($data['topic'])) {
+            $data['topic'] = $defaultTopic;
+        }
+
         $payload = json_encode($data,
             JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
@@ -51,9 +58,9 @@ class MercurePublisher
         // 1. Canal primaire : hub Mercure SSE
         if ($this->hub !== null) {
             try {
-                $topic = $this->resolveTopic($projectUuid, $data['event'] ?? 'unknown');
+                $allTopics = array_values(array_unique(array_merge([$defaultTopic, "projects/{$projectUuid}"], $extraTopics)));
                 $update = new Update(
-                    topics: [$topic, "projects/{$projectUuid}"],
+                    topics: $allTopics,
                     data: $payload,
                     private: true,
                 );
@@ -116,18 +123,29 @@ class MercurePublisher
     // ─── Helpers métier ──────────────────────────────────────────────────
 
     /** Un contenu a été créé, mis à jour ou supprimé */
-    public function contentChanged(string $projectUuid, string $action, array $entry, ?string $title = null): void
+    public function contentChanged(string $projectUuid, string $action, array $entry, ?string $title = null, ?string $collectionSlug = null): void
     {
         $defaultTitle = $this->trans('realtime.untitled', [], 'Untitled');
+        $resolvedTitle = $title ?? ($entry['name'] ?? $entry['title'] ?? $defaultTitle);
+        $slug = $collectionSlug ?? ($entry['collection'] ?? null);
+
+        $extraTopics = [];
+        if (is_string($slug) && $slug !== '') {
+            $extraTopics[] = "projects/{$projectUuid}/collections/{$slug}";
+            $extraTopics[] = "projects/{$projectUuid}/content/{$slug}";
+        }
+
         $this->publish($projectUuid, [
             'event' => "entry.{$action}",
+            'topic' => "projects/{$projectUuid}/content",
             'data'  => [
-                'action' => $action,
-                'entry'  => $entry,
-                'title'  => $title ?? ($entry['name'] ?? $defaultTitle),
-                'time'   => time(),
+                'action'     => $action,
+                'entry'      => $entry,
+                'title'      => $resolvedTitle,
+                'collection' => $slug,
+                'time'       => time(),
             ],
-        ]);
+        ], $extraTopics);
     }
 
     /** Un upload média est terminé */
@@ -136,6 +154,7 @@ class MercurePublisher
         $defaultTitle = $this->trans('realtime.file', [], 'File');
         $this->publish($projectUuid, [
             'event' => 'media.uploaded',
+            'topic' => "projects/{$projectUuid}/media",
             'data'  => [
                 'media' => $media,
                 'title' => $media['original_filename'] ?? $defaultTitle,
@@ -149,6 +168,7 @@ class MercurePublisher
     {
         $this->publish($projectUuid, [
             'event' => 'media.deleted',
+            'topic' => "projects/{$projectUuid}/media",
             'data'  => [
                 'filename' => $filename,
                 'title'    => $filename,
@@ -158,17 +178,24 @@ class MercurePublisher
     }
 
     /** Un statut workflow a changé */
-    public function statusChanged(string $projectUuid, string $entryTitle, string $fromStatus, string $toStatus): void
+    public function statusChanged(string $projectUuid, string $entryTitle, string $fromStatus, string $toStatus, ?string $collectionSlug = null): void
     {
+        $extraTopics = [];
+        if (is_string($collectionSlug) && $collectionSlug !== '') {
+            $extraTopics[] = "projects/{$projectUuid}/collections/{$collectionSlug}";
+        }
+
         $this->publish($projectUuid, [
             'event' => 'status.changed',
+            'topic' => "projects/{$projectUuid}/status",
             'data'  => [
-                'entry' => $entryTitle,
-                'from'  => $fromStatus,
-                'to'    => $toStatus,
-                'title' => "{$entryTitle} → {$toStatus}",
-                'time'  => time(),
+                'entry'      => $entryTitle,
+                'from'       => $fromStatus,
+                'to'         => $toStatus,
+                'collection' => $collectionSlug,
+                'title'      => "{$entryTitle} → {$toStatus}",
+                'time'       => time(),
             ],
-        ]);
+        ], $extraTopics);
     }
 }

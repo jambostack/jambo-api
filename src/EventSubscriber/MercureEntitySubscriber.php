@@ -57,10 +57,12 @@ class MercureEntitySubscriber
                 return;
             }
 
+            $collectionSlug = $entity->collection?->slug;
             $this->mercure->contentChanged($projectUuid, 'created', [
-                'action' => 'created',
-                'uuid'   => $entity->uuid?->toRfc4122(),
-            ]);
+                'action'     => 'created',
+                'uuid'       => $entity->uuid?->toRfc4122(),
+                'collection' => $collectionSlug,
+            ], collectionSlug: $collectionSlug);
         }
     }
 
@@ -73,10 +75,12 @@ class MercureEntitySubscriber
                 return;
             }
 
+            $collectionSlug = $entity->collection?->slug;
             $this->mercure->contentChanged($projectUuid, 'updated', [
-                'action' => 'updated',
-                'uuid'   => $entity->uuid?->toRfc4122(),
-            ]);
+                'action'     => 'updated',
+                'uuid'       => $entity->uuid?->toRfc4122(),
+                'collection' => $collectionSlug,
+            ], collectionSlug: $collectionSlug);
         }
     }
 
@@ -92,10 +96,12 @@ class MercureEntitySubscriber
                 return;
             }
 
+            $collectionSlug = $entity->collection?->slug;
             $this->mercure->contentChanged($projectUuid, 'deleted', [
-                'action' => 'deleted',
-                'uuid'   => $entity->uuid?->toRfc4122(),
-            ]);
+                'action'     => 'deleted',
+                'uuid'       => $entity->uuid?->toRfc4122(),
+                'collection' => $collectionSlug,
+            ], collectionSlug: $collectionSlug);
         }
 
         if ($entity instanceof Media) {
@@ -136,12 +142,14 @@ class MercureEntitySubscriber
 
             // Utiliser l'UUID comme identifiant en attendant d'avoir un getter name
             $entryId = $entity->uuid?->toRfc4122() ?? 'inconnu';
+            $collectionSlug = $entity->collection?->slug;
 
             $this->statusEvents[] = [
-                'projectUuid' => $projectUuid,
-                'title'       => $entryId,
-                'from'        => $from,
-                'to'          => $to,
+                'projectUuid'    => $projectUuid,
+                'title'          => $entryId,
+                'from'           => $from,
+                'to'             => $to,
+                'collectionSlug' => $collectionSlug,
             ];
         }
     }
@@ -158,6 +166,7 @@ class MercureEntitySubscriber
                 $event['title'],
                 $event['from'],
                 $event['to'],
+                $event['collectionSlug'] ?? null,
             );
         }
 

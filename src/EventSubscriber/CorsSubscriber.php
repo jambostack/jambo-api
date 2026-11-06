@@ -35,8 +35,8 @@ class CorsSubscriber implements EventSubscriberInterface
             return;
         }
 
-        // Les routes avec un contrôleur OPTIONS explicite (ex: TUS protocol discovery) passent au contrôleur
-        if (str_contains($request->getPathInfo(), '/files/tus')) {
+        // Les routes avec un contrôleur OPTIONS explicite (ex: TUS protocol discovery, Mercure fallback) passent au contrôleur
+        if (str_contains($request->getPathInfo(), '/files/tus') || str_contains($request->getPathInfo(), '/.well-known/mercure')) {
             return;
         }
 
@@ -122,7 +122,6 @@ class CorsSubscriber implements EventSubscriberInterface
             '#^/api/forms/submit#',
             '#^/storage/#',
             '#^/files/#',
-            '#^/\.well-known/mercure#',
             '#^/api/system/info#',
             '#^/health#',
         ];

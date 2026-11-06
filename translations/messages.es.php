@@ -4137,4 +4137,11 @@ return [
     'fields.options.hide_in_content_list_hint' => 'Evita que este campo se muestre en la lista de contenido',
     'fields.options.hidden_in_api' => 'Oculto en la API',
     'fields.options.hidden_in_api_hint' => 'Evita que este campo se incluya en la respuesta de la API',
+
+    // ─── Cycle 128: Realtime SSE Streaming & Mercure Fallback Multi-Tenant Hardening ───
+    'realtime.sensitive_topic_denied' => 'La suscripción a temas sensibles requiere privilegios administrativos.',
+    'realtime.collection_not_found' => 'La colección "%slug%" no existe en este proyecto.',
+    'mercure.cors_origin_denied' => 'Origen CORS no permitido para la transmisión en tiempo real.',
+    'mercure.multiple_projects_denied' => 'Está prohibido suscribirse a temas de múltiples proyectos en un solo flujo.',
+    'mercure.auth_required' => 'Se requiere autenticación para suscribirse a los eventos en tiempo real.',
 ];

@@ -4137,4 +4137,11 @@ return [
     'fields.options.hide_in_content_list_hint' => 'Prevents this field from being displayed in the content list',
     'fields.options.hidden_in_api' => 'Hidden in API',
     'fields.options.hidden_in_api_hint' => 'Prevents this field from being included in the API response',
+
+    // ─── Cycle 128: Realtime SSE Streaming & Mercure Fallback Multi-Tenant Hardening ───
+    'realtime.sensitive_topic_denied' => 'Sensitive topic subscription requires administrative privileges.',
+    'realtime.collection_not_found' => 'Collection "%slug%" does not exist in this project.',
+    'mercure.cors_origin_denied' => 'CORS origin not allowed for realtime stream.',
+    'mercure.multiple_projects_denied' => 'Subscribing to topics across multiple projects in a single stream is forbidden.',
+    'mercure.auth_required' => 'Authentication required to subscribe to realtime events.',
 ];

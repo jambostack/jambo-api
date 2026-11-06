@@ -8,7 +8,9 @@ use App\Entity\ApiToken;
 use App\Entity\Project;
 use App\Entity\Role;
 use App\Entity\User;
+use App\Repository\CollectionRepository;
 use App\Repository\ProjectMemberRepository;
+use App\Repository\ProjectRepository;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
@@ -27,6 +29,8 @@ class MercureTopicSecurityService
     public function __construct(
         private readonly ProjectMemberRepository $memberRepo,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?CollectionRepository $collectionRepo = null,
+        private readonly ?ProjectRepository $projectRepo = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -59,7 +63,7 @@ class MercureTopicSecurityService
      * @param string[]|string|null $topics
      * @return array{topics: string[], error?: string, code?: string}
      */
-    public function validateAndFilterTopics(string $projectUuid, $topics): array
+    public function validateAndFilterTopics(string $projectUuid, $topics, User|ApiToken|null $actor = null): array
     {
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
             return [
@@ -93,6 +97,16 @@ class MercureTopicSecurityService
                 'error'  => $this->trans('realtime.too_many_topics', ['%max%' => self::MAX_TOPICS_PER_REQUEST], 'Too many topics requested (max ' . self::MAX_TOPICS_PER_REQUEST . ').'),
                 'code'   => 'TOO_MANY_TOPICS',
             ];
+        }
+
+        if ($actor instanceof ApiToken) {
+            if (!$actor->can('*') && !$actor->can('read') && !$actor->can('realtime.subscribe')) {
+                return [
+                    'topics' => [],
+                    'error'  => $this->trans('realtime.topic_access_denied', [], 'Cross-tenant topic subscription is forbidden.'),
+                    'code'   => 'FORBIDDEN',
+                ];
+            }
         }
 
         $sanitized = [];
@@ -179,6 +193,41 @@ class MercureTopicSecurityService
                 ];
             }
 
+            // Validate subpaths (sensitive administrative topics & collection containment)
+            $subPath = substr($canonicalTopic, strlen($expectedPrefix));
+            if ($subPath !== '') {
+                $sensitivePrefixes = ['/audit', '/security', '/system', '/members', '/settings'];
+                foreach ($sensitivePrefixes as $sp) {
+                    if ($subPath === $sp || str_starts_with($subPath, $sp . '/')) {
+                        if ($actor !== null && !$this->isActorAdmin($actor, $projectUuid)) {
+                            return [
+                                'topics' => [],
+                                'error'  => $this->trans('realtime.sensitive_topic_denied', [], 'Sensitive topic subscription requires administrative privileges.'),
+                                'code'   => 'FORBIDDEN',
+                            ];
+                        }
+                        break;
+                    }
+                }
+
+                if (preg_match('#^/collections/([a-zA-Z0-9_\-]+)$#i', $subPath, $cm)) {
+                    $collectionSlug = $cm[1];
+                    if ($this->collectionRepo !== null && $this->projectRepo !== null) {
+                        $proj = $this->projectRepo->findOneBy(['uuid' => $projectUuid]);
+                        if ($proj !== null) {
+                            $coll = $this->collectionRepo->findOneByProjectAndSlug($proj, $collectionSlug);
+                            if ($coll === null) {
+                                return [
+                                    'topics' => [],
+                                    'error'  => $this->trans('realtime.collection_not_found', ['%slug%' => $collectionSlug], 'Collection "' . $collectionSlug . '" does not exist in this project.'),
+                                    'code'   => 'COLLECTION_NOT_FOUND',
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+
             $sanitized[] = $canonicalTopic;
         }
 
@@ -234,6 +283,52 @@ class MercureTopicSecurityService
 
             if (is_string($role)) {
                 return in_array(strtolower($role), ['owner', 'admin', 'manager', 'editor'], true);
+            }
+        }
+
+        return false;
+    }
+
+    public function isActorAdmin(User|ApiToken|null $actor, Project|string $project): bool
+    {
+        if ($actor === null) {
+            return false;
+        }
+
+        $projectEntity = null;
+        if ($project instanceof Project) {
+            $projectEntity = $project;
+        } elseif ($this->projectRepo !== null) {
+            $projectEntity = $this->projectRepo->findOneBy(['uuid' => $project]);
+        }
+
+        if ($actor instanceof ApiToken) {
+            if ($projectEntity !== null && $actor->project !== null && $actor->project->uuid?->toRfc4122() === $projectEntity->uuid?->toRfc4122()) {
+                return $actor->can('*') || $actor->can('manage') || $actor->can('admin') || $actor->can('realtime.admin');
+            }
+            return false;
+        }
+
+        if ($actor instanceof User) {
+            if (in_array('ROLE_SUPER_ADMIN', $actor->getRoles(), true) || in_array('ROLE_ADMIN', $actor->getRoles(), true)) {
+                return true;
+            }
+
+            if ($projectEntity !== null) {
+                $member = $this->memberRepo->findActiveByUserAndProject($actor, $projectEntity);
+                if ($member === null) {
+                    return false;
+                }
+
+                $role = $member->role;
+                if ($role instanceof Role) {
+                    $name = strtolower($role->name);
+                    return in_array($name, ['owner', 'admin'], true) || $role->hasPermission('project.manage');
+                }
+
+                if (is_string($role)) {
+                    return in_array(strtolower($role), ['owner', 'admin'], true);
+                }
             }
         }
 
@@ -310,6 +405,7 @@ class MercureTopicSecurityService
             }
 
             $subscribeTopics = (array) ($mercureClaim['subscribe'] ?? []);
+            $publishTopics = (array) ($mercureClaim['publish'] ?? []);
             $expectedPrefix = 'projects/' . strtolower(trim($projectUuid));
 
             // Ensure subscribed topics belong to the project (unless global superadmin wildcard)
@@ -317,8 +413,37 @@ class MercureTopicSecurityService
                 if ($st === '*') {
                     continue;
                 }
-                $normSt = is_string($st) ? 'projects/' . strtolower(substr($st, 9, 36)) . substr($st, 45) : '';
+                if (!is_string($st) || $st === '' || preg_match('/[\x00-\x1F\x7F]/', $st) || str_contains($st, '..') || str_contains($st, '\\') || str_contains($st, '//')) {
+                    return [
+                        'valid' => false,
+                        'error' => $this->trans('realtime.invalid_topic', [], 'Topic contains illegal characters or wildcards.'),
+                        'code'  => 'ILLEGAL_CHARACTERS',
+                    ];
+                }
+                $normSt = 'projects/' . strtolower(substr($st, 9, 36)) . substr($st, 45);
                 if ($normSt !== $expectedPrefix && !str_starts_with($normSt, $expectedPrefix . '/')) {
+                    return [
+                        'valid' => false,
+                        'error' => $this->trans('realtime.topic_access_denied', [], 'Cross-tenant topic subscription is forbidden.'),
+                        'code'  => 'FORBIDDEN',
+                    ];
+                }
+            }
+
+            // Ensure publish topics belong to the project (unless global superadmin wildcard)
+            foreach ($publishTopics as $pt) {
+                if ($pt === '*') {
+                    continue;
+                }
+                if (!is_string($pt) || $pt === '' || preg_match('/[\x00-\x1F\x7F]/', $pt) || str_contains($pt, '..') || str_contains($pt, '\\') || str_contains($pt, '//')) {
+                    return [
+                        'valid' => false,
+                        'error' => $this->trans('realtime.invalid_topic', [], 'Topic contains illegal characters or wildcards.'),
+                        'code'  => 'ILLEGAL_CHARACTERS',
+                    ];
+                }
+                $normPt = 'projects/' . strtolower(substr($pt, 9, 36)) . substr($pt, 45);
+                if ($normPt !== $expectedPrefix && !str_starts_with($normPt, $expectedPrefix . '/')) {
                     return [
                         'valid' => false,
                         'error' => $this->trans('realtime.topic_access_denied', [], 'Cross-tenant topic subscription is forbidden.'),
@@ -335,7 +460,7 @@ class MercureTopicSecurityService
                     'iss'       => $claims['iss'] ?? null,
                     'exp'       => isset($claims['exp']) && $claims['exp'] instanceof \DateTimeInterface ? $claims['exp']->format(\DateTimeInterface::ATOM) : null,
                     'subscribe' => $subscribeTopics,
-                    'publish'   => (array) ($mercureClaim['publish'] ?? []),
+                    'publish'   => $publishTopics,
                 ],
             ];
         } catch (\Throwable $e) {
