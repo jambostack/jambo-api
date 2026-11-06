@@ -35,6 +35,7 @@ class PermissionController extends AbstractController
     public const PROTECTED_PERMISSIONS = [
         'users.manage',
         'roles.manage',
+        'permissions.manage',
         'project.manage',
         'project.create',
         'collection.create',
@@ -63,18 +64,64 @@ class PermissionController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function isJsonContentType(Request $request): bool
+    {
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if ($contentType === '') {
+            return false;
+        }
+        $cleanType = strtolower(trim(explode(';', $contentType)[0]));
+        return in_array($cleanType, ['application/json', 'application/merge-patch+json'], true);
+    }
+
+    private function isProtectedPermission(string $name): bool
+    {
+        $normalized = strtolower(trim($name));
+        $protected = array_map('strtolower', self::PROTECTED_PERMISSIONS);
+        return in_array($normalized, $protected, true)
+            || str_starts_with($normalized, 'roles.')
+            || str_starts_with($normalized, 'users.')
+            || str_starts_with($normalized, 'permissions.')
+            || str_starts_with($normalized, 'admin.')
+            || str_starts_with($normalized, 'system.');
+    }
+
+    private function getCurrentUserIdentifier(): ?string
+    {
+        try {
+            $user = $this->getUser();
+            return $user?->getUserIdentifier();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function checkRateLimit(?Request $request = null): ?JsonResponse
     {
         if ($this->permissionLimiter !== null && $request !== null) {
             $identifier = $request->getClientIp() ?: '127.0.0.1';
+            $userId = null;
             try {
                 $user = $this->getUser();
                 if ($user !== null) {
                     $identifier = $user->getUserIdentifier();
+                    $userId = $identifier;
                 }
             } catch (\Throwable) {}
 
             if (false === $this->permissionLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService->log(
+                    toolName: 'permission_rate_limit_exceeded',
+                    project: null,
+                    input: ['ip' => $request->getClientIp(), 'uri' => $request->getRequestUri()],
+                    output: ['error' => 'rate_limit_exceeded'],
+                    status: 'failure',
+                    errorMessage: 'Rate limit exceeded on permission management endpoint',
+                    createdBy: $userId,
+                    source: 'user_management'
+                );
+                $this->auditService->flush();
+
                 return $this->secureJson([
                     'error' => $this->translator->trans('permission.admin.rate_limit_exceeded', [], 'messages'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
@@ -136,11 +183,30 @@ class PermissionController extends AbstractController
     }
 
     #[Route('/bulk-delete', name: 'bulk_delete', methods: ['POST'], priority: 10)]
-    #[IsGranted('users.manage')]
+    #[IsGranted('permissions.manage')]
     public function bulkDelete(Request $request): JsonResponse
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if (!$this->isJsonContentType($request)) {
+            $this->auditService->log(
+                toolName: 'permission_invalid_content_type',
+                project: null,
+                input: ['content_type' => $request->headers->get('Content-Type'), 'uri' => $request->getRequestUri()],
+                output: ['error' => 'invalid_content_type'],
+                status: 'failure',
+                errorMessage: 'Content-Type must be application/json.',
+                createdBy: $this->getCurrentUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+
+            return $this->secureJson([
+                'error' => $this->translator->trans('permission.admin.invalid_content_type', [], 'messages'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
         }
 
         $contentLength = (int) $request->headers->get('Content-Length', 0);
@@ -179,6 +245,7 @@ class PermissionController extends AbstractController
                 input: ['attempted_by' => $currentUser->getUserIdentifier()],
                 output: ['error' => 'invalid_password'],
                 status: 'failure',
+                errorMessage: 'Invalid confirmation password',
                 createdBy: $currentUser->getUserIdentifier(),
                 source: 'user_management'
             );
@@ -240,11 +307,30 @@ class PermissionController extends AbstractController
     }
 
     #[Route('', name: 'create', methods: ['POST'])]
-    #[IsGranted('users.manage')]
+    #[IsGranted('permissions.manage')]
     public function create(Request $request): JsonResponse
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if (!$this->isJsonContentType($request)) {
+            $this->auditService->log(
+                toolName: 'permission_invalid_content_type',
+                project: null,
+                input: ['content_type' => $request->headers->get('Content-Type'), 'uri' => $request->getRequestUri()],
+                output: ['error' => 'invalid_content_type'],
+                status: 'failure',
+                errorMessage: 'Content-Type must be application/json.',
+                createdBy: $this->getCurrentUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+
+            return $this->secureJson([
+                'error' => $this->translator->trans('permission.admin.invalid_content_type', [], 'messages'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
         }
 
         $contentLength = (int) $request->headers->get('Content-Length', 0);
@@ -263,6 +349,10 @@ class PermissionController extends AbstractController
             return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_required')]], 422);
         }
 
+        if (mb_strlen($name) > 100) {
+            return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_too_long', [], 'messages') ?? 'Name too long']], 422);
+        }
+
         if (!preg_match('/^[a-z0-9_]+(\.[a-z0-9_]+)*$/', $name)) {
             return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.invalid_name_format')]], 422);
         }
@@ -271,13 +361,50 @@ class PermissionController extends AbstractController
             return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_control_chars')]], 422);
         }
 
+        /** @var ?User $currentUser */
+        $currentUser = null;
+        try {
+            $currentUser = $this->getUser();
+        } catch (\Throwable) {}
+
         $existing = $this->permissionRepository->findOneBy(['name' => $name]);
+
+        // Anti-privilege escalation on protected system permissions
+        if ($this->isProtectedPermission($name)) {
+            if ($existing !== null) {
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_exists')]], 422);
+            }
+            if ($currentUser !== null && !$currentUser->isSuperAdmin()) {
+                $this->auditService->log(
+                    toolName: 'permission_create_privilege_escalation_attempt',
+                    project: null,
+                    input: ['attempted_permission' => $name],
+                    output: ['error' => 'protected_system_permission'],
+                    status: 'failure',
+                    errorMessage: 'Attempt to create protected system permission by non-superadmin',
+                    createdBy: $currentUser->getUserIdentifier(),
+                    source: 'user_management'
+                );
+                $this->auditService->flush();
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.cannot_create_protected_permission')]], 403);
+            }
+            return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.cannot_create_protected_permission')]], 422);
+        }
+
         if ($existing !== null) {
             return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_exists')]], 422);
         }
 
+        $totalPerms = $this->permissionRepository->count([]);
+        if ($totalPerms >= self::MAX_PERMISSIONS_COUNT) {
+            return $this->secureJson([
+                'error' => $this->translator->trans('permission.admin.max_permissions_exceeded', ['%max%' => self::MAX_PERMISSIONS_COUNT]),
+                'code' => 'MAX_PERMISSIONS_EXCEEDED',
+            ], 422);
+        }
+
         $permission = new Permission();
-        $permission->name  = $name;
+        $permission->name = $name;
         $label = trim((string) ($data['label'] ?? $name)) ?: $name;
         if (mb_strlen($label) > 255) {
             return $this->secureJson(['errors' => ['label' => $this->translator->trans('permission.admin.label_too_long')]], 422);
@@ -294,25 +421,12 @@ class PermissionController extends AbstractController
             return $this->secureJson(['errors' => ['group' => $this->translator->trans('permission.admin.group_control_chars')]], 422);
         }
 
-        $totalPerms = $this->permissionRepository->count([]);
-        if ($totalPerms >= self::MAX_PERMISSIONS_COUNT) {
-            return $this->secureJson([
-                'error' => $this->translator->trans('permission.admin.max_permissions_exceeded', ['%max%' => self::MAX_PERMISSIONS_COUNT]),
-                'code' => 'MAX_PERMISSIONS_EXCEEDED',
-            ], 422);
-        }
-
         $permission->label = $label;
         $permission->group = $group;
 
         $this->em->persist($permission);
         $this->em->flush();
 
-        /** @var ?User $currentUser */
-        $currentUser = null;
-        try {
-            $currentUser = $this->getUser();
-        } catch (\Throwable) {}
         $this->auditService->log(
             toolName: 'permission_create',
             project: null,
@@ -330,11 +444,30 @@ class PermissionController extends AbstractController
     }
 
     #[Route('/{id}', name: 'update', methods: ['PUT', 'PATCH'])]
-    #[IsGranted('users.manage')]
+    #[IsGranted('permissions.manage')]
     public function update(int $id, Request $request): JsonResponse
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if (!$this->isJsonContentType($request)) {
+            $this->auditService->log(
+                toolName: 'permission_invalid_content_type',
+                project: null,
+                input: ['content_type' => $request->headers->get('Content-Type'), 'uri' => $request->getRequestUri()],
+                output: ['error' => 'invalid_content_type'],
+                status: 'failure',
+                errorMessage: 'Content-Type must be application/json.',
+                createdBy: $this->getCurrentUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+
+            return $this->secureJson([
+                'error' => $this->translator->trans('permission.admin.invalid_content_type', [], 'messages'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
         }
 
         $contentLength = (int) $request->headers->get('Content-Length', 0);
@@ -347,8 +480,12 @@ class PermissionController extends AbstractController
             return $this->secureJson(['error' => $this->translator->trans('permission.admin.not_found')], 404);
         }
 
-        if (in_array($permission->name, self::PROTECTED_PERMISSIONS, true)) {
-            return $this->secureJson(['error' => $this->translator->trans('permission.admin.system_permission_protected')], 422);
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+
+        // System permissions cannot be modified by non-superadmins
+        if (in_array($permission->name, self::PROTECTED_PERMISSIONS, true) && !$currentUser->isSuperAdmin()) {
+            return $this->secureJson(['error' => $this->translator->trans('permission.admin.system_permission_protected')], 403);
         }
 
         try {
@@ -368,6 +505,17 @@ class PermissionController extends AbstractController
             if (preg_match('/[\x00-\x1F\x7F]/', $newName)) {
                 return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_control_chars')]], 422);
             }
+
+            // Cannot rename a protected system permission even if superadmin
+            if (in_array($permission->name, self::PROTECTED_PERMISSIONS, true) && $newName !== $permission->name) {
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.system_permission_cannot_rename')]], 422);
+            }
+
+            // Cannot rename a custom permission to match a protected system permission
+            if (!in_array($permission->name, self::PROTECTED_PERMISSIONS, true) && $this->isProtectedPermission($newName)) {
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.cannot_create_protected_permission')]], 403);
+            }
+
             $existing = $this->permissionRepository->findOneBy(['name' => $newName]);
             if ($existing !== null && $existing->id !== $permission->id) {
                 return $this->secureJson(['errors' => ['name' => $this->translator->trans('permission.admin.name_exists')]], 422);
@@ -398,8 +546,6 @@ class PermissionController extends AbstractController
 
         $this->em->flush();
 
-        /** @var User $currentUser */
-        $currentUser = $this->getUser();
         $this->auditService->log(
             toolName: 'permission_update',
             project: null,
@@ -417,7 +563,7 @@ class PermissionController extends AbstractController
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
-    #[IsGranted('users.manage')]
+    #[IsGranted('permissions.manage')]
     public function delete(int $id, ?Request $request = null): JsonResponse
     {
         if ($request !== null && ($rateLimitResponse = $this->checkRateLimit($request))) {
@@ -429,7 +575,23 @@ class PermissionController extends AbstractController
             return $this->secureJson(['error' => $this->translator->trans('permission.admin.not_found')], 404);
         }
 
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+        $permId = $permission->id;
+        $permName = $permission->name;
+
         if (in_array($permission->name, self::PROTECTED_PERMISSIONS, true)) {
+            $this->auditService->log(
+                toolName: 'permission_delete_failed_system_permission',
+                project: null,
+                input: ['id' => $permId, 'name' => $permName],
+                output: ['error' => 'protected_system_permission'],
+                status: 'failure',
+                errorMessage: 'Attempt to delete protected system permission',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
             return $this->secureJson(['error' => $this->translator->trans('permission.admin.system_permission_protected')], 422);
         }
 
@@ -438,13 +600,19 @@ class PermissionController extends AbstractController
         )->setParameter('pid', $permission->id)->getSingleScalarResult() > 0;
 
         if ($isAssigned) {
+            $this->auditService->log(
+                toolName: 'permission_delete_failed_assigned_role',
+                project: null,
+                input: ['id' => $permId, 'name' => $permName],
+                output: ['error' => 'assigned_to_role'],
+                status: 'failure',
+                errorMessage: 'Cannot delete permission assigned to active roles',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
             return $this->secureJson(['error' => $this->translator->trans('permission.admin.cannot_delete_assigned')], 422);
         }
-
-        /** @var User $currentUser */
-        $currentUser = $this->getUser();
-        $permId = $permission->id;
-        $permName = $permission->name;
 
         $this->em->remove($permission);
         $this->em->flush();

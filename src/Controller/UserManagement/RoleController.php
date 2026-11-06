@@ -42,6 +42,12 @@ class RoleController extends AbstractController
         'super_admin',
     ];
 
+    private const ADMINISTRATIVE_PERMISSIONS = [
+        'roles.manage',
+        'users.manage',
+        'permissions.manage',
+    ];
+
     public function __construct(
         private RoleRepository $roleRepository,
         private PermissionRepository $permissionRepository,
@@ -58,18 +64,66 @@ class RoleController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function isJsonContentType(Request $request): bool
+    {
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if ($contentType === '') {
+            return false;
+        }
+        $cleanType = strtolower(trim(explode(';', $contentType)[0]));
+        return in_array($cleanType, ['application/json', 'application/merge-patch+json'], true);
+    }
+
+    private function isProtectedRole(string $name): bool
+    {
+        $normalized = strtolower(trim($name));
+        $protected = array_map('strtolower', self::PROTECTED_ROLES);
+        return in_array($normalized, $protected, true)
+            || $normalized === 'super_admin'
+            || $normalized === 'role_super_admin'
+            || $normalized === 'admin'
+            || $normalized === 'role_admin'
+            || $normalized === 'role_user'
+            || $normalized === 'root'
+            || $normalized === 'system';
+    }
+
+    private function getCurrentUserIdentifier(): ?string
+    {
+        try {
+            $user = $this->getUser();
+            return $user?->getUserIdentifier();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function checkRateLimit(?Request $request = null): ?JsonResponse
     {
         if ($this->roleLimiter !== null && $request !== null) {
             $identifier = $request->getClientIp() ?: '127.0.0.1';
+            $userId = null;
             try {
                 $user = $this->getUser();
                 if ($user !== null) {
                     $identifier = $user->getUserIdentifier();
+                    $userId = $identifier;
                 }
             } catch (\Throwable) {}
 
             if (false === $this->roleLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService->log(
+                    toolName: 'role_rate_limit_exceeded',
+                    project: null,
+                    input: ['ip' => $request->getClientIp(), 'uri' => $request->getRequestUri()],
+                    output: ['error' => 'rate_limit_exceeded'],
+                    status: 'failure',
+                    errorMessage: 'Rate limit exceeded on role management endpoint',
+                    createdBy: $userId,
+                    source: 'user_management'
+                );
+                $this->auditService->flush();
+
                 return $this->secureJson([
                     'error' => $this->translator->trans('role.admin.rate_limit_exceeded', [], 'messages'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
@@ -138,6 +192,25 @@ class RoleController extends AbstractController
             return $rateLimitResponse;
         }
 
+        if (!$this->isJsonContentType($request)) {
+            $this->auditService->log(
+                toolName: 'role_invalid_content_type',
+                project: null,
+                input: ['content_type' => $request->headers->get('Content-Type'), 'uri' => $request->getRequestUri()],
+                output: ['error' => 'invalid_content_type'],
+                status: 'failure',
+                errorMessage: 'Content-Type must be application/json.',
+                createdBy: $this->getCurrentUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+
+            return $this->secureJson([
+                'error' => $this->translator->trans('role.admin.invalid_content_type', [], 'messages'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('role.admin.payload_too_large')], 413);
@@ -178,6 +251,7 @@ class RoleController extends AbstractController
                 input: ['attempted_by' => $currentUser->getUserIdentifier()],
                 output: ['error' => 'invalid_password'],
                 status: 'failure',
+                errorMessage: 'Invalid confirmation password',
                 createdBy: $currentUser->getUserIdentifier(),
                 source: 'user_management'
             );
@@ -189,9 +263,19 @@ class RoleController extends AbstractController
         $deletedIds = [];
         foreach ($ids as $id) {
             $role = $this->roleRepository->find((int) $id);
-            if ($role === null || $role->users->count() > 0 || in_array($role->name, self::PROTECTED_ROLES, true)) {
+            if ($role === null || $role->users->count() > 0 || $this->isProtectedRole($role->name)) {
                 continue;
             }
+
+            // Check if role is assigned to any ProjectMember
+            $assignedMembersCount = (int) $this->em->createQuery(
+                'SELECT COUNT(pm.id) FROM App\Entity\ProjectMember pm WHERE pm.role = :role'
+            )->setParameter('role', $role)->getSingleScalarResult();
+
+            if ($assignedMembersCount > 0) {
+                continue;
+            }
+
             $this->em->remove($role);
             $deletedIds[] = $role->id;
             $deleted++;
@@ -237,6 +321,25 @@ class RoleController extends AbstractController
             return $rateLimitResponse;
         }
 
+        if (!$this->isJsonContentType($request)) {
+            $this->auditService->log(
+                toolName: 'role_invalid_content_type',
+                project: null,
+                input: ['content_type' => $request->headers->get('Content-Type'), 'uri' => $request->getRequestUri()],
+                output: ['error' => 'invalid_content_type'],
+                status: 'failure',
+                errorMessage: 'Content-Type must be application/json.',
+                createdBy: $this->getCurrentUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+
+            return $this->secureJson([
+                'error' => $this->translator->trans('role.admin.invalid_content_type', [], 'messages'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('role.admin.payload_too_large')], 413);
@@ -280,12 +383,30 @@ class RoleController extends AbstractController
             $currentUser = $this->getUser();
         } catch (\Throwable) {}
 
+        $existing = $this->roleRepository->findByName($name);
+
         // Anti-privilege escalation: reserved system role name
-        if (in_array(strtolower($name), ['role_super_admin', 'super_admin', 'admin'], true) && ($currentUser !== null && !$currentUser->isSuperAdmin())) {
-            return $this->secureJson(['errors' => ['name' => $this->translator->trans('role.admin.system_role_protected')]], 403);
+        if ($this->isProtectedRole($name)) {
+            if ($existing !== null) {
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('role.admin.name_exists')]], 422);
+            }
+            if ($currentUser !== null && !$currentUser->isSuperAdmin()) {
+                $this->auditService->log(
+                    toolName: 'role_create_privilege_escalation_attempt',
+                    project: null,
+                    input: ['attempted_role_name' => $name],
+                    output: ['error' => 'protected_system_role'],
+                    status: 'failure',
+                    errorMessage: 'Attempt to create protected system role by non-superadmin',
+                    createdBy: $currentUser->getUserIdentifier(),
+                    source: 'user_management'
+                );
+                $this->auditService->flush();
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('role.admin.cannot_create_protected_role')]], 403);
+            }
+            return $this->secureJson(['errors' => ['name' => $this->translator->trans('role.admin.cannot_create_protected_role')]], 422);
         }
 
-        $existing = $this->roleRepository->findByName($name);
         if ($existing !== null) {
             return $this->secureJson(['errors' => ['name' => $this->translator->trans('role.admin.name_exists')]], 422);
         }
@@ -295,15 +416,38 @@ class RoleController extends AbstractController
             return $this->secureJson(['errors' => ['permissions' => $this->translator->trans('role.admin.permissions_must_be_array')]], 422);
         }
 
-        if (is_array($permissions) && count($permissions) > self::MAX_PERMISSIONS_PER_ROLE) {
-            return $this->secureJson(['errors' => ['permissions' => $this->translator->trans('role.admin.permissions_limit_exceeded')]], 422);
-        }
+        if (is_array($permissions)) {
+            if (count($permissions) > self::MAX_PERMISSIONS_PER_ROLE) {
+                return $this->secureJson(['errors' => ['permissions' => $this->translator->trans('role.admin.permissions_limit_exceeded')]], 422);
+            }
 
-        // Anti-privilege escalation: cannot assign permissions not possessed
-        if (!empty($permissions) && ($currentUser !== null && !$currentUser->isSuperAdmin())) {
+            // Anti-privilege escalation: cannot assign permissions not possessed
+            if ($currentUser !== null && !$currentUser->isSuperAdmin()) {
+                foreach ($permissions as $permName) {
+                    $permNameStr = (string) $permName;
+                    if (!$currentUser->hasPermission($permNameStr)) {
+                        $this->auditService->log(
+                            toolName: 'role_create_privilege_escalation_attempt',
+                            project: null,
+                            input: ['role_name' => $name, 'permission' => $permNameStr],
+                            output: ['error' => 'unowned_permission'],
+                            status: 'failure',
+                            errorMessage: 'Attempt to assign unowned permission',
+                            createdBy: $currentUser->getUserIdentifier(),
+                            source: 'user_management'
+                        );
+                        $this->auditService->flush();
+                        return $this->secureJson(['error' => $this->translator->trans('role.admin.cannot_assign_unowned_permissions')], 403);
+                    }
+                }
+            }
+
+            // Validate permission existence
             foreach ($permissions as $permName) {
-                if (!$currentUser->hasPermission((string) $permName)) {
-                    return $this->secureJson(['error' => $this->translator->trans('role.admin.cannot_assign_unowned_permissions')], 403);
+                $permNameStr = (string) $permName;
+                $permObj = $this->permissionRepository->findOneBy(['name' => $permNameStr]);
+                if ($permObj === null) {
+                    return $this->secureJson(['errors' => ['permissions' => $this->translator->trans('role.admin.invalid_permission')]], 422);
                 }
             }
         }
@@ -351,6 +495,25 @@ class RoleController extends AbstractController
             return $rateLimitResponse;
         }
 
+        if (!$this->isJsonContentType($request)) {
+            $this->auditService->log(
+                toolName: 'role_invalid_content_type',
+                project: null,
+                input: ['content_type' => $request->headers->get('Content-Type'), 'uri' => $request->getRequestUri()],
+                output: ['error' => 'invalid_content_type'],
+                status: 'failure',
+                errorMessage: 'Content-Type must be application/json.',
+                createdBy: $this->getCurrentUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+
+            return $this->secureJson([
+                'error' => $this->translator->trans('role.admin.invalid_content_type', [], 'messages'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('role.admin.payload_too_large')], 413);
@@ -365,7 +528,7 @@ class RoleController extends AbstractController
         $currentUser = $this->getUser();
 
         // System roles cannot be renamed or modified by non-superadmins
-        if (in_array($role->name, self::PROTECTED_ROLES, true) && !$currentUser->isSuperAdmin()) {
+        if ($this->isProtectedRole($role->name) && !$currentUser->isSuperAdmin()) {
             return $this->secureJson(['error' => $this->translator->trans('role.admin.system_role_protected')], 403);
         }
 
@@ -389,12 +552,24 @@ class RoleController extends AbstractController
             if (preg_match('/[\x00-\x1F\x7F]/', $newName)) {
                 return $this->secureJson(['errors' => ['name' => $this->translator->trans('role.admin.name_control_chars')]], 422);
             }
+
+            // Cannot rename an already protected role even if superadmin
+            if ($this->isProtectedRole($role->name) && strtolower($newName) !== strtolower($role->name)) {
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('role.admin.system_role_cannot_rename')]], 422);
+            }
+
+            // Cannot rename a non-protected role to a protected role name
+            if (!$this->isProtectedRole($role->name) && $this->isProtectedRole($newName)) {
+                return $this->secureJson(['errors' => ['name' => $this->translator->trans('role.admin.cannot_create_protected_role')]], 403);
+            }
+
             $existing = $this->roleRepository->findByName($newName);
             if ($existing !== null && $existing->id !== $role->id) {
                 return $this->secureJson(['errors' => ['name' => $this->translator->trans('role.admin.name_exists')]], 422);
             }
             $role->name = $newName;
         }
+
         if (isset($data['label'])) {
             $newLabel = trim((string) $data['label']);
             if (mb_strlen($newLabel) > 255) {
@@ -407,6 +582,7 @@ class RoleController extends AbstractController
         } elseif (isset($data['name'])) {
             $role->label = $role->name;
         }
+
         if (isset($data['permissions'])) {
             if (!is_array($data['permissions'])) {
                 return $this->secureJson(['errors' => ['permissions' => $this->translator->trans('role.admin.permissions_must_be_array')]], 422);
@@ -419,9 +595,30 @@ class RoleController extends AbstractController
             // Anti-privilege escalation: cannot assign permissions not possessed
             if (!$currentUser->isSuperAdmin()) {
                 foreach ($data['permissions'] as $permName) {
-                    if (!$currentUser->hasPermission((string) $permName)) {
+                    $permNameStr = (string) $permName;
+                    if (!$currentUser->hasPermission($permNameStr)) {
+                        $this->auditService->log(
+                            toolName: 'role_update_privilege_escalation_attempt',
+                            project: null,
+                            input: ['role_id' => $role->id, 'permission' => $permNameStr],
+                            output: ['error' => 'unowned_permission'],
+                            status: 'failure',
+                            errorMessage: 'Attempt to assign unowned permission during role update',
+                            createdBy: $currentUser->getUserIdentifier(),
+                            source: 'user_management'
+                        );
+                        $this->auditService->flush();
                         return $this->secureJson(['error' => $this->translator->trans('role.admin.cannot_assign_unowned_permissions')], 403);
                     }
+                }
+            }
+
+            // Validate permission existence
+            foreach ($data['permissions'] as $permName) {
+                $permNameStr = (string) $permName;
+                $permObj = $this->permissionRepository->findOneBy(['name' => $permNameStr]);
+                if ($permObj === null) {
+                    return $this->secureJson(['errors' => ['permissions' => $this->translator->trans('role.admin.invalid_permission')]], 422);
                 }
             }
 
@@ -460,18 +657,60 @@ class RoleController extends AbstractController
             return $this->secureJson(['error' => $this->translator->trans('role.admin.not_found')], 404);
         }
 
-        if (in_array($role->name, self::PROTECTED_ROLES, true)) {
-            return $this->secureJson(['error' => $this->translator->trans('role.admin.system_role_protected')], 422);
-        }
-
-        if ($role->users->count() > 0) {
-            return $this->secureJson(['error' => $this->translator->trans('role.admin.cannot_delete_assigned')], 422);
-        }
-
         /** @var User $currentUser */
         $currentUser = $this->getUser();
         $roleId = $role->id;
         $roleName = $role->name;
+
+        if ($this->isProtectedRole($role->name)) {
+            $this->auditService->log(
+                toolName: 'role_delete_failed_system_role',
+                project: null,
+                input: ['id' => $roleId, 'name' => $roleName],
+                output: ['error' => 'protected_system_role'],
+                status: 'failure',
+                errorMessage: 'Attempt to delete protected system role',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+            return $this->secureJson(['error' => $this->translator->trans('role.admin.system_role_protected')], 422);
+        }
+
+        if ($role->users->count() > 0) {
+            $this->auditService->log(
+                toolName: 'role_delete_failed_assigned_user',
+                project: null,
+                input: ['id' => $roleId, 'name' => $roleName, 'users_count' => $role->users->count()],
+                output: ['error' => 'assigned_to_users'],
+                status: 'failure',
+                errorMessage: 'Cannot delete role assigned to users',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+            return $this->secureJson(['error' => $this->translator->trans('role.admin.cannot_delete_assigned')], 422);
+        }
+
+        // Check if role is assigned to any ProjectMember
+        $assignedMembersCount = (int) $this->em->createQuery(
+            'SELECT COUNT(pm.id) FROM App\Entity\ProjectMember pm WHERE pm.role = :role'
+        )->setParameter('role', $role)->getSingleScalarResult();
+
+        if ($assignedMembersCount > 0) {
+            $this->auditService->log(
+                toolName: 'role_delete_failed_assigned_member',
+                project: null,
+                input: ['id' => $roleId, 'name' => $roleName, 'members_count' => $assignedMembersCount],
+                output: ['error' => 'assigned_to_project_member'],
+                status: 'failure',
+                errorMessage: 'Cannot delete role assigned to project members',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+            return $this->secureJson(['error' => $this->translator->trans('role.admin.cannot_delete_assigned_to_members')], 422);
+        }
 
         $this->em->remove($role);
         $this->em->flush();
