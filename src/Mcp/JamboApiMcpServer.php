@@ -23,6 +23,8 @@ use Symfony\Component\Uid\Uuid;
 
 class JamboApiMcpServer extends McpServer
 {
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+
     private EntityManagerInterface $em;
     private EavDataFormatterService $formatter;
 
@@ -924,7 +926,7 @@ class JamboApiMcpServer extends McpServer
                 'media_uuid' => McpTool::stringProp('UUID du média', true),
             ], ['media_uuid']),
             function (array $args, array $ctx): array {
-                $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
+                $media = $this->findMedia($args['media_uuid'] ?? '');
                 if (!$media) throw new McpException($this->trans('mcp.media_not_found', [], 'Media not found.'), 404);
                 if ($media->project !== null) {
                     $this->assertCanReadProject($media->project->uuid->toRfc4122(), $ctx);
@@ -956,7 +958,7 @@ class JamboApiMcpServer extends McpServer
                 'caption' => McpTool::stringProp('Légende du média'),
             ], ['media_uuid']),
             function (array $args, array $ctx): array {
-                $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
+                $media = $this->findMedia($args['media_uuid'] ?? '');
                 if (!$media) throw new McpException($this->trans('mcp.media_not_found', [], 'Media not found.'), 404);
                 if ($media->project !== null) {
                     $this->assertCanWriteProject($media->project->uuid->toRfc4122(), $ctx);
@@ -982,7 +984,7 @@ class JamboApiMcpServer extends McpServer
                 'media_uuid' => McpTool::stringProp('UUID du média', true),
             ], ['media_uuid']),
             function (array $args, array $ctx): array {
-                $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
+                $media = $this->findMedia($args['media_uuid'] ?? '');
                 if (!$media) throw new McpException($this->trans('mcp.media_not_found', [], 'Media not found.'), 404);
                 if ($media->project !== null) {
                     $this->assertCanWriteProject($media->project->uuid->toRfc4122(), $ctx);
@@ -1273,18 +1275,42 @@ class JamboApiMcpServer extends McpServer
                 'quality' => McpTool::intProp('Qualité (1-100)'),
             ], ['media_uuid']),
             function (array $args, array $ctx): array {
-                $media = $this->em->getRepository(Media::class)->findOneBy(['uuid' => $args['media_uuid'], 'deletedAt' => null]);
+                $media = $this->findMedia($args['media_uuid'] ?? '');
                 if (!$media) throw new McpException($this->trans('mcp.media_not_found', [], 'Media not found.'), 404);
                 if ($media->project !== null) {
                     $this->assertCanReadProject($media->project->uuid->toRfc4122(), $ctx);
                 }
 
                 $params = [];
-                if (isset($args['width'])) $params['w'] = $args['width'];
-                if (isset($args['height'])) $params['h'] = $args['height'];
-                if (isset($args['fit'])) $params['fit'] = $args['fit'];
-                if (isset($args['format'])) $params['fmt'] = $args['format'];
-                if (isset($args['quality'])) $params['q'] = $args['quality'];
+                if (isset($args['width'])) {
+                    $w = (int) $args['width'];
+                    if ($w < 1 || $w > 4000) {
+                        throw new McpException($this->trans('mcp.invalid_transform_dimensions', [], 'Invalid image transform dimensions (width and height must be between 1 and 4000).'), 422);
+                    }
+                    $params['w'] = $w;
+                }
+                if (isset($args['height'])) {
+                    $h = (int) $args['height'];
+                    if ($h < 1 || $h > 4000) {
+                        throw new McpException($this->trans('mcp.invalid_transform_dimensions', [], 'Invalid image transform dimensions (width and height must be between 1 and 4000).'), 422);
+                    }
+                    $params['h'] = $h;
+                }
+                if (isset($args['fit'])) {
+                    $allowedFits = ['contain', 'cover', 'crop', 'fill', 'scale-down'];
+                    if (in_array($args['fit'], $allowedFits, true)) {
+                        $params['fit'] = $args['fit'];
+                    }
+                }
+                if (isset($args['format'])) {
+                    $allowedFormats = ['webp', 'avif', 'png', 'jpg'];
+                    if (in_array($args['format'], $allowedFormats, true)) {
+                        $params['fmt'] = $args['format'];
+                    }
+                }
+                if (isset($args['quality'])) {
+                    $params['q'] = max(1, min(100, (int) $args['quality']));
+                }
 
                 $query = http_build_query($params);
                 return [
@@ -1352,7 +1378,26 @@ class JamboApiMcpServer extends McpServer
 
     private function findProject(string $uuid): ?Project
     {
-        return $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return null;
+        }
+        try {
+            return $this->em->getRepository(Project::class)->findOneBy(['uuid' => $uuid]);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function findMedia(string $uuid): ?Media
+    {
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return null;
+        }
+        try {
+            return $this->em->getRepository(Media::class)->findOneBy(['uuid' => $uuid, 'deletedAt' => null]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -1361,6 +1406,10 @@ class JamboApiMcpServer extends McpServer
      */
     private function assertCanReadProject(string $projectUuid, array $ctx): Project
     {
+        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+            throw new McpException($this->trans('mcp.invalid_project_uuid', [], 'Invalid project UUID format.'), 400);
+        }
+
         $project = $this->findProject($projectUuid);
         if (!$project) {
             throw new McpException($this->trans('mcp.project_not_found', [], 'Project not found.'), 404);
@@ -1395,7 +1444,12 @@ class JamboApiMcpServer extends McpServer
      */
     private function assertCanWriteSchema(array $args, array $ctx): Project
     {
-        $project = $this->findProject($args['project_uuid'] ?? '');
+        $projectUuid = $args['project_uuid'] ?? '';
+        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+            throw new McpException($this->trans('mcp.invalid_project_uuid', [], 'Invalid project UUID format.'), 400);
+        }
+
+        $project = $this->findProject($projectUuid);
         if (!$project) {
             throw new McpException($this->trans('mcp.project_not_found', [], 'Project not found.'), 404);
         }
@@ -1439,6 +1493,10 @@ class JamboApiMcpServer extends McpServer
      */
     private function assertCanWriteProject(string $projectUuid, array $ctx): Project
     {
+        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
+            throw new McpException($this->trans('mcp.invalid_project_uuid', [], 'Invalid project UUID format.'), 400);
+        }
+
         $project = $this->findProject($projectUuid);
         if (!$project) {
             throw new McpException($this->trans('mcp.project_not_found', [], 'Project not found.'), 404);
@@ -1491,16 +1549,28 @@ class JamboApiMcpServer extends McpServer
 
     private function findCollection(string $projectUuid, string $slug, ?array $ctx = null): ?Collection
     {
+        if (!preg_match(self::UUID_REGEX, $projectUuid) || !preg_match('/^[a-z0-9_-]+$/i', $slug)) {
+            return null;
+        }
+
         $project = $ctx !== null ? $this->assertCanReadProject($projectUuid, $ctx) : $this->findProject($projectUuid);
         if (!$project) return null;
 
-        return $this->em->getRepository(Collection::class)->findOneBy([
-            'project' => $project, 'slug' => $slug, 'deletedAt' => null,
-        ]);
+        try {
+            return $this->em->getRepository(Collection::class)->findOneBy([
+                'project' => $project, 'slug' => $slug, 'deletedAt' => null,
+            ]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function findEntry(string $projectUuid, string $collectionSlug, string $entryUuid, ?array $ctx = null, bool $includeDeleted = false): ?ContentEntry
     {
+        if (!preg_match(self::UUID_REGEX, $entryUuid)) {
+            return null;
+        }
+
         $collection = $this->findCollection($projectUuid, $collectionSlug, $ctx);
         if (!$collection) return null;
 
@@ -1509,7 +1579,11 @@ class JamboApiMcpServer extends McpServer
             $criteria['deletedAt'] = null;
         }
 
-        return $this->em->getRepository(ContentEntry::class)->findOneBy($criteria);
+        try {
+            return $this->em->getRepository(ContentEntry::class)->findOneBy($criteria);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function createFieldValue(Field $field, mixed $value): ContentFieldValue

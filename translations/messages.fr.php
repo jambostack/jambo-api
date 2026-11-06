@@ -4002,4 +4002,14 @@ return [
     'project.mailer.unsupported_content_type' => 'En-tête Content-Type non pris en charge. application/json attendu.',
     'project.storage.unsupported_content_type' => 'En-tête Content-Type non pris en charge. application/json attendu.',
     'project.jwt_ttl.unsupported_content_type' => 'En-tête Content-Type non pris en charge. application/json attendu.',
+
+    // ─── Cycle 119: MCP Protocol & Server Security Hardening ───
+    'mcp.unsupported_content_type' => 'Type de média non supporté : Content-Type doit être application/json.',
+    'mcp.invalid_project_uuid' => 'Format d\'UUID de projet invalide.',
+    'mcp.missing_argument' => 'Argument obligatoire manquant : %arg%.',
+    'mcp.argument_too_large' => 'L\'argument "%arg%" dépasse la taille maximale autorisée.',
+    'mcp.argument_depth_exceeded' => 'L\'argument "%arg%" dépasse la profondeur d\'imbrication maximale.',
+    'mcp.too_many_arguments' => 'Trop d\'arguments fournis (maximum %max%).',
+    'mcp.invalid_transform_dimensions' => 'Dimensions de transformation d\'image invalides (largeur et hauteur doivent être comprises entre 1 et 4000).',
+    'mcp.invalid_control_characters' => 'Requête invalide : le corps contient des caractères de contrôle invalides.',
 ];

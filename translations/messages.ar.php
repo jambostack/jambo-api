@@ -3986,4 +3986,14 @@ return [
     'project.mailer.unsupported_content_type' => 'رأس Content-Type غير مدعوم. يُتوقع application/json.',
     'project.storage.unsupported_content_type' => 'رأس Content-Type غير مدعوم. يُتوقع application/json.',
     'project.jwt_ttl.unsupported_content_type' => 'رأس Content-Type غير مدعوم. يُتوقع application/json.',
+
+    // ─── Cycle 119: MCP Protocol & Server Security Hardening ───
+    'mcp.unsupported_content_type' => 'نوع الوسائط غير مدعوم: يجب أن يكون Content-Type هو application/json.',
+    'mcp.invalid_project_uuid' => 'تنسيق UUID للمشروع غير صالح.',
+    'mcp.missing_argument' => 'الوسيطة المطلوبة مفقودة: %arg%.',
+    'mcp.argument_too_large' => 'تتجاوز الوسيطة "%arg%" الحد الأقصى للحجم المسموح به.',
+    'mcp.argument_depth_exceeded' => 'تتجاوز الوسيطة "%arg%" الحد الأقصى لعمق التداخل.',
+    'mcp.too_many_arguments' => 'تم توفير عدد كبير جداً من الوسائط (الحد الأقصى %max%).',
+    'mcp.invalid_transform_dimensions' => 'أبعاد تحويل الصورة غير صالحة (يجب أن يكون العرض والارتفاع بين 1 و 4000).',
+    'mcp.invalid_control_characters' => 'طلب غير صالح: يحتوي نص الطلب على أحرف تحكم غير صالحة.',
 ];

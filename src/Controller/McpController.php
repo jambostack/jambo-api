@@ -19,9 +19,13 @@ class McpController extends AbstractController
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
 
     private const SECURITY_HEADERS = [
-        'X-Content-Type-Options' => 'nosniff',
-        'X-Frame-Options'        => 'DENY',
-        'Cache-Control'          => 'no-store',
+        'Cache-Control'             => 'no-store, no-cache, must-revalidate, private',
+        'Pragma'                    => 'no-cache',
+        'X-Content-Type-Options'    => 'nosniff',
+        'X-Frame-Options'           => 'DENY',
+        'Referrer-Policy'           => 'no-referrer',
+        'Content-Security-Policy'   => "default-src 'none'; frame-ancestors 'none';",
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
     ];
 
     public function __construct(
@@ -69,24 +73,45 @@ class McpController extends AbstractController
     #[Route('/mcp', name: 'mcp_endpoint', methods: ['POST'])]
     public function handle(Request $request): Response
     {
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if ($contentType !== '' && !str_contains(strtolower($contentType), 'application/json')) {
+            return $this->secureJson([
+                'jsonrpc' => '2.0',
+                'id' => null,
+                'error' => [
+                    'code' => -32700,
+                    'message' => $this->trans('mcp.unsupported_content_type', [], 'Unsupported Media Type: Content-Type must be application/json.'),
+                ],
+            ], 415);
+        }
+
         $token = $this->extractBearerToken($request);
         $context = $this->buildContext($request, $token);
         $identifier = $this->resolveIdentifier($request, $context);
 
         // Rate limiting : 60 requêtes par minute par IP ou identifiant
-        $limiter = $this->mcpLimiter->create($identifier);
-        if (false === $limiter->consume(1)->isAccepted()) {
-            $this->auditService?->log(
-                toolName: 'mcp_rate_limit_exceeded',
-                project: $context['_project'] ?? null,
-                input: ['identifier' => $identifier],
-                output: null,
-                status: 'failed',
-                errorMessage: 'Rate limit exceeded for MCP endpoint',
-                createdBy: $identifier,
-                source: 'mcp_controller',
-            );
-            return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
+        $rateLimit = null;
+        if ($this->mcpLimiter !== null) {
+            $limiter = $this->mcpLimiter->create($identifier);
+            $rateLimit = $limiter->consume(1);
+            if (!$rateLimit->isAccepted()) {
+                $retryAfter = (string) ceil(max(1, $rateLimit->getRetryAfter()->getTimestamp() - time()));
+                $this->auditService?->log(
+                    toolName: 'mcp_rate_limit_exceeded',
+                    project: $context['_project'] ?? null,
+                    input: ['identifier' => $identifier],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Rate limit exceeded for MCP endpoint',
+                    createdBy: $identifier,
+                    source: 'mcp_controller',
+                );
+                return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429, [
+                    'Retry-After' => $retryAfter,
+                    'X-RateLimit-Limit' => (string) $rateLimit->getLimit(),
+                    'X-RateLimit-Remaining' => '0',
+                ]);
+            }
         }
 
         $body = $request->getContent();
@@ -114,7 +139,24 @@ class McpController extends AbstractController
             ], 400);
         }
 
-        return $this->mcpServer->handleRequest($body, $context);
+        if (str_contains($body, "\0")) {
+            return $this->secureJson([
+                'jsonrpc' => '2.0',
+                'id' => null,
+                'error' => [
+                    'code' => -32600,
+                    'message' => $this->trans('mcp.invalid_control_characters', [], 'Invalid Request: body contains invalid control characters.'),
+                ],
+            ], 400);
+        }
+
+        $extraHeaders = [];
+        if ($rateLimit !== null) {
+            $extraHeaders['X-RateLimit-Limit'] = (string) $rateLimit->getLimit();
+            $extraHeaders['X-RateLimit-Remaining'] = (string) $rateLimit->getRemainingTokens();
+        }
+
+        return $this->mcpServer->handleRequest($body, $context, $extraHeaders);
     }
 
     /**
@@ -123,24 +165,45 @@ class McpController extends AbstractController
     #[Route('/api/projects/{uuid}/mcp', name: 'mcp_project_endpoint', methods: ['POST'])]
     public function handleProject(string $uuid, Request $request): Response
     {
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if ($contentType !== '' && !str_contains(strtolower($contentType), 'application/json')) {
+            return $this->secureJson([
+                'jsonrpc' => '2.0',
+                'id' => null,
+                'error' => [
+                    'code' => -32700,
+                    'message' => $this->trans('mcp.unsupported_content_type', [], 'Unsupported Media Type: Content-Type must be application/json.'),
+                ],
+            ], 415);
+        }
+
         $token = $this->extractBearerToken($request);
         $context = $this->buildContext($request, $token);
         $identifier = $this->resolveIdentifier($request, $context);
 
         // Rate limiting : 60 requêtes par minute par IP ou identifiant
-        $limiter = $this->mcpLimiter->create($identifier);
-        if (false === $limiter->consume(1)->isAccepted()) {
-            $this->auditService?->log(
-                toolName: 'mcp_rate_limit_exceeded',
-                project: null,
-                input: ['uuid' => $uuid, 'identifier' => $identifier],
-                output: null,
-                status: 'failed',
-                errorMessage: 'Rate limit exceeded for project MCP endpoint',
-                createdBy: $identifier,
-                source: 'mcp_controller',
-            );
-            return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
+        $rateLimit = null;
+        if ($this->mcpLimiter !== null) {
+            $limiter = $this->mcpLimiter->create($identifier);
+            $rateLimit = $limiter->consume(1);
+            if (!$rateLimit->isAccepted()) {
+                $retryAfter = (string) ceil(max(1, $rateLimit->getRetryAfter()->getTimestamp() - time()));
+                $this->auditService?->log(
+                    toolName: 'mcp_rate_limit_exceeded',
+                    project: null,
+                    input: ['uuid' => $uuid, 'identifier' => $identifier],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Rate limit exceeded for project MCP endpoint',
+                    createdBy: $identifier,
+                    source: 'mcp_controller',
+                );
+                return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429, [
+                    'Retry-After' => $retryAfter,
+                    'X-RateLimit-Limit' => (string) $rateLimit->getLimit(),
+                    'X-RateLimit-Remaining' => '0',
+                ]);
+            }
         }
 
         $body = $request->getContent();
@@ -164,6 +227,17 @@ class McpController extends AbstractController
                 'error' => [
                     'code' => -32600,
                     'message' => $this->trans('mcp.invalid_request', [], 'Invalid Request: body cannot be empty.'),
+                ],
+            ], 400);
+        }
+
+        if (str_contains($body, "\0")) {
+            return $this->secureJson([
+                'jsonrpc' => '2.0',
+                'id' => null,
+                'error' => [
+                    'code' => -32600,
+                    'message' => $this->trans('mcp.invalid_control_characters', [], 'Invalid Request: body contains invalid control characters.'),
                 ],
             ], 400);
         }
@@ -238,7 +312,13 @@ class McpController extends AbstractController
         $context['project_id'] = $project->id;
         $context['_project'] = $project;
 
-        return $this->mcpServer->handleRequest($body, $context);
+        $extraHeaders = [];
+        if ($rateLimit !== null) {
+            $extraHeaders['X-RateLimit-Limit'] = (string) $rateLimit->getLimit();
+            $extraHeaders['X-RateLimit-Remaining'] = (string) $rateLimit->getRemainingTokens();
+        }
+
+        return $this->mcpServer->handleRequest($body, $context, $extraHeaders);
     }
 
     /**
@@ -247,12 +327,21 @@ class McpController extends AbstractController
     #[Route('/mcp', name: 'mcp_info', methods: ['GET'])]
     public function info(?Request $request = null): JsonResponse
     {
+        $headers = [];
         if ($this->mcpLimiter !== null && $request !== null) {
             $identifier = $this->resolveIdentifier($request);
             $limiter = $this->mcpLimiter->create($identifier);
-            if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
+            $rateLimit = $limiter->consume(1);
+            if (!$rateLimit->isAccepted()) {
+                $retryAfter = (string) ceil(max(1, $rateLimit->getRetryAfter()->getTimestamp() - time()));
+                return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429, [
+                    'Retry-After' => $retryAfter,
+                    'X-RateLimit-Limit' => (string) $rateLimit->getLimit(),
+                    'X-RateLimit-Remaining' => '0',
+                ]);
             }
+            $headers['X-RateLimit-Limit'] = (string) $rateLimit->getLimit();
+            $headers['X-RateLimit-Remaining'] = (string) $rateLimit->getRemainingTokens();
         }
         return $this->secureJson([
             'name' => 'JamboApi MCP Server',
@@ -271,7 +360,7 @@ class McpController extends AbstractController
                 'tools' => true,
                 'resources' => true,
             ],
-        ]);
+        ], 200, $headers);
     }
 
     private function extractBearerToken(Request $request): ?string

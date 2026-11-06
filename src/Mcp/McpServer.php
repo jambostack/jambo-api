@@ -7,6 +7,20 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class McpServer
 {
+    public const SECURITY_HEADERS = [
+        'Cache-Control'             => 'no-store, no-cache, must-revalidate, private',
+        'Pragma'                    => 'no-cache',
+        'X-Content-Type-Options'    => 'nosniff',
+        'X-Frame-Options'           => 'DENY',
+        'Referrer-Policy'           => 'no-referrer',
+        'Content-Security-Policy'   => "default-src 'none'; frame-ancestors 'none';",
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+    ];
+
+    private const MAX_ARGUMENTS_COUNT = 50;
+    private const MAX_ARG_STRING_LENGTH = 250_000;
+    private const MAX_ARG_DEPTH = 6;
+
     /** @var McpTool[] */
     protected array $tools = [];
 
@@ -57,50 +71,50 @@ class McpServer
     /**
      * Handle a JSON-RPC 2.0 request and return a response.
      */
-    public function handleRequest(string $jsonBody, array $context = []): JsonResponse
+    public function handleRequest(string $jsonBody, array $context = [], array $extraHeaders = []): JsonResponse
     {
         try {
             $request = json_decode($jsonBody, true, 64, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
-            return $this->error(null, -32700, $this->trans('mcp.parse_error', ['%error%' => $e->getMessage()], 'Parse error: ' . $e->getMessage()));
+            return $this->error(null, -32700, $this->trans('mcp.parse_error', ['%error%' => $e->getMessage()], 'Parse error: ' . $e->getMessage()), $extraHeaders);
         }
 
         if (!is_array($request) || (array_is_list($request) && !empty($request))) {
-            return $this->error(null, -32600, $this->trans('mcp.invalid_root', [], 'Invalid Request: root must be a JSON object.'));
+            return $this->error(null, -32600, $this->trans('mcp.invalid_root', [], 'Invalid Request: root must be a JSON object.'), $extraHeaders);
         }
 
         $id = $request['id'] ?? null;
         if ($id !== null && !is_string($id) && !is_int($id)) {
-            return $this->error(null, -32600, $this->trans('mcp.invalid_id', [], 'Invalid Request: id must be a string, integer or null.'));
+            return $this->error(null, -32600, $this->trans('mcp.invalid_id', [], 'Invalid Request: id must be a string, integer or null.'), $extraHeaders);
         }
         if (is_string($id) && strlen($id) > 256) {
-            return $this->error(null, -32600, $this->trans('mcp.id_too_long', [], 'Invalid Request: id exceeds maximum length.'));
+            return $this->error(null, -32600, $this->trans('mcp.id_too_long', [], 'Invalid Request: id exceeds maximum length.'), $extraHeaders);
         }
 
         if (isset($request['jsonrpc']) && $request['jsonrpc'] !== '2.0') {
-            return $this->error($id, -32600, $this->trans('mcp.invalid_version', [], 'Invalid Request: jsonrpc version must be "2.0".'));
+            return $this->error($id, -32600, $this->trans('mcp.invalid_version', [], 'Invalid Request: jsonrpc version must be "2.0".'), $extraHeaders);
         }
 
         $method = $request['method'] ?? '';
         if (!is_string($method) || empty($method)) {
-            return $this->error($id, -32600, $this->trans('mcp.method_required', [], 'Invalid Request: method required.'));
+            return $this->error($id, -32600, $this->trans('mcp.method_required', [], 'Invalid Request: method required.'), $extraHeaders);
         }
         if (strlen($method) > 128) {
-            return $this->error($id, -32600, $this->trans('mcp.method_too_long', [], 'Invalid Request: method name too long.'));
+            return $this->error($id, -32600, $this->trans('mcp.method_too_long', [], 'Invalid Request: method name too long.'), $extraHeaders);
         }
 
         $params = $request['params'] ?? [];
         if (!is_array($params)) {
-            return $this->error($id, -32600, $this->trans('mcp.invalid_params', [], 'Invalid Request: params must be an object or array.'));
+            return $this->error($id, -32600, $this->trans('mcp.invalid_params', [], 'Invalid Request: params must be an object or array.'), $extraHeaders);
         }
 
         try {
             $result = $this->dispatch($method, $params, $context);
-            return $this->success($id, $result);
+            return $this->success($id, $result, $extraHeaders);
         } catch (McpException $e) {
-            return $this->error($id, $e->getCode(), $e->getMessage());
+            return $this->error($id, $e->getCode(), $e->getMessage(), $extraHeaders);
         } catch (\Throwable $e) {
-            return $this->error($id, -32603, $this->trans('mcp.internal_error', ['%error%' => $e->getMessage()], 'Internal error: ' . $e->getMessage()));
+            return $this->error($id, -32603, $this->trans('mcp.internal_error', ['%error%' => $e->getMessage()], 'Internal error: ' . $e->getMessage()), $extraHeaders);
         }
     }
 
@@ -169,6 +183,8 @@ class McpServer
         if (!$tool->isAvailable($context)) {
             throw new McpException($this->trans('mcp.tool_not_available', [], 'Tool not available in this context.'), -32001);
         }
+
+        $this->validateArguments($arguments, $tool->getInputSchema());
 
         $startTime = microtime(true);
         $result = null;
@@ -271,16 +287,69 @@ class McpServer
         ];
     }
 
-    private function success(mixed $id, mixed $result): JsonResponse
+    private function validateArguments(array $arguments, array $schema): void
+    {
+        if (count($arguments) > self::MAX_ARGUMENTS_COUNT) {
+            throw new McpException(
+                $this->trans('mcp.too_many_arguments', ['%max%' => (string) self::MAX_ARGUMENTS_COUNT], sprintf('Too many arguments provided (max %d).', self::MAX_ARGUMENTS_COUNT)),
+                -32602
+            );
+        }
+
+        $required = $schema['required'] ?? [];
+        foreach ($required as $field) {
+            if (!array_key_exists($field, $arguments) || $arguments[$field] === null || $arguments[$field] === '') {
+                throw new McpException(
+                    $this->trans('mcp.missing_argument', ['%arg%' => $field], "Missing required argument: {$field}."),
+                    -32602
+                );
+            }
+        }
+
+        foreach ($arguments as $key => $val) {
+            $this->validateArgumentValue((string) $key, $val, 1);
+        }
+    }
+
+    private function validateArgumentValue(string $key, mixed $value, int $depth): void
+    {
+        if ($depth > self::MAX_ARG_DEPTH) {
+            throw new McpException(
+                $this->trans('mcp.argument_depth_exceeded', ['%arg%' => $key], "Argument '{$key}' exceeds maximum nesting depth."),
+                -32602
+            );
+        }
+
+        if (is_string($value)) {
+            if (strlen($value) > self::MAX_ARG_STRING_LENGTH) {
+                throw new McpException(
+                    $this->trans('mcp.argument_too_large', ['%arg%' => $key], "Argument '{$key}' exceeds maximum allowed size."),
+                    -32602
+                );
+            }
+        } elseif (is_array($value)) {
+            if (count($value) > 200) {
+                throw new McpException(
+                    $this->trans('mcp.argument_too_large', ['%arg%' => $key], "Argument '{$key}' contains too many elements."),
+                    -32602
+                );
+            }
+            foreach ($value as $subKey => $subVal) {
+                $this->validateArgumentValue($key . '.' . $subKey, $subVal, $depth + 1);
+            }
+        }
+    }
+
+    private function success(mixed $id, mixed $result, array $extraHeaders = []): JsonResponse
     {
         return new JsonResponse([
             'jsonrpc' => '2.0',
             'id' => $id,
             'result' => $result,
-        ]);
+        ], 200, array_merge(self::SECURITY_HEADERS, $extraHeaders));
     }
 
-    private function error(mixed $id, int $code, string $message): JsonResponse
+    private function error(mixed $id, int $code, string $message, array $extraHeaders = []): JsonResponse
     {
         return new JsonResponse([
             'jsonrpc' => '2.0',
@@ -289,6 +358,6 @@ class McpServer
                 'code' => $code,
                 'message' => $message,
             ],
-        ]);
+        ], 200, array_merge(self::SECURITY_HEADERS, $extraHeaders));
     }
 }

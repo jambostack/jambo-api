@@ -3984,4 +3984,14 @@ return [
     'project.mailer.unsupported_content_type' => 'Encabezado Content-Type no compatible. Se esperaba application/json.',
     'project.storage.unsupported_content_type' => 'Encabezado Content-Type no compatible. Se esperaba application/json.',
     'project.jwt_ttl.unsupported_content_type' => 'Encabezado Content-Type no compatible. Se esperaba application/json.',
+
+    // ─── Cycle 119: MCP Protocol & Server Security Hardening ───
+    'mcp.unsupported_content_type' => 'Tipo de medio no soportado: Content-Type debe ser application/json.',
+    'mcp.invalid_project_uuid' => 'Formato de UUID de proyecto no válido.',
+    'mcp.missing_argument' => 'Falta el argumento obligatorio: %arg%.',
+    'mcp.argument_too_large' => 'El argumento "%arg%" excede el tamaño máximo permitido.',
+    'mcp.argument_depth_exceeded' => 'El argumento "%arg%" excede la profundidad máxima de anidamiento.',
+    'mcp.too_many_arguments' => 'Demasiados argumentos proporcionados (máximo %max%).',
+    'mcp.invalid_transform_dimensions' => 'Dimensiones de transformación de imagen no válidas (ancho y alto deben estar entre 1 y 4000).',
+    'mcp.invalid_control_characters' => 'Solicitud no válida: el cuerpo contiene caracteres de control no válidos.',
 ];

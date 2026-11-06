@@ -3984,4 +3984,14 @@ return [
     'project.mailer.unsupported_content_type' => 'Unsupported Content-Type header. Expected application/json.',
     'project.storage.unsupported_content_type' => 'Unsupported Content-Type header. Expected application/json.',
     'project.jwt_ttl.unsupported_content_type' => 'Unsupported Content-Type header. Expected application/json.',
+
+    // ─── Cycle 119: MCP Protocol & Server Security Hardening ───
+    'mcp.unsupported_content_type' => 'Unsupported Media Type: Content-Type must be application/json.',
+    'mcp.invalid_project_uuid' => 'Invalid project UUID format.',
+    'mcp.missing_argument' => 'Missing required argument: %arg%.',
+    'mcp.argument_too_large' => 'Argument "%arg%" exceeds maximum allowed size.',
+    'mcp.argument_depth_exceeded' => 'Argument "%arg%" exceeds maximum nesting depth.',
+    'mcp.too_many_arguments' => 'Too many arguments provided (max %max%).',
+    'mcp.invalid_transform_dimensions' => 'Invalid image transform dimensions (width and height must be between 1 and 4000).',
+    'mcp.invalid_control_characters' => 'Invalid Request: body contains invalid control characters.',
 ];
