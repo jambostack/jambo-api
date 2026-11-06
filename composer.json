@@ -1,6 +1,6 @@
 {
     "name": "jambostack/jambo-api",
-    "version": "1.26.203",
+    "version": "1.26.204",
     "description": "Jambo API — Headless CMS open-source. Backend API REST + GraphQL pour le JamboStack.",
     "type": "project",
     "license": "AGPL-3.0-or-later",
@@ -22,7 +22,7 @@
         "doctrine/doctrine-migrations-bundle": "^4.0.1",
         "doctrine/orm": "^3.7.6",
         "dompdf/dompdf": "^3.1.6",
-        "endroid/qr-code": "^6.2",
+        "endroid/qr-code": "^6.1.3",
         "gregwar/captcha-bundle": "^2.5",
         "intervention/image": "^4.4.1",
         "knplabs/knp-paginator-bundle": "^6.11",
@@ -88,6 +88,9 @@
             "symfony/runtime": true
         },
         "bump-after-update": true,
+        "platform": {
+            "php": "8.4.1"
+        },
         "sort-packages": true
     },
     "autoload": {
