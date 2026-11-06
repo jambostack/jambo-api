@@ -3847,4 +3847,15 @@ return [
     'form.admin.export_rate_limit_exceeded' => 'عدد كبير جداً من طلبات تصدير المشاركات. يرجى إعادة المحاولة لاحقاً.',
     'redirect.admin.rate_limit_exceeded' => 'عدد كبير جداً من طلبات إعادة التوجيه. يرجى المحاولة مرة أخرى لاحقاً.',
     'redirect.admin.project_quota_exceeded' => 'تم تجاوز حصة إعادة التوجيه للمشروع (الحد الأقصى المسموح به %max% عمليات إعادة توجيه).',
+
+    // Cycle #98: Admin User Management, JWT TTL & Ping Rate Limiting & Security Hardening
+    'project.jwt_ttl.rate_limit_exceeded' => 'طلبات تكوين مدة صلاحية JWT كثيرة جدًا. يُرجى المحاولة لاحقًا.',
+    'admin_api.ping.rate_limit_exceeded' => 'طلبات اختبار الاتصال كثيرة جدًا. يُرجى المحاولة لاحقًا.',
+    'settings.locale.rate_limit_exceeded' => 'طلبات تغيير اللغة كثيرة جدًا. يُرجى المحاولة لاحقًا.',
+    'user.admin.rate_limit_exceeded' => 'طلبات إدارة المستخدمين كثيرة جدًا. يُرجى المحاولة لاحقًا.',
+    'user.admin.max_users_exceeded' => 'تم تجاوز الحد الأقصى لسعة مستخدمي المنصة (الحد الأقصى %max% مستخدمين).',
+    'role.admin.rate_limit_exceeded' => 'طلبات إدارة الأدوار كثيرة جدًا. يُرجى المحاولة لاحقًا.',
+    'role.admin.max_roles_exceeded' => 'تم الوصول إلى الحد الأقصى للأدوار (الحد الأقصى %max% أدوار).',
+    'permission.admin.rate_limit_exceeded' => 'طلبات إدارة الصلاحيات كثيرة جدًا. يُرجى المحاولة لاحقًا.',
+    'permission.admin.max_permissions_exceeded' => 'تم الوصول إلى الحد الأقصى للصلاحيات (الحد الأقصى %max% صلاحيات).',
 ];

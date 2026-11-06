@@ -3863,4 +3863,15 @@ return [
     'form.admin.export_rate_limit_exceeded' => 'Trop de requêtes d\'exportation des soumissions. Veuillez réessayer plus tard.',
     'redirect.admin.rate_limit_exceeded' => 'Trop de requêtes relatives aux redirections. Veuillez réessayer plus tard.',
     'redirect.admin.project_quota_exceeded' => 'Quota de redirections du projet dépassé (maximum %max% redirections autorisées).',
+
+    // Cycle #98: Admin User Management, JWT TTL & Ping Rate Limiting & Security Hardening
+    'project.jwt_ttl.rate_limit_exceeded' => 'Trop de requêtes de configuration du TTL JWT. Veuillez réessayer plus tard.',
+    'admin_api.ping.rate_limit_exceeded' => 'Trop de requêtes ping. Veuillez réessayer plus tard.',
+    'settings.locale.rate_limit_exceeded' => 'Trop de requêtes de changement de langue. Veuillez réessayer plus tard.',
+    'user.admin.rate_limit_exceeded' => 'Trop de requêtes de gestion des utilisateurs. Veuillez réessayer plus tard.',
+    'user.admin.max_users_exceeded' => 'Capacité maximale d\'utilisateurs atteinte sur la plateforme (maximum %max% utilisateurs).',
+    'role.admin.rate_limit_exceeded' => 'Trop de requêtes de gestion des rôles. Veuillez réessayer plus tard.',
+    'role.admin.max_roles_exceeded' => 'Limite maximale de rôles atteinte (maximum %max% rôles).',
+    'permission.admin.rate_limit_exceeded' => 'Trop de requêtes de gestion des permissions. Veuillez réessayer plus tard.',
+    'permission.admin.max_permissions_exceeded' => 'Limite maximale de permissions atteinte (maximum %max% permissions).',
 ];

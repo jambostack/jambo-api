@@ -7,6 +7,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.168] — 2026-11-06
+
+### Admin User Management, JWT TTL & Ping Rate Limiting & Security Hardening (Cycle #98)
+- **User Management Hardening (`UserManagement\UserController`, `RoleController`, `PermissionController`)**:
+  - Enforced rate limiting via `limiter.token_management_limiter` across user, role, and permission management endpoints (`index`, `show`, `create`, `update`, `delete`, `bulkDelete`, `resetTwoFactor`).
+  - Added strict platform capacity limits: `UserController::MAX_USERS_COUNT = 500`, `RoleController::MAX_ROLES_COUNT = 100`, and `PermissionController::MAX_PERMISSIONS_COUNT = 300` preventing entity exhaustion and DDoS attacks.
+  - Safe error handling in rate limiting without reliance on uninitialized controller container.
+- **Admin Project JWT TTL Hardening (`Admin\ProjectJwtTtlController`)**:
+  - Injected `limiter.project_limiter` for rate limiting requests to `getJwtTtl` and `updateJwtTtl`.
+  - Added audit logging via `AuditService` for security-sensitive token TTL updates (`admin_project_jwt_ttl_update`), recording both successes and invalid range rejections.
+  - Retained strict range checks (`60s <= access <= refresh <= MAX_TTL`).
+- **Admin API Ping & Trait Hardening (`AdminApi\PingController`, `AdminApiControllerTrait`)**:
+  - Enforced rate limiting via `limiter.admin_api_limiter` on `GET /admin-api/_ping` with i18n error reporting (`admin_api.ping.rate_limit_exceeded`).
+  - Added security audit logging in `AdminApiControllerTrait::requireScope` when personal access token scope violations are detected (`admin_api_scope_violation`).
+- **Settings Locale Hardening (`Settings\LocaleController`)**:
+  - Enforced rate limiting via `limiter.profile_limiter` on `/settings/locale` preventing database write flooding and audit log spam.
+- **I18n Translation Completeness & Testing**:
+  - Added 9 new translation keys across English, French, Spanish, and Arabic (`project.jwt_ttl.rate_limit_exceeded`, `admin_api.ping.rate_limit_exceeded`, `settings.locale.rate_limit_exceeded`, `user.admin.rate_limit_exceeded`, `user.admin.max_users_exceeded`, `role.admin.rate_limit_exceeded`, `role.admin.max_roles_exceeded`, `permission.admin.rate_limit_exceeded`, `permission.admin.max_permissions_exceeded`) — 100% symmetrical.
+  - Added dedicated test suite `Cycle98AdminSecurityHardeningTest` (14 tests, 125 assertions, 100% pass).
+
 ## [1.26.167] — 2026-11-06
 
 ### Admin Form & Redirect Security Hardening (Cycle #97)

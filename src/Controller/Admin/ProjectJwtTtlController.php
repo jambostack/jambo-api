@@ -3,11 +3,14 @@
 namespace App\Controller\Admin;
 
 use App\Entity\Project;
+use App\Service\AuditService;
 use App\Service\EndUserJwtService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -26,6 +29,9 @@ class ProjectJwtTtlController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.project_limiter')]
+        private readonly ?RateLimiterFactory $projectLimiter = null,
+        private readonly ?AuditService $auditService = null,
     ) {}
 
     private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
@@ -33,9 +39,34 @@ class ProjectJwtTtlController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
-    #[Route('/api/admin/projects/{uuid}/jwt-ttl', name: 'admin_project_jwt_ttl_get', methods: ['GET'])]
-    public function getJwtTtl(string $uuid): JsonResponse
+    private function checkRateLimit(?Request $request = null): ?JsonResponse
     {
+        if ($this->projectLimiter !== null && $request !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (false === $this->projectLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('project.jwt_ttl.rate_limit_exceeded', [], 'Too many JWT TTL configuration requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+        return null;
+    }
+
+    #[Route('/api/admin/projects/{uuid}/jwt-ttl', name: 'admin_project_jwt_ttl_get', methods: ['GET'])]
+    public function getJwtTtl(string $uuid, ?Request $request = null): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->findProject($uuid);
         if ($project instanceof JsonResponse) {
             return $project;
@@ -55,6 +86,10 @@ class ProjectJwtTtlController extends AbstractController
     #[Route('/api/admin/projects/{uuid}/jwt-ttl', name: 'admin_project_jwt_ttl_update', methods: ['PATCH'])]
     public function updateJwtTtl(string $uuid, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->findProject($uuid);
         if ($project instanceof JsonResponse) {
             return $project;
@@ -88,10 +123,25 @@ class ProjectJwtTtlController extends AbstractController
             $project->jwtRefreshTtl = $result;
         }
 
+        $userIdentifier = null;
+        try {
+            $userIdentifier = $this->getUser()?->getUserIdentifier();
+        } catch (\Throwable) {}
+
         // Cross-check: refresh TTL must be >= access TTL
         $finalAccess  = EndUserJwtService::resolveTtl($project->jwtAccessTtl, EndUserJwtService::DEFAULT_ACCESS_TTL);
         $finalRefresh = EndUserJwtService::resolveTtl($project->jwtRefreshTtl, EndUserJwtService::DEFAULT_REFRESH_TTL);
         if ($finalRefresh < $finalAccess) {
+            $this->auditService?->log(
+                toolName: 'admin_project_jwt_ttl_update',
+                project: $project,
+                input: ['jwt_access_ttl' => $finalAccess, 'jwt_refresh_ttl' => $finalRefresh],
+                output: ['status' => 'rejected'],
+                status: 'failure',
+                errorMessage: 'Refresh TTL cannot be less than access TTL',
+                createdBy: $userIdentifier,
+                source: 'admin_api',
+            );
             return $this->secureJson([
                 'error' => sprintf(
                     $this->trans('project.jwt_refresh_lt_access'),
@@ -102,7 +152,20 @@ class ProjectJwtTtlController extends AbstractController
 
         $this->em->flush();
 
-        return $this->getJwtTtl($uuid);
+        $this->auditService?->log(
+            toolName: 'admin_project_jwt_ttl_update',
+            project: $project,
+            input: [
+                'jwt_access_ttl'  => $project->jwtAccessTtl,
+                'jwt_refresh_ttl' => $project->jwtRefreshTtl,
+            ],
+            output: ['status' => 'updated'],
+            status: 'success',
+            createdBy: $userIdentifier,
+            source: 'admin_api',
+        );
+
+        return $this->getJwtTtl($uuid, $request);
     }
 
     private function findProject(string $uuid): Project|JsonResponse

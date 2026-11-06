@@ -6,9 +6,11 @@ use App\Entity\User;
 use App\Service\AuditService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -29,6 +31,8 @@ class LocaleController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly ?TranslatorInterface $translator = null,
         private readonly ?AuditService $auditService = null,
+        #[Autowire(service: 'limiter.profile_limiter')]
+        private readonly ?RateLimiterFactory $localeLimiter = null,
     ) {}
 
     private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
@@ -50,6 +54,23 @@ class LocaleController extends AbstractController
     #[Route('/locale', name: 'locale_update', methods: ['POST'])]
     public function update(Request $request): Response
     {
+        if ($this->localeLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (false === $this->localeLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('settings.locale.rate_limit_exceeded', [], 'Too many locale change requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson([
                 'error' => $this->trans('settings.locale.payload_too_large', [], 'Payload exceeds maximum size.'),

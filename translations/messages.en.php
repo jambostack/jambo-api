@@ -3845,4 +3845,15 @@ return [
     'form.admin.export_rate_limit_exceeded' => 'Too many submissions export requests. Please retry later.',
     'redirect.admin.rate_limit_exceeded' => 'Too many redirect requests. Please retry later.',
     'redirect.admin.project_quota_exceeded' => 'Project redirect quota exceeded (maximum %max% redirects allowed).',
+
+    // Cycle #98: Admin User Management, JWT TTL & Ping Rate Limiting & Security Hardening
+    'project.jwt_ttl.rate_limit_exceeded' => 'Too many JWT TTL configuration requests. Please retry later.',
+    'admin_api.ping.rate_limit_exceeded' => 'Too many ping requests. Please retry later.',
+    'settings.locale.rate_limit_exceeded' => 'Too many locale change requests. Please retry later.',
+    'user.admin.rate_limit_exceeded' => 'Too many user management requests. Please retry later.',
+    'user.admin.max_users_exceeded' => 'Platform user capacity exceeded (maximum %max% users).',
+    'role.admin.rate_limit_exceeded' => 'Too many role management requests. Please retry later.',
+    'role.admin.max_roles_exceeded' => 'Maximum role limit reached (maximum %max% roles).',
+    'permission.admin.rate_limit_exceeded' => 'Too many permission management requests. Please retry later.',
+    'permission.admin.max_permissions_exceeded' => 'Maximum permission limit reached (maximum %max% permissions).',
 ];

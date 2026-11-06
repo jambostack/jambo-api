@@ -8,9 +8,11 @@ use App\Repository\PermissionRepository;
 use App\Service\AuditService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -21,6 +23,7 @@ class PermissionController extends AbstractController
 {
     public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
     public const MAX_BULK_IDS = 100;
+    public const MAX_PERMISSIONS_COUNT = 300;
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -51,6 +54,8 @@ class PermissionController extends AbstractController
         private UserPasswordHasherInterface $hasher,
         private TranslatorInterface $translator,
         private AuditService $auditService,
+        #[Autowire(service: 'limiter.token_management_limiter')]
+        private ?RateLimiterFactory $permissionLimiter = null,
     ) {}
 
     private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
@@ -58,9 +63,33 @@ class PermissionController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function checkRateLimit(?Request $request = null): ?JsonResponse
+    {
+        if ($this->permissionLimiter !== null && $request !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (false === $this->permissionLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->translator->trans('permission.admin.rate_limit_exceeded', [], 'messages'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+        return null;
+    }
+
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
         $search    = mb_substr(trim((string) $request->query->get('search', '')), 0, 100);
         $page      = max(1, $request->query->getInt('page', 1));
         $perPage   = min(100, max(1, $request->query->getInt('per_page', 20)));
@@ -110,6 +139,10 @@ class PermissionController extends AbstractController
     #[IsGranted('users.manage')]
     public function bulkDelete(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
@@ -192,8 +225,12 @@ class PermissionController extends AbstractController
     }
 
     #[Route('/{id}', name: 'show', methods: ['GET'])]
-    public function show(int $id): JsonResponse
+    public function show(int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimitResponse = $this->checkRateLimit($request))) {
+            return $rateLimitResponse;
+        }
+
         $permission = $this->permissionRepository->find($id);
         if ($permission === null) {
             return $this->secureJson(['error' => $this->translator->trans('permission.admin.not_found')], 404);
@@ -206,6 +243,18 @@ class PermissionController extends AbstractController
     #[IsGranted('users.manage')]
     public function create(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        $totalPerms = $this->permissionRepository->count([]);
+        if ($totalPerms >= self::MAX_PERMISSIONS_COUNT) {
+            return $this->secureJson([
+                'error' => $this->translator->trans('permission.admin.max_permissions_exceeded', ['%max%' => self::MAX_PERMISSIONS_COUNT]),
+                'code' => 'MAX_PERMISSIONS_EXCEEDED',
+            ], 422);
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
@@ -281,6 +330,10 @@ class PermissionController extends AbstractController
     #[IsGranted('users.manage')]
     public function update(int $id, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('permission.admin.payload_too_large')], 413);
@@ -362,8 +415,12 @@ class PermissionController extends AbstractController
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
     #[IsGranted('users.manage')]
-    public function delete(int $id): JsonResponse
+    public function delete(int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimitResponse = $this->checkRateLimit($request))) {
+            return $rateLimitResponse;
+        }
+
         $permission = $this->permissionRepository->find($id);
         if ($permission === null) {
             return $this->secureJson(['error' => $this->translator->trans('permission.admin.not_found')], 404);

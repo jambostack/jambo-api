@@ -10,9 +10,11 @@ use App\Service\ProjectAuthLockoutService;
 use App\Service\Security\PasswordPolicyValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -23,6 +25,7 @@ class UserController extends AbstractController
 {
     public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
     public const MAX_BULK_IDS = 100;
+    public const MAX_USERS_COUNT = 500;
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -39,6 +42,8 @@ class UserController extends AbstractController
         private TranslatorInterface $translator,
         private AuditService $auditService,
         private ?ProjectAuthLockoutService $lockoutService = null,
+        #[Autowire(service: 'limiter.token_management_limiter')]
+        private ?RateLimiterFactory $userLimiter = null,
     ) {}
 
     private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
@@ -46,9 +51,33 @@ class UserController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function checkRateLimit(?Request $request = null): ?JsonResponse
+    {
+        if ($this->userLimiter !== null && $request !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            try {
+                $user = $this->getUser();
+                if ($user !== null) {
+                    $identifier = $user->getUserIdentifier();
+                }
+            } catch (\Throwable) {}
+
+            if (false === $this->userLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->translator->trans('user.admin.rate_limit_exceeded', [], 'messages'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+        return null;
+    }
+
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
         $search    = mb_substr(trim((string) $request->query->get('search', '')), 0, 100);
         $page      = max(1, $request->query->getInt('page', 1));
         $perPage   = min(100, max(1, $request->query->getInt('per_page', 20)));
@@ -103,6 +132,10 @@ class UserController extends AbstractController
     #[IsGranted('users.manage')]
     public function bulkDelete(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.payload_too_large')], 413);
@@ -188,8 +221,12 @@ class UserController extends AbstractController
     }
 
     #[Route('/{id}', name: 'show', methods: ['GET'])]
-    public function show(int $id): JsonResponse
+    public function show(int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimitResponse = $this->checkRateLimit($request))) {
+            return $rateLimitResponse;
+        }
+
         $user = $this->userRepository->find($id);
         if ($user === null) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.not_found')], 404);
@@ -208,6 +245,18 @@ class UserController extends AbstractController
     #[IsGranted('users.manage')]
     public function create(Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        $totalUsers = $this->userRepository->count([]);
+        if ($totalUsers >= self::MAX_USERS_COUNT) {
+            return $this->secureJson([
+                'error' => $this->translator->trans('user.admin.max_users_exceeded', ['%max%' => self::MAX_USERS_COUNT]),
+                'code' => 'MAX_USERS_EXCEEDED',
+            ], 422);
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.payload_too_large')], 413);
@@ -331,6 +380,10 @@ class UserController extends AbstractController
     #[IsGranted('users.manage')]
     public function update(int $id, Request $request): JsonResponse
     {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.payload_too_large')], 413);
@@ -458,8 +511,12 @@ class UserController extends AbstractController
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'])]
     #[IsGranted('users.manage')]
-    public function delete(int $id): JsonResponse
+    public function delete(int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimitResponse = $this->checkRateLimit($request))) {
+            return $rateLimitResponse;
+        }
+
         if ($_ENV['DEMO_MODE'] ?? false) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.demo_mode_disabled')], 403);
         }
@@ -507,8 +564,12 @@ class UserController extends AbstractController
 
     #[Route('/{id}/reset-2fa', name: 'reset_2fa', methods: ['POST'])]
     #[IsGranted('ROLE_SUPER_ADMIN')]
-    public function resetTwoFactor(int $id): JsonResponse
+    public function resetTwoFactor(int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimitResponse = $this->checkRateLimit($request))) {
+            return $rateLimitResponse;
+        }
+
         $targetUser = $this->userRepository->find($id);
         if ($targetUser === null) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.not_found')], 404);
