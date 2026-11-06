@@ -2303,6 +2303,11 @@ return [
     // EndUser Admin CRUD
     'enduser.admin.not_found'                 => 'Not found',
     'enduser.admin.invalid_json'              => 'Invalid JSON',
+    'enduser.admin.invalid_content_type'      => 'Content-Type must be application/json.',
+    'enduser.admin.payload_too_large'         => 'Payload exceeds maximum size limit (64 KB).',
+    'enduser.admin.rate_limit_exceeded'       => 'Too many requests. Please retry later.',
+    'enduser.admin.deleted_success'           => 'End user deleted successfully.',
+    'enduser.admin.email_too_long'            => 'Email exceeds maximum allowed length (255 characters).',
     'enduser.admin.valid_email_required'      => 'Valid email is required',
     'enduser.admin.password_min_length'       => 'Password must be at least %min% characters',
     'enduser.admin.invalid_status'            => 'Invalid status',
@@ -2334,6 +2339,10 @@ return [
 
     // EndUser Schema Controller Hardening
     'enduser.schema.invalid_json'             => 'Invalid JSON body',
+    'enduser.schema.invalid_content_type'     => 'Content-Type must be application/json.',
+    'enduser.schema.payload_too_large'        => 'Payload exceeds maximum size limit (64 KB).',
+    'enduser.schema.rate_limit_exceeded'      => 'Too many schema requests. Please retry later.',
+    'enduser.schema.deleted_success'          => 'End user field deleted successfully.',
     'enduser.schema.fields_must_be_array'     => 'fields must be an array of field objects',
     'enduser.schema.too_many_fields_to_reorder'=> 'Cannot reorder more than 500 fields at once',
     'enduser.schema.order_out_of_bounds'      => 'Order must be between 0 and %max%',

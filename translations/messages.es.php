@@ -2303,6 +2303,11 @@ return [
     // EndUser Admin CRUD
     'enduser.admin.not_found'                 => 'No encontrado',
     'enduser.admin.invalid_json'              => 'JSON no válido',
+    'enduser.admin.invalid_content_type'      => 'El encabezado Content-Type debe ser application/json.',
+    'enduser.admin.payload_too_large'         => 'El cuerpo de la solicitud supera el tamaño máximo permitido (64 KB).',
+    'enduser.admin.rate_limit_exceeded'       => 'Demasiadas solicitudes. Por favor, inténtelo de nuevo más tarde.',
+    'enduser.admin.deleted_success'           => 'Usuario final eliminado con éxito.',
+    'enduser.admin.email_too_long'            => 'El correo electrónico supera la longitud máxima permitida (255 caracteres).',
     'enduser.admin.valid_email_required'      => 'Se requiere un correo electrónico válido',
     'enduser.admin.password_min_length'       => 'La contraseña debe tener al menos %min% caracteres',
     'enduser.admin.invalid_status'            => 'Estado no válido',
@@ -2334,6 +2339,10 @@ return [
 
     // EndUser Schema Controller Hardening
     'enduser.schema.invalid_json'             => 'Cuerpo JSON no válido',
+    'enduser.schema.invalid_content_type'     => 'El encabezado Content-Type debe ser application/json.',
+    'enduser.schema.payload_too_large'        => 'El cuerpo de la solicitud supera el tamaño máximo permitido (64 KB).',
+    'enduser.schema.rate_limit_exceeded'      => 'Demasiadas solicitudes de esquema. Por favor, inténtelo de nuevo más tarde.',
+    'enduser.schema.deleted_success'          => 'Campo de usuario final eliminado con éxito.',
     'enduser.schema.fields_must_be_array'     => 'fields debe ser una matriz de objetos de campo',
     'enduser.schema.too_many_fields_to_reorder'=> 'No se pueden reordenar más de 500 campos a la vez',
     'enduser.schema.order_out_of_bounds'      => 'El orden debe estar entre 0 y %max%',

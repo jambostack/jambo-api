@@ -2303,6 +2303,11 @@ return [
     // EndUser Admin CRUD
     'enduser.admin.not_found'                 => 'غير موجود',
     'enduser.admin.invalid_json'              => 'JSON غير صالح',
+    'enduser.admin.invalid_content_type'      => 'يجب أن يكون رأس Content-Type هو application/json.',
+    'enduser.admin.payload_too_large'         => 'يتجاوز حجم حمولة الطلب الحد الأقصى المسموح به (64 كيلوبايت).',
+    'enduser.admin.rate_limit_exceeded'       => 'طلبات كثيرة جدًا. يرجى المحاولة مرة أخرى لاحقًا.',
+    'enduser.admin.deleted_success'           => 'تم حذف المستخدم النهائي بنجاح.',
+    'enduser.admin.email_too_long'            => 'يتجاوز البريد الإلكتروني الحد الأقصى المسموح به للطول (255 حرفًا).',
     'enduser.admin.valid_email_required'      => 'البريد الإلكتروني الصالح مطلوب',
     'enduser.admin.password_min_length'       => 'يجب أن تتكون كلمة المرور من %min% أحرف على الأقل',
     'enduser.admin.invalid_status'            => 'حالة غير صالحة',
@@ -2334,6 +2339,10 @@ return [
 
     // EndUser Schema Controller Hardening
     'enduser.schema.invalid_json'             => 'محتوى JSON غير صالح',
+    'enduser.schema.invalid_content_type'     => 'يجب أن يكون رأس Content-Type هو application/json.',
+    'enduser.schema.payload_too_large'        => 'يتجاوز حجم حمولة الطلب الحد الأقصى المسموح به (64 كيلوبايت).',
+    'enduser.schema.rate_limit_exceeded'      => 'طلبات كثيرة جدًا للمخطط. يرجى المحاولة مرة أخرى لاحقًا.',
+    'enduser.schema.deleted_success'          => 'تم حذف حقل المستخدم النهائي بنجاح.',
     'enduser.schema.fields_must_be_array'     => 'يجب أن يكون fields مصفوفة من كائنات الحقول',
     'enduser.schema.too_many_fields_to_reorder'=> 'لا يمكن إعادة ترتيب أكثر من 500 حقل في المرة الواحدة',
     'enduser.schema.order_out_of_bounds'      => 'يجب أن يكون الترتيب بين 0 و %max%',
