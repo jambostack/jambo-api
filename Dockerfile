@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # JamboApi CMS — Dockerfile production
 # Build: docker build -t jamboapi .
 # Run:   docker run -p 8080:80 -e DATABASE_URL=... jamboapi
@@ -38,8 +39,14 @@ COPY . .
 # Copier les assets compilés depuis l'étape frontend
 COPY --from=frontend-builder /app/public/build ./public/build
 
-# Installer les dépendances PHP sans scripts (pour éviter warmup sans DB)
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
+# Installer les dépendances PHP sans scripts (avec support secret COMPOSER_AUTH et retry en cas d'indisponibilité/504 GitHub API)
+ENV COMPOSER_ALLOW_SUPERUSER=1 \
+    COMPOSER_PROCESS_TIMEOUT=600 \
+    COMPOSER_MAX_PARALLEL_HTTP=6
+
+RUN --mount=type=secret,id=composer_auth,env=COMPOSER_AUTH,required=false \
+    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts \
+    || (sleep 5 && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts)
 
 # Configuration des permissions pour cache, logs et uploads
 RUN mkdir -p var/cache var/log public/uploads/media/cache \

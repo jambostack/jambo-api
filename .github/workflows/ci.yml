@@ -114,5 +114,7 @@ jobs:
           file: ./Dockerfile
           push: false
           tags: jamboapi:ci
+          secrets: |
+            composer_auth={"github-oauth":{"github.com":"${{ secrets.GITHUB_TOKEN }}"}}
           cache-from: type=gha
           cache-to: type=gha,mode=max
