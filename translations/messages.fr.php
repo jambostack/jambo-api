@@ -2137,6 +2137,9 @@ return [
 
     // TokenController
     'token.rate_limit_exceeded'                => 'Trop de requêtes de gestion de jetons. Veuillez réessayer plus tard.',
+    'token.invalid_content_type'               => 'L\'en-tête Content-Type doit être application/json.',
+    'token.payload_too_large'                  => 'La charge utile dépasse la taille maximale autorisée.',
+    'token.unauthorized'                       => 'Non autorisé.',
     'token.invalid_json'                       => 'Corps JSON invalide.',
     'token.name_required'                      => 'Le nom du jeton est requis.',
     'token.name_empty'                         => 'Le nom du jeton ne peut pas être vide.',
@@ -2151,6 +2154,24 @@ return [
     'token.not_found'                          => 'Jeton introuvable.',
     'token.lacks_manage_update'                => 'Le jeton d\'accès personnel ne dispose pas de "tokens:manage" pour mettre à jour d\'autres jetons.',
     'token.lacks_manage_delete'                => 'Le jeton d\'accès personnel ne dispose pas de "tokens:manage" pour supprimer d\'autres jetons.',
+
+    // ApiKeyController
+    'api_key.invalid_content_type'             => 'L\'en-tête Content-Type doit être application/json.',
+    'api_key.payload_too_large'                => 'La charge utile dépasse la taille maximale autorisée.',
+    'api_key.invalid_json'                     => 'Corps JSON invalide.',
+    'api_key.name_required'                    => 'Le nom de la clé API est requis.',
+    'api_key.name_empty'                       => 'Le nom de la clé API ne peut pas être vide.',
+    'api_key.name_too_long'                    => 'Le nom de la clé API ne doit pas dépasser 255 caractères.',
+    'api_key.name_control_chars'               => 'Le nom de la clé API contient des caractères de contrôle non autorisés.',
+    'api_key.invalid_abilities'                => 'Les capacités doivent être un tableau de permissions valides (read, create, update, delete, *).',
+    'api_key.invalid_expires_at'               => 'Format de date d\'expiration invalide.',
+    'api_key.expires_future'                   => 'La date d\'expiration doit être dans le futur.',
+    'api_key.not_found'                        => 'Clé API introuvable.',
+    'api_key.max_limit_reached'                => 'Nombre maximal de clés API atteint pour ce projet (50 clés au maximum).',
+    'api_key.rate_limit_exceeded'              => 'Trop de requêtes de clés API. Veuillez réessayer plus tard.',
+    'api_key.unauthorized'                     => 'Accès non autorisé aux clés API du projet.',
+    'api_key.project_not_found'                => 'Projet introuvable.',
+    'api_key.lacks_scope'                      => 'Le jeton d\'accès ne dispose pas de la portée requise pour la gestion des clés API.',
 
     // ProjectEmailController
     'email.rate_limit_exceeded'                => 'Trop de requêtes d\'envoi d\'email. Veuillez réessayer plus tard.',
@@ -3099,6 +3120,7 @@ return [
     'settings.locale.invalid_locale' => 'Paramètre régional invalide.',
     'settings.locale.unauthenticated' => 'Non authentifié.',
     'settings.pat.rate_limit_exceeded' => 'Trop de requêtes de jetons. Veuillez réessayer plus tard.',
+    'settings.pat.invalid_content_type' => 'L\'en-tête Content-Type doit être application/json.',
     'settings.pat.max_limit_reached' => 'Limite maximale de jetons atteinte (50 jetons au maximum).',
     'settings.pat.payload_too_large' => 'La charge utile dépasse la taille maximale autorisée.',
     'settings.pat.invalid_json' => 'Corps JSON invalide.',
@@ -3131,6 +3153,7 @@ return [
     'project_settings.cannot_delete_default_locale' => 'Impossible de supprimer le paramètre régional par défaut.',
     'project_settings.rate_limit_exceeded' => 'Trop de requêtes. Veuillez réessayer plus tard.',
     'project_settings.token_max_limit_reached' => 'Nombre maximal de jetons atteint pour ce projet (50 jetons au maximum).',
+    'project_settings.token_invalid_content_type' => 'L\'en-tête Content-Type doit être application/json.',
     'project_settings.token_name_required' => 'Le nom du jeton est obligatoire.',
     'project_settings.token_name_too_long' => 'Le nom du jeton ne doit pas dépasser 255 caractères.',
     'project_settings.token_name_control_chars' => 'Le nom du jeton contient des caractères de contrôle non autorisés.',

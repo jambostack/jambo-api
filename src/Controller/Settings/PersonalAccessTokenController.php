@@ -65,11 +65,21 @@ class PersonalAccessTokenController extends AbstractController
     }
 
     #[Route('', name: 'index', methods: ['GET'])]
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $user = $this->requireUser();
         if ($user instanceof JsonResponse) {
             return $user;
+        }
+
+        if ($this->tokenLimiter !== null) {
+            $identifier = $user->getUserIdentifier();
+            if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('settings.pat.rate_limit_exceeded', [], 'Too many token requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
         }
 
         $tokens = $this->repo->findByUser($user);
@@ -88,6 +98,8 @@ class PersonalAccessTokenController extends AbstractController
         if ($this->tokenLimiter !== null) {
             $identifier = $user->getUserIdentifier();
             if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log('pat_create_failure', null, ['reason' => 'rate_limit_exceeded'], null, 'failure', 'Rate limit exceeded', $user->getUserIdentifier(), 'pat_management');
+                $this->auditService?->flush();
                 return $this->secureJson([
                     'error' => $this->trans('settings.pat.rate_limit_exceeded', [], 'Too many token requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
@@ -95,8 +107,20 @@ class PersonalAccessTokenController extends AbstractController
             }
         }
 
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if ($contentType !== '' && !str_contains(strtolower($contentType), 'application/json')) {
+            $this->auditService?->log('pat_create_failure', null, ['reason' => 'invalid_content_type', 'content_type' => $contentType], null, 'failure', 'Content-Type must be application/json.', $user->getUserIdentifier(), 'pat_management');
+            $this->auditService?->flush();
+            return $this->secureJson([
+                'error' => $this->trans('settings.pat.invalid_content_type', [], 'Content-Type must be application/json.'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
+        }
+
         $existingTokens = $this->repo->findByUser($user);
         if (count($existingTokens) >= 50) {
+            $this->auditService?->log('pat_create_failure', null, ['reason' => 'max_limit_reached'], null, 'failure', 'Maximum token limit reached', $user->getUserIdentifier(), 'pat_management');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'errors' => ['name' => $this->trans('settings.pat.max_limit_reached', [], 'Maximum token limit reached (50 tokens max).')],
                 'code'   => 'MAX_TOKENS_REACHED',
@@ -104,6 +128,8 @@ class PersonalAccessTokenController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            $this->auditService?->log('pat_create_failure', null, ['reason' => 'payload_too_large'], null, 'failure', 'Payload exceeds maximum size.', $user->getUserIdentifier(), 'pat_management');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'error' => $this->trans('settings.pat.payload_too_large', [], 'Payload exceeds maximum size.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
@@ -113,6 +139,8 @@ class PersonalAccessTokenController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
+            $this->auditService?->log('pat_create_failure', null, ['reason' => 'invalid_json'], null, 'failure', 'Invalid JSON body.', $user->getUserIdentifier(), 'pat_management');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'error' => $this->trans('settings.pat.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
@@ -208,15 +236,29 @@ class PersonalAccessTokenController extends AbstractController
     }
 
     #[Route('/{id}', name: 'delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
-    public function delete(int $id): JsonResponse
+    public function delete(int $id, Request $request): JsonResponse
     {
         $user = $this->requireUser();
         if ($user instanceof JsonResponse) {
             return $user;
         }
 
+        if ($this->tokenLimiter !== null) {
+            $identifier = $user->getUserIdentifier();
+            if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log('pat_delete_failure', null, ['id' => $id, 'reason' => 'rate_limit_exceeded'], null, 'failure', 'Rate limit exceeded', $user->getUserIdentifier(), 'pat_management');
+                $this->auditService?->flush();
+                return $this->secureJson([
+                    'error' => $this->trans('settings.pat.rate_limit_exceeded', [], 'Too many token requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+
         $token = $this->repo->find($id);
         if (!$token || $token->user !== $user) {
+            $this->auditService?->log('pat_delete_failure', null, ['id' => $id, 'reason' => 'token_not_found'], null, 'failure', 'Token not found', $user->getUserIdentifier(), 'pat_management');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'error' => $this->trans('settings.pat.not_found', [], 'Token not found.'),
                 'code'  => 'TOKEN_NOT_FOUND',

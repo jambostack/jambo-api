@@ -2119,6 +2119,9 @@ return [
 
     // TokenController
     'token.rate_limit_exceeded'                => 'Too many token management requests. Please retry later.',
+    'token.invalid_content_type'               => 'Content-Type must be application/json.',
+    'token.payload_too_large'                  => 'Payload exceeds maximum size limit.',
+    'token.unauthorized'                       => 'Unauthorized.',
     'token.invalid_json'                       => 'Invalid JSON body.',
     'token.name_required'                      => 'Token name is required.',
     'token.name_empty'                         => 'Token name cannot be empty.',
@@ -2133,6 +2136,24 @@ return [
     'token.not_found'                          => 'Token not found.',
     'token.lacks_manage_update'                => 'Personal access token lacks "tokens:manage" to update other tokens.',
     'token.lacks_manage_delete'                => 'Personal access token lacks "tokens:manage" to delete other tokens.',
+
+    // ApiKeyController
+    'api_key.invalid_content_type'             => 'Content-Type must be application/json.',
+    'api_key.payload_too_large'                => 'Payload exceeds maximum size limit.',
+    'api_key.invalid_json'                     => 'Invalid JSON body.',
+    'api_key.name_required'                    => 'API key name is required.',
+    'api_key.name_empty'                       => 'API key name cannot be empty.',
+    'api_key.name_too_long'                    => 'API key name must not exceed 255 characters.',
+    'api_key.name_control_chars'               => 'API key name contains invalid control characters.',
+    'api_key.invalid_abilities'                => 'Abilities must be an array of valid permissions (read, create, update, delete, *).',
+    'api_key.invalid_expires_at'               => 'Invalid expiration date format.',
+    'api_key.expires_future'                   => 'Expiration date must be in the future.',
+    'api_key.not_found'                        => 'API key not found.',
+    'api_key.max_limit_reached'                => 'Maximum API key limit reached for this project (50 keys max).',
+    'api_key.rate_limit_exceeded'              => 'Too many API key requests. Please retry later.',
+    'api_key.unauthorized'                     => 'Unauthorized access to project API keys.',
+    'api_key.project_not_found'                => 'Project not found.',
+    'api_key.lacks_scope'                      => 'Access token lacks required scope for API key management.',
 
     // ProjectEmailController
     'email.rate_limit_exceeded'                => 'Too many email requests. Please retry later.',
@@ -3081,6 +3102,7 @@ return [
     'settings.locale.invalid_locale' => 'Invalid locale.',
     'settings.locale.unauthenticated' => 'Unauthenticated.',
     'settings.pat.rate_limit_exceeded' => 'Too many token requests. Please retry later.',
+    'settings.pat.invalid_content_type' => 'Content-Type must be application/json.',
     'settings.pat.max_limit_reached' => 'Maximum token limit reached (50 tokens max).',
     'settings.pat.payload_too_large' => 'Payload exceeds maximum size.',
     'settings.pat.invalid_json' => 'Invalid JSON body.',
@@ -3113,6 +3135,7 @@ return [
     'project_settings.cannot_delete_default_locale' => 'Cannot delete the default locale.',
     'project_settings.rate_limit_exceeded' => 'Too many requests. Please retry later.',
     'project_settings.token_max_limit_reached' => 'Maximum token limit reached for this project (50 tokens max).',
+    'project_settings.token_invalid_content_type' => 'Content-Type must be application/json.',
     'project_settings.token_name_required' => 'Token name is required.',
     'project_settings.token_name_too_long' => 'Token name must not exceed 255 characters.',
     'project_settings.token_name_control_chars' => 'Token name contains invalid control characters.',

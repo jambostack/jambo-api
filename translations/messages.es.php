@@ -2119,6 +2119,9 @@ return [
 
     // TokenController
     'token.rate_limit_exceeded'                => 'Demasiadas solicitudes de gestión de tokens. Inténtelo más tarde.',
+    'token.invalid_content_type'               => 'El encabezado Content-Type debe ser application/json.',
+    'token.payload_too_large'                  => 'La carga útil supera el tamaño máximo permitido.',
+    'token.unauthorized'                       => 'No autorizado.',
     'token.invalid_json'                       => 'Cuerpo JSON inválido.',
     'token.name_required'                      => 'El nombre del token es obligatorio.',
     'token.name_empty'                         => 'El nombre del token no puede estar vacío.',
@@ -2133,6 +2136,24 @@ return [
     'token.not_found'                          => 'Token no encontrado.',
     'token.lacks_manage_update'                => 'El token de acceso personal carece de "tokens:manage" para actualizar otros tokens.',
     'token.lacks_manage_delete'                => 'El token de acceso personal carece de "tokens:manage" para eliminar otros tokens.',
+
+    // ApiKeyController
+    'api_key.invalid_content_type'             => 'El encabezado Content-Type debe ser application/json.',
+    'api_key.payload_too_large'                => 'La carga útil supera el tamaño máximo permitido.',
+    'api_key.invalid_json'                     => 'Cuerpo JSON no válido.',
+    'api_key.name_required'                    => 'El nombre de la clave API es obligatorio.',
+    'api_key.name_empty'                       => 'El nombre de la clave API no puede estar vacío.',
+    'api_key.name_too_long'                    => 'El nombre de la clave API no debe superar los 255 caracteres.',
+    'api_key.name_control_chars'               => 'El nombre de la clave API contiene caracteres de control no válidos.',
+    'api_key.invalid_abilities'                => 'Las capacidades deben ser una matriz de permisos válidos (read, create, update, delete, *).',
+    'api_key.invalid_expires_at'               => 'Formato de fecha de vencimiento no válido.',
+    'api_key.expires_future'                   => 'La fecha de vencimiento debe estar en el futuro.',
+    'api_key.not_found'                        => 'Clave API no encontrada.',
+    'api_key.max_limit_reached'                => 'Límite máximo de claves API alcanzado para este proyecto (máximo 50 claves).',
+    'api_key.rate_limit_exceeded'              => 'Demasiadas solicitudes de claves API. Por favor, inténtelo de nuevo más tarde.',
+    'api_key.unauthorized'                     => 'Acceso no autorizado a las claves API del proyecto.',
+    'api_key.project_not_found'                => 'Proyecto no encontrado.',
+    'api_key.lacks_scope'                      => 'El token de acceso carece del alcance requerido para la gestión de claves API.',
 
     // ProjectEmailController
     'email.rate_limit_exceeded'                => 'Demasiadas solicitudes de correo electrónico. Por favor, inténtelo de nuevo más tarde.',
@@ -3081,6 +3102,7 @@ return [
     'settings.locale.invalid_locale' => 'Configuración regional no válida.',
     'settings.locale.unauthenticated' => 'No autenticado.',
     'settings.pat.rate_limit_exceeded' => 'Demasiadas solicitudes de tokens. Por favor, inténtelo de nuevo más tarde.',
+    'settings.pat.invalid_content_type' => 'El encabezado Content-Type debe ser application/json.',
     'settings.pat.max_limit_reached' => 'Límite máximo de tokens alcanzado (máximo 50 tokens).',
     'settings.pat.payload_too_large' => 'La carga útil supera el tamaño máximo permitido.',
     'settings.pat.invalid_json' => 'Cuerpo JSON no válido.',
@@ -3113,6 +3135,7 @@ return [
     'project_settings.cannot_delete_default_locale' => 'No se puede eliminar la configuración regional predeterminada.',
     'project_settings.rate_limit_exceeded' => 'Demasiadas solicitudes. Por favor, inténtelo de nuevo más tarde.',
     'project_settings.token_max_limit_reached' => 'Límite máximo de tokens alcanzado para este proyecto (máximo 50 tokens).',
+    'project_settings.token_invalid_content_type' => 'El encabezado Content-Type debe ser application/json.',
     'project_settings.token_name_required' => 'El nombre del token es obligatorio.',
     'project_settings.token_name_too_long' => 'El nombre del token no debe superar los 255 caracteres.',
     'project_settings.token_name_control_chars' => 'El nombre del token contiene caracteres de control no válidos.',

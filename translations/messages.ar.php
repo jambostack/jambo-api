@@ -2119,6 +2119,9 @@ return [
 
     // TokenController
     'token.rate_limit_exceeded'                => 'طلبات إدارة الرموز كثيرة جداً. يرجى المحاولة لاحقاً.',
+    'token.invalid_content_type'               => 'يجب أن يكون ترويسة Content-Type بتنسيق application/json.',
+    'token.payload_too_large'                  => 'حجم البيانات يتجاوز الحد الأقصى المسموح به.',
+    'token.unauthorized'                       => 'غير مصرح به.',
     'token.invalid_json'                       => 'نص JSON غير صالح.',
     'token.name_required'                      => 'اسم الرمز مطلوب.',
     'token.name_empty'                         => 'لا يمكن أن يكون اسم الرمز فارغاً.',
@@ -2133,6 +2136,24 @@ return [
     'token.not_found'                          => 'الرمز غير موجود.',
     'token.lacks_manage_update'                => 'رمز الوصول الشخصي يفتقر إلى "tokens:manage" لتحديث الرموز الأخرى.',
     'token.lacks_manage_delete'                => 'رمز الوصول الشخصي يفتقر إلى "tokens:manage" لحذف الرموز الأخرى.',
+
+    // ApiKeyController
+    'api_key.invalid_content_type'             => 'يجب أن يكون ترويسة Content-Type بتنسيق application/json.',
+    'api_key.payload_too_large'                => 'حجم البيانات يتجاوز الحد الأقصى المسموح به.',
+    'api_key.invalid_json'                     => 'نص JSON غير صالح.',
+    'api_key.name_required'                    => 'اسم مفتاح واجهة برمجة التطبيقات مطلوب.',
+    'api_key.name_empty'                       => 'لا يمكن أن يكون اسم مفتاح واجهة برمجة التطبيقات فارغاً.',
+    'api_key.name_too_long'                    => 'يجب ألا يتجاوز اسم مفتاح واجهة برمجة التطبيقات 255 حرفاً.',
+    'api_key.name_control_chars'               => 'يحتوي اسم مفتاح واجهة برمجة التطبيقات على أحرف تحكم غير صالحة.',
+    'api_key.invalid_abilities'                => 'يجب أن تكون الصلاحيات مصفوفة من الأذونات الصالحة (read, create, update, delete, *).',
+    'api_key.invalid_expires_at'               => 'تنسيق تاريخ انتهاء الصلاحية غير صالح.',
+    'api_key.expires_future'                   => 'يجب أن يكون تاريخ انتهاء الصلاحية في المستقبل.',
+    'api_key.not_found'                        => 'مفتاح واجهة برمجة التطبيقات غير موجود.',
+    'api_key.max_limit_reached'                => 'تم الوصول إلى الحد الأقصى لمفاتيح هذا المشروع (50 مفتاحاً كحد أقصى).',
+    'api_key.rate_limit_exceeded'              => 'طلبات مفاتيح واجهة برمجة التطبيقات كثيرة جداً. يرجى المحاولة لاحقاً.',
+    'api_key.unauthorized'                     => 'وصول غير مصرح به إلى مفاتيح واجهة برمجة تطبيقات المشروع.',
+    'api_key.project_not_found'                => 'المشروع غير موجود.',
+    'api_key.lacks_scope'                      => 'رمز الوصول يفتقر إلى النطاق المطلوب لإدارة مفاتيح واجهة برمجة التطبيقات.',
 
     // ProjectEmailController
     'email.rate_limit_exceeded'                => 'طلبات بريد إلكتروني كثيرة جداً. يرجى إعادة المحاولة لاحقاً.',
@@ -3083,6 +3104,7 @@ return [
     'settings.locale.invalid_locale' => 'إعداد محلي غير صالح.',
     'settings.locale.unauthenticated' => 'غير موثق.',
     'settings.pat.rate_limit_exceeded' => 'عدد كبير جداً من طلبات الرموز. يرجى المحاولة لاحقاً.',
+    'settings.pat.invalid_content_type' => 'يجب أن يكون ترويسة Content-Type بتنسيق application/json.',
     'settings.pat.max_limit_reached' => 'تم الوصول إلى الحد الأقصى للرموز (50 رمزاً كحد أقصى).',
     'settings.pat.payload_too_large' => 'حجم البيانات يتجاوز الحد الأقصى المسموح به.',
     'settings.pat.invalid_json' => 'نص JSON غير صالح.',
@@ -3115,6 +3137,7 @@ return [
     'project_settings.cannot_delete_default_locale' => 'لا يمكن حذف الإعداد المحلي الافتراضي.',
     'project_settings.rate_limit_exceeded' => 'عدد كبير جداً من الطلبات. يرجى المحاولة لاحقاً.',
     'project_settings.token_max_limit_reached' => 'تم الوصول إلى الحد الأقصى لرموز هذا المشروع (50 رمزاً كحد أقصى).',
+    'project_settings.token_invalid_content_type' => 'يجب أن يكون ترويسة Content-Type بتنسيق application/json.',
     'project_settings.token_name_required' => 'اسم الرمز مطلوب.',
     'project_settings.token_name_too_long' => 'يجب ألا يتجاوز اسم الرمز 255 حرفاً.',
     'project_settings.token_name_control_chars' => 'يحتوي اسم الرمز على أحرف تحكم غير صالحة.',

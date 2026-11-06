@@ -329,11 +329,21 @@ class ProjectSettingsController extends AbstractController
     // ─── API Tokens ────────────────────────────────────────────────────────
 
     #[Route('/tokens', name: 'tokens_index', methods: ['GET'])]
-    public function listTokens(string $projectUuid): JsonResponse
+    public function listTokens(string $projectUuid, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
         if ($project instanceof JsonResponse) {
             return $project;
+        }
+
+        if ($this->tokenLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('project_settings.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
         }
 
         $tokens = $this->apiTokenRepository->findByProject($project);
@@ -361,6 +371,8 @@ class ProjectSettingsController extends AbstractController
         if ($this->tokenLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
             if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log('api_token_create_failure', $project, ['reason' => 'rate_limit_exceeded'], null, 'failure', 'Rate limit exceeded', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+                $this->auditService?->flush();
                 return $this->secureJson([
                     'error' => $this->trans('project_settings.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
@@ -368,8 +380,20 @@ class ProjectSettingsController extends AbstractController
             }
         }
 
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if ($contentType !== '' && !str_contains(strtolower($contentType), 'application/json')) {
+            $this->auditService?->log('api_token_create_failure', $project, ['reason' => 'invalid_content_type', 'content_type' => $contentType], null, 'failure', 'Content-Type must be application/json.', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+            $this->auditService?->flush();
+            return $this->secureJson([
+                'error' => $this->trans('project_settings.token_invalid_content_type', [], 'Content-Type must be application/json.'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
+        }
+
         $existingCount = count($this->apiTokenRepository->findByProject($project));
         if ($existingCount >= self::MAX_PROJECT_TOKENS) {
+            $this->auditService?->log('api_token_create_failure', $project, ['reason' => 'max_limit_reached'], null, 'failure', 'Maximum token limit reached for project', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'error' => $this->trans('project_settings.token_max_limit_reached', [], 'Maximum token limit reached for this project (50 tokens max).'),
                 'code'  => 'MAX_TOKENS_REACHED',
@@ -377,6 +401,8 @@ class ProjectSettingsController extends AbstractController
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            $this->auditService?->log('api_token_create_failure', $project, ['reason' => 'payload_too_large'], null, 'failure', 'Payload exceeds maximum size limit.', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'error' => $this->trans('project_settings.payload_too_large', [], 'Payload exceeds maximum size limit.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
@@ -386,6 +412,8 @@ class ProjectSettingsController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
+            $this->auditService?->log('api_token_create_failure', $project, ['reason' => 'invalid_json'], null, 'failure', 'Invalid JSON body.', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'error' => $this->trans('project_settings.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
@@ -490,15 +518,41 @@ class ProjectSettingsController extends AbstractController
             return $project;
         }
 
+        if ($this->tokenLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log('api_token_update_failure', $project, ['id' => $id, 'reason' => 'rate_limit_exceeded'], null, 'failure', 'Rate limit exceeded', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+                $this->auditService?->flush();
+                return $this->secureJson([
+                    'error' => $this->trans('project_settings.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+
         $token = $this->apiTokenRepository->findOneBy(['id' => $id, 'project' => $project]);
         if ($token === null) {
+            $this->auditService?->log('api_token_update_failure', $project, ['id' => $id, 'reason' => 'token_not_found'], null, 'failure', 'Token not found.', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'error' => $this->trans('project_settings.token_not_found', [], 'Token not found.'),
                 'code'  => 'TOKEN_NOT_FOUND',
             ], 404);
         }
 
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if ($contentType !== '' && !str_contains(strtolower($contentType), 'application/json')) {
+            $this->auditService?->log('api_token_update_failure', $project, ['id' => $id, 'reason' => 'invalid_content_type', 'content_type' => $contentType], null, 'failure', 'Content-Type must be application/json.', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+            $this->auditService?->flush();
+            return $this->secureJson([
+                'error' => $this->trans('project_settings.token_invalid_content_type', [], 'Content-Type must be application/json.'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
+        }
+
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            $this->auditService?->log('api_token_update_failure', $project, ['id' => $id, 'reason' => 'payload_too_large'], null, 'failure', 'Payload exceeds maximum size limit.', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'error' => $this->trans('project_settings.payload_too_large', [], 'Payload exceeds maximum size limit.'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
@@ -508,6 +562,8 @@ class ProjectSettingsController extends AbstractController
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
+            $this->auditService?->log('api_token_update_failure', $project, ['id' => $id, 'reason' => 'invalid_json'], null, 'failure', 'Invalid JSON body.', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'error' => $this->trans('project_settings.invalid_json', [], 'Invalid JSON body.'),
                 'code'  => 'INVALID_JSON',
@@ -603,15 +659,29 @@ class ProjectSettingsController extends AbstractController
     }
 
     #[Route('/tokens/{id}', name: 'tokens_delete', methods: ['DELETE'])]
-    public function deleteToken(string $projectUuid, int $id): JsonResponse
+    public function deleteToken(string $projectUuid, int $id, Request $request): JsonResponse
     {
         $project = $this->resolveProject($projectUuid);
         if ($project instanceof JsonResponse) {
             return $project;
         }
 
+        if ($this->tokenLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log('api_token_delete_failure', $project, ['id' => $id, 'reason' => 'rate_limit_exceeded'], null, 'failure', 'Rate limit exceeded', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+                $this->auditService?->flush();
+                return $this->secureJson([
+                    'error' => $this->trans('project_settings.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+
         $token = $this->apiTokenRepository->findOneBy(['id' => $id, 'project' => $project]);
         if ($token === null) {
+            $this->auditService?->log('api_token_delete_failure', $project, ['id' => $id, 'reason' => 'token_not_found'], null, 'failure', 'Token not found.', $this->getUser()?->getUserIdentifier() ?? 'api', 'project_settings');
+            $this->auditService?->flush();
             return $this->secureJson([
                 'error' => $this->trans('project_settings.token_not_found', [], 'Token not found.'),
                 'code'  => 'TOKEN_NOT_FOUND',

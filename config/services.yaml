@@ -83,6 +83,10 @@ services:
         arguments:
             $appSecret: '%kernel.secret%'
 
+    App\Controller\AdminApi\ApiKeyController:
+        arguments:
+            $appSecret: '%kernel.secret%'
+
     App\Controller\Settings\PersonalAccessTokenController:
         arguments:
             $appSecret: '%kernel.secret%'

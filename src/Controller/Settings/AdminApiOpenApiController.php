@@ -89,6 +89,7 @@ class AdminApiOpenApiController extends AbstractController
                 ['name' => 'Collections', 'description' => 'Schéma : collections (scope schema:write en écriture)'],
                 ['name' => 'Champs',      'description' => 'Schéma : champs des collections (scope schema:write en écriture)'],
                 ['name' => 'Jetons',      'description' => 'Gestion de vos Personal Access Tokens'],
+                ['name' => 'Clés API',    'description' => 'Gestion des clés API de projet (ApiToken)'],
                 ['name' => 'Import',      'description' => 'Import CSV en masse dans une collection'],
             ],
             'paths' => array_merge(
@@ -96,6 +97,7 @@ class AdminApiOpenApiController extends AbstractController
                 $this->collectionPaths(),
                 $this->fieldPaths(),
                 $this->tokenPaths(),
+                $this->apiKeyPaths(),
                 $this->importPaths(),
             ),
         ];
@@ -150,6 +152,16 @@ class AdminApiOpenApiController extends AbstractController
                     'id'     => ['type' => 'integer', 'example' => 1],
                     'name'   => ['type' => 'string', 'example' => 'Déploiement CI'],
                     'scopes' => ['type' => 'array', 'items' => ['type' => 'string'], 'example' => ['schema:write']],
+                ],
+            ],
+            'ApiKey' => [
+                'type'       => 'object',
+                'properties' => [
+                    'id'        => ['type' => 'integer', 'example' => 1],
+                    'name'      => ['type' => 'string', 'example' => 'Frontend Web Key'],
+                    'abilities' => ['type' => 'array', 'items' => ['type' => 'string'], 'example' => ['read']],
+                    'expiresAt' => ['type' => 'string', 'format' => 'date-time', 'nullable' => true],
+                    'createdAt' => ['type' => 'string', 'format' => 'date-time'],
                 ],
             ],
         ];
@@ -336,6 +348,43 @@ class AdminApiOpenApiController extends AbstractController
                     'tags' => ['Jetons'], 'summary' => 'Révoque un jeton',
                     'parameters' => [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
                     'responses' => ['204' => ['description' => 'Révoqué']] + $this->commonErrors(),
+                ],
+            ],
+        ];
+    }
+
+    private function apiKeyPaths(): array
+    {
+        return [
+            '/projects/{uuid}/api-keys' => [
+                'get' => [
+                    'tags' => ['Clés API'], 'summary' => 'Liste les clés API du projet',
+                    'parameters' => [$this->uuidParam()],
+                    'responses' => ['200' => $this->dataResponse('#/components/schemas/ApiKey', 'Liste des clés API', true)] + $this->commonErrors(withScope: true),
+                ],
+                'post' => [
+                    'tags' => ['Clés API'], 'summary' => 'Crée une clé API de projet (valeur affichée une seule fois)',
+                    'parameters' => [$this->uuidParam()],
+                    'requestBody' => $this->jsonBody(['name' => 'Clé Frontend', 'abilities' => ['read']], ['name']),
+                    'responses' => ['201' => $this->dataResponse('#/components/schemas/ApiKey', 'Clé API créée')] + $this->commonErrors(withScope: true, withValidation: true),
+                ],
+            ],
+            '/projects/{uuid}/api-keys/{id}' => [
+                'get' => [
+                    'tags' => ['Clés API'], 'summary' => 'Détail d\'une clé API',
+                    'parameters' => [$this->uuidParam(), ['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+                    'responses' => ['200' => $this->dataResponse('#/components/schemas/ApiKey', 'Détail de la clé API')] + $this->commonErrors(withScope: true),
+                ],
+                'patch' => [
+                    'tags' => ['Clés API'], 'summary' => 'Met à jour une clé API',
+                    'parameters' => [$this->uuidParam(), ['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+                    'requestBody' => $this->jsonBody(['name' => 'Nouveau nom', 'abilities' => ['read', 'create']], []),
+                    'responses' => ['200' => $this->dataResponse('#/components/schemas/ApiKey', 'Clé API mise à jour')] + $this->commonErrors(withScope: true, withValidation: true),
+                ],
+                'delete' => [
+                    'tags' => ['Clés API'], 'summary' => 'Révoque une clé API',
+                    'parameters' => [$this->uuidParam(), ['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']]],
+                    'responses' => ['204' => ['description' => 'Révoquée']] + $this->commonErrors(withScope: true),
                 ],
             ],
         ];
