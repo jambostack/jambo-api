@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.201] — 2026-11-06
+
+### CI Workflows Memory Hardening, PHPUnit Isolation & Composer Lock Synchronization (Cycle #130)
+- **CI Workflows Hardening & GitHub Actions Stability (`.github/workflows/ci.yml`)**:
+  - Increased PHP memory limit from 512MB to 2GB (`ini-values: memory_limit=2G` and `php -d memory_limit=2G vendor/bin/phpunit --no-coverage`) to safely accommodate all 2,347+ Symfony integration tests without OOM crashes.
+  - Added explicit `pdo_sqlite` extension to PHP setup step for complete Doctrine DBAL SQLite support.
+  - Added explicit `DATABASE_URL` environment injection to SQLite schema creation step (`php bin/console doctrine:schema:create --env=test`).
+- **Composer Lock Synchronization**:
+  - Synchronized `composer.lock` content-hash via `composer update --lock --no-install`.
+  - Validated zero errors via `composer validate` (exit code 0).
+- **Quality Assurance & Verification**:
+  - Validated local PHPUnit test suite (2,347 tests, 18,563 assertions, 0 errors, 0 failures).
+  - Validated Webpack Encore frontend asset production compilation (`npm run build`).
+  - Verified 100% 4-language i18n parity across 3,819 translation keys.
+
+---
+
 ## [1.26.200] — 2026-11-06
 
 ### Asynchronous Batch Import & JSONL/CSV Multi-Tenant Serialization Hardening (Cycle #129)
