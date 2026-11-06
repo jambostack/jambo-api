@@ -4003,4 +4003,9 @@ return [
     'realtime.topic_depth_exceeded' => 'Topic hierarchy exceeds maximum allowed depth.',
     'realtime.rate_limit_exceeded_retry' => 'Too many realtime requests. Please retry in %seconds% seconds.',
     'mercure.tenant_access_denied' => 'Cross-tenant topic subscription or publication is strictly forbidden.',
+    'realtime.token_verified' => 'Token verified successfully.',
+    'realtime.token_invalid' => 'Token is invalid or malformed.',
+    'realtime.token_expired' => 'Realtime token has expired.',
+    'realtime.token_signature_invalid' => 'Realtime token signature is invalid.',
+    'realtime.token_claims_mismatch' => 'Token is missing valid Mercure authorization claims.',
 ];

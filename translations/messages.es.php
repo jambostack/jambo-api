@@ -4003,4 +4003,9 @@ return [
     'realtime.topic_depth_exceeded' => 'La jerarquía del tema excede la profundidad máxima permitida.',
     'realtime.rate_limit_exceeded_retry' => 'Demasiadas solicitudes en tiempo real. Inténtelo de nuevo en %seconds% segundos.',
     'mercure.tenant_access_denied' => 'La suscripción o publicación de temas entre inquilinos está estrictamente prohibida.',
+    'realtime.token_verified' => 'Token verificado con éxito.',
+    'realtime.token_invalid' => 'El token no es válido o está mal formado.',
+    'realtime.token_expired' => 'El token en tiempo real ha expirado.',
+    'realtime.token_signature_invalid' => 'La firma del token en tiempo real no es válida.',
+    'realtime.token_claims_mismatch' => 'El token no contiene los reclamos de autorización Mercure requeridos.',
 ];

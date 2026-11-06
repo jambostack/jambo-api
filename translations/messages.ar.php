@@ -4005,4 +4005,9 @@ return [
     'realtime.topic_depth_exceeded' => 'تتجاوز تسلسل الموضوع الحد الأقصى للعمق المسموح به.',
     'realtime.rate_limit_exceeded_retry' => 'طلبات البث المباشر كثيرة جدًا. يرجى إعادة المحاولة بعد %seconds% ثانية.',
     'mercure.tenant_access_denied' => 'الاشتراك أو النشر في مواضيع عبر المستأجرين محظور تمامًا.',
+    'realtime.token_verified' => 'تم التحقق من صحة الرمز بنجاح.',
+    'realtime.token_invalid' => 'الرمز غير صالح أو تالف.',
+    'realtime.token_expired' => 'انتهت صلاحية رمز الوقت الفعلي.',
+    'realtime.token_signature_invalid' => 'توقيع رمز الوقت الفعلي غير صالح.',
+    'realtime.token_claims_mismatch' => 'يفتقر الرمز إلى مطالبات تفويض Mercure المطلوبة.',
 ];

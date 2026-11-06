@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace App\Service\Mercure;
 
+use App\Entity\ApiToken;
 use App\Entity\Project;
 use App\Entity\Role;
 use App\Entity\User;
 use App\Repository\ProjectMemberRepository;
+use Lcobucci\JWT\Configuration;
+use Lcobucci\JWT\Signer\Hmac\Sha256;
+use Lcobucci\JWT\Signer\Key\InMemory;
+use Lcobucci\JWT\Validation\Constraint\SignedWith;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 class MercureTopicSecurityService
@@ -17,7 +22,7 @@ class MercureTopicSecurityService
     public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
     public const MAX_TOPIC_DEPTH = 5;
 
-    private const ALLOWED_TOPIC_REGEX = '/^projects\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/[a-zA-Z0-9_\-\.]{1,64}){0,5}$/';
+    private const ALLOWED_TOPIC_REGEX = '/^projects\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/[a-zA-Z0-9_\-\.]{1,64}){0,5}$/i';
 
     public function __construct(
         private readonly ProjectMemberRepository $memberRepo,
@@ -162,8 +167,11 @@ class MercureTopicSecurityService
                 ];
             }
 
+            // Normalize project UUID in topic to canonical lowercase
+            $canonicalTopic = 'projects/' . strtolower(substr($topic, 9, 36)) . substr($topic, 45);
+
             // Strict multi-tenant isolation: topic must belong to this project
-            if ($topic !== $expectedPrefix && !str_starts_with($topic, $expectedPrefix . '/')) {
+            if ($canonicalTopic !== $expectedPrefix && !str_starts_with($canonicalTopic, $expectedPrefix . '/')) {
                 return [
                     'topics' => [],
                     'error'  => $this->trans('realtime.topic_access_denied', [], 'Cross-tenant topic subscription is forbidden.'),
@@ -171,7 +179,7 @@ class MercureTopicSecurityService
                 ];
             }
 
-            $sanitized[] = $topic;
+            $sanitized[] = $canonicalTopic;
         }
 
         $unique = array_values(array_unique($sanitized));
@@ -183,43 +191,159 @@ class MercureTopicSecurityService
     }
 
     /**
+     * Determines whether the given actor (User or ApiToken) has publish permissions on the project.
+     */
+    public function canActorPublish(User|ApiToken|null $actor, Project $project): bool
+    {
+        if ($actor === null) {
+            return false;
+        }
+
+        if ($actor instanceof ApiToken) {
+            if ($actor->project !== null && $actor->project->uuid?->toRfc4122() === $project->uuid?->toRfc4122()) {
+                return $actor->can('write') || $actor->can('create') || $actor->can('realtime.publish') || $actor->can('*');
+            }
+            return false;
+        }
+
+        if ($actor instanceof User) {
+            if (in_array('ROLE_SUPER_ADMIN', $actor->getRoles(), true) || in_array('ROLE_ADMIN', $actor->getRoles(), true)) {
+                return true;
+            }
+
+            $member = $this->memberRepo->findActiveByUserAndProject($actor, $project);
+            if ($member === null) {
+                return false;
+            }
+
+            $role = $member->role;
+            if ($role === null) {
+                return false;
+            }
+
+            if ($role instanceof Role) {
+                $name = strtolower($role->name);
+                if (in_array($name, ['owner', 'admin', 'manager', 'editor'], true)) {
+                    return true;
+                }
+                if ($role->hasPermission('realtime.publish') || $role->hasPermission('content.edit') || $role->hasPermission('project.manage')) {
+                    return true;
+                }
+                return false;
+            }
+
+            if (is_string($role)) {
+                return in_array(strtolower($role), ['owner', 'admin', 'manager', 'editor'], true);
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Determines whether the given user has publish permissions on the project.
      */
     public function canUserPublish(?User $user, Project $project): bool
     {
-        if ($user === null) {
-            return false;
+        return $this->canActorPublish($user, $project);
+    }
+
+    /**
+     * Verifies a Mercure JWT token signature, expiration and claims for a specific project.
+     *
+     * @return array{valid: bool, error?: string, code?: string, claims?: array<string, mixed>}
+     */
+    public function verifyToken(string $tokenString, string $secret, string $projectUuid): array
+    {
+        $tokenString = trim($tokenString);
+        if ($tokenString === '') {
+            return [
+                'valid' => false,
+                'error' => $this->trans('realtime.token_invalid', [], 'Token cannot be empty.'),
+                'code'  => 'TOKEN_INVALID',
+            ];
         }
 
-        if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true) || in_array('ROLE_ADMIN', $user->getRoles(), true)) {
-            return true;
+        if ($secret === '' || strlen($secret) < 32) {
+            return [
+                'valid' => false,
+                'error' => $this->trans('realtime.token_signature_invalid', [], 'Invalid secret configuration.'),
+                'code'  => 'TOKEN_SIGNATURE_INVALID',
+            ];
         }
 
-        $member = $this->memberRepo->findActiveByUserAndProject($user, $project);
-        if ($member === null) {
-            return false;
-        }
+        try {
+            $jwtConfig = Configuration::forSymmetricSigner(
+                new Sha256(),
+                InMemory::plainText($secret),
+            );
 
-        $role = $member->role;
-        if ($role === null) {
-            return false;
-        }
+            $token = $jwtConfig->parser()->parse($tokenString);
 
-        if ($role instanceof Role) {
-            $name = strtolower($role->name);
-            if (in_array($name, ['owner', 'admin', 'manager', 'editor'], true)) {
-                return true;
+            // Verify signature
+            if (!$jwtConfig->validator()->validate($token, new SignedWith(new Sha256(), InMemory::plainText($secret)))) {
+                return [
+                    'valid' => false,
+                    'error' => $this->trans('realtime.token_signature_invalid', [], 'Invalid token signature.'),
+                    'code'  => 'TOKEN_SIGNATURE_INVALID',
+                ];
             }
-            if ($role->hasPermission('realtime.publish') || $role->hasPermission('content.edit') || $role->hasPermission('project.manage')) {
-                return true;
+
+            // Verify expiration
+            $now = new \DateTimeImmutable();
+            if ($token->isExpired($now)) {
+                return [
+                    'valid' => false,
+                    'error' => $this->trans('realtime.token_expired', [], 'Token has expired.'),
+                    'code'  => 'TOKEN_EXPIRED',
+                ];
             }
-            return false;
-        }
 
-        if (is_string($role)) {
-            return in_array(strtolower($role), ['owner', 'admin', 'manager', 'editor'], true);
-        }
+            $claims = $token->claims()->all();
+            $mercureClaim = $claims['mercure'] ?? null;
+            if (!is_array($mercureClaim)) {
+                return [
+                    'valid' => false,
+                    'error' => $this->trans('realtime.token_claims_mismatch', [], 'Token is missing Mercure authorization claim.'),
+                    'code'  => 'TOKEN_CLAIMS_MISMATCH',
+                ];
+            }
 
-        return false;
+            $subscribeTopics = (array) ($mercureClaim['subscribe'] ?? []);
+            $expectedPrefix = 'projects/' . strtolower(trim($projectUuid));
+
+            // Ensure subscribed topics belong to the project (unless global superadmin wildcard)
+            foreach ($subscribeTopics as $st) {
+                if ($st === '*') {
+                    continue;
+                }
+                $normSt = is_string($st) ? 'projects/' . strtolower(substr($st, 9, 36)) . substr($st, 45) : '';
+                if ($normSt !== $expectedPrefix && !str_starts_with($normSt, $expectedPrefix . '/')) {
+                    return [
+                        'valid' => false,
+                        'error' => $this->trans('realtime.topic_access_denied', [], 'Cross-tenant topic subscription is forbidden.'),
+                        'code'  => 'FORBIDDEN',
+                    ];
+                }
+            }
+
+            return [
+                'valid'  => true,
+                'claims' => [
+                    'sub'       => $claims['sub'] ?? null,
+                    'jti'       => $claims['jti'] ?? null,
+                    'iss'       => $claims['iss'] ?? null,
+                    'exp'       => isset($claims['exp']) && $claims['exp'] instanceof \DateTimeInterface ? $claims['exp']->format(\DateTimeInterface::ATOM) : null,
+                    'subscribe' => $subscribeTopics,
+                    'publish'   => (array) ($mercureClaim['publish'] ?? []),
+                ],
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'valid' => false,
+                'error' => $this->trans('realtime.token_invalid', [], 'Invalid token format.'),
+                'code'  => 'TOKEN_INVALID',
+            ];
+        }
     }
 }

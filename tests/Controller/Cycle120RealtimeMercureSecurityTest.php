@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Controller;
 
+use App\Entity\ApiToken;
 use App\Entity\Project;
 use App\Entity\ProjectMember;
 use App\Entity\Role;
@@ -88,6 +89,20 @@ class Cycle120RealtimeMercureSecurityTest extends WebTestCase
         $em->persist($member);
         $em->flush();
         return $member;
+    }
+
+    private function makeApiToken(Project $project, array $abilities = ['read']): array
+    {
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $token = new ApiToken();
+        $token->name = 'Test Token ' . bin2hex(random_bytes(3));
+        $token->project = $project;
+        $plainSecret = bin2hex(random_bytes(24));
+        $token->tokenHash = hash('sha256', $plainSecret);
+        $token->abilities = $abilities;
+        $em->persist($token);
+        $em->flush();
+        return ['token' => $token, 'secret' => $plainSecret];
     }
 
     private function assertStandardSecurityHeaders(Response $response): void
@@ -449,6 +464,193 @@ class Cycle120RealtimeMercureSecurityTest extends WebTestCase
         self::ensureKernelShutdown();
     }
 
+    // ─── Token Verification & API Token Authorization Tests ───────────
+
+    public function testVerifyTokenEndpointValidToken(): void
+    {
+        $client  = static::createClient();
+        $user    = $this->makeUser('ROLE_SUPER_ADMIN');
+        $project = $this->makeProject();
+        $this->addMember($user, $project);
+        $client->loginUser($user);
+
+        // First obtain a signed token
+        $client->request('POST', '/api/projects/' . $project->uuid . '/realtime/token', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'topics' => ["projects/{$project->uuid}/content"],
+        ]));
+        $response = $client->getResponse();
+        self::assertSame(200, $response->getStatusCode());
+        $tokenData = json_decode((string) $response->getContent(), true);
+
+        if ($tokenData['enabled'] ?? false) {
+            $signedToken = $tokenData['token'];
+
+            $client->request('POST', '/api/projects/' . $project->uuid . '/realtime/verify-token', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+                'token' => $signedToken,
+            ]));
+            $verifyRes = $client->getResponse();
+            self::assertSame(200, $verifyRes->getStatusCode());
+            $verifyData = json_decode((string) $verifyRes->getContent(), true);
+            self::assertTrue($verifyData['valid']);
+            self::assertNotEmpty($verifyData['claims']['subscribe']);
+        }
+    }
+
+    public function testVerifyTokenEndpointRejectsTamperedToken(): void
+    {
+        $client  = static::createClient();
+        $user    = $this->makeUser('ROLE_SUPER_ADMIN');
+        $project = $this->makeProject();
+        $this->addMember($user, $project);
+        $client->loginUser($user);
+
+        $client->request('POST', '/api/projects/' . $project->uuid . '/realtime/verify-token', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'token' => 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.tampered_signature_here',
+        ]));
+        $verifyRes = $client->getResponse();
+        self::assertSame(422, $verifyRes->getStatusCode());
+        $verifyData = json_decode((string) $verifyRes->getContent(), true);
+        self::assertFalse($verifyData['valid']);
+        self::assertSame('TOKEN_INVALID', $verifyData['code']);
+    }
+
+    public function testApiTokenCanSubscribeAndPublish(): void
+    {
+        $client   = static::createClient();
+        $project  = $this->makeProject();
+        $apiToken = $this->makeApiToken($project, ['read', 'write']);
+
+        // Token endpoint via Bearer
+        $client->request('GET', '/api/projects/' . $project->uuid . '/realtime/token', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $apiToken['secret'],
+        ]);
+        $response = $client->getResponse();
+        self::assertSame(200, $response->getStatusCode());
+        $data = json_decode((string) $response->getContent(), true);
+        self::assertTrue($data['can_publish'] ?? false);
+
+        // Publish endpoint via Bearer
+        $client->request(
+            'POST',
+            '/api/projects/' . $project->uuid . '/realtime/publish',
+            [], [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $apiToken['secret'],
+                'CONTENT_TYPE'       => 'application/json',
+            ],
+            json_encode([
+                'event' => 'custom.event',
+                'data'  => ['from' => 'api_token'],
+            ])
+        );
+        $pubRes = $client->getResponse();
+        self::assertSame(200, $pubRes->getStatusCode());
+        $pubData = json_decode((string) $pubRes->getContent(), true);
+        self::assertSame('published', $pubData['status']);
+    }
+
+    public function testApiTokenReadOnlyCannotPublish(): void
+    {
+        $client   = static::createClient();
+        $project  = $this->makeProject();
+        $apiToken = $this->makeApiToken($project, ['read']);
+
+        $client->request(
+            'POST',
+            '/api/projects/' . $project->uuid . '/realtime/publish',
+            [], [],
+            [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $apiToken['secret'],
+                'CONTENT_TYPE'       => 'application/json',
+            ],
+            json_encode([
+                'event' => 'custom.event',
+                'data'  => ['from' => 'readonly_token'],
+            ])
+        );
+        $pubRes = $client->getResponse();
+        self::assertSame(403, $pubRes->getStatusCode());
+    }
+
+    public function testUppercaseUuidTopicIsNormalizedAndAccepted(): void
+    {
+        $client  = static::createClient();
+        $user    = $this->makeUser('ROLE_SUPER_ADMIN');
+        $project = $this->makeProject();
+        $this->addMember($user, $project);
+        $client->loginUser($user);
+
+        $upperUuidTopic = 'projects/' . strtoupper((string) $project->uuid) . '/content';
+        $client->request('GET', '/api/projects/' . $project->uuid . '/realtime/token?topics=' . urlencode($upperUuidTopic));
+        $response = $client->getResponse();
+        self::assertSame(200, $response->getStatusCode());
+        $data = json_decode((string) $response->getContent(), true);
+        $lowerExpected = 'projects/' . strtolower((string) $project->uuid) . '/content';
+        self::assertContains($lowerExpected, $data['topics']);
+    }
+
+    public function testExtendedReservedSystemEventsSpoofingDenied(): void
+    {
+        $client  = static::createClient();
+        $user    = $this->makeUser('ROLE_USER');
+        $project = $this->makeProject();
+        $editorRole = $this->makeRole('editor');
+        $this->addMember($user, $project, $editorRole);
+        $client->loginUser($user);
+
+        foreach (['system.shutdown', 'security.alert', 'audit.wipe', 'member.removed'] as $reservedEvent) {
+            $client->request(
+                'POST',
+                '/api/projects/' . $project->uuid . '/realtime/publish',
+                [], [], ['CONTENT_TYPE' => 'application/json'],
+                json_encode([
+                    'event' => $reservedEvent,
+                    'data'  => ['test' => true],
+                ])
+            );
+            $response = $client->getResponse();
+            self::assertSame(403, $response->getStatusCode(), "Event '{$reservedEvent}' should be forbidden for editor role");
+            $data = json_decode((string) $response->getContent(), true);
+            self::assertSame('EVENT_SPOOFING_DENIED', $data['code']);
+        }
+    }
+
+    public function testPollEndpointFiltersByEventAndTopic(): void
+    {
+        $client  = static::createClient();
+        $user    = $this->makeUser('ROLE_SUPER_ADMIN');
+        $project = $this->makeProject();
+        $this->addMember($user, $project);
+        $client->loginUser($user);
+
+        // Write simulated jsonl lines directly to test poll filtering
+        $container = self::getContainer();
+        $projectDir = (string) $container->getParameter('kernel.project_dir');
+        $dir = $projectDir . '/var/realtime';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0750, true);
+        }
+        $filePath = $dir . '/' . $project->uuid . '.jsonl';
+        $lines = [
+            json_encode(['event' => 'entry.created', 'topic' => "projects/{$project->uuid}/content", 'data' => ['id' => 1]]),
+            json_encode(['event' => 'media.uploaded', 'topic' => "projects/{$project->uuid}/media", 'data' => ['id' => 2]]),
+            json_encode(['event' => 'entry.updated', 'topic' => "projects/{$project->uuid}/content", 'data' => ['id' => 3]]),
+        ];
+        file_put_contents($filePath, implode("\n", $lines) . "\n");
+
+        // Filter by event 'entry.*'
+        $client->request('GET', '/api/projects/' . $project->uuid . '/realtime?event=entry.*');
+        $res = $client->getResponse();
+        self::assertSame(200, $res->getStatusCode());
+        $data = json_decode((string) $res->getContent(), true);
+        self::assertCount(2, $data['events']);
+        self::assertSame('entry.created', $data['events'][0]['event']);
+        self::assertSame('entry.updated', $data['events'][1]['event']);
+
+        // Clean up test file
+        @unlink($filePath);
+    }
+
     // ─── 4-Locales Parity Verification ────────────────────────────────
 
     public function testAllLocalesHaveCycle120Translations(): void
@@ -461,6 +663,11 @@ class Cycle120RealtimeMercureSecurityTest extends WebTestCase
             'realtime.topic_depth_exceeded',
             'realtime.rate_limit_exceeded_retry',
             'mercure.tenant_access_denied',
+            'realtime.token_verified',
+            'realtime.token_invalid',
+            'realtime.token_expired',
+            'realtime.token_signature_invalid',
+            'realtime.token_claims_mismatch',
         ];
 
         foreach (['en', 'fr', 'es', 'ar'] as $locale) {

@@ -4021,4 +4021,9 @@ return [
     'realtime.topic_depth_exceeded' => 'La hiérarchie du topic dépasse la profondeur maximale autorisée.',
     'realtime.rate_limit_exceeded_retry' => 'Trop de requêtes temps réel. Veuillez réessayer dans %seconds% secondes.',
     'mercure.tenant_access_denied' => 'L\'abonnement ou la publication de topics inter-tenants est strictement interdit.',
+    'realtime.token_verified' => 'Jeton vérifié avec succès.',
+    'realtime.token_invalid' => 'Le jeton est invalide ou malformé.',
+    'realtime.token_expired' => 'Le jeton temps réel a expiré.',
+    'realtime.token_signature_invalid' => 'La signature du jeton temps réel est invalide.',
+    'realtime.token_claims_mismatch' => 'Le jeton ne contient pas les revendications Mercure requises.',
 ];

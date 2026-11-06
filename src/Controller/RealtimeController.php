@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\ApiToken;
 use App\Entity\Project;
 use App\Entity\User;
 use App\Repository\ProjectMemberRepository;
 use App\Repository\ProjectRepository;
+use App\Service\ApiTokenChecker;
 use App\Service\Mercure\MercureTopicSecurityService;
 use App\Service\MercurePublisher;
 use Lcobucci\JWT\Configuration;
@@ -52,6 +54,7 @@ class RealtimeController extends AbstractController
         private readonly ?TranslatorInterface $translator = null,
         ?MercureTopicSecurityService $topicSecurity = null,
         private readonly ?MercurePublisher $mercurePublisher = null,
+        private readonly ?ApiTokenChecker $tokenChecker = null,
     ) {
         $this->topicSecurity = $topicSecurity ?? new MercureTopicSecurityService($this->memberRepo, $this->translator);
     }
@@ -167,7 +170,11 @@ class RealtimeController extends AbstractController
         // Determine publish permissions
         $user = $this->getUser();
         $userEntity = $user instanceof User ? $user : null;
-        $canPublish = $this->topicSecurity->canUserPublish($userEntity, $project);
+        $apiToken = $request->attributes->get('_api_token');
+        if (!$apiToken instanceof ApiToken && $this->tokenChecker !== null) {
+            $apiToken = $this->tokenChecker->resolve($request);
+        }
+        $canPublish = $this->topicSecurity->canActorPublish($userEntity ?? $apiToken, $project);
 
         $requestedPublish = $request->query->get('publish') ?? $request->request->get('publish');
         $requestedPublishTopics = $request->query->get('publish_topics') ?? $request->request->get('publish_topics');
@@ -218,7 +225,7 @@ class RealtimeController extends AbstractController
                 ->issuedAt($now)
                 ->expiresAt($now->modify('+1 hour'))
                 ->identifiedBy(bin2hex(random_bytes(16)))
-                ->relatedTo($userEntity?->getUserIdentifier() ?? 'anonymous')
+                ->relatedTo($userEntity?->getUserIdentifier() ?? ($apiToken instanceof ApiToken ? 'token:' . $apiToken->name : 'anonymous'))
                 ->issuedBy($request->getSchemeAndHttpHost())
                 ->withClaim('mercure', [
                     'subscribe' => $subscribeTopics,
@@ -303,7 +310,11 @@ class RealtimeController extends AbstractController
 
         $user = $this->getUser();
         $userEntity = $user instanceof User ? $user : null;
-        if (!$this->topicSecurity->canUserPublish($userEntity, $project)) {
+        $apiToken = $request->attributes->get('_api_token');
+        if (!$apiToken instanceof ApiToken && $this->tokenChecker !== null) {
+            $apiToken = $this->tokenChecker->resolve($request);
+        }
+        if (!$this->topicSecurity->canActorPublish($userEntity ?? $apiToken, $project)) {
             return $this->secureJson([
                 'error' => $this->trans('realtime.publish_denied', [], 'Publishing to realtime stream is denied for your role.'),
                 'code'  => 'PUBLISH_DENIED',
@@ -348,8 +359,18 @@ class RealtimeController extends AbstractController
         $member = $userEntity !== null ? $this->memberRepo->findActiveByUserAndProject($userEntity, $project) : null;
         $roleName = strtolower($member?->role?->name ?? (is_string($member?->role) ? $member->role : ''));
         $isAdminRole = in_array($roleName, ['owner', 'admin'], true);
+        $isTokenAdmin = $apiToken instanceof ApiToken && $apiToken->can('*');
 
-        if (!$isSuperAdmin && !$isAdminRole && (str_starts_with($event, 'entry.') || str_starts_with($event, 'media.') || str_starts_with($event, 'status.'))) {
+        $reservedPrefixes = ['entry.', 'media.', 'status.', 'system.', 'security.', 'audit.', 'project.', 'member.'];
+        $isReserved = false;
+        foreach ($reservedPrefixes as $prefix) {
+            if (str_starts_with($event, $prefix)) {
+                $isReserved = true;
+                break;
+            }
+        }
+
+        if (!$isSuperAdmin && !$isAdminRole && !$isTokenAdmin && $isReserved) {
             return $this->secureJson([
                 'error' => $this->trans('realtime.event_spoofing_denied', [], 'Direct publishing to reserved system events is not permitted.'),
                 'code'  => 'EVENT_SPOOFING_DENIED',
@@ -417,6 +438,9 @@ class RealtimeController extends AbstractController
         $events = [];
         $lastId = $since;
 
+        $filterEvent = $request->query->get('event');
+        $filterTopic = $request->query->get('topic');
+
         if (file_exists($eventFile)) {
             // Guard against traversal
             $realPath = realpath($eventFile);
@@ -428,7 +452,23 @@ class RealtimeController extends AbstractController
                         $data = json_decode($lines[$i], true);
                         if ($data !== null) {
                             $data['_id'] = $i;
-                            $events[] = $data;
+                            $match = true;
+                            if (is_string($filterEvent) && $filterEvent !== '') {
+                                $ev = (string) ($data['event'] ?? '');
+                                if (str_ends_with($filterEvent, '*')) {
+                                    $prefix = rtrim($filterEvent, '*');
+                                    $match = str_starts_with($ev, $prefix);
+                                } else {
+                                    $match = $ev === $filterEvent;
+                                }
+                            }
+                            if ($match && is_string($filterTopic) && $filterTopic !== '') {
+                                $top = (string) ($data['topic'] ?? '');
+                                $match = $top === $filterTopic;
+                            }
+                            if ($match) {
+                                $events[] = $data;
+                            }
                             $lastId = $i + 1;
                         }
                     }
@@ -448,6 +488,79 @@ class RealtimeController extends AbstractController
         ]);
     }
 
+    /**
+     * Verifies and inspects a signed Mercure JWT token.
+     */
+    #[Route('/verify-token', name: 'verify_token', methods: ['POST'])]
+    public function verifyTokenEndpoint(string $projectUuid, Request $request): JsonResponse
+    {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return $this->secureJson([
+                'error' => $this->trans('realtime.invalid_project_uuid', [], 'Invalid project UUID format'),
+                'code'  => 'INVALID_PROJECT_UUID',
+            ], 400);
+        }
+
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return $this->secureJson([
+                'error' => $this->trans('realtime.project_not_found', [], 'Project not found'),
+                'code'  => 'PROJECT_NOT_FOUND',
+            ], 404);
+        }
+        if (!$project) {
+            return $this->secureJson([
+                'error' => $this->trans('realtime.project_not_found', [], 'Project not found'),
+                'code'  => 'PROJECT_NOT_FOUND',
+            ], 404);
+        }
+        if ($error = $this->denyProjectAccess($project, $request)) {
+            return $error;
+        }
+
+        $rawContentType = (string) $request->headers->get('Content-Type', '');
+        $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
+        if ($contentType !== '' && !in_array($contentType, ['application/json', 'application/x-www-form-urlencoded'], true)) {
+            return $this->secureJson([
+                'error' => $this->trans('realtime.unsupported_content_type', [], 'Unsupported Media Type: Content-Type must be application/json.'),
+                'code'  => 'UNSUPPORTED_MEDIA_TYPE',
+            ], 415);
+        }
+
+        $rawContent = $request->getContent();
+        if (str_contains($rawContent, "\0")) {
+            return $this->secureJson([
+                'error' => $this->trans('realtime.null_byte_detected', [], 'Null bytes or control characters are strictly forbidden in realtime requests.'),
+                'code'  => 'NULL_BYTE_DETECTED',
+            ], 400);
+        }
+
+        $body = json_decode($rawContent, true, 16, JSON_INVALID_UTF8_SUBSTITUTE);
+        $tokenToVerify = is_array($body) ? (string) ($body['token'] ?? '') : (string) $request->request->get('token', '');
+
+        $mercureSecret = (string) ($this->getParameter('mercure_jwt_secret') ?? '');
+        $verification = $this->topicSecurity->verifyToken($tokenToVerify, $mercureSecret, $projectUuid);
+
+        if (!$verification['valid']) {
+            return $this->secureJson([
+                'valid' => false,
+                'error' => $verification['error'] ?? 'Token invalid',
+                'code'  => $verification['code'] ?? 'TOKEN_INVALID',
+            ], 422);
+        }
+
+        return $this->secureJson([
+            'valid'   => true,
+            'message' => $this->trans('realtime.token_verified', [], 'Token verified successfully.'),
+            'claims'  => $verification['claims'] ?? [],
+        ]);
+    }
+
     // ─── Private ─────────────────────────────────────────────────────────
 
     private function denyProjectAccess(Project $project, Request $request): ?JsonResponse
@@ -455,23 +568,46 @@ class RealtimeController extends AbstractController
         if ($request->attributes->get('_project') === $project) {
             return null;
         }
+
         $user = $this->getUser();
-        if (!$user) {
-            return $this->secureJson([
-                'error' => $this->trans('realtime.auth_required', [], 'Authentication required.'),
-                'code'  => 'AUTH_REQUIRED',
-            ], 401);
-        }
-        if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
-            return null;
-        }
-        if ($this->memberRepo->findActiveByUserAndProject($user, $project) === null) {
+        if ($user instanceof User) {
+            if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+                return null;
+            }
+            if ($this->memberRepo->findActiveByUserAndProject($user, $project) !== null) {
+                return null;
+            }
             return $this->secureJson([
                 'error' => $this->trans('realtime.access_denied', [], 'Access denied'),
                 'code'  => 'ACCESS_DENIED',
             ], 403);
         }
-        return null;
+
+        if ($this->tokenChecker !== null) {
+            $apiToken = $this->tokenChecker->resolve($request);
+            if ($apiToken !== null && $apiToken->project !== null) {
+                if ($apiToken->project->uuid?->toRfc4122() === $project->uuid?->toRfc4122()) {
+                    if ($this->tokenChecker->isAllowedForMethod($apiToken, $request->getMethod())) {
+                        $request->attributes->set('_project', $project);
+                        $request->attributes->set('_api_token', $apiToken);
+                        return null;
+                    }
+                    return $this->secureJson([
+                        'error' => $this->trans('project.insufficient_token_abilities', [], 'Insufficient token abilities.'),
+                        'code'  => 'INSUFFICIENT_ABILITIES',
+                    ], 403);
+                }
+                return $this->secureJson([
+                    'error' => $this->trans('realtime.access_denied', [], 'Access denied'),
+                    'code'  => 'ACCESS_DENIED',
+                ], 403);
+            }
+        }
+
+        return $this->secureJson([
+            'error' => $this->trans('realtime.auth_required', [], 'Authentication required.'),
+            'code'  => 'AUTH_REQUIRED',
+        ], 401);
     }
 
     private function trimEventFile(string $path, array $lines): void
