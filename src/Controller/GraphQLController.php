@@ -33,12 +33,14 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 class GraphQLController extends AbstractController
 {
+    private const UUID_REGEX        = '/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/';
     public const MAX_QUERY_LENGTH   = 65536; // 64 KB
     public const MAX_ALIASES        = 30;    // Limit alias amplification attacks
     public const MAX_OPERATIONS     = 1;     // Single operation per request (no batched operations)
     public const MAX_FRAGMENTS      = 10;    // Limit fragment definition spam
     public const MAX_DIRECTIVES     = 15;    // Limit directive injection/amplification
     public const MAX_SELECTIONS     = 150;   // Limit total field selections in AST
+    public const MAX_AST_DEPTH      = 15;    // Limit maximum nesting depth of selection sets
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -52,6 +54,7 @@ class GraphQLController extends AbstractController
         private ?\Symfony\Component\RateLimiter\RateLimiterFactory $graphqlLimiter = null,
         private ?TranslatorInterface $translator = null,
         private ?ApiTokenChecker $tokenChecker = null,
+        private ?\App\Service\AuditService $auditService = null,
     ) {}
 
     private function trans(string $key, string $default, array $parameters = []): string
@@ -91,7 +94,21 @@ class GraphQLController extends AbstractController
         }
 
         if ($this->graphqlLimiter !== null && false === $this->graphqlLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $this->auditService?->log(
+                toolName: 'graphql_rate_limit_exceeded',
+                project: null,
+                input: ['identifier' => $identifier],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Rate limit exceeded for GraphQL endpoint',
+                createdBy: $identifier,
+                source: 'graphql',
+            );
             return $this->secureJson(['errors' => [['message' => $this->trans('graphql.too_many_requests', 'Trop de requêtes GraphQL. Veuillez réessayer plus tard.')]]], 429);
+        }
+
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return $this->secureJson(['errors' => [['message' => $this->trans('graphql.project_not_found', 'Projet introuvable.')]]], 404);
         }
 
         try {
@@ -127,6 +144,16 @@ class GraphQLController extends AbstractController
             }
             // ── Blocage des requêtes GraphQL en batch (array de queries) ─────────
             if (isset($body[0])) {
+                $this->auditService?->log(
+                    toolName: 'graphql_security_blocked',
+                    project: $project,
+                    input: ['reason' => 'batch_not_allowed'],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Batch GraphQL queries not allowed',
+                    createdBy: $identifier,
+                    source: 'graphql',
+                );
                 return $this->secureJson(['errors' => [['message' => $this->trans('graphql.batch_not_allowed', 'Les requêtes GraphQL en batch ne sont pas autorisées. Envoyez une seule opération par requête.')]]], 400);
             }
             $query = $body['query'] ?? null;
@@ -173,12 +200,32 @@ class GraphQLController extends AbstractController
         }
 
         if (count($operations) > self::MAX_OPERATIONS) {
+            $this->auditService?->log(
+                toolName: 'graphql_security_blocked',
+                project: $project,
+                input: ['reason' => 'too_many_operations', 'operations' => count($operations)],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Too many GraphQL operations',
+                createdBy: $identifier,
+                source: 'graphql',
+            );
             return $this->secureJson([
                 'errors' => [['message' => $this->trans('graphql.too_many_operations', 'Une seule opération GraphQL est autorisée par requête.')]],
             ], 400);
         }
 
         if (count($fragments) > self::MAX_FRAGMENTS) {
+            $this->auditService?->log(
+                toolName: 'graphql_security_blocked',
+                project: $project,
+                input: ['reason' => 'too_many_fragments', 'fragments' => count($fragments)],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Too many GraphQL fragments',
+                createdBy: $identifier,
+                source: 'graphql',
+            );
             return $this->secureJson([
                 'errors' => [['message' => $this->trans(
                     'graphql.too_many_fragments',
@@ -188,10 +235,40 @@ class GraphQLController extends AbstractController
             ], 400);
         }
 
-        // ── Contrôle approfondi de l'AST : alias, directives, sélections ──
+        // ── Contrôle approfondi de l'AST : profondeur, alias, directives, sélections ──
         $metrics = $this->inspectAstMetrics($document);
 
+        if ($metrics['max_depth'] > self::MAX_AST_DEPTH) {
+            $this->auditService?->log(
+                toolName: 'graphql_security_blocked',
+                project: $project,
+                input: ['reason' => 'ast_depth_exceeded', 'depth' => $metrics['max_depth'], 'max' => self::MAX_AST_DEPTH],
+                output: null,
+                status: 'failed',
+                errorMessage: 'GraphQL query AST depth exceeded',
+                createdBy: $identifier,
+                source: 'graphql',
+            );
+            return $this->secureJson([
+                'errors' => [['message' => $this->trans(
+                    'graphql.ast_depth_exceeded',
+                    sprintf('Profondeur de requête GraphQL dépassée (max %d niveaux).', self::MAX_AST_DEPTH),
+                    ['%max%' => self::MAX_AST_DEPTH]
+                )]],
+            ], 400);
+        }
+
         if ($metrics['aliases'] > self::MAX_ALIASES) {
+            $this->auditService?->log(
+                toolName: 'graphql_security_blocked',
+                project: $project,
+                input: ['reason' => 'too_many_aliases', 'aliases' => $metrics['aliases'], 'max' => self::MAX_ALIASES],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Too many GraphQL aliases',
+                createdBy: $identifier,
+                source: 'graphql',
+            );
             return $this->secureJson([
                 'errors' => [['message' => $this->trans(
                     'graphql.too_many_aliases',
@@ -202,6 +279,16 @@ class GraphQLController extends AbstractController
         }
 
         if ($metrics['directives'] > self::MAX_DIRECTIVES) {
+            $this->auditService?->log(
+                toolName: 'graphql_security_blocked',
+                project: $project,
+                input: ['reason' => 'too_many_directives', 'directives' => $metrics['directives'], 'max' => self::MAX_DIRECTIVES],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Too many GraphQL directives',
+                createdBy: $identifier,
+                source: 'graphql',
+            );
             return $this->secureJson([
                 'errors' => [['message' => $this->trans(
                     'graphql.too_many_directives',
@@ -212,6 +299,16 @@ class GraphQLController extends AbstractController
         }
 
         if ($metrics['selections'] > self::MAX_SELECTIONS) {
+            $this->auditService?->log(
+                toolName: 'graphql_security_blocked',
+                project: $project,
+                input: ['reason' => 'too_many_selections', 'selections' => $metrics['selections'], 'max' => self::MAX_SELECTIONS],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Too many GraphQL selections',
+                createdBy: $identifier,
+                source: 'graphql',
+            );
             return $this->secureJson([
                 'errors' => [['message' => $this->trans(
                     'graphql.too_many_selections',
@@ -231,6 +328,16 @@ class GraphQLController extends AbstractController
         if ($this->isMutationDocument($document)) {
             // Rejet absolu des mutations en GET (OWASP GraphQL / HTTP RFC)
             if ($request->isMethod('GET')) {
+                $this->auditService?->log(
+                    toolName: 'graphql_security_blocked',
+                    project: $project,
+                    input: ['reason' => 'mutation_via_get'],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'GraphQL mutations not allowed via GET',
+                    createdBy: $identifier,
+                    source: 'graphql',
+                );
                 return $this->secureJson([
                     'errors' => [['message' => $this->trans('graphql.mutations_not_allowed_via_get', 'Les mutations GraphQL ne sont pas autorisées via les requêtes GET.')]],
                 ], 405);
@@ -238,6 +345,16 @@ class GraphQLController extends AbstractController
 
             // Vérification des droits sur ApiToken
             if ($apiToken !== null && !$apiToken->can('write') && !$apiToken->can('create') && !$apiToken->can('*')) {
+                $this->auditService?->log(
+                    toolName: 'graphql_mutation_denied',
+                    project: $project,
+                    input: ['query' => mb_substr($query, 0, 500)],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Insufficient permissions for GraphQL mutation',
+                    createdBy: $identifier,
+                    source: 'graphql',
+                );
                 return $this->secureJson([
                     'errors' => [['message' => $this->trans('graphql.mutation_permission_denied', 'Permissions insuffisantes pour exécuter des mutations GraphQL.')]],
                 ], 403);
@@ -245,6 +362,16 @@ class GraphQLController extends AbstractController
 
             // Vérification des droits sur Utilisateur session
             if ($user !== null && !$this->isGranted('ROLE_SUPER_ADMIN') && !$this->isGranted('project.manage', $project) && !$this->isGranted('content.create', $project) && !$this->isGranted('content.update', $project)) {
+                $this->auditService?->log(
+                    toolName: 'graphql_mutation_denied',
+                    project: $project,
+                    input: ['query' => mb_substr($query, 0, 500)],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Insufficient permissions for GraphQL mutation',
+                    createdBy: $identifier,
+                    source: 'graphql',
+                );
                 return $this->secureJson([
                     'errors' => [['message' => $this->trans('graphql.mutation_permission_denied', 'Permissions insuffisantes pour exécuter des mutations GraphQL.')]],
                 ], 403);
@@ -284,12 +411,30 @@ class GraphQLController extends AbstractController
             $validationRules[] = new DisableIntrospection(DisableIntrospection::ENABLED);
         }
 
+        $isMutation = $this->isMutationDocument($document);
+        $startTime = microtime(true);
         $result = GraphQLExecutor::executeQuery(
             schema: $schema,
             source: $document,
             variableValues: $variables,
             validationRules: $validationRules,
         );
+        $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+
+        if ($isMutation) {
+            $hasErrors = !empty($result->errors);
+            $this->auditService?->log(
+                toolName: 'graphql_mutation',
+                project: $project,
+                input: ['query' => mb_substr($query, 0, 500), 'variables' => $variables],
+                output: $hasErrors ? ['errors_count' => count($result->errors)] : ['success' => true],
+                status: $hasErrors ? 'failed' : 'success',
+                errorMessage: $hasErrors ? $result->errors[0]->getMessage() : null,
+                createdBy: $identifier,
+                source: 'graphql',
+                durationMs: $durationMs,
+            );
+        }
 
         $debug = $this->getParameter('kernel.debug')
             ? DebugFlag::INCLUDE_DEBUG_MESSAGE | DebugFlag::INCLUDE_TRACE
@@ -303,25 +448,25 @@ class GraphQLController extends AbstractController
     // ─── Sécurité de l'AST ───────────────────────────────────────────────
 
     /**
-     * Inspects the AST document to count aliases, total selections, and directives across
+     * Inspects the AST document to count aliases, total selections, directives, and nesting depth across
      * all operations and fragments, preventing amplification and resource exhaustion attacks.
      *
-     * @return array{aliases: int, selections: int, directives: int}
+     * @return array{aliases: int, selections: int, directives: int, max_depth: int}
      */
     private function inspectAstMetrics(DocumentNode $document): array
     {
-        $metrics = ['aliases' => 0, 'selections' => 0, 'directives' => 0];
+        $metrics = ['aliases' => 0, 'selections' => 0, 'directives' => 0, 'max_depth' => 0];
 
         foreach ($document->definitions as $def) {
             if ($def instanceof OperationDefinitionNode) {
                 $metrics['directives'] += count($def->directives ?? []);
                 if ($def->selectionSet !== null) {
-                    $this->traverseSelectionSet($def->selectionSet, $metrics);
+                    $this->traverseSelectionSet($def->selectionSet, $metrics, 1);
                 }
             } elseif ($def instanceof FragmentDefinitionNode) {
                 $metrics['directives'] += count($def->directives ?? []);
                 if ($def->selectionSet !== null) {
-                    $this->traverseSelectionSet($def->selectionSet, $metrics);
+                    $this->traverseSelectionSet($def->selectionSet, $metrics, 1);
                 }
             }
         }
@@ -329,8 +474,16 @@ class GraphQLController extends AbstractController
         return $metrics;
     }
 
-    private function traverseSelectionSet(SelectionSetNode $set, array &$metrics): void
+    private function traverseSelectionSet(SelectionSetNode $set, array &$metrics, int $currentDepth = 1): void
     {
+        if ($currentDepth > $metrics['max_depth']) {
+            $metrics['max_depth'] = $currentDepth;
+        }
+
+        if ($currentDepth > self::MAX_AST_DEPTH) {
+            return;
+        }
+
         foreach ($set->selections as $sel) {
             $metrics['selections']++;
             if ($sel instanceof FieldNode) {
@@ -339,12 +492,12 @@ class GraphQLController extends AbstractController
                 }
                 $metrics['directives'] += count($sel->directives ?? []);
                 if ($sel->selectionSet !== null) {
-                    $this->traverseSelectionSet($sel->selectionSet, $metrics);
+                    $this->traverseSelectionSet($sel->selectionSet, $metrics, $currentDepth + 1);
                 }
             } elseif ($sel instanceof InlineFragmentNode) {
                 $metrics['directives'] += count($sel->directives ?? []);
                 if ($sel->selectionSet !== null) {
-                    $this->traverseSelectionSet($sel->selectionSet, $metrics);
+                    $this->traverseSelectionSet($sel->selectionSet, $metrics, $currentDepth + 1);
                 }
             } elseif ($sel instanceof FragmentSpreadNode) {
                 $metrics['directives'] += count($sel->directives ?? []);

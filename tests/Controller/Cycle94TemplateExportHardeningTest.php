@@ -49,6 +49,9 @@ class Cycle94TemplateExportHardeningTest extends WebTestCase
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
         $hasher = self::getContainer()->get(UserPasswordHasherInterface::class);
 
+        $this->em->createQuery('DELETE FROM App\Entity\CollectionTemplateField f')->execute();
+        $this->em->createQuery('DELETE FROM App\Entity\CollectionTemplate c')->execute();
+
         $this->admin = new User();
         $this->admin->name = 'Cycle94 Admin';
         $this->admin->email = 'admin_c94_' . bin2hex(random_bytes(4)) . '@test.com';

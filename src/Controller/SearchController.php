@@ -44,7 +44,24 @@ class SearchController extends AbstractController
         private readonly ?RateLimiterFactory $reindexLimiter = null,
         private readonly ?ApiTokenChecker $tokenChecker = null,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?\App\Service\AuditService $auditService = null,
     ) {}
+
+    private function resolveIdentifier(Request $request, ?\App\Entity\ApiToken $token = null): string
+    {
+        try {
+            $user = $this->getUser();
+            if ($user !== null) {
+                return 'user_' . $user->getUserIdentifier();
+            }
+        } catch (\Throwable) {}
+
+        if ($token !== null) {
+            return 'token_' . $token->id;
+        }
+
+        return $request->getClientIp() ?: '127.0.0.1';
+    }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
     {
@@ -65,16 +82,21 @@ class SearchController extends AbstractController
     #[Route('/api/projects/{uuid}/search', name: 'search_endpoint', methods: ['GET'])]
     public function search(string $uuid, Request $request): JsonResponse
     {
-        if ($this->searchLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
+        $token = $this->tokenChecker?->resolve($request);
+        $identifier = $this->resolveIdentifier($request, $token);
 
+        if ($this->searchLimiter !== null) {
             if (!$this->searchLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log(
+                    toolName: 'search_rate_limit_exceeded',
+                    project: null,
+                    input: ['identifier' => $identifier],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Search rate limit exceeded',
+                    createdBy: $identifier,
+                    source: 'search_controller',
+                );
                 return $this->secureJson(['error' => $this->trans('search.rate_limit_exceeded', [], 'Too many search requests. Please retry later.')], 429);
             }
         }
@@ -95,12 +117,31 @@ class SearchController extends AbstractController
         // Cloisonnement strict multi-tenant
         $attrProject = $request->attributes->get('_project');
         if ($attrProject instanceof Project && $attrProject->uuid?->toRfc4122() !== $project->uuid?->toRfc4122()) {
+            $this->auditService?->log(
+                toolName: 'search_tenant_mismatch',
+                project: $project,
+                input: ['uuid' => $uuid, 'attr_project' => $attrProject->uuid?->toRfc4122()],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Forbidden: token belongs to another project',
+                createdBy: $identifier,
+                source: 'search_controller',
+            );
             return $this->secureJson(['error' => $this->trans('search.token_project_mismatch', [], 'Forbidden: token belongs to another project.')], 403);
         }
 
-        $token = $this->tokenChecker?->resolve($request);
         if ($token !== null) {
             if ($token->project->uuid?->toRfc4122() !== $project->uuid?->toRfc4122()) {
+                $this->auditService?->log(
+                    toolName: 'search_tenant_mismatch',
+                    project: $project,
+                    input: ['uuid' => $uuid, 'token_project' => $token->project->uuid?->toRfc4122()],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Forbidden: token belongs to another project',
+                    createdBy: $identifier,
+                    source: 'search_controller',
+                );
                 return $this->secureJson(['error' => $this->trans('search.token_project_mismatch', [], 'Forbidden: token belongs to another project.')], 403);
             }
             if (!$token->can('read') && !$token->can('*') && !$token->can('write')) {
@@ -264,16 +305,21 @@ class SearchController extends AbstractController
     #[Route('/api/projects/{uuid}/search/reindex', name: 'search_reindex', methods: ['POST'])]
     public function reindex(string $uuid, Request $request): JsonResponse
     {
-        if ($this->reindexLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
+        $token = $this->tokenChecker?->resolve($request);
+        $identifier = $this->resolveIdentifier($request, $token);
 
+        if ($this->reindexLimiter !== null) {
             if (!$this->reindexLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log(
+                    toolName: 'search_reindex_rate_limit_exceeded',
+                    project: null,
+                    input: ['identifier' => $identifier],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Reindexing rate limit exceeded',
+                    createdBy: $identifier,
+                    source: 'search_controller',
+                );
                 return $this->secureJson(['error' => $this->trans('search.reindex_rate_limit_exceeded', [], 'Reindexing rate limit exceeded. Please retry in a few minutes.')], 429);
             }
         }
@@ -294,12 +340,31 @@ class SearchController extends AbstractController
         // Cloisonnement strict multi-tenant
         $attrProject = $request->attributes->get('_project');
         if ($attrProject instanceof Project && $attrProject->uuid?->toRfc4122() !== $project->uuid?->toRfc4122()) {
+            $this->auditService?->log(
+                toolName: 'search_tenant_mismatch',
+                project: $project,
+                input: ['uuid' => $uuid, 'attr_project' => $attrProject->uuid?->toRfc4122()],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Forbidden: token belongs to another project',
+                createdBy: $identifier,
+                source: 'search_controller',
+            );
             return $this->secureJson(['error' => $this->trans('search.token_project_mismatch', [], 'Forbidden: token belongs to another project.')], 403);
         }
 
-        $token = $this->tokenChecker?->resolve($request);
         if ($token !== null) {
             if ($token->project->uuid?->toRfc4122() !== $project->uuid?->toRfc4122()) {
+                $this->auditService?->log(
+                    toolName: 'search_tenant_mismatch',
+                    project: $project,
+                    input: ['uuid' => $uuid, 'token_project' => $token->project->uuid?->toRfc4122()],
+                    output: null,
+                    status: 'failed',
+                    errorMessage: 'Forbidden: token belongs to another project',
+                    createdBy: $identifier,
+                    source: 'search_controller',
+                );
                 return $this->secureJson(['error' => $this->trans('search.token_project_mismatch', [], 'Forbidden: token belongs to another project.')], 403);
             }
             if (!$token->can('*') && !$token->can('manage') && !$token->can('write')) {
@@ -315,6 +380,16 @@ class SearchController extends AbstractController
         $quotaLimit = $this->search->getProjectSearchDocLimit($project);
         $totalEntries = $this->search->getProjectIndexedCount($project);
         if ($totalEntries > $quotaLimit) {
+            $this->auditService?->log(
+                toolName: 'search_reindex_quota_exceeded',
+                project: $project,
+                input: ['quota_limit' => $quotaLimit, 'total_entries' => $totalEntries],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Search index document quota exceeded',
+                createdBy: $identifier,
+                source: 'search_controller',
+            );
             return $this->secureJson([
                 'error' => $this->trans('search.quota.document_limit_exceeded', [
                     '%limit%' => (string) $quotaLimit,
@@ -326,7 +401,20 @@ class SearchController extends AbstractController
             ], 422);
         }
 
+        $startTime = microtime(true);
         $count = $this->search->rebuildIndex($project);
+        $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+
+        $this->auditService?->log(
+            toolName: 'search_reindex',
+            project: $project,
+            input: ['uuid' => $uuid],
+            output: ['indexed' => $count, 'limit' => $quotaLimit],
+            status: 'success',
+            createdBy: $identifier,
+            source: 'search_controller',
+            durationMs: $durationMs,
+        );
 
         return $this->secureJson([
             'indexed' => $count,

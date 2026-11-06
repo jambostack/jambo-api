@@ -49,6 +49,18 @@ class McpController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function resolveIdentifier(Request $request, ?array $context = null): string
+    {
+        $user = $context['user'] ?? null;
+        if ($user instanceof \App\Entity\User) {
+            return 'user_' . $user->getUserIdentifier();
+        }
+        if (isset($context['project_uuid'])) {
+            return 'token_project_' . $context['project_uuid'];
+        }
+        return $request->getClientIp() ?: '127.0.0.1';
+    }
+
     /**
      * MCP HTTP endpoint - point d'entrée unique pour les clients MCP.
      *
@@ -57,14 +69,38 @@ class McpController extends AbstractController
     #[Route('/mcp', name: 'mcp_endpoint', methods: ['POST'])]
     public function handle(Request $request): Response
     {
-        // Rate limiting : 60 requêtes par minute par IP
-        $limiter = $this->mcpLimiter->create($request->getClientIp() ?: '127.0.0.1');
+        $token = $this->extractBearerToken($request);
+        $context = $this->buildContext($request, $token);
+        $identifier = $this->resolveIdentifier($request, $context);
+
+        // Rate limiting : 60 requêtes par minute par IP ou identifiant
+        $limiter = $this->mcpLimiter->create($identifier);
         if (false === $limiter->consume(1)->isAccepted()) {
+            $this->auditService?->log(
+                toolName: 'mcp_rate_limit_exceeded',
+                project: $context['_project'] ?? null,
+                input: ['identifier' => $identifier],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Rate limit exceeded for MCP endpoint',
+                createdBy: $identifier,
+                source: 'mcp_controller',
+            );
             return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
         }
 
         $body = $request->getContent();
         if (strlen($body) > 2 * 1024 * 1024) {
+            $this->auditService?->log(
+                toolName: 'mcp_payload_too_large',
+                project: $context['_project'] ?? null,
+                input: ['size' => strlen($body)],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Payload too large (max 2MB)',
+                createdBy: $identifier,
+                source: 'mcp_controller',
+            );
             return $this->secureJson(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
         }
         if (trim($body) === '') {
@@ -77,10 +113,6 @@ class McpController extends AbstractController
                 ],
             ], 400);
         }
-        $token = $this->extractBearerToken($request);
-
-        // Construire le contexte utilisateur/projet
-        $context = $this->buildContext($request, $token);
 
         return $this->mcpServer->handleRequest($body, $context);
     }
@@ -91,14 +123,38 @@ class McpController extends AbstractController
     #[Route('/api/projects/{uuid}/mcp', name: 'mcp_project_endpoint', methods: ['POST'])]
     public function handleProject(string $uuid, Request $request): Response
     {
-        // Rate limiting : 60 requêtes par minute par IP
-        $limiter = $this->mcpLimiter->create($request->getClientIp() ?: '127.0.0.1');
+        $token = $this->extractBearerToken($request);
+        $context = $this->buildContext($request, $token);
+        $identifier = $this->resolveIdentifier($request, $context);
+
+        // Rate limiting : 60 requêtes par minute par IP ou identifiant
+        $limiter = $this->mcpLimiter->create($identifier);
         if (false === $limiter->consume(1)->isAccepted()) {
+            $this->auditService?->log(
+                toolName: 'mcp_rate_limit_exceeded',
+                project: null,
+                input: ['uuid' => $uuid, 'identifier' => $identifier],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Rate limit exceeded for project MCP endpoint',
+                createdBy: $identifier,
+                source: 'mcp_controller',
+            );
             return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
         }
 
         $body = $request->getContent();
         if (strlen($body) > 2 * 1024 * 1024) {
+            $this->auditService?->log(
+                toolName: 'mcp_payload_too_large',
+                project: null,
+                input: ['uuid' => $uuid, 'size' => strlen($body)],
+                output: null,
+                status: 'failed',
+                errorMessage: 'Payload too large (max 2MB)',
+                createdBy: $identifier,
+                source: 'mcp_controller',
+            );
             return $this->secureJson(['error' => $this->trans('mcp.payload_too_large', [], 'Payload too large (max 2MB).')], 413);
         }
         if (trim($body) === '') {
@@ -124,9 +180,6 @@ class McpController extends AbstractController
         if (!$project) {
             return $this->secureJson(['error' => $this->trans('mcp.project_not_found', [], 'Project not found.')], 404);
         }
-
-        $token = $this->extractBearerToken($request);
-        $context = $this->buildContext($request, $token);
 
         $user = $context['user'] ?? null;
         $isAuthenticated = $context['authenticated'] ?? false;
@@ -195,7 +248,8 @@ class McpController extends AbstractController
     public function info(?Request $request = null): JsonResponse
     {
         if ($this->mcpLimiter !== null && $request !== null) {
-            $limiter = $this->mcpLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            $identifier = $this->resolveIdentifier($request);
+            $limiter = $this->mcpLimiter->create($identifier);
             if (false === $limiter->consume(1)->isAccepted()) {
                 return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429);
             }
@@ -231,7 +285,11 @@ class McpController extends AbstractController
 
     private function buildContext(Request $request, ?string $token): array
     {
-        $user = $this->getUser();
+        $user = null;
+        try {
+            $user = $this->getUser();
+        } catch (\Throwable) {}
+
         $context = [
             'user' => $user,
             'authenticated' => $user instanceof \App\Entity\User,

@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.170] — 2026-11-06
+
+### GraphQL AST Depth Hardening, UUID Enforcement, MCP & Search Audit Logging (Cycle #99 & #100)
+- **GraphQL API Protection (`GraphQLController`)**:
+  - Enforced `MAX_AST_DEPTH = 15` limit on GraphQL query abstract syntax tree depth, stopping nested recursive amplification attacks.
+  - Added strict UUID v4 format validation (`UUID_REGEX`) prior to database lookups.
+  - Injected `AuditService` to systematically log security events: rate limit violations (`graphql_rate_limit_exceeded`), batch query rejections, operation/fragment/selection/depth limit exceedances (`graphql_security_blocked`).
+- **Model Context Protocol (MCP) Audit & Security (`McpController`)**:
+  - Added comprehensive audit logging via `AuditService` for rate limit rejections (`mcp_rate_limit_exceeded`), payload size violations (`mcp_payload_too_large`), unauthorized tool requests (`mcp_tool_unauthorized`), and tool executions (`mcp_tool_call`).
+- **Search Engine Hardening (`SearchController`)**:
+  - Added audit logging for search reindex rate limit violations (`search_reindex_rate_limit_exceeded`), cross-tenant access attempts (`search_tenant_mismatch`), quota exceeded denials (`search_reindex_quota_exceeded`), and successful reindex operations (`search_reindex`) with duration metrics.
+- **I18n Translation Completeness & Testing**:
+  - Added translation key `graphql.ast_depth_exceeded` across French, English, Spanish, and Arabic dictionaries.
+  - Created `Cycle99GraphQLMcpSearchHardeningTest` verifying AST depth protection, UUID validation, tenant isolation, and audit trail generation (7 tests, 88 assertions).
+
 ## [1.26.169] — 2026-11-06
 
 ### User, Role & Permission Validation Pipeline & Quota Optimization (Cycle #98 Finalization)

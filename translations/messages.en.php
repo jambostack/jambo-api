@@ -1976,6 +1976,7 @@ return [
     'graphql.mutation_permission_denied' => 'Insufficient permissions to execute GraphQL mutations.',
     'graphql.parse_error' => 'Syntax error in GraphQL query.',
     'graphql.invalid_uuid' => 'Invalid UUID identifier format.',
+    'graphql.ast_depth_exceeded' => 'GraphQL query depth exceeded (max %max% levels).',
     'graphql.mercure_not_configured' => 'Mercure hub not configured. Install and start the Mercure Docker service.',
     'mcp.rate_limit_exceeded' => 'Too many MCP requests. Please retry later.',
     'mcp.payload_too_large' => 'Payload too large (max 2MB).',

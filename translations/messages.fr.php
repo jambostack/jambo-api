@@ -1994,6 +1994,7 @@ return [
     'graphql.mutation_permission_denied' => 'Permissions insuffisantes pour exécuter des mutations GraphQL.',
     'graphql.parse_error' => 'Erreur de syntaxe dans la requête GraphQL.',
     'graphql.invalid_uuid' => 'Format d\'identifiant UUID invalide.',
+    'graphql.ast_depth_exceeded' => 'Profondeur de requête GraphQL dépassée (max %max% niveaux).',
     'graphql.mercure_not_configured' => 'Hub Mercure non configuré. Installez et démarrez le service Docker Mercure.',
     'mcp.rate_limit_exceeded' => 'Trop de requêtes MCP. Veuillez réessayer plus tard.',
     'mcp.payload_too_large' => 'Payload trop volumineux (max 2 Mo).',

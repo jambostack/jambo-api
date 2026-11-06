@@ -1976,6 +1976,7 @@ return [
     'graphql.mutation_permission_denied' => 'أذونات غير كافية لتنفيذ عمليات تعديل GraphQL.',
     'graphql.parse_error' => 'خطأ نحوي في استعلام GraphQL.',
     'graphql.invalid_uuid' => 'تنسيق معرّف UUID غير صالح.',
+    'graphql.ast_depth_exceeded' => 'تم تجاوز عمق استعلام GraphQL (الحد الأقصى %max% مستويات).',
     'graphql.mercure_not_configured' => 'مركز Mercure غير مهيأ. قم بتثبيت وبدء تشغيل خدمة Mercure عبر Docker.',
     'mcp.rate_limit_exceeded' => 'طلبات MCP كثيرة جداً. يُرجى المحاولة لاحقاً.',
     'mcp.payload_too_large' => 'الحمولة كبيرة جداً (الحد الأقصى 2 ميغابايت).',
