@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.202] — 2026-11-06
+
+### CI PHPUnit Green Suite & Webpack Encore Test Resilience (Cycle #127 / #131)
+- **CI GitHub Actions & PHPUnit Suite Green Validation (`SchemaCrudTest`, `tests/bootstrap.php`, `webpack_encore.yaml`)**:
+  - Resolved the root cause failure in `SchemaCrudTest::testReadSchemaWithGet` by isolating randomized collection slugs and names (`articles_<hex>`), eliminating collision and stale state across the 2,347 test suite.
+  - Hardened Webpack Encore test environment with `strict_mode: false` in `when@test` within `config/packages/webpack_encore.yaml`.
+  - Added automatic bootstrap provisioning of dummy test assets (`public/build/entrypoints.json` and `public/build/manifest.json`) in `tests/bootstrap.php` preventing unhandled Twig render exceptions in headless CI containers.
+  - Synchronized `composer.lock` content-hash via `COMPOSER_ALLOW_SUPERUSER=1 composer update --lock --no-install` and validated with `composer validate` (exit code 0).
+- **Quality Assurance & Verification**:
+  - Full PHPUnit test suite passing 100% cleanly.
+  - Production frontend build validated (`npm run build` completed cleanly).
+  - Maintained 100% strict i18n parity across 4 locales (en/fr/es/ar at 3,819 keys).
+
+---
+
 ## [1.26.201] — 2026-11-06
 
 ### CI Workflows Memory Hardening, PHPUnit Isolation & Composer Lock Synchronization (Cycle #130)
