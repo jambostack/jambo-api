@@ -2532,6 +2532,7 @@ return [
     // User Admin
     'user.admin.not_found'                            => 'User not found.',
     'user.admin.invalid_json'                         => 'Invalid JSON payload.',
+    'user.admin.invalid_content_type'                 => 'Content-Type must be application/json.',
     'user.admin.demo_mode_disabled'                   => 'User deletion is disabled in demo mode.',
     'user.admin.no_users_selected'                    => 'No users selected.',
     'user.admin.invalid_password'                     => 'Invalid password.',
@@ -2545,6 +2546,10 @@ return [
     'user.admin.cannot_modify_super_admin'            => 'You cannot modify a super administrator.',
     'user.admin.cannot_escalate_super_admin'          => 'Only super administrators can assign the super administrator role.',
     'user.admin.cannot_assign_unowned_permissions'    => 'You cannot assign roles with permissions you do not possess.',
+    'user.admin.cannot_modify_own_roles'              => 'You cannot modify your own roles.',
+    'user.admin.cannot_assign_protected_role'         => 'Only super administrators can assign system protected roles.',
+    'user.admin.invalid_role'                         => 'One or more specified roles do not exist.',
+    'user.admin.roles_must_be_array'                  => 'Roles must be provided as an array.',
     'user.admin.created_success'                      => 'User created successfully.',
     'user.admin.updated_success'                      => 'User updated successfully.',
     'user.admin.single_deleted_success'               => 'User deleted successfully.',

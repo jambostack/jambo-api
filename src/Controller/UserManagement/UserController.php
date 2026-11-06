@@ -34,6 +34,14 @@ class UserController extends AbstractController
         'Pragma'                 => 'no-cache',
     ];
 
+    private const PROTECTED_ROLES = [
+        'ROLE_SUPER_ADMIN',
+        'ROLE_ADMIN',
+        'ROLE_USER',
+        'admin',
+        'super_admin',
+    ];
+
     public function __construct(
         private UserRepository $userRepository,
         private RoleRepository $roleRepository,
@@ -51,18 +59,66 @@ class UserController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function isJsonContentType(Request $request): bool
+    {
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if ($contentType === '') {
+            return false;
+        }
+        $cleanType = strtolower(trim(explode(';', $contentType)[0]));
+        return in_array($cleanType, ['application/json', 'application/merge-patch+json'], true);
+    }
+
+    private function isProtectedRole(string $name): bool
+    {
+        $normalized = strtolower(trim($name));
+        $protected = array_map('strtolower', self::PROTECTED_ROLES);
+        return in_array($normalized, $protected, true)
+            || $normalized === 'super_admin'
+            || $normalized === 'role_super_admin'
+            || $normalized === 'admin'
+            || $normalized === 'role_admin'
+            || $normalized === 'role_user'
+            || $normalized === 'root'
+            || $normalized === 'system';
+    }
+
+    private function getCurrentUserIdentifier(): ?string
+    {
+        try {
+            $user = $this->getUser();
+            return $user?->getUserIdentifier();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function checkRateLimit(?Request $request = null): ?JsonResponse
     {
         if ($this->userLimiter !== null && $request !== null) {
             $identifier = $request->getClientIp() ?: '127.0.0.1';
+            $userId = null;
             try {
                 $user = $this->getUser();
                 if ($user !== null) {
                     $identifier = $user->getUserIdentifier();
+                    $userId = $identifier;
                 }
             } catch (\Throwable) {}
 
             if (false === $this->userLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService->log(
+                    toolName: 'user_rate_limit_exceeded',
+                    project: null,
+                    input: ['ip' => $request->getClientIp(), 'uri' => $request->getRequestUri()],
+                    output: ['error' => 'rate_limit_exceeded'],
+                    status: 'failure',
+                    errorMessage: 'Rate limit exceeded on user management endpoint',
+                    createdBy: $userId,
+                    source: 'user_management'
+                );
+                $this->auditService->flush();
+
                 return $this->secureJson([
                     'error' => $this->translator->trans('user.admin.rate_limit_exceeded', [], 'messages'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
@@ -136,6 +192,25 @@ class UserController extends AbstractController
             return $rateLimitResponse;
         }
 
+        if (!$this->isJsonContentType($request)) {
+            $this->auditService->log(
+                toolName: 'user_invalid_content_type',
+                project: null,
+                input: ['content_type' => $request->headers->get('Content-Type'), 'uri' => $request->getRequestUri()],
+                output: ['error' => 'invalid_content_type'],
+                status: 'failure',
+                errorMessage: 'Content-Type must be application/json.',
+                createdBy: $this->getCurrentUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+
+            return $this->secureJson([
+                'error' => $this->translator->trans('user.admin.invalid_content_type', [], 'messages'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.payload_too_large')], 413);
@@ -176,6 +251,7 @@ class UserController extends AbstractController
                 input: ['attempted_by' => $currentUser->getUserIdentifier()],
                 output: ['error' => 'invalid_password'],
                 status: 'failure',
+                errorMessage: 'Invalid confirmation password',
                 createdBy: $currentUser->getUserIdentifier(),
                 source: 'user_management'
             );
@@ -249,6 +325,25 @@ class UserController extends AbstractController
             return $rateLimitResponse;
         }
 
+        if (!$this->isJsonContentType($request)) {
+            $this->auditService->log(
+                toolName: 'user_invalid_content_type',
+                project: null,
+                input: ['content_type' => $request->headers->get('Content-Type'), 'uri' => $request->getRequestUri()],
+                output: ['error' => 'invalid_content_type'],
+                status: 'failure',
+                errorMessage: 'Content-Type must be application/json.',
+                createdBy: $this->getCurrentUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+
+            return $this->secureJson([
+                'error' => $this->translator->trans('user.admin.invalid_content_type', [], 'messages'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.payload_too_large')], 413);
@@ -320,6 +415,17 @@ class UserController extends AbstractController
         $isSuperAdminRequested = !empty($data['is_super_admin'])
             || (!empty($data['roles']) && is_array($data['roles']) && in_array('ROLE_SUPER_ADMIN', $data['roles'], true));
         if ($isSuperAdminRequested && ($currentUser !== null && !$currentUser->isSuperAdmin())) {
+            $this->auditService->log(
+                toolName: 'user_create_privilege_escalation_attempt',
+                project: null,
+                input: ['email' => $email, 'attempted_by' => $currentUser->getUserIdentifier()],
+                output: ['error' => 'cannot_escalate_super_admin'],
+                status: 'failure',
+                errorMessage: 'Attempt to create superadmin by non-superadmin',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
             return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_escalate_super_admin')], 403);
         }
 
@@ -332,32 +438,95 @@ class UserController extends AbstractController
             $user->roles = ['ROLE_SUPER_ADMIN'];
         }
 
-        if (!empty($data['roles']) && is_array($data['roles'])) {
-            foreach ($data['roles'] as $roleId) {
-                $role = $this->roleRepository->find((int) $roleId);
-                if ($role !== null) {
-                    if ($currentUser !== null && !$currentUser->isSuperAdmin()) {
-                        foreach ($role->permissions as $perm) {
-                            if (!$currentUser->hasPermission($perm->name)) {
-                                return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_assign_unowned_permissions')], 403);
-                            }
-                        }
-                    }
-                    $user->userRoles->add($role);
-                }
+        $rolesToAdd = [];
+        if (isset($data['roles'])) {
+            if (!is_array($data['roles'])) {
+                return $this->secureJson(['errors' => ['roles' => [$this->translator->trans('user.admin.roles_must_be_array')]]], 422);
             }
-        } elseif (!empty($data['role'])) {
-            $role = $this->roleRepository->findByName($data['role']);
-            if ($role !== null) {
+            foreach ($data['roles'] as $roleId) {
+                if (!is_numeric($roleId) || (int) $roleId <= 0) {
+                    return $this->secureJson(['errors' => ['roles' => [$this->translator->trans('user.admin.invalid_role')]]], 422);
+                }
+                $role = $this->roleRepository->find((int) $roleId);
+                if ($role === null) {
+                    return $this->secureJson(['errors' => ['roles' => [$this->translator->trans('user.admin.invalid_role')]]], 422);
+                }
                 if ($currentUser !== null && !$currentUser->isSuperAdmin()) {
+                    if ($this->isProtectedRole($role->name)) {
+                        $this->auditService->log(
+                            toolName: 'user_create_privilege_escalation_attempt',
+                            project: null,
+                            input: ['role_name' => $role->name, 'email' => $email],
+                            output: ['error' => 'protected_system_role'],
+                            status: 'failure',
+                            errorMessage: 'Attempt to assign protected system role by non-superadmin',
+                            createdBy: $currentUser->getUserIdentifier(),
+                            source: 'user_management'
+                        );
+                        $this->auditService->flush();
+                        return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_assign_protected_role')], 403);
+                    }
                     foreach ($role->permissions as $perm) {
                         if (!$currentUser->hasPermission($perm->name)) {
+                            $this->auditService->log(
+                                toolName: 'user_create_privilege_escalation_attempt',
+                                project: null,
+                                input: ['permission' => $perm->name, 'email' => $email],
+                                output: ['error' => 'unowned_permission'],
+                                status: 'failure',
+                                errorMessage: 'Attempt to assign unowned permission',
+                                createdBy: $currentUser->getUserIdentifier(),
+                                source: 'user_management'
+                            );
+                            $this->auditService->flush();
                             return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_assign_unowned_permissions')], 403);
                         }
                     }
                 }
-                $user->userRoles->add($role);
+                $rolesToAdd[] = $role;
             }
+        } elseif (!empty($data['role'])) {
+            $role = $this->roleRepository->findByName(trim((string) $data['role']));
+            if ($role === null) {
+                return $this->secureJson(['errors' => ['role' => [$this->translator->trans('user.admin.invalid_role')]]], 422);
+            }
+            if ($currentUser !== null && !$currentUser->isSuperAdmin()) {
+                if ($this->isProtectedRole($role->name)) {
+                    $this->auditService->log(
+                        toolName: 'user_create_privilege_escalation_attempt',
+                        project: null,
+                        input: ['role_name' => $role->name, 'email' => $email],
+                        output: ['error' => 'protected_system_role'],
+                        status: 'failure',
+                        errorMessage: 'Attempt to assign protected system role by non-superadmin',
+                        createdBy: $currentUser->getUserIdentifier(),
+                        source: 'user_management'
+                    );
+                    $this->auditService->flush();
+                    return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_assign_protected_role')], 403);
+                }
+                foreach ($role->permissions as $perm) {
+                    if (!$currentUser->hasPermission($perm->name)) {
+                        $this->auditService->log(
+                            toolName: 'user_create_privilege_escalation_attempt',
+                            project: null,
+                            input: ['permission' => $perm->name, 'email' => $email],
+                            output: ['error' => 'unowned_permission'],
+                            status: 'failure',
+                            errorMessage: 'Attempt to assign unowned permission',
+                            createdBy: $currentUser->getUserIdentifier(),
+                            source: 'user_management'
+                            );
+                        $this->auditService->flush();
+                        return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_assign_unowned_permissions')], 403);
+                    }
+                }
+            }
+            $rolesToAdd[] = $role;
+        }
+
+        foreach ($rolesToAdd as $r) {
+            $user->userRoles->add($r);
         }
 
         $this->em->persist($user);
@@ -366,7 +535,7 @@ class UserController extends AbstractController
         $this->auditService->log(
             toolName: 'user_create',
             project: null,
-            input: ['id' => $user->id, 'email' => $user->email, 'name' => $user->name],
+            input: ['id' => $user->id, 'email' => $user->email, 'name' => $user->name, 'roles' => array_map(fn($r) => $r->name, $rolesToAdd)],
             output: ['success' => true, 'id' => $user->id],
             status: 'success',
             createdBy: $currentUser?->getUserIdentifier(),
@@ -387,6 +556,25 @@ class UserController extends AbstractController
             return $rateLimitResponse;
         }
 
+        if (!$this->isJsonContentType($request)) {
+            $this->auditService->log(
+                toolName: 'user_invalid_content_type',
+                project: null,
+                input: ['content_type' => $request->headers->get('Content-Type'), 'uri' => $request->getRequestUri()],
+                output: ['error' => 'invalid_content_type'],
+                status: 'failure',
+                errorMessage: 'Content-Type must be application/json.',
+                createdBy: $this->getCurrentUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
+
+            return $this->secureJson([
+                'error' => $this->translator->trans('user.admin.invalid_content_type', [], 'messages'),
+                'code'  => 'INVALID_CONTENT_TYPE',
+            ], 415);
+        }
+
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->translator->trans('user.admin.payload_too_large')], 413);
@@ -402,6 +590,17 @@ class UserController extends AbstractController
 
         // Anti-privilege escalation: non-superadmin cannot modify a superadmin
         if ($user->isSuperAdmin() && !$currentUser->isSuperAdmin()) {
+            $this->auditService->log(
+                toolName: 'user_update_privilege_escalation_attempt',
+                project: null,
+                input: ['target_user_id' => $user->id, 'attempted_by' => $currentUser->getUserIdentifier()],
+                output: ['error' => 'cannot_modify_super_admin'],
+                status: 'failure',
+                errorMessage: 'Attempt to modify superadmin by non-superadmin',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
             return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_modify_super_admin')], 403);
         }
 
@@ -411,11 +610,25 @@ class UserController extends AbstractController
             return $this->secureJson(['error' => $this->translator->trans('user.admin.invalid_json')], 400);
         }
 
+        $changes = [];
+
         // Anti-privilege escalation: superadmin promotion check
         if (isset($data['is_super_admin'])) {
             if (!$currentUser->isSuperAdmin()) {
+                $this->auditService->log(
+                    toolName: 'user_update_privilege_escalation_attempt',
+                    project: null,
+                    input: ['target_user_id' => $user->id, 'attempted_by' => $currentUser->getUserIdentifier()],
+                    output: ['error' => 'cannot_escalate_super_admin'],
+                    status: 'failure',
+                    errorMessage: 'Attempt to change superadmin status by non-superadmin',
+                    createdBy: $currentUser->getUserIdentifier(),
+                    source: 'user_management'
+                );
+                $this->auditService->flush();
                 return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_escalate_super_admin')], 403);
             }
+            $wasSuperAdmin = $user->isSuperAdmin();
             if ($data['is_super_admin']) {
                 $user->roles = array_unique(array_merge($user->roles, ['ROLE_SUPER_ADMIN']));
             } else {
@@ -424,6 +637,7 @@ class UserController extends AbstractController
                 }
                 $user->roles = array_values(array_diff($user->roles, ['ROLE_SUPER_ADMIN']));
             }
+            $changes['is_super_admin'] = ['from' => $wasSuperAdmin, 'to' => (bool) $data['is_super_admin']];
         }
 
         if (isset($data['name'])) {
@@ -437,8 +651,12 @@ class UserController extends AbstractController
             if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
                 return $this->secureJson(['errors' => ['name' => $this->translator->trans('user.admin.name_control_chars')]], 422);
             }
-            $user->name = $name;
+            if ($user->name !== $name) {
+                $changes['name'] = ['from' => $user->name, 'to' => $name];
+                $user->name = $name;
+            }
         }
+
         if (isset($data['email'])) {
             $newEmail = trim((string) $data['email']);
             if ($newEmail === '') {
@@ -454,8 +672,12 @@ class UserController extends AbstractController
             if ($existing !== null && $existing->id !== $user->id) {
                 return $this->secureJson(['errors' => ['email' => $this->translator->trans('user.admin.email_already_taken')]], 409);
             }
-            $user->email = $newEmail;
+            if ($user->email !== $newEmail) {
+                $changes['email'] = ['from' => $user->email, 'to' => $newEmail];
+                $user->email = $newEmail;
+            }
         }
+
         if (!empty($data['password'])) {
             $newPassword = (string) $data['password'];
             if (mb_strlen($newPassword) < 8 || mb_strlen($newPassword) > 4096) {
@@ -471,27 +693,78 @@ class UserController extends AbstractController
             }
             $user->password = $this->hasher->hashPassword($user, $newPassword);
             $user->passwordChangedAt = new \DateTimeImmutable();
+            $changes['password_changed'] = true;
         }
 
-        if (isset($data['roles']) && is_array($data['roles'])) {
+        if (isset($data['roles'])) {
+            // Anti-privilege escalation: non-superadmin cannot modify own roles
+            if ($currentUser->id === $user->id && !$currentUser->isSuperAdmin()) {
+                $this->auditService->log(
+                    toolName: 'user_update_privilege_escalation_attempt',
+                    project: null,
+                    input: ['target_user_id' => $user->id, 'attempted_by' => $currentUser->getUserIdentifier()],
+                    output: ['error' => 'cannot_modify_own_roles'],
+                    status: 'failure',
+                    errorMessage: 'Attempt by delegated admin to modify own roles',
+                    createdBy: $currentUser->getUserIdentifier(),
+                    source: 'user_management'
+                );
+                $this->auditService->flush();
+                return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_modify_own_roles')], 403);
+            }
+
+            if (!is_array($data['roles'])) {
+                return $this->secureJson(['errors' => ['roles' => [$this->translator->trans('user.admin.roles_must_be_array')]]], 422);
+            }
+
             $newRoles = [];
             foreach ($data['roles'] as $roleId) {
+                if (!is_numeric($roleId) || (int) $roleId <= 0) {
+                    return $this->secureJson(['errors' => ['roles' => [$this->translator->trans('user.admin.invalid_role')]]], 422);
+                }
                 $role = $this->roleRepository->find((int) $roleId);
-                if ($role !== null) {
-                    if (!$currentUser->isSuperAdmin()) {
-                        foreach ($role->permissions as $perm) {
-                            if (!$currentUser->hasPermission($perm->name)) {
-                                return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_assign_unowned_permissions')], 403);
-                            }
+                if ($role === null) {
+                    return $this->secureJson(['errors' => ['roles' => [$this->translator->trans('user.admin.invalid_role')]]], 422);
+                }
+                if (!$currentUser->isSuperAdmin()) {
+                    if ($this->isProtectedRole($role->name)) {
+                        $this->auditService->log(
+                            toolName: 'user_update_privilege_escalation_attempt',
+                            project: null,
+                            input: ['role_name' => $role->name, 'target_user_id' => $user->id],
+                            output: ['error' => 'protected_system_role'],
+                            status: 'failure',
+                            errorMessage: 'Attempt to assign protected system role by non-superadmin',
+                            createdBy: $currentUser->getUserIdentifier(),
+                            source: 'user_management'
+                        );
+                        $this->auditService->flush();
+                        return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_assign_protected_role')], 403);
+                    }
+                    foreach ($role->permissions as $perm) {
+                        if (!$currentUser->hasPermission($perm->name)) {
+                            $this->auditService->log(
+                                toolName: 'user_update_privilege_escalation_attempt',
+                                project: null,
+                                input: ['permission' => $perm->name, 'target_user_id' => $user->id],
+                                output: ['error' => 'unowned_permission'],
+                                status: 'failure',
+                                errorMessage: 'Attempt to assign unowned permission',
+                                createdBy: $currentUser->getUserIdentifier(),
+                                source: 'user_management'
+                            );
+                            $this->auditService->flush();
+                            return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_assign_unowned_permissions')], 403);
                         }
                     }
-                    $newRoles[] = $role;
                 }
+                $newRoles[] = $role;
             }
             $user->userRoles->clear();
             foreach ($newRoles as $r) {
                 $user->userRoles->add($r);
             }
+            $changes['roles'] = array_map(fn($r) => $r->name, $newRoles);
         }
 
         $this->em->flush();
@@ -499,7 +772,7 @@ class UserController extends AbstractController
         $this->auditService->log(
             toolName: 'user_update',
             project: null,
-            input: ['id' => $user->id, 'email' => $user->email],
+            input: ['id' => $user->id, 'email' => $user->email, 'changes' => $changes],
             output: ['success' => true, 'id' => $user->id],
             status: 'success',
             createdBy: $currentUser->getUserIdentifier(),
@@ -533,14 +806,47 @@ class UserController extends AbstractController
         $currentUser = $this->getUser();
 
         if ($user === $currentUser) {
+            $this->auditService->log(
+                toolName: 'user_delete_failed_self',
+                project: null,
+                input: ['id' => $user->id, 'email' => $user->email],
+                output: ['error' => 'cannot_delete_self'],
+                status: 'failure',
+                errorMessage: 'Attempt to delete own account',
+                createdBy: $currentUser->getUserIdentifier(),
+                source: 'user_management'
+            );
+            $this->auditService->flush();
             return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_delete_self')], 422);
         }
 
         if ($user->isSuperAdmin()) {
             if ($this->countSuperAdmins() <= 1) {
+                $this->auditService->log(
+                    toolName: 'user_delete_failed_last_super_admin',
+                    project: null,
+                    input: ['id' => $user->id, 'email' => $user->email],
+                    output: ['error' => 'cannot_delete_last_super_admin'],
+                    status: 'failure',
+                    errorMessage: 'Attempt to delete the last super administrator',
+                    createdBy: $currentUser->getUserIdentifier(),
+                    source: 'user_management'
+                );
+                $this->auditService->flush();
                 return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_delete_last_super_admin')], 422);
             }
             if (!$currentUser->isSuperAdmin()) {
+                $this->auditService->log(
+                    toolName: 'user_delete_privilege_escalation_attempt',
+                    project: null,
+                    input: ['target_id' => $user->id, 'email' => $user->email],
+                    output: ['error' => 'cannot_modify_super_admin'],
+                    status: 'failure',
+                    errorMessage: 'Attempt to delete superadmin by non-superadmin',
+                    createdBy: $currentUser->getUserIdentifier(),
+                    source: 'user_management'
+                );
+                $this->auditService->flush();
                 return $this->secureJson(['error' => $this->translator->trans('user.admin.cannot_modify_super_admin')], 403);
             }
         }
