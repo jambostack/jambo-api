@@ -188,13 +188,13 @@
             <span class="brand-logo-name">JamboAPI</span>
         </a>
         <div class="brand-hero">
-            <div class="brand-badge"><span class="badge-dot"></span>Headless CMS</div>
-            <h1 class="brand-title">Your content,<br><span>your API.</span></h1>
-            <p class="brand-desc">Structure your content, build flexible schemas, and deliver data anywhere via REST API.</p>
+            <div class="brand-badge"><span class="badge-dot"></span>{{ 'auth.brand_hero_badge'|trans }}</div>
+            <h1 class="brand-title">{{ 'auth.brand_hero_title'|trans|raw }}</h1>
+            <p class="brand-desc">{{ 'auth.brand_hero_desc'|trans }}</p>
             <div class="brand-stats">
-                <div class="stat-card"><div class="stat-value">∞</div><div class="stat-label">Collections</div></div>
-                <div class="stat-card"><div class="stat-value">REST</div><div class="stat-label">API Ready</div></div>
-                <div class="stat-card"><div class="stat-value">&lt;/&gt;</div><div class="stat-label">Headless</div></div>
+                <div class="stat-card"><div class="stat-value">∞</div><div class="stat-label">{{ 'auth.brand_stat_collections'|trans }}</div></div>
+                <div class="stat-card"><div class="stat-value">REST</div><div class="stat-label">{{ 'auth.brand_stat_api_ready'|trans }}</div></div>
+                <div class="stat-card"><div class="stat-value">&lt;/&gt;</div><div class="stat-label">{{ 'auth.brand_stat_headless'|trans }}</div></div>
             </div>
         </div>
         <p class="brand-footer">&copy; {{ "now"|date("Y") }} JamboAPI CMS.</p>
@@ -209,8 +209,8 @@
         </a>
         <div class="form-container">
             <div class="form-header">
-                <h2 class="form-title">Welcome back</h2>
-                <p class="form-subtitle">Sign in to your account to continue</p>
+                <h2 class="form-title">{{ 'auth.welcome_back'|trans }}</h2>
+                <p class="form-subtitle">{{ 'auth.sign_in_subtitle'|trans }}</p>
             </div>
 
             {% if error %}
@@ -220,20 +220,20 @@
             <form method="post" action="{{ path('app_login') }}">
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
                 <div class="form-group">
-                    <label class="form-label" for="email">Email address</label>
+                    <label class="form-label" for="email">{{ 'auth.email_address'|trans }}</label>
                     <input id="email" name="email" type="email" class="form-input"
                         autocomplete="email" required value="{{ last_username }}" placeholder="you@example.com">
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="password">Password</label>
+                    <label class="form-label" for="password">{{ 'common.password'|trans }}</label>
                     <input id="password" name="password" type="password" class="form-input"
                         autocomplete="current-password" required placeholder="••••••••">
                 </div>
-                <button type="submit" class="form-submit">Sign in</button>
+                <button type="submit" class="form-submit">{{ 'auth.sign_in'|trans }}</button>
             </form>
 
             <div class="form-links">
-                <a href="/forgot-password">Forgot your password?</a>
+                <a href="/forgot-password">{{ 'auth.forgot_password'|trans }}</a>
             </div>
         </div>
     </div>

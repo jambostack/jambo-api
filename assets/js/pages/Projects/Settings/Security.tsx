@@ -147,14 +147,14 @@ export default function ProjectSecuritySettings({ project }: Props) {
                                                             })}
                                                             className="rounded"
                                                         />
-                                                        Activé
+                                                        {t('common.enabled')}
                                                     </label>
                                                 </div>
 
                                                 {sp?.enabled && (
                                                     <div className="space-y-2 pl-2 border-l-2 border-muted">
                                                         <div>
-                                                            <Label className="text-xs">Client ID</Label>
+                                                            <Label className="text-xs">{t('auth.client_id')}</Label>
                                                             <Input
                                                                 placeholder="..."
                                                                 value={sp.clientId ?? ''}
@@ -169,7 +169,7 @@ export default function ProjectSecuritySettings({ project }: Props) {
                                                             />
                                                         </div>
                                                         <div>
-                                                            <Label className="text-xs">Client Secret</Label>
+                                                            <Label className="text-xs">{t('auth.client_secret')}</Label>
                                                             <Input
                                                                 type="password"
                                                                 placeholder={isConfigured ? '••••••••' : '...'}

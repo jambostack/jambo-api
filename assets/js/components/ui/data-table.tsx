@@ -629,14 +629,14 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
                                 <PopoverContent className="w-[calc(100vw-2rem)] sm:w-72">
                                     <div className="space-y-4">
                                         <div className="flex items-center justify-between">
-                                            <h4 className="font-medium">Column Settings</h4>
+                                            <h4 className="font-medium">{t('common.column_settings')}</h4>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => setColumns(prev => prev.map(col => ({ ...col, visible: true })))}
                                                 className="h-8 text-xs"
                                             >
-                                                Show all
+                                                {t('common.show_all')}
                                             </Button>
                                         </div>
                                         <ScrollArea className="h-[300px] pr-4">
@@ -678,11 +678,11 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
                                                 className="relative"
                                             >
                                                 <RotateCcw className="h-4 w-4" />
-                                                <span className="sr-only">Reset table</span>
+                                                <span className="sr-only">{t('common.reset_table')}</span>
                                             </Button>
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                            Reset table to initial state
+                                            {t('common.reset_table_tooltip')}
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
@@ -691,7 +691,7 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
                         {selectable && selectedItems.length > 0 && (
                             <div className="flex items-center gap-2 whitespace-nowrap">
                                 <span className="text-sm text-muted-foreground">
-                                    {selectedItems.length} selected
+                                    {t('common.selected_count', { count: String(selectedItems.length) })}
                                 </span>
                                 <TooltipProvider>
                                     <Tooltip>
@@ -706,7 +706,7 @@ export const DataTable = forwardRef<DataTableRef, DataTableProps<any>>(({
                                                 <X className="h-4 w-4" />
                                             </Button>
                                         </TooltipTrigger>
-                                        <TooltipContent>Clear selection</TooltipContent>
+                                        <TooltipContent>{t('common.clear_selection')}</TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
                             </div>

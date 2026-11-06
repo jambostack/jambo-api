@@ -6,15 +6,17 @@ use Doctrine\DBAL\Connection;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use OpenApi\Attributes as OA;
 
 #[OA\Tag(name: 'Health')]
 class HealthController extends AbstractController
 {
-    public const VERSION = '1.26.196';
+    public const VERSION = '1.26.197';
 
     public function __construct(
         private Connection $connection,
+        private ?TranslatorInterface $translator = null,
     ) {}
 
     #[OA\Get(
@@ -42,7 +44,7 @@ class HealthController extends AbstractController
             $httpCode = 503;
             $checks['database'] = [
                 'status' => 'fail',
-                'message' => 'Database connection failed: ' . $e->getMessage(),
+                'message' => $this->translator ? $this->translator->trans('health.db_connection_failed') : 'Database connection failed',
             ];
         }
 

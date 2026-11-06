@@ -256,7 +256,7 @@ ${methods}
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2"><Globe className="w-4 h-4" /> Langage cible</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2"><Globe className="w-4 h-4" /> {t('studio.code_exporter.target_language')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex gap-2">

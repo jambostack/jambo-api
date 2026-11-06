@@ -792,7 +792,7 @@ class WebhookController extends AbstractController
             'timestamp' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
             'project'   => $projectUuid,
             'webhook'   => $webhook->uuid?->toString(),
-            'message'   => 'Test webhook ping from Jambo API',
+            'message'   => $this->trans('webhook.test_ping_message', [], 'Test webhook ping from Jambo API'),
         ];
 
         if ($this->bus !== null) {

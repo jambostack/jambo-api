@@ -1375,7 +1375,7 @@ export default function SchemaBuilder({ project }: { project: Project }) {
           </button>
           <button className={`sb-bottom-tab${mobileTab === 'chat' ? ' active' : ''}`} onClick={() => setMobileTab('chat')}>
             <Sparkles />
-            <span>Chat IA</span>
+            <span>{t('studio.schema.ai_chat_tab')}</span>
           </button>
         </div>
       </div>
@@ -1584,19 +1584,19 @@ function ValidationRulesEditor({ rules, onChange, fieldType, S }: {
     return (
         <details style={{ marginTop: '8px', fontSize: '10px' }}>
             <summary style={{ cursor: 'pointer', color: 'var(--studio-green)', fontWeight: 600 }}>
-                ✅ Règles de validation {Object.keys(rules).filter(k => rules[k] !== undefined && rules[k] !== '').length > 0 ? '(configurées)' : ''}
+                ✅ {t('studio.schema.validation_rules')} {Object.keys(rules).filter(k => rules[k] !== undefined && rules[k] !== '').length > 0 ? t('studio.schema.configured') : ''}
             </summary>
             <div style={{ marginTop: '6px', padding: '6px', border: '1px solid var(--studio-border)', borderRadius: '6px', background: 'var(--studio-surface)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {isTextType && (
                     <>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
                             <div>
-                                <span style={S.label}>Longueur min</span>
+                                <span style={S.label}>{t('studio.schema.min_length')}</span>
                                 <input type="number" value={rules.minLength ?? ''} onChange={e => setRules({ ...rules, minLength: e.target.value ? Number(e.target.value) : undefined })}
                                     style={{ ...S.input, width: '100%' }} />
                             </div>
                             <div>
-                                <span style={S.label}>Longueur max</span>
+                                <span style={S.label}>{t('studio.schema.max_length')}</span>
                                 <input type="number" value={rules.maxLength ?? ''} onChange={e => setRules({ ...rules, maxLength: e.target.value ? Number(e.target.value) : undefined })}
                                     style={{ ...S.input, width: '100%' }} />
                             </div>
@@ -1608,22 +1608,22 @@ function ValidationRulesEditor({ rules, onChange, fieldType, S }: {
                                 placeholder="^[a-z0-9_-]+$" />
                         </div>
                         <div>
-                            <span style={S.label}>Message si regex invalide</span>
+                            <span style={S.label}>{t('studio.schema.regex_invalid_message')}</span>
                             <input value={rules.regexMessage ?? ''} onChange={e => setRules({ ...rules, regexMessage: e.target.value })}
                                 style={{ ...S.input, width: '100%' }}
-                                placeholder="Format attendu : lettres et chiffres uniquement" />
+                                placeholder={t('studio.schema.regex_invalid_ph')} />
                         </div>
                     </>
                 )}
                 {isNumericType && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
                         <div>
-                            <span style={S.label}>Valeur min</span>
+                            <span style={S.label}>{t('studio.schema.min_value')}</span>
                             <input type="number" value={rules.min ?? ''} onChange={e => setRules({ ...rules, min: e.target.value ? Number(e.target.value) : undefined })}
                                 style={{ ...S.input, width: '100%' }} />
                         </div>
                         <div>
-                            <span style={S.label}>Valeur max</span>
+                            <span style={S.label}>{t('studio.schema.max_value')}</span>
                             <input type="number" value={rules.max ?? ''} onChange={e => setRules({ ...rules, max: e.target.value ? Number(e.target.value) : undefined })}
                                 style={{ ...S.input, width: '100%' }} />
                         </div>
@@ -1633,7 +1633,7 @@ function ValidationRulesEditor({ rules, onChange, fieldType, S }: {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Switch checked={rules.unique === true}
                             onCheckedChange={v => setRules({ ...rules, unique: v || undefined })} />
-                        <span style={S.label}>Valeur unique dans la collection</span>
+                        <span style={S.label}>{t('studio.schema.unique_in_collection')}</span>
                     </div>
                 )}
                 <div>
@@ -2056,7 +2056,7 @@ function FieldOptionsEditor({ field, allCollections, allFields, onValidationRule
     return (
       <div style={panelStyle}>
         <div>
-          <span style={S.label}>Default Language</span>
+          <span style={S.label}>{t('studio.schema.default_language')}</span>
           <select
             value={opts.language ?? 'plaintext'}
             onChange={e => onChange({ ...opts, language: e.target.value })}
@@ -2103,9 +2103,9 @@ function EditorView({
       <Wand2 style={{ width: '36px', height: '36px' }} />
       <div>
         <h3>{collections.length === 0 ? t('studio.schema.create_first_collection') : t('studio.preview_select')}</h3>
-        <p>{collections.length === 0 ? 'Définissez votre modèle de données.' : 'Choisissez une collection dans la barre latérale.'}</p>
+        <p>{collections.length === 0 ? t('studio.schema.define_data_model') : t('studio.schema.choose_collection_sidebar')}</p>
       </div>
-      {collections.length === 0 && <Button onClick={addCollection} style={{ background: 'var(--studio-accent)', color: '#000' }}><Plus className="w-4 h-4 mr-2" />Nouvelle collection</Button>}
+      {collections.length === 0 && <Button onClick={addCollection} style={{ background: 'var(--studio-accent)', color: '#000' }}><Plus className="w-4 h-4 mr-2" />{t('studio.schema.new_collection')}</Button>}
     </div>
   );
 
@@ -2413,11 +2413,11 @@ function FieldRow({
             <div style={{ display:'flex', alignItems:'center', gap:'12px', marginTop:'6px' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                 <Switch checked={parseFieldOptions(field).hideInList ?? false} onCheckedChange={v => handleOptionsChange({ ...parseFieldOptions(field), hideInList: v })} />
-                <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>Masquer dans les listes</span>
+                <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>{t('studio.schema.hide_in_lists')}</span>
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                 <Switch checked={parseFieldOptions(field).readOnly ?? false} onCheckedChange={v => handleOptionsChange({ ...parseFieldOptions(field), readOnly: v })} />
-                <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>Lecture seule</span>
+                <span style={{ fontSize:'10px', color:'var(--studio-text-muted)' }}>{t('studio.schema.read_only')}</span>
               </div>
             </div>
           )}
@@ -2448,8 +2448,8 @@ function MobileCollectionsView({
         <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--studio-text-muted)' }}>
           <FolderOpen style={{ width: '40px', height: '40px', opacity: .2, margin: '0 auto 12px', display: 'block' }} />
           <p style={{ fontSize: '13px', margin: 0 }}>{t('studio.schema.no_collection_created')}</p>
-          <p style={{ fontSize: '11px', margin: '4px 0 16px' }}>Appuyez sur "+ Nouvelle" ou utilisez le Chat IA.</p>
-          <Button onClick={onAdd} style={{ background: 'var(--studio-accent)', color: '#000' }}><Plus className="w-3.5 h-3.5 mr-1" />Nouvelle collection</Button>
+          <p style={{ fontSize: '11px', margin: '4px 0 16px' }}>{t('studio.schema.press_new_or_use_ai')}</p>
+          <Button onClick={onAdd} style={{ background: 'var(--studio-accent)', color: '#000' }}><Plus className="w-3.5 h-3.5 mr-1" />{t('studio.schema.new_collection')}</Button>
         </div>
       )}
       <div className="sb-mobile-col-list">

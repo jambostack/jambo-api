@@ -485,11 +485,11 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
 
                         {fieldType === 'slug' && (
                             <div className="space-y-4 border-t pt-4">
-                                <h2 className="font-bold">SLUG OPTIONS</h2>
+                                <h2 className="font-bold">{t('fields.options.slug_title')}</h2>
                                 
                                 <div className="space-y-2">
                                     <div className="space-y-2">
-                                        <Label htmlFor="attachSlug">Attach slug to a field (optional)</Label>
+                                        <Label htmlFor="attachSlug">{t('fields.options.slug_attach')}</Label>
 
                                         <MultiSelect
                                             isClearable
@@ -515,7 +515,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                             }))}
                                         />
                                         <p className="text-sm text-muted-foreground">
-                                            Slug will be generated from the selected field. Only <strong>text fields</strong> can be selected
+                                            {t('fields.options.slug_hint')}
                                         </p>
                                     </div>
 
@@ -539,9 +539,9 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                 className="mt-1"
                                             />
                                             <div className="space-y-1">
-                                                <Label htmlFor="readonly" className="font-medium">Read Only</Label>
+                                                <Label htmlFor="readonly" className="font-medium">{t('fields.options.readonly')}</Label>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Prevents editing slug field
+                                                    {t('fields.options.readonly_hint')}
                                                 </p>
                                             </div>
                                         </div>
@@ -577,21 +577,21 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
 
                         {fieldType === 'enumeration' && (
                             <div className="space-y-4 border-t pt-4">
-                                <h2 className="font-bold">ENUMERATION OPTIONS</h2>
+                                <h2 className="font-bold">{t('fields.options.enum_title')}</h2>
                                 
                                 <div className="space-y-2">
                                     <div className="space-y-2">
-                                        <Label>List of Values</Label>
+                                        <Label>{t('fields.options.enum_list')}</Label>
                                         <div className="flex space-x-2">
                                             <Input
                                                 value={enumerationItem}
                                                 onChange={(e) => setEnumerationItem(e.target.value)}
-                                                placeholder="Enter value"
+                                                placeholder={t('fields.options.enum_ph')}
                                             />
-                                            <Button type="button" onClick={addToEnumList}>+ Add</Button>
+                                            <Button type="button" onClick={addToEnumList}>{t('fields.options.enum_add')}</Button>
                                         </div>
                                         {!enumerationValid && (
-                                            <p className="text-sm text-red-500">! Enter a value</p>
+                                            <p className="text-sm text-red-500">{t('fields.options.enum_required')}</p>
                                         )}
                                     </div>
 
@@ -621,9 +621,9 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                             className="mt-1"
                                         />
                                         <div className="space-y-1">
-                                            <Label htmlFor="multiple" className="font-medium">Allow multiple</Label>
+                                            <Label htmlFor="multiple" className="font-medium">{t('fields.options.allow_multiple')}</Label>
                                             <p className="text-sm text-muted-foreground">
-                                                Allows multiple values to be selected
+                                                {t('fields.options.allow_multiple_hint')}
                                             </p>
                                         </div>
                                     </div>
@@ -633,7 +633,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
 
                         {fieldType === 'date' && (
                             <div className="space-y-4 border-t pt-4">
-                                <h2 className="font-bold">DATE OPTIONS</h2>
+                                <h2 className="font-bold">{t('fields.options.date_title')}</h2>
                                 
                                 <div className="space-y-2">
                                     <div className="flex items-start space-x-2 p-4 rounded-md border border-dashed border-gray-600 dark:border-gray-400">
@@ -649,9 +649,9 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                             className="mt-1"
                                         />
                                         <div className="space-y-1">
-                                            <Label htmlFor="includeTime" className="font-medium">Include time picker</Label>
+                                            <Label htmlFor="includeTime" className="font-medium">{t('fields.options.include_time')}</Label>
                                             <p className="text-sm text-muted-foreground">
-                                                Allows time to be selected along with date
+                                                {t('fields.options.include_time_hint')}
                                             </p>
                                         </div>
                                     </div>
@@ -669,9 +669,9 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                             className="mt-1"
                                         />
                                         <div className="space-y-1">
-                                            <Label htmlFor="range" className="font-medium">Allow range select</Label>
+                                            <Label htmlFor="range" className="font-medium">{t('fields.options.allow_range')}</Label>
                                             <p className="text-sm text-muted-foreground">
-                                                Allows selecting a range of dates
+                                                {t('fields.options.allow_range_hint')}
                                             </p>
                                         </div>
                                     </div>
@@ -681,7 +681,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
 
                         {fieldType === 'media' && (
                             <div className="space-y-4 border-t pt-4">
-                                <h2 className="font-bold">MEDIA OPTIONS</h2>
+                                <h2 className="font-bold">{t('fields.options.media_title')}</h2>
                                 
                                 <RadioGroup
                                     value={data.options.media?.type.toString()}
@@ -698,12 +698,12 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                 >
                                     <div className="flex items-start space-x-2 p-4 rounded-md flex-1 border border-dashed border-gray-600 dark:border-gray-400">
                                         <RadioGroupItem value="1" id="media_single" />
-                                        <Label htmlFor="media_single" className="font-medium">Single File</Label>
+                                        <Label htmlFor="media_single" className="font-medium">{t('fields.options.single_file')}</Label>
                                     </div>
 
                                     <div className="flex items-start space-x-2 p-4 rounded-md flex-1 border border-dashed border-gray-600 dark:border-gray-400">
                                         <RadioGroupItem value="2" id="media_multi" />
-                                        <Label htmlFor="media_multi" className="font-medium">Multiple Files</Label>
+                                        <Label htmlFor="media_multi" className="font-medium">{t('fields.options.multiple_files')}</Label>
                                     </div>
                                 </RadioGroup>
                             </div>
@@ -711,13 +711,13 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
 
                         {fieldType === 'relation' && (
                             <div className="space-y-4 border-t pt-4">
-                                <h2 className="font-bold">RELATION OPTIONS</h2>
+                                <h2 className="font-bold">{t('fields.options.relation_title')}</h2>
                                 
                                 <div className="space-y-2">
                                     <div className="space-y-2">
-                                        <Label htmlFor="relationCollection">Relation Collection</Label>
+                                        <Label htmlFor="relationCollection">{t('fields.options.relation_collection')}</Label>
                                         <MultiSelect
-                                            value={data.options.relation?.collection ? { value: data.options.relation.collection, label: (data.options.relation.collection === -1 || data.options.relation.collection === 'end_users') ? 'End Users (system)' : (collections.find(c => c.id === data.options.relation!.collection)?.name ?? '') } : null}
+                                            value={data.options.relation?.collection ? { value: data.options.relation.collection, label: (data.options.relation.collection === -1 || data.options.relation.collection === 'end_users') ? t('fields.options.relation_system_end_users') : (collections.find(c => c.id === data.options.relation!.collection)?.name ?? '') } : null}
                                             onChange={(selected) => {
                                                 const val = (selected as any)?.value ?? null;
                                                 setData('options', {
@@ -729,7 +729,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                 });
                                             }}
                                             options={collections.map(c => ({ value: c.id, label: c.name }))}
-                                            placeholder="Select a collection"
+                                            placeholder={t('fields.options.relation_collection_ph')}
                                             isClearable
                                             classNamePrefix="react-select"
                                         />
@@ -750,12 +750,12 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                     >
                                         <div className="flex items-center space-x-2 p-4 rounded-md flex-1 border border-dashed border-gray-600 dark:border-gray-400">
                                             <RadioGroupItem value="1" id="relation_one_to_one" />
-                                            <Label htmlFor="relation_one_to_one" className="font-medium">One to One</Label>
+                                            <Label htmlFor="relation_one_to_one" className="font-medium">{t('fields.options.one_to_one')}</Label>
                                         </div>
 
                                         <div className="flex items-center space-x-2 p-4 rounded-md flex-1 border border-dashed border-gray-600 dark:border-gray-400">
                                             <RadioGroupItem value="2" id="relation_one_to_many" />
-                                            <Label htmlFor="relation_one_to_many" className="font-medium">One to Many</Label>
+                                            <Label htmlFor="relation_one_to_many" className="font-medium">{t('fields.options.one_to_many')}</Label>
                                         </div>
                                     </RadioGroup>
                                     
@@ -772,9 +772,9 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                             className="mt-1"
                                         />
                                         <div className="space-y-1">
-                                            <Label htmlFor="includeDraft" className="font-medium">Include Draft</Label>
+                                            <Label htmlFor="includeDraft" className="font-medium">{t('fields.options.include_draft')}</Label>
                                             <p className="text-sm text-muted-foreground">
-                                                Allows draft content to be included in the relation
+                                                {t('fields.options.include_draft_hint')}
                                             </p>
                                         </div>
                                     </div>
@@ -803,7 +803,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                             </p>
                                             {data.validations.required.status && (
                                                 <Input
-                                                    placeholder="Custom error message"
+                                                    placeholder={t('fields.options.custom_error_ph')}
                                                     value={data.validations.required.message || ''}
                                                     onChange={(e) => handleValidationChange('required', 'message', e.target.value)}
                                                     className="mt-2"
@@ -838,11 +838,11 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                 <p className="text-sm text-muted-foreground">
                                                     {data.options.repeatable
                                                         ? t('fields.unique_desc')
-                                                        : "Prevents saving content if this field value is already used"}
+                                                        : t('fields.options.unique_desc_alt')}
                                                 </p>
                                                 {data.validations.unique.status && !data.options.repeatable && (
                                                     <Input
-                                                        placeholder="Custom error message"
+                                                        placeholder={t('fields.options.custom_error_ph')}
                                                         value={data.validations.unique.message || ''}
                                                         onChange={(e) => handleValidationChange('unique', 'message', e.target.value)}
                                                         className="mt-2"
@@ -874,12 +874,12 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                 />
                                                 <div className="space-y-1">
                                                     <Label htmlFor="charcount" className="font-medium">
-                                                        {fieldType === 'number' || fieldType === 'rating' ? 'Integer limitations' : 'Character count'}
+                                                        {fieldType === 'number' || fieldType === 'rating' ? t('fields.options.int_limitations') : t('fields.options.char_count')}
                                                     </Label>
                                                     <p className="text-sm text-muted-foreground">
                                                         {fieldType === 'number' || fieldType === 'rating'
-                                                            ? 'Specifies a minimum and/or maximum allowed numbers'
-                                                            : 'Specifies a minimum and/or maximum allowed number of characters'}
+                                                            ? t('fields.options.num_min_max_hint')
+                                                            : t('fields.options.char_min_max_hint')}
                                                     </p>
                                                 </div>
                                             </div>
@@ -893,9 +893,9 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                                             onChange={(option: any) => handleValidationChange('charcount', 'type', option?.value)}
                                                             options={[
-                                                                { value: 'Between', label: 'Between' },
-                                                                { value: 'Min', label: 'Min' },
-                                                                { value: 'Max', label: 'Max' },
+                                                                { value: 'Between', label: t('fields.options.between') },
+                                                                { value: 'Min', label: t('fields.options.min') },
+                                                                { value: 'Max', label: t('fields.options.max') },
                                                             ]}
                                                             isClearable={false}
                                                         />
@@ -905,7 +905,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                             data.validations.charcount.type === 'Min') && (
                                                                 <Input
                                                                     type="number"
-                                                                    placeholder="Min"
+                                                                    placeholder={t('fields.options.min')}
                                                                     value={data.validations.charcount.min ?? ''}
                                                                     onChange={(e) => handleValidationChange('charcount', 'min', e.target.value ? Number(e.target.value) : null)}
                                                                     className="w-24"
@@ -915,7 +915,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                             data.validations.charcount.type === 'Max') && (
                                                                 <Input
                                                                     type="number"
-                                                                    placeholder="Max"
+                                                                    placeholder={t('fields.options.max')}
                                                                     value={data.validations.charcount.max ?? ''}
                                                                     onChange={(e) => handleValidationChange('charcount', 'max', e.target.value ? Number(e.target.value) : null)}
                                                                     className="w-24"
@@ -925,7 +925,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                     </div>
 
                                                     <Input
-                                                        placeholder="Custom error message"
+                                                        placeholder={t('fields.options.custom_error_ph')}
                                                         value={data.validations.charcount.message || ''}
                                                         onChange={(e) => handleValidationChange('charcount', 'message', e.target.value)}
                                                     />
@@ -939,7 +939,7 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
 
                         {fieldType !== 'password' && (
                             <div className="space-y-4 border-t pt-4">
-                                <h2 className="font-bold">OTHER OPTIONS</h2>
+                                <h2 className="font-bold">{t('fields.options.other_title')}</h2>
                                 
                                 <div className="space-y-2">
                                     {fieldType !== 'richtext' && 
@@ -965,9 +965,9 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                                 className="mt-1"
                                             />
                                             <div className="space-y-1">
-                                                <Label htmlFor="repeatable" className="font-medium">Repeatable Field</Label>
+                                                <Label htmlFor="repeatable" className="font-medium">{t('fields.options.repeatable')}</Label>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Allows multiple values to be added to this field
+                                                    {t('fields.options.repeatable_hint')}
                                                 </p>
                                             </div>
                                         </div>
@@ -986,9 +986,9 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                             className="mt-1"
                                         />
                                         <div className="space-y-1 w-full">
-                                            <Label htmlFor="hideInContentList" className="font-medium">Hide in content list</Label>
+                                            <Label htmlFor="hideInContentList" className="font-medium">{t('fields.options.hide_in_content_list')}</Label>
                                             <p className="text-sm text-muted-foreground">
-                                                Prevents this field from being displayed in the content list
+                                                {t('fields.options.hide_in_content_list_hint')}
                                             </p>
                                         </div>
                                     </div>
@@ -1006,9 +1006,9 @@ export default function FieldFormModal({ isOpen, onClose, fieldType, collectionI
                                             className="mt-1"
                                         />
                                         <div className="space-y-1 w-full">
-                                            <Label htmlFor="hiddenInAPI" className="font-medium">Hidden in API</Label>
+                                            <Label htmlFor="hiddenInAPI" className="font-medium">{t('fields.options.hidden_in_api')}</Label>
                                             <p className="text-sm text-muted-foreground">
-                                                Prevents this field from being included in the API response
+                                                {t('fields.options.hidden_in_api_hint')}
                                             </p>
                                         </div>
                                     </div>

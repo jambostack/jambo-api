@@ -762,7 +762,7 @@ export default function AppSettingsPage() {
                                     {p.enabled && (
                                         <div className="space-y-3 pt-3 border-t">
                                             <div className="space-y-1.5">
-                                                <Label className="text-xs">Client ID</Label>
+                                                <Label className="text-xs">{t('auth.client_id')}</Label>
                                                 <Input
                                                     placeholder="..."
                                                     value={p.clientId}
@@ -771,7 +771,7 @@ export default function AppSettingsPage() {
                                                 />
                                             </div>
                                             <div className="space-y-1.5">
-                                                <Label className="text-xs">Client Secret</Label>
+                                                <Label className="text-xs">{t('auth.client_secret')}</Label>
                                                 <Input
                                                     type="password"
                                                     placeholder={isConfigured ? '••••••••' : '...'}

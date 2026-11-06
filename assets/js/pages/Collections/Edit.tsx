@@ -167,7 +167,7 @@ export default function Edit({ project, collection }: Props) {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>{t('collections.template_dialog_title')}</DialogTitle>
-                        <DialogDescription className="sr-only">Save Collection as Template</DialogDescription>
+                        <DialogDescription className="sr-only">{t('collections.template_dialog_title')}</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <Input value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder={t('collections.template_name_ph')} />

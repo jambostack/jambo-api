@@ -218,13 +218,13 @@ export default function AutomationForm({ projectUuid, automation, onClose, onSav
                         )}
                         {isSchedule && (
                             <div>
-                                <Label>Expression cron</Label>
+                                <Label>{t('automations.cron_expression')}</Label>
                                 <Input
                                     placeholder={t('automations.cron_placeholder')}
                                     value={form.trigger_config?.schedule || ''}
                                     onChange={e => update({ trigger_config: { schedule: e.target.value } })}
                                 />
-                                <p className="text-xs text-muted-foreground mt-1">Minute Heure Jour Mois JourSemaine</p>
+                                <p className="text-xs text-muted-foreground mt-1">{t('automations.cron_hint')}</p>
                             </div>
                         )}
                     </div>
