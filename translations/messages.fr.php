@@ -3856,4 +3856,11 @@ return [
     'api_content.slug_too_long' => 'Le slug dépasse la longueur maximale autorisée (%max% caractères).',
     'admin_api.import.quota_exceeded' => 'Limite d\'entrées atteinte pour cette collection (maximum %max% entrées).',
     'admin_api.import.cell_control_chars' => 'La cellule contient des caractères de contrôle invalides dans la colonne "%column%".',
+
+    // Cycle #97: Admin Form & Redirect Security Hardening
+    'form.admin.rate_limit_exceeded' => 'Trop de requêtes relatives aux formulaires. Veuillez réessayer plus tard.',
+    'form.admin.project_quota_exceeded' => 'Quota de formulaires du projet dépassé (maximum %max% formulaires autorisés).',
+    'form.admin.export_rate_limit_exceeded' => 'Trop de requêtes d\'exportation des soumissions. Veuillez réessayer plus tard.',
+    'redirect.admin.rate_limit_exceeded' => 'Trop de requêtes relatives aux redirections. Veuillez réessayer plus tard.',
+    'redirect.admin.project_quota_exceeded' => 'Quota de redirections du projet dépassé (maximum %max% redirections autorisées).',
 ];

@@ -7,12 +7,15 @@ namespace App\Controller\Admin;
 use App\Entity\Redirect;
 use App\Repository\ProjectRepository;
 use App\Repository\RedirectRepository;
+use App\Service\AuditService;
 use App\Service\Redirect\RedirectChainDetector;
 use App\Service\Security\SsrfProtectionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Uid\Uuid;
@@ -22,7 +25,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class RedirectController extends AbstractController
 {
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
-    private const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    public const MAX_REDIRECTS_PER_PROJECT = 500;
+
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options'        => 'DENY',
@@ -38,8 +43,25 @@ class RedirectController extends AbstractController
         private readonly RedirectChainDetector $chainDetector,
         ?SsrfProtectionService $ssrfProtection = null,
         private readonly ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.admin_api_limiter')]
+        private readonly ?RateLimiterFactory $adminApiLimiter = null,
+        private readonly ?AuditService $auditService = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
+    }
+
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->adminApiLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?: ($request->getClientIp() ?: '127.0.0.1');
+            if (false === $this->adminApiLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('redirect.admin.rate_limit_exceeded', [], 'Too many redirect requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+        return null;
     }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -60,6 +82,10 @@ class RedirectController extends AbstractController
     #[Route('/admin-api/{projectUuid}/redirects', name: 'admin_redirects_list', methods: ['GET'])]
     public function index(string $projectUuid, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->secureJson(['error' => $this->trans('redirect.admin.project_not_found', [], 'Project not found.'), 'code' => 'PROJECT_NOT_FOUND'], 404);
@@ -91,8 +117,12 @@ class RedirectController extends AbstractController
     // ── Détection des chaînes ─────────────────────────────────────────────
 
     #[Route('/admin-api/{projectUuid}/redirects/chains', name: 'admin_redirects_chains', methods: ['GET'])]
-    public function chains(string $projectUuid): JsonResponse
+    public function chains(string $projectUuid, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->secureJson(['error' => $this->trans('redirect.admin.project_not_found', [], 'Project not found.'), 'code' => 'PROJECT_NOT_FOUND'], 404);
@@ -116,11 +146,23 @@ class RedirectController extends AbstractController
     #[Route('/admin-api/{projectUuid}/redirects', name: 'admin_redirects_create', methods: ['POST'])]
     public function create(string $projectUuid, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->secureJson(['error' => $this->trans('redirect.admin.project_not_found', [], 'Project not found.'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $project);
+
+        $currentCount = $this->redirectRepo->count(['project' => $project]);
+        if ($currentCount >= self::MAX_REDIRECTS_PER_PROJECT) {
+            return $this->secureJson([
+                'error' => $this->trans('redirect.admin.project_quota_exceeded', ['%max%' => (string) self::MAX_REDIRECTS_PER_PROJECT], sprintf('Project redirect quota exceeded (maximum %d redirects allowed).', self::MAX_REDIRECTS_PER_PROJECT)),
+                'code' => 'PROJECT_QUOTA_EXCEEDED',
+            ], 422);
+        }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->trans('redirect.admin.payload_too_large', [], 'Redirect payload exceeds maximum allowed size (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
@@ -174,14 +216,29 @@ class RedirectController extends AbstractController
         $this->em->persist($redirect);
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'admin_redirect_create',
+            project: $project,
+            input: ['fromPath' => $fromPath, 'toPath' => $toPath, 'httpCode' => $httpCode, 'isPattern' => $isPattern],
+            output: ['id' => $redirect->id, 'uuid' => $redirect->uuid?->toRfc4122()],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
+
         return $this->secureJson($this->serializeRedirect($redirect), 201);
     }
 
     // ── Lire ───────────────────────────────────────────────────────────────
 
     #[Route('/admin-api/{projectUuid}/redirects/{id}', name: 'admin_redirects_show', requirements: ['id' => '\d+'], methods: ['GET'])]
-    public function show(string $projectUuid, int $id): JsonResponse
+    public function show(string $projectUuid, int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         $redirect = $this->redirectRepo->find($id);
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.'), 'code' => 'REDIRECT_NOT_FOUND'], 404);
@@ -196,6 +253,10 @@ class RedirectController extends AbstractController
     #[Route('/admin-api/{projectUuid}/redirects/{id}', name: 'admin_redirects_update', requirements: ['id' => '\d+'], methods: ['PUT'])]
     public function update(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $redirect = $this->redirectRepo->find($id);
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.'), 'code' => 'REDIRECT_NOT_FOUND'], 404);
@@ -261,22 +322,52 @@ class RedirectController extends AbstractController
 
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'admin_redirect_update',
+            project: $redirect->project,
+            input: ['id' => $redirect->id, 'fromPath' => $redirect->fromPath, 'toPath' => $redirect->toPath, 'httpCode' => $redirect->httpCode],
+            output: ['id' => $redirect->id, 'uuid' => $redirect->uuid?->toRfc4122()],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
+
         return $this->secureJson($this->serializeRedirect($redirect));
     }
 
     // ── Supprimer ──────────────────────────────────────────────────────────
 
     #[Route('/admin-api/{projectUuid}/redirects/{id}', name: 'admin_redirects_delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
-    public function delete(string $projectUuid, int $id): JsonResponse
+    public function delete(string $projectUuid, int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         $redirect = $this->redirectRepo->find($id);
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.'), 'code' => 'REDIRECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $redirect->project);
 
+        $fromPath = $redirect->fromPath;
+        $toPath = $redirect->toPath;
+        $project = $redirect->project;
+
         $this->em->remove($redirect);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'admin_redirect_delete',
+            project: $project,
+            input: ['id' => $id, 'fromPath' => $fromPath, 'toPath' => $toPath],
+            output: ['deleted' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
 
         return $this->secureJson(null, 204);
     }
@@ -284,8 +375,12 @@ class RedirectController extends AbstractController
     // ── Toggle enabled ─────────────────────────────────────────────────────
 
     #[Route('/admin-api/{projectUuid}/redirects/{id}/toggle', name: 'admin_redirects_toggle', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function toggle(string $projectUuid, int $id): JsonResponse
+    public function toggle(string $projectUuid, int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         $redirect = $this->redirectRepo->find($id);
         if (!$redirect || $redirect->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('redirect.admin.redirect_not_found', [], 'Redirect not found.'), 'code' => 'REDIRECT_NOT_FOUND'], 404);
@@ -295,6 +390,17 @@ class RedirectController extends AbstractController
         $redirect->isEnabled = !$redirect->isEnabled;
         $redirect->updatedBy = $this->getUser();
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'admin_redirect_toggle',
+            project: $redirect->project,
+            input: ['id' => $redirect->id, 'isEnabled' => $redirect->isEnabled],
+            output: ['id' => $redirect->id, 'isEnabled' => $redirect->isEnabled],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
 
         return $this->secureJson($this->serializeRedirect($redirect));
     }

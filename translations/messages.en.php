@@ -3838,4 +3838,11 @@ return [
     'api_content.slug_too_long' => 'Slug exceeds maximum allowed length (%max% characters).',
     'admin_api.import.quota_exceeded' => 'Collection entry limit reached (maximum %max% entries).',
     'admin_api.import.cell_control_chars' => 'Cell contains invalid control characters in column "%column%".',
+
+    // Cycle #97: Admin Form & Redirect Security Hardening
+    'form.admin.rate_limit_exceeded' => 'Too many form requests. Please retry later.',
+    'form.admin.project_quota_exceeded' => 'Project form quota exceeded (maximum %max% forms allowed).',
+    'form.admin.export_rate_limit_exceeded' => 'Too many submissions export requests. Please retry later.',
+    'redirect.admin.rate_limit_exceeded' => 'Too many redirect requests. Please retry later.',
+    'redirect.admin.project_quota_exceeded' => 'Project redirect quota exceeded (maximum %max% redirects allowed).',
 ];

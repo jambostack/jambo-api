@@ -3840,4 +3840,11 @@ return [
     'api_content.slug_too_long' => 'يتجاوز المعرّف اللطيف الطول الأقصى المسموح به (%max% حرف).',
     'admin_api.import.quota_exceeded' => 'تم الوصول إلى الحد الأقصى للمدخلات في هذه المجموعة (الحد الأقصى %max% مدخل).',
     'admin_api.import.cell_control_chars' => 'تحتوي الخلية على أحرف تحكم غير صالحة في العمود "%column%".',
+
+    // Cycle #97: Admin Form & Redirect Security Hardening
+    'form.admin.rate_limit_exceeded' => 'عدد كبير جداً من طلبات النماذج. يرجى المحاولة مرة أخرى لاحقاً.',
+    'form.admin.project_quota_exceeded' => 'تم تجاوز حصة نماذج المشروع (الحد الأقصى المسموح به %max% نماذج).',
+    'form.admin.export_rate_limit_exceeded' => 'عدد كبير جداً من طلبات تصدير المشاركات. يرجى إعادة المحاولة لاحقاً.',
+    'redirect.admin.rate_limit_exceeded' => 'عدد كبير جداً من طلبات إعادة التوجيه. يرجى المحاولة مرة أخرى لاحقاً.',
+    'redirect.admin.project_quota_exceeded' => 'تم تجاوز حصة إعادة التوجيه للمشروع (الحد الأقصى المسموح به %max% عمليات إعادة توجيه).',
 ];

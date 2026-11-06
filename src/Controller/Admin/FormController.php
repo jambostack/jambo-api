@@ -9,15 +9,18 @@ use App\Entity\FormSubmission;
 use App\Repository\FormRepository;
 use App\Repository\FormSubmissionRepository;
 use App\Repository\ProjectRepository;
+use App\Service\AuditService;
 use App\Service\Form\FormBuilder;
 use App\Service\Security\CsvSanitizer;
 use App\Service\Security\SsrfProtectionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Uid\Uuid;
@@ -27,6 +30,10 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class FormController extends AbstractController
 {
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+    public const MAX_FORMS_PER_PROJECT = 50;
+    public const MAX_PAYLOAD_BYTES = 524288; // 512 KB
+    public const MAX_EXPORT_RECORDS = 50000;
+
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options'        => 'DENY',
@@ -44,8 +51,25 @@ class FormController extends AbstractController
         private readonly ?CsvSanitizer $csvSanitizer = null,
         ?SsrfProtectionService $ssrfProtection = null,
         private readonly ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.admin_api_limiter')]
+        private readonly ?RateLimiterFactory $adminApiLimiter = null,
+        private readonly ?AuditService $auditService = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
+    }
+
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->adminApiLimiter !== null) {
+            $identifier = $this->getUser()?->getUserIdentifier() ?: ($request->getClientIp() ?: '127.0.0.1');
+            if (false === $this->adminApiLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->secureJson([
+                    'error' => $this->trans('form.admin.rate_limit_exceeded', [], 'Too many form requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429);
+            }
+        }
+        return null;
     }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -64,8 +88,12 @@ class FormController extends AbstractController
     // ── Liste des formulaires ──────────────────────────────────────────────
 
     #[Route('/admin-api/{projectUuid}/forms', name: 'admin_forms_list', methods: ['GET'])]
-    public function index(string $projectUuid): JsonResponse
+    public function index(string $projectUuid, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->secureJson(['error' => $this->trans('form.admin.project_not_found', [], 'Project not found.'), 'code' => 'PROJECT_NOT_FOUND'], 404);
@@ -94,13 +122,25 @@ class FormController extends AbstractController
     #[Route('/admin-api/{projectUuid}/forms', name: 'admin_forms_create', methods: ['POST'])]
     public function create(string $projectUuid, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $project = $this->resolveProject($projectUuid);
         if (!$project) {
             return $this->secureJson(['error' => $this->trans('form.admin.project_not_found', [], 'Project not found.'), 'code' => 'PROJECT_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $project);
 
-        if (strlen($request->getContent()) > 524288) {
+        $currentCount = $this->formRepo->count(['project' => $project]);
+        if ($currentCount >= self::MAX_FORMS_PER_PROJECT) {
+            return $this->secureJson([
+                'error' => $this->trans('form.admin.project_quota_exceeded', ['%max%' => (string) self::MAX_FORMS_PER_PROJECT], sprintf('Project form quota exceeded (maximum %d forms allowed).', self::MAX_FORMS_PER_PROJECT)),
+                'code' => 'PROJECT_QUOTA_EXCEEDED',
+            ], 422);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->trans('form.admin.payload_too_large', [], 'Form payload exceeds maximum size limit (512 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
@@ -182,14 +222,29 @@ class FormController extends AbstractController
         $this->em->persist($form);
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'admin_form_create',
+            project: $project,
+            input: ['name' => $name, 'slug' => $slug, 'fields_count' => count($fields)],
+            output: ['id' => $form->id, 'slug' => $slug],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
+
         return $this->secureJson($this->serializeForm($form), 201);
     }
 
     // ── Lire un formulaire ─────────────────────────────────────────────────
 
     #[Route('/admin-api/{projectUuid}/forms/{id}', name: 'admin_forms_show', requirements: ['id' => '\d+'], methods: ['GET'])]
-    public function show(string $projectUuid, int $id): JsonResponse
+    public function show(string $projectUuid, int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
@@ -204,13 +259,17 @@ class FormController extends AbstractController
     #[Route('/admin-api/{projectUuid}/forms/{id}', name: 'admin_forms_update', requirements: ['id' => '\d+'], methods: ['PUT'])]
     public function update(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $form->project);
 
-        if (strlen($request->getContent()) > 524288) {
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->trans('form.admin.payload_too_large', [], 'Form payload exceeds maximum size limit (512 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
         }
 
@@ -289,25 +348,55 @@ class FormController extends AbstractController
 
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'admin_form_update',
+            project: $form->project,
+            input: ['id' => $form->id, 'modified_keys' => array_keys($data)],
+            output: ['id' => $form->id, 'slug' => $form->slug],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
+
         return $this->secureJson($this->serializeForm($form));
     }
 
     // ── Supprimer un formulaire ────────────────────────────────────────────
 
     #[Route('/admin-api/{projectUuid}/forms/{id}', name: 'admin_forms_delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
-    public function delete(string $projectUuid, int $id): JsonResponse
+    public function delete(string $projectUuid, int $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.manage', $form->project);
 
+        $formName = $form->name;
+        $formSlug = $form->slug;
+        $project = $form->project;
+
         // Supprimer d'abord les soumissions en une requête directe (évite OOM)
         $this->submissionRepo->deleteByForm($form);
 
         $this->em->remove($form);
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'admin_form_delete',
+            project: $project,
+            input: ['id' => $id, 'slug' => $formSlug, 'name' => $formName],
+            output: ['deleted' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
 
         return $this->secureJson(null, 204);
     }
@@ -317,6 +406,10 @@ class FormController extends AbstractController
     #[Route('/admin-api/{projectUuid}/forms/{id}/submissions', name: 'admin_forms_submissions', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function submissions(string $projectUuid, int $id, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
@@ -354,11 +447,26 @@ class FormController extends AbstractController
     #[Route('/admin-api/{projectUuid}/forms/{id}/submissions/export-csv', name: 'admin_forms_submissions_export_csv', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function exportSubmissionsCsv(string $projectUuid, int $id, Request $request): Response
     {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
         }
         $this->denyAccessUnlessGranted('project.view', $form->project);
+
+        $this->auditService?->log(
+            toolName: 'admin_form_submissions_export',
+            project: $form->project,
+            input: ['id' => $form->id, 'slug' => $form->slug, 'spam_filter' => $request->query->get('spam')],
+            output: ['exported' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
 
         $spamFilter = $request->query->get('spam'); // 'spam', 'ham', or omit for all
         if ($spamFilter !== null && !in_array($spamFilter, ['spam', 'ham'], true)) {
@@ -461,8 +569,12 @@ class FormController extends AbstractController
     // ── Consulter une soumission ───────────────────────────────────────────
 
     #[Route('/admin-api/{projectUuid}/forms/{id}/submissions/{submissionId}', name: 'admin_forms_submission_show', requirements: ['id' => '\d+', 'submissionId' => '\d+'], methods: ['GET'])]
-    public function showSubmission(string $projectUuid, int $id, int $submissionId): JsonResponse
+    public function showSubmission(string $projectUuid, int $id, int $submissionId, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
@@ -489,8 +601,12 @@ class FormController extends AbstractController
     // ── Supprimer une soumission ───────────────────────────────────────────
 
     #[Route('/admin-api/{projectUuid}/forms/{id}/submissions/{submissionId}', name: 'admin_forms_submission_delete', requirements: ['id' => '\d+', 'submissionId' => '\d+'], methods: ['DELETE'])]
-    public function deleteSubmission(string $projectUuid, int $id, int $submissionId): JsonResponse
+    public function deleteSubmission(string $projectUuid, int $id, int $submissionId, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
@@ -505,6 +621,17 @@ class FormController extends AbstractController
         $this->em->remove($submission);
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'admin_form_submission_delete',
+            project: $form->project,
+            input: ['form_id' => $form->id, 'submission_id' => $submissionId],
+            output: ['deleted' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
+
         return $this->secureJson(null, 204);
     }
 
@@ -513,6 +640,10 @@ class FormController extends AbstractController
     #[Route('/admin-api/{projectUuid}/forms/{id}/submissions/{submissionId}', name: 'admin_forms_submission_update', requirements: ['id' => '\d+', 'submissionId' => '\d+'], methods: ['PATCH'])]
     public function updateSubmission(string $projectUuid, int $id, int $submissionId, Request $request): JsonResponse
     {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
         $form = $this->formRepo->find($id);
         if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
             return $this->secureJson(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
@@ -546,6 +677,17 @@ class FormController extends AbstractController
         }
 
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'admin_form_submission_update',
+            project: $form->project,
+            input: ['form_id' => $form->id, 'submission_id' => $submissionId, 'isRead' => $submission->isRead, 'isSpam' => $submission->isSpam],
+            output: ['id' => $submission->id, 'success' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
 
         return $this->secureJson([
             'id' => $submission->id,

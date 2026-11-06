@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.167] — 2026-11-06
+
+### Admin Form & Redirect Security Hardening (Cycle #97)
+- **Admin Form Security Hardening (`Admin\FormController`)**:
+  - Enforced rate limiting via `limiter.admin_api_limiter` across all form management endpoints (`index`, `create`, `show`, `update`, `delete`, `submissions`, `exportSubmissionsCsv`, `showSubmission`, `deleteSubmission`, `updateSubmission`).
+  - Implemented project form quota limit (`MAX_FORMS_PER_PROJECT = 50`) preventing arbitrary form flooding and resource exhaustion.
+  - Added comprehensive audit logging via `AuditService` for form creation (`admin_form_create`), form updates (`admin_form_update`), form deletions (`admin_form_delete`), submission exports (`admin_form_submissions_export`), submission updates (`admin_form_submission_update`), and submission deletions (`admin_form_submission_delete`).
+  - Enforced strict security headers (`Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`).
+- **Admin Redirect Security Hardening (`Admin\RedirectController`)**:
+  - Enforced rate limiting via `limiter.admin_api_limiter` on all redirect endpoints (`index`, `chains`, `create`, `show`, `update`, `delete`, `toggle`).
+  - Added project redirect quota bounds (`MAX_REDIRECTS_PER_PROJECT = 500`) preventing memory saturation and infinite loops during graph chain detection.
+  - Added audit logging via `AuditService` for redirect creation (`admin_redirect_create`), updates (`admin_redirect_update`), toggling (`admin_redirect_toggle`), and deletion (`admin_redirect_delete`).
+  - Enforced strict security headers (`Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`).
+- **I18n Translation Completeness & Testing**:
+  - Added 5 new translation keys across English, French, Spanish, and Arabic (`form.admin.rate_limit_exceeded`, `form.admin.project_quota_exceeded`, `form.admin.export_rate_limit_exceeded`, `redirect.admin.rate_limit_exceeded`, `redirect.admin.project_quota_exceeded`) — 3,525 keys per language, 100% symmetrical.
+  - Added dedicated test suite `Cycle97AdminFormAndRedirectSecurityHardeningTest` (7 tests, 98 assertions, 100% pass). All 33 Form & Redirect tests pass without failures.
+
 ## [1.26.166] — 2026-11-06
 
 ### Content API & AdminApi CSV Import Security Hardening (Cycle #96)
