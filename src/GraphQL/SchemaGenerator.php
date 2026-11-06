@@ -184,7 +184,9 @@ class SchemaGenerator
                 'args' => [
                     'locale' => ['type' => Type::string()],
                     'status' => ['type' => Type::string()],
-                    'limit' => ['type' => Type::int(), 'defaultValue' => 50],
+                    'search' => ['type' => Type::string()],
+                    'sort'   => ['type' => Type::string()],
+                    'limit'  => ['type' => Type::int(), 'defaultValue' => 50],
                     'offset' => ['type' => Type::int(), 'defaultValue' => 0],
                 ],
                 'complexity' => function (int $childrenComplexity, array $args): int {
@@ -300,10 +302,16 @@ class SchemaGenerator
         $status = isset($args['status']) && is_string($args['status']) && preg_match('/^[a-z0-9_-]{1,50}$/i', $args['status'])
             ? $args['status']
             : null;
+        $search = isset($args['search']) && is_string($args['search']) ? mb_substr(trim($args['search']), 0, 100) : null;
+        $sortArg = isset($args['sort']) && is_string($args['sort']) ? trim($args['sort']) : 'createdAt_DESC';
+        $sort = match ($sortArg) {
+            'createdAt_ASC', 'ASC' => 'ASC',
+            default => 'DESC',
+        };
 
         $page = (int) floor($offset / $limit) + 1;
         $entries = $this->entryRepo->findByCollectionPaginated(
-            $collection, $page, $limit, $locale, $status
+            $collection, $page, $limit, $locale, $status, $search !== '' ? $search : null, $sort
         );
 
         return array_map(fn($entry) => $this->formatter->formatEntry($entry), $entries);
@@ -345,7 +353,11 @@ class SchemaGenerator
         }
 
         foreach ($input as $fieldSlug => $value) {
-            $field = $this->fieldHelper->findField($collection, (string) $fieldSlug);
+            $cleanSlug = (string) $fieldSlug;
+            $field = $this->fieldHelper->findField($collection, $cleanSlug);
+            if (!$field && str_starts_with($cleanSlug, 'field_')) {
+                $field = $this->fieldHelper->findField($collection, substr($cleanSlug, 6));
+            }
             if (!$field) continue;
 
             $errors = $this->fieldHelper->validateValue($field->type, $value);
@@ -401,7 +413,11 @@ class SchemaGenerator
         }
 
         foreach ($input as $fieldSlug => $value) {
-            $field = $this->fieldHelper->findField($collection, (string) $fieldSlug);
+            $cleanSlug = (string) $fieldSlug;
+            $field = $this->fieldHelper->findField($collection, $cleanSlug);
+            if (!$field && str_starts_with($cleanSlug, 'field_')) {
+                $field = $this->fieldHelper->findField($collection, substr($cleanSlug, 6));
+            }
             if (!$field) continue;
 
             $errors = $this->fieldHelper->validateValue($field->type, $value);

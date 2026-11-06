@@ -30,7 +30,7 @@ class EndUserAdminController extends AbstractController
 {
     use ProjectAwareControllerTrait;
 
-    public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    public const MAX_PAYLOAD_BYTES = 131072; // 128 KB
     public const MAX_EMAIL_LENGTH = 255;
     public const MAX_USERNAME_LENGTH = 100;
 
@@ -118,7 +118,7 @@ class EndUserAdminController extends AbstractController
     {
         if (strlen((string) $request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson([
-                'error' => $this->trans('enduser.admin.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'),
+                'error' => $this->trans('enduser.admin.payload_too_large', [], 'Payload exceeds maximum size limit (128 KB).'),
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
         }

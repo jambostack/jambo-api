@@ -145,7 +145,11 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
         }
 
         // Cloisonnement strict des portées selon la méthode HTTP via ApiTokenChecker
-        if (!$this->tokenChecker->isAllowedForMethod($apiToken, $request->getMethod())) {
+        // Pour les endpoints GraphQL, les requêtes POST peuvent transporter des lectures (queries) ou mutations ;
+        // la vérification fine des droits de mutation est déléguée au GraphQLController.
+        $path = $request->getPathInfo();
+        $methodToCheck = (str_ends_with($path, '/graphql') && $request->isMethod('POST')) ? 'GET' : $request->getMethod();
+        if (!$this->tokenChecker->isAllowedForMethod($apiToken, $methodToCheck)) {
             $event->setResponse($this->secureJson([
                 'error' => $this->trans('project.insufficient_token_abilities', [], 'Insufficient token abilities.'),
                 'code' => 'INSUFFICIENT_ABILITIES',
