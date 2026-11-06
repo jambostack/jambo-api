@@ -58,7 +58,7 @@ class EavDataFormatterService
      *
      * @param string[] $uuids
      */
-    private function expandMediaUuids(array $uuids): mixed
+    private function expandMediaUuids(array $uuids, ?\App\Entity\Project $project = null): mixed
     {
         if ($this->mediaRepository === null || $uuids === []) {
             return null;
@@ -71,7 +71,11 @@ class EavDataFormatterService
             } catch (\Throwable) {
                 continue;
             }
-            $media = $this->mediaRepository->findOneBy(['uuid' => $uuidObj, 'deletedAt' => null]);
+            $criteria = ['uuid' => $uuidObj, 'deletedAt' => null];
+            if ($project !== null) {
+                $criteria['project'] = $project;
+            }
+            $media = $this->mediaRepository->findOneBy($criteria);
             if ($media !== null) {
                 $results[] = $this->serializeMedia($media);
             }
@@ -140,7 +144,7 @@ class EavDataFormatterService
                 'json', 'array', 'repeater',
                 'relation', 'enumeration', 'tags'                        => $fieldValue->jsonValue,
                 'media'                                                  => is_array($fieldValue->jsonValue) && $fieldValue->jsonValue !== []
-                                                                              ? $this->expandMediaUuids($fieldValue->jsonValue)
+                                                                              ? $this->expandMediaUuids($fieldValue->jsonValue, $entry->project)
                                                                               : null,
                 default                                                  => $fieldValue->textValue,
             };
@@ -171,7 +175,7 @@ class EavDataFormatterService
                         'datetime'                                               => $val->datetimeValue?->format(\DateTimeInterface::ATOM),
                         'json', 'array', 'repeater', 'relation', 'enumeration', 'tags' => $val->jsonValue,
                         'media'                                                  => is_array($val->jsonValue) && $val->jsonValue !== []
-                            ? $this->expandMediaUuids($val->jsonValue)
+                            ? $this->expandMediaUuids($val->jsonValue, $entry->project)
                             : null,
                         default                                                  => $val->textValue,
                     };

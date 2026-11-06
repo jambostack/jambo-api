@@ -146,15 +146,26 @@ class EnsureProjectMemberSubscriber implements EventSubscriberInterface
 
         // Cloisonnement strict des portées selon la méthode HTTP via ApiTokenChecker
         // Pour les endpoints GraphQL, les requêtes POST peuvent transporter des lectures (queries) ou mutations ;
-        // la vérification fine des droits de mutation est déléguée au GraphQLController.
+        // la vérification fine des droits de query et mutation est déléguée au GraphQLController.
         $path = $request->getPathInfo();
-        $methodToCheck = (str_ends_with($path, '/graphql') && $request->isMethod('POST')) ? 'GET' : $request->getMethod();
-        if (!$this->tokenChecker->isAllowedForMethod($apiToken, $methodToCheck)) {
-            $event->setResponse($this->secureJson([
-                'error' => $this->trans('project.insufficient_token_abilities', [], 'Insufficient token abilities.'),
-                'code' => 'INSUFFICIENT_ABILITIES',
-            ], 403));
-            return;
+        $isGraphQL = str_ends_with($path, '/graphql');
+        if ($isGraphQL) {
+            $hasAnyAbility = $apiToken->can('read') || $apiToken->can('write') || $apiToken->can('create') || $apiToken->can('update') || $apiToken->can('delete') || $apiToken->can('*');
+            if (!$hasAnyAbility) {
+                $event->setResponse($this->secureJson([
+                    'error' => $this->trans('project.insufficient_token_abilities', [], 'Insufficient token abilities.'),
+                    'code' => 'INSUFFICIENT_ABILITIES',
+                ], 403));
+                return;
+            }
+        } else {
+            if (!$this->tokenChecker->isAllowedForMethod($apiToken, $request->getMethod())) {
+                $event->setResponse($this->secureJson([
+                    'error' => $this->trans('project.insufficient_token_abilities', [], 'Insufficient token abilities.'),
+                    'code' => 'INSUFFICIENT_ABILITIES',
+                ], 403));
+                return;
+            }
         }
 
         $request->attributes->set('_project', $apiToken->project);

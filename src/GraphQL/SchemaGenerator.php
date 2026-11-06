@@ -7,12 +7,16 @@ use App\Entity\Field;
 use App\Entity\Project;
 use App\Repository\CollectionRepository;
 use App\Repository\ContentEntryRepository;
+use App\Repository\EndUserRepository;
+use App\Repository\MediaRepository;
 use App\Service\EavDataFormatterService;
 use App\Service\EavFieldHelperService;
 use Doctrine\ORM\EntityManagerInterface;
+use GraphQL\Error\UserError;
 use GraphQL\Type\Definition\InputObjectType;
 use GraphQL\Type\Definition\ObjectType;
 use GraphQL\Type\Definition\Type;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class SchemaGenerator
 {
@@ -26,7 +30,21 @@ class SchemaGenerator
         private EavDataFormatterService $formatter,
         private EavFieldHelperService $fieldHelper,
         private readonly string $projectDir = '',
+        private ?MediaRepository $mediaRepo = null,
+        private ?EndUserRepository $endUserRepo = null,
+        private ?TranslatorInterface $translator = null,
     ) {}
+
+    private function trans(string $key, string $default, array $parameters = []): string
+    {
+        if ($this->translator !== null) {
+            $translated = $this->translator->trans($key, $parameters, 'messages');
+            if ($translated !== $key) {
+                return $translated;
+            }
+        }
+        return strtr($default, $parameters);
+    }
 
     /**
      * Build a dynamic GraphQL schema for the given project.
@@ -226,7 +244,7 @@ class SchemaGenerator
                 'args' => [
                     'input' => ['type' => Type::nonNull($inputType)],
                 ],
-                'resolve' => fn($root, array $args) => $this->resolveCreate($collection, $args['input']),
+                'resolve' => fn($root, array $args, $context = null) => $this->resolveCreate($collection, $args['input'], $context),
             ];
 
             $fields[$updateName] = [
@@ -235,7 +253,7 @@ class SchemaGenerator
                     'uuid' => ['type' => Type::nonNull(Type::string())],
                     'input' => ['type' => Type::nonNull($inputType)],
                 ],
-                'resolve' => fn($root, array $args) => $this->resolveUpdate($collection, $args['uuid'], $args['input']),
+                'resolve' => fn($root, array $args, $context = null) => $this->resolveUpdate($collection, $args['uuid'], $args['input'], $context),
             ];
 
             $fields[$deleteName] = [
@@ -243,7 +261,7 @@ class SchemaGenerator
                 'args' => [
                     'uuid' => ['type' => Type::nonNull(Type::string())],
                 ],
-                'resolve' => fn($root, array $args) => $this->resolveDelete($collection, $args['uuid']),
+                'resolve' => fn($root, array $args, $context = null) => $this->resolveDelete($collection, $args['uuid'], $context),
             ];
         }
 
@@ -285,7 +303,7 @@ class SchemaGenerator
         $entry = $this->em->getRepository(\App\Entity\ContentEntry::class)
             ->findOneBy(['collection' => $collection, 'uuid' => $uuid]);
 
-        if (!$entry || $entry->isDeleted()) {
+        if (!$entry || $entry->isDeleted() || $entry->project?->id !== $collection->project?->id) {
             return null;
         }
 
@@ -317,11 +335,20 @@ class SchemaGenerator
         return array_map(fn($entry) => $this->formatter->formatEntry($entry), $entries);
     }
 
-    private function resolveCreate(Collection $collection, array $input): array
+    private function resolveCreate(Collection $collection, array $input, mixed $context = null): array
     {
+        $project = $collection->project;
+
+        // Validation IDOR / isolation multi-tenant du projet
+        if (is_array($context) && isset($context['project']) && $context['project'] instanceof Project) {
+            if ($context['project']->id !== $project->id) {
+                throw new UserError($this->trans('graphql.cross_project_relation_forbidden', 'Accès inter-projet non autorisé.'));
+            }
+        }
+
         $entry = new \App\Entity\ContentEntry();
         $entry->collection = $collection;
-        $entry->project = $collection->project;
+        $entry->project = $project;
 
         $locale = $input['locale'] ?? $collection->project->defaultLocale ?? 'en';
         if (!is_string($locale) || !preg_match('/^[a-zA-Z]{2,5}(-[a-zA-Z0-9]{2,5})?$/', $locale)) {
@@ -342,6 +369,16 @@ class SchemaGenerator
         }
         $entry->status = $status;
 
+        $baseSlug = null;
+        if (isset($input['slug']) && is_string($input['slug']) && trim($input['slug']) !== '') {
+            $baseSlug = trim($input['slug']);
+        } elseif (isset($input['title']) && is_string($input['title']) && trim($input['title']) !== '') {
+            $baseSlug = trim($input['title']);
+        } else {
+            $baseSlug = 'entry-' . bin2hex(random_bytes(3));
+        }
+        $entry->slug = $this->ensureUniqueSlug($collection, $baseSlug, $entry->locale);
+
         $entry->createdAt = new \DateTimeImmutable();
         $entry->updatedAt = new \DateTimeImmutable();
 
@@ -352,6 +389,27 @@ class SchemaGenerator
             $input = array_slice($input, 0, 200, true);
         }
 
+        // Vérification des champs obligatoires (isRequired)
+        /** @var Field[] $entityFields */
+        $entityFields = $collection->fields
+            ->filter(fn(Field $f) => !$f->isDeleted())
+            ->toArray();
+
+        foreach ($entityFields as $f) {
+            if ($f->isRequired) {
+                $val = $input[$f->slug] ?? $input['field_' . $f->slug] ?? null;
+                if ($val === null || $val === '' || $val === []) {
+                    throw new UserError(
+                        $this->trans(
+                            'graphql.field_required',
+                            sprintf('Le champ "%s" est requis.', $f->name),
+                            ['%field%' => $f->name]
+                        )
+                    );
+                }
+            }
+        }
+
         foreach ($input as $fieldSlug => $value) {
             $cleanSlug = (string) $fieldSlug;
             $field = $this->fieldHelper->findField($collection, $cleanSlug);
@@ -360,8 +418,13 @@ class SchemaGenerator
             }
             if (!$field) continue;
 
-            $errors = $this->fieldHelper->validateValue($field->type, $value);
-            if (!empty($errors)) continue;
+            $errors = $this->fieldHelper->validateFieldValue($field, $value);
+            if (!empty($errors)) {
+                throw new UserError(implode(' ', $errors));
+            }
+
+            // Validation stricte anti-IDOR et intégrité relationnelle multi-tenant
+            $this->validateTenantFieldReference($field, $value, $project);
 
             $cfv = new \App\Entity\ContentFieldValue();
             $cfv->field = $field;
@@ -377,16 +440,25 @@ class SchemaGenerator
         return $this->formatter->formatEntry($entry);
     }
 
-    private function resolveUpdate(Collection $collection, string $uuid, array $input): ?array
+    private function resolveUpdate(Collection $collection, string $uuid, array $input, mixed $context = null): ?array
     {
         if (!$this->isValidUuid($uuid)) {
             return null;
         }
 
+        $project = $collection->project;
+
+        // Validation IDOR / isolation multi-tenant du projet
+        if (is_array($context) && isset($context['project']) && $context['project'] instanceof Project) {
+            if ($context['project']->id !== $project->id) {
+                throw new UserError($this->trans('graphql.cross_project_relation_forbidden', 'Accès inter-projet non autorisé.'));
+            }
+        }
+
         $entry = $this->em->getRepository(\App\Entity\ContentEntry::class)
             ->findOneBy(['collection' => $collection, 'uuid' => $uuid]);
 
-        if (!$entry || $entry->isDeleted()) {
+        if (!$entry || $entry->isDeleted() || $entry->project?->id !== $project->id) {
             return null;
         }
 
@@ -420,8 +492,13 @@ class SchemaGenerator
             }
             if (!$field) continue;
 
-            $errors = $this->fieldHelper->validateValue($field->type, $value);
-            if (!empty($errors)) continue;
+            $errors = $this->fieldHelper->validateFieldValue($field, $value, $entry);
+            if (!empty($errors)) {
+                throw new UserError(implode(' ', $errors));
+            }
+
+            // Validation stricte anti-IDOR et intégrité relationnelle multi-tenant
+            $this->validateTenantFieldReference($field, $value, $project);
 
             $cfv = $entry->fieldValues->findFirst(
                 fn(int $key, \App\Entity\ContentFieldValue $v) => $v->field?->slug === $fieldSlug
@@ -444,16 +521,25 @@ class SchemaGenerator
         return $this->formatter->formatEntry($entry);
     }
 
-    private function resolveDelete(Collection $collection, string $uuid): bool
+    private function resolveDelete(Collection $collection, string $uuid, mixed $context = null): bool
     {
         if (!$this->isValidUuid($uuid)) {
             return false;
         }
 
+        $project = $collection->project;
+
+        // Validation IDOR / isolation multi-tenant du projet
+        if (is_array($context) && isset($context['project']) && $context['project'] instanceof Project) {
+            if ($context['project']->id !== $project->id) {
+                return false;
+            }
+        }
+
         $entry = $this->em->getRepository(\App\Entity\ContentEntry::class)
             ->findOneBy(['collection' => $collection, 'uuid' => $uuid]);
 
-        if (!$entry || $entry->isDeleted()) {
+        if (!$entry || $entry->isDeleted() || $entry->project?->id !== $project->id) {
             return false;
         }
 
@@ -461,6 +547,216 @@ class SchemaGenerator
         $this->em->flush();
 
         return true;
+    }
+
+    private function validateTenantFieldReference(Field $field, mixed $value, Project $project): void
+    {
+        if ($value === null || $value === '' || $value === []) {
+            return;
+        }
+
+        if ($field->type === 'media') {
+            $uuids = $this->extractCandidateUuids($value);
+            if (!empty($uuids)) {
+                $mediaRepo = $this->mediaRepo ?? $this->em->getRepository(\App\Entity\Media::class);
+                if (method_exists($mediaRepo, 'findProjectMediaUuids')) {
+                    $validUuids = $mediaRepo->findProjectMediaUuids($project, $uuids);
+                    $diff = array_diff($uuids, $validUuids);
+                    if (!empty($diff)) {
+                        throw new UserError(
+                            $this->trans(
+                                'graphql.cross_project_media_forbidden',
+                                sprintf('Média introuvable ou n\'appartenant pas à ce projet pour le champ "%s".', $field->name),
+                                ['%field%' => $field->name]
+                            )
+                        );
+                    }
+                }
+            }
+            return;
+        }
+
+        if ($field->type === 'relation') {
+            $options = $field->options ?? [];
+            $targetColId = $options['relation']['collection'] ?? null;
+            $targetIsEndUsers = ($options['targetCollection'] ?? null) === 'end_users';
+
+            if ($targetIsEndUsers) {
+                $uuids = $this->extractCandidateUuids($value);
+                if (!empty($uuids)) {
+                    $endUserRepo = $this->endUserRepo ?? $this->em->getRepository(\App\Entity\EndUser::class);
+                    if (method_exists($endUserRepo, 'findProjectEndUserUuids')) {
+                        $validUuids = $endUserRepo->findProjectEndUserUuids($project, $uuids);
+                        $diff = array_diff($uuids, $validUuids);
+                        if (!empty($diff)) {
+                            throw new UserError(
+                                $this->trans(
+                                    'graphql.cross_project_relation_forbidden',
+                                    sprintf('Référence de relation introuvable ou n\'appartenant pas à ce projet pour le champ "%s".', $field->name),
+                                    ['%field%' => $field->name]
+                                )
+                            );
+                        }
+                    }
+                }
+                $intIds = $this->extractCandidateIntIds($value);
+                if (!empty($intIds)) {
+                    $endUserRepo = $this->endUserRepo ?? $this->em->getRepository(\App\Entity\EndUser::class);
+                    foreach ($intIds as $intId) {
+                        $found = $endUserRepo->findOneBy(['id' => $intId, 'project' => $project]);
+                        if ($found === null) {
+                            throw new UserError(
+                                $this->trans(
+                                    'graphql.cross_project_relation_forbidden',
+                                    sprintf('Référence de relation introuvable ou n\'appartenant pas à ce projet pour le champ "%s".', $field->name),
+                                    ['%field%' => $field->name]
+                                )
+                            );
+                        }
+                    }
+                }
+                return;
+            }
+
+            // Regular collection relation
+            $targetCol = null;
+            if ($targetColId !== null && is_numeric($targetColId)) {
+                $colRepo = $this->em->getRepository(Collection::class);
+                $targetCol = $colRepo->findOneBy([
+                    'id' => (int) $targetColId,
+                    'project' => $project,
+                    'deletedAt' => null,
+                ]);
+                if ($targetCol === null) {
+                    throw new UserError(
+                        $this->trans(
+                            'graphql.cross_project_relation_forbidden',
+                            sprintf('Collection cible introuvable ou non autorisée pour le champ "%s".', $field->name),
+                            ['%field%' => $field->name]
+                        )
+                    );
+                }
+            }
+
+            $uuids = $this->extractCandidateUuids($value);
+            if (!empty($uuids)) {
+                $validUuids = $this->entryRepo->findProjectEntryUuids($project, $uuids);
+                $diff = array_diff($uuids, $validUuids);
+                if (!empty($diff)) {
+                    throw new UserError(
+                        $this->trans(
+                            'graphql.cross_project_relation_forbidden',
+                            sprintf('Référence de relation introuvable ou n\'appartenant pas à ce projet pour le champ "%s".', $field->name),
+                            ['%field%' => $field->name]
+                        )
+                    );
+                }
+                if ($targetCol !== null) {
+                    foreach ($uuids as $uuidStr) {
+                        $entry = $this->entryRepo->findOneBy([
+                            'uuid' => \Symfony\Component\Uid\Uuid::fromString($uuidStr),
+                            'collection' => $targetCol,
+                            'deletedAt' => null,
+                        ]);
+                        if ($entry === null) {
+                            throw new UserError(
+                                $this->trans(
+                                    'graphql.cross_project_relation_forbidden',
+                                    sprintf('Référence de relation n\'appartenant pas à la collection cible pour le champ "%s".', $field->name),
+                                    ['%field%' => $field->name]
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+
+            $intIds = $this->extractCandidateIntIds($value);
+            if (!empty($intIds)) {
+                foreach ($intIds as $intId) {
+                    $criteria = ['id' => $intId, 'project' => $project, 'deletedAt' => null];
+                    if ($targetCol !== null) {
+                        $criteria['collection'] = $targetCol;
+                    }
+                    $found = $this->entryRepo->findOneBy($criteria);
+                    if ($found === null) {
+                        throw new UserError(
+                            $this->trans(
+                                'graphql.cross_project_relation_forbidden',
+                                sprintf('Référence de relation introuvable ou n\'appartenant pas à ce projet pour le champ "%s".', $field->name),
+                                ['%field%' => $field->name]
+                            )
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    private function extractCandidateUuids(mixed $value): array
+    {
+        $items = is_array($value) ? $value : [$value];
+        $uuids = [];
+        foreach ($items as $item) {
+            $raw = is_array($item) ? ($item['uuid'] ?? $item['id'] ?? null) : $item;
+            if (is_string($raw) && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $raw)) {
+                $uuids[] = strtolower($raw);
+            }
+        }
+        return array_values(array_unique($uuids));
+    }
+
+    private function extractCandidateIntIds(mixed $value): array
+    {
+        $items = is_array($value) ? $value : [$value];
+        $ids = [];
+        foreach ($items as $item) {
+            $raw = is_array($item) ? ($item['id'] ?? null) : $item;
+            if ($raw !== null && is_numeric($raw) && !is_float($raw + 0)) {
+                $ids[] = (int) $raw;
+            }
+        }
+        return array_values(array_unique($ids));
+    }
+
+    private function ensureUniqueSlug(Collection $collection, string $baseSlug, string $locale, ?int $excludeEntryId = null): string
+    {
+        $clean = preg_replace('/[^a-zA-Z0-9_-]/', '-', strtolower(trim($baseSlug)));
+        $clean = trim((string) preg_replace('/-+/', '-', (string) $clean), '-');
+        if ($clean === '') {
+            $clean = 'entry';
+        }
+        $base = substr($clean, 0, 50);
+        $slug = $base;
+        $counter = 1;
+
+        while (true) {
+            $qb = $this->em->createQueryBuilder();
+            $qb->select('COUNT(e.id)')
+               ->from(\App\Entity\ContentEntry::class, 'e')
+               ->where('e.collection = :collection')
+               ->andWhere('e.slug = :slug')
+               ->andWhere('e.locale = :locale')
+               ->setParameter('collection', $collection)
+               ->setParameter('slug', $slug)
+               ->setParameter('locale', $locale);
+
+            if ($excludeEntryId !== null) {
+                $qb->andWhere('e.id != :excludeId')
+                   ->setParameter('excludeId', $excludeEntryId);
+            }
+
+            if ((int) $qb->getQuery()->getSingleScalarResult() === 0) {
+                return $slug;
+            }
+
+            $suffix = '-' . $counter;
+            $slug = substr($base, 0, max(1, 50 - strlen($suffix))) . $suffix;
+            $counter++;
+            if ($counter > 500) {
+                return $base . '-' . bin2hex(random_bytes(4));
+            }
+        }
     }
 
     private function typeName(Collection $collection): string

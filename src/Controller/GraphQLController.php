@@ -428,38 +428,70 @@ class GraphQLController extends AbstractController
                 ], 405, $rateHeaders);
             }
 
-            // Vérification des droits sur ApiToken
-            if ($apiToken !== null && !$apiToken->can('write') && !$apiToken->can('create') && !$apiToken->can('*')) {
-                $this->auditService?->log(
-                    toolName: 'graphql_mutation_denied',
-                    project: $project,
-                    input: ['query' => mb_substr($query, 0, 500)],
-                    output: null,
-                    status: 'failed',
-                    errorMessage: 'Insufficient permissions for GraphQL mutation',
-                    createdBy: $identifier,
-                    source: 'graphql',
-                );
-                return $this->secureJson([
-                    'errors' => [['message' => $this->trans('graphql.mutation_permission_denied', 'Permissions insuffisantes pour exécuter des mutations GraphQL.')]],
-                ], 403, $rateHeaders);
+            // Vérification fine des droits par mutation (create / update / delete)
+            $mutationFields = $this->extractMutationFieldNames($document);
+            if (empty($mutationFields)) {
+                $mutationFields = ['generic'];
             }
 
-            // Vérification des droits sur Utilisateur session
-            if ($user !== null && !$this->isGranted('ROLE_SUPER_ADMIN') && !$this->isGranted('project.manage', $project) && !$this->isGranted('content.create', $project) && !$this->isGranted('content.update', $project)) {
-                $this->auditService?->log(
-                    toolName: 'graphql_mutation_denied',
-                    project: $project,
-                    input: ['query' => mb_substr($query, 0, 500)],
-                    output: null,
-                    status: 'failed',
-                    errorMessage: 'Insufficient permissions for GraphQL mutation',
-                    createdBy: $identifier,
-                    source: 'graphql',
-                );
-                return $this->secureJson([
-                    'errors' => [['message' => $this->trans('graphql.mutation_permission_denied', 'Permissions insuffisantes pour exécuter des mutations GraphQL.')]],
-                ], 403, $rateHeaders);
+            foreach ($mutationFields as $fieldName) {
+                $action = match (true) {
+                    str_starts_with($fieldName, 'create') => 'create',
+                    str_starts_with($fieldName, 'update') => 'update',
+                    str_starts_with($fieldName, 'delete') => 'delete',
+                    default => 'write',
+                };
+
+                $authorized = false;
+                if ($apiToken !== null) {
+                    $authorized = match ($action) {
+                        'create' => $apiToken->can('create') || $apiToken->can('write') || $apiToken->can('*'),
+                        'update' => $apiToken->can('update') || $apiToken->can('write') || $apiToken->can('*'),
+                        'delete' => $apiToken->can('delete') || $apiToken->can('write') || $apiToken->can('*'),
+                        default  => $apiToken->can('write') || $apiToken->can('*'),
+                    };
+                } elseif ($user !== null) {
+                    if ($this->isGranted('ROLE_SUPER_ADMIN') || $this->isGranted('project.manage', $project)) {
+                        $authorized = true;
+                    } else {
+                        $authorized = match ($action) {
+                            'create' => $this->isGranted('content.create', $project),
+                            'update' => $this->isGranted('content.update', $project),
+                            'delete' => $this->isGranted('content.delete', $project) || $this->isGranted('content.trash', $project),
+                            default  => false,
+                        };
+                    }
+                }
+
+                if (!$authorized) {
+                    $this->auditService?->log(
+                        toolName: 'graphql_mutation_denied',
+                        project: $project,
+                        input: ['field' => $fieldName, 'action' => $action, 'query' => mb_substr($query, 0, 500)],
+                        output: null,
+                        status: 'failed',
+                        errorMessage: sprintf('Insufficient permissions for GraphQL mutation field %s (%s)', $fieldName, $action),
+                        createdBy: $identifier,
+                        source: 'graphql',
+                    );
+
+                    $msgKey = match ($action) {
+                        'create' => 'graphql.mutation_create_permission_denied',
+                        'update' => 'graphql.mutation_update_permission_denied',
+                        'delete' => 'graphql.mutation_delete_permission_denied',
+                        default  => 'graphql.mutation_permission_denied',
+                    };
+                    $defaultMsg = match ($action) {
+                        'create' => 'Permissions insuffisantes pour créer du contenu via GraphQL.',
+                        'update' => 'Permissions insuffisantes pour modifier du contenu via GraphQL.',
+                        'delete' => 'Permissions insuffisantes pour supprimer du contenu via GraphQL.',
+                        default  => 'Permissions insuffisantes pour exécuter des mutations GraphQL.',
+                    };
+
+                    return $this->secureJson([
+                        'errors' => [['message' => $this->trans($msgKey, $defaultMsg)]],
+                    ], 403, $rateHeaders);
+                }
             }
         } else {
             // Vérification des droits de lecture sur ApiToken
@@ -518,6 +550,13 @@ class GraphQLController extends AbstractController
         $result = GraphQLExecutor::executeQuery(
             schema: $schema,
             source: $document,
+            rootValue: null,
+            contextValue: [
+                'project'  => $project,
+                'user'     => $user,
+                'apiToken' => $apiToken,
+                'request'  => $request,
+            ],
             variableValues: $variables,
             operationName: $operationName,
             validationRules: $validationRules,
@@ -639,6 +678,54 @@ class GraphQLController extends AbstractController
             }
         }
         return false;
+    }
+
+    /**
+     * @return string[]
+     */
+    private function extractMutationFieldNames(DocumentNode $document): array
+    {
+        $fieldNames = [];
+        $fragments = [];
+        foreach ($document->definitions as $def) {
+            if ($def instanceof FragmentDefinitionNode) {
+                $fragments[$def->name->value] = $def;
+            }
+        }
+
+        foreach ($document->definitions as $def) {
+            if ($def instanceof OperationDefinitionNode && $def->operation === 'mutation') {
+                if ($def->selectionSet !== null) {
+                    $this->collectFieldNamesFromSelectionSet($def->selectionSet, $fragments, $fieldNames);
+                }
+            }
+        }
+
+        return array_values(array_unique($fieldNames));
+    }
+
+    /**
+     * @param array<string, FragmentDefinitionNode> $fragments
+     * @param string[] $fieldNames
+     */
+    private function collectFieldNamesFromSelectionSet(SelectionSetNode $selectionSet, array $fragments, array &$fieldNames, int $depth = 1): void
+    {
+        if ($depth > 10) {
+            return;
+        }
+
+        foreach ($selectionSet->selections as $sel) {
+            if ($sel instanceof FieldNode) {
+                $fieldNames[] = $sel->name->value;
+            } elseif ($sel instanceof InlineFragmentNode && $sel->selectionSet !== null) {
+                $this->collectFieldNamesFromSelectionSet($sel->selectionSet, $fragments, $fieldNames, $depth + 1);
+            } elseif ($sel instanceof FragmentSpreadNode) {
+                $fragName = $sel->name->value;
+                if (isset($fragments[$fragName]) && $fragments[$fragName]->selectionSet !== null) {
+                    $this->collectFieldNamesFromSelectionSet($fragments[$fragName]->selectionSet, $fragments, $fieldNames, $depth + 1);
+                }
+            }
+        }
     }
 
     private function isSubscriptionDocument(DocumentNode $document): bool
