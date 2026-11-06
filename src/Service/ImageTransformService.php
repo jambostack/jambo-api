@@ -19,6 +19,10 @@ class ImageTransformService
     public const MAX_OUTPUT_PIXELS = 12_000_000; // 12 MP
     public const MAX_DIMENSION = 4000;           // 4000 px
     public const MAX_SOURCE_DIMENSION = 10000;   // 10000 px
+    public const MAX_ASPECT_RATIO = 25.0;        // 25:1
+    public const MAX_SOURCE_ASPECT_RATIO = 50.0; // 50:1
+    public const MAX_DECOMPRESSION_RATIO = 500;
+    public const DECOMPRESSION_BOMB_THRESHOLD_BYTES = 5_000_000; // 5 MB
 
     private const ALLOWED_FITS = ['contain', 'cover', 'fill', 'crop', 'scale-down'];
     private const ALLOWED_FORMATS = ['webp', 'avif', 'png', 'jpg', 'jpeg', 'gif'];
@@ -41,7 +45,6 @@ class ImageTransformService
         }
 
         // Intervention Image v4 : instanciation par classe de driver
-        // (les helpers statiques ::gd()/::imagick() ne sont pas exposés dans cette build).
         $driverClass = extension_loaded('imagick')
             ? \Intervention\Image\Drivers\Imagick\Driver::class
             : \Intervention\Image\Drivers\Gd\Driver::class;
@@ -62,9 +65,9 @@ class ImageTransformService
     }
 
     /**
-     * Transform an image and return the cached path.
+     * Transform an image and return the cached path with tenant isolation.
      */
-    public function transform(string $sourcePath, array $params): string
+    public function transform(string $sourcePath, array $params, ?string $tenantUuid = null): string
     {
         if (str_contains($sourcePath, "\0")) {
             throw new \InvalidArgumentException($this->trans('media.file_not_found', 'File not found.'));
@@ -95,13 +98,43 @@ class ImageTransformService
             throw new \OverflowException($this->trans('media.dimensions_too_large', 'Source image dimensions exceed memory safety thresholds (max 30 MP).'));
         }
 
-        $normalized = $this->normalizeParams($params);
-        if ($normalized['w'] !== null && $normalized['h'] !== null && ($normalized['w'] * $normalized['h'] > self::MAX_OUTPUT_PIXELS)) {
-            throw new \InvalidArgumentException($this->trans('media.pixel_limit_exceeded', 'Requested image dimensions exceed maximum output pixel limit (12 MP).'));
+        // Protection Anti-DoS : Ratio d'aspect de l'image source
+        $sourceRatio = (float) ($srcW / $srcH);
+        if ($sourceRatio > self::MAX_SOURCE_ASPECT_RATIO || $sourceRatio < (1.0 / self::MAX_SOURCE_ASPECT_RATIO)) {
+            throw new \InvalidArgumentException($this->trans('media.source_aspect_ratio_exceeded', 'Source image aspect ratio exceeds maximum safety threshold (50:1).'));
         }
 
+        // Protection Anti-DoS : Détection de bombe de décompression (pixel bomb)
+        $uncompressedBytes = $srcW * $srcH * 4;
+        if ($fileSize !== false && $fileSize > 0) {
+            $decompressionRatio = $uncompressedBytes / $fileSize;
+            if ($decompressionRatio > self::MAX_DECOMPRESSION_RATIO && $uncompressedBytes > self::DECOMPRESSION_BOMB_THRESHOLD_BYTES) {
+                throw new \OverflowException($this->trans('media.image_bomb_detected', 'Suspicious compression ratio detected (potential image decompression bomb).'));
+            }
+        }
+
+        // Protection Anti-DoS : Risque d'épuisement mémoire PHP
+        if ($this->isMemoryExhaustionRisk($uncompressedBytes)) {
+            throw new \OverflowException($this->trans('media.memory_limit_exceeded', 'Insufficient server memory headroom to safely decode and transform this image.'));
+        }
+
+        $normalized = $this->normalizeParams($params);
+
+        // Protection Anti-DoS : Ratio d'aspect de la sortie demandée
+        if ($normalized['w'] !== null && $normalized['h'] !== null) {
+            $outputRatio = (float) ($normalized['w'] / $normalized['h']);
+            if ($outputRatio > self::MAX_ASPECT_RATIO || $outputRatio < (1.0 / self::MAX_ASPECT_RATIO)) {
+                throw new \InvalidArgumentException($this->trans('media.aspect_ratio_exceeded', 'Requested image aspect ratio exceeds maximum allowed threshold (25:1).'));
+            }
+
+            if ($normalized['w'] * $normalized['h'] > self::MAX_OUTPUT_PIXELS) {
+                throw new \InvalidArgumentException($this->trans('media.pixel_limit_exceeded', 'Requested image dimensions exceed maximum output pixel limit (12 MP).'));
+            }
+        }
+
+        $targetDir = $this->resolveTenantCacheDir($tenantUuid);
         $cacheKey = $this->cacheKey($sourcePath, $normalized);
-        $cachePath = $this->cacheDir . '/' . $cacheKey;
+        $cachePath = $targetDir . '/' . $cacheKey;
 
         if (isset($this->checkedPaths[$cachePath]) || file_exists($cachePath)) {
             $this->checkedPaths[$cachePath] = true;
@@ -166,18 +199,33 @@ class ImageTransformService
     }
 
     /**
-     * Nettoie les fichiers de cache des transformations d'images.
+     * Résout le répertoire de cache avec isolation multi-tenant.
+     */
+    public function resolveTenantCacheDir(?string $tenantUuid): string
+    {
+        if ($tenantUuid !== null && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $tenantUuid)) {
+            return $this->cacheDir . '/' . strtolower($tenantUuid);
+        }
+
+        return $this->cacheDir;
+    }
+
+    /**
+     * Nettoie les fichiers de cache des transformations d'images (globalement ou par tenant).
      *
      * @param int $maxAgeDays Âge maximal des fichiers en jours
      * @param int|null $maxSizeBytes Taille maximale totale autorisée pour le dossier de cache
+     * @param string|null $tenantUuid UUID optionnel pour nettoyer uniquement le cache d'un projet/tenant
      * @return array{deletedFiles: int, freedBytes: int, remainingFiles: int, remainingBytes: int}
      */
-    public function pruneCache(int $maxAgeDays = 30, ?int $maxSizeBytes = null): array
+    public function pruneCache(int $maxAgeDays = 30, ?int $maxSizeBytes = null, ?string $tenantUuid = null): array
     {
         $deletedCount = 0;
         $freedBytes = 0;
 
-        if (!is_dir($this->cacheDir)) {
+        $targetDir = $this->resolveTenantCacheDir($tenantUuid);
+
+        if (!is_dir($targetDir)) {
             return [
                 'deletedFiles' => 0,
                 'freedBytes' => 0,
@@ -193,24 +241,56 @@ class ImageTransformService
         $files = [];
         $totalBytes = 0;
 
-        $it = new \DirectoryIterator($this->cacheDir);
-        foreach ($it as $fileInfo) {
-            if ($fileInfo->isDot() || !$fileInfo->isFile()) {
-                continue;
-            }
-            $mtime = $fileInfo->getMTime();
-            $size = $fileInfo->getSize();
-
-            if ($mtime < $cutoffTime) {
-                if (@unlink($fileInfo->getPathname())) {
-                    $deletedCount++;
-                    $freedBytes += $size;
+        // Si tenant spécifique, itération sur son sous-répertoire, sinon parcours récursif pour couvrir racine et sous-dossiers tenant
+        if ($tenantUuid !== null && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $tenantUuid)) {
+            $iterator = new \DirectoryIterator($targetDir);
+            foreach ($iterator as $fileInfo) {
+                if ($fileInfo->isDot() || !$fileInfo->isFile()) {
                     continue;
                 }
-            }
+                $mtime = $fileInfo->getMTime();
+                $size = $fileInfo->getSize();
 
-            $files[] = clone $fileInfo;
-            $totalBytes += $size;
+                if ($mtime < $cutoffTime) {
+                    if (@unlink($fileInfo->getPathname())) {
+                        $deletedCount++;
+                        $freedBytes += $size;
+                        continue;
+                    }
+                }
+
+                $files[] = clone $fileInfo;
+                $totalBytes += $size;
+            }
+        } else {
+            $dirIt = new \RecursiveDirectoryIterator($targetDir, \FilesystemIterator::SKIP_DOTS);
+            $recIt = new \RecursiveIteratorIterator($dirIt, \RecursiveIteratorIterator::CHILD_FIRST);
+
+            foreach ($recIt as $fileInfo) {
+                if ($fileInfo->isDir()) {
+                    // Nettoyer les sous-dossiers de tenants vides
+                    @rmdir($fileInfo->getPathname());
+                    continue;
+                }
+
+                if (!$fileInfo->isFile()) {
+                    continue;
+                }
+
+                $mtime = $fileInfo->getMTime();
+                $size = $fileInfo->getSize();
+
+                if ($mtime < $cutoffTime) {
+                    if (@unlink($fileInfo->getPathname())) {
+                        $deletedCount++;
+                        $freedBytes += $size;
+                        continue;
+                    }
+                }
+
+                $files[] = clone $fileInfo;
+                $totalBytes += $size;
+            }
         }
 
         // Si une taille maximale est spécifiée et dépassée, supprimer les plus anciens
@@ -260,5 +340,21 @@ class ImageTransformService
         $parts = array_filter([$params['w'], $params['h']]);
         $dims = !empty($parts) ? implode('x', $parts) . '_' : '';
         return $dims . $hash . '.' . $ext;
+    }
+
+    private function isMemoryExhaustionRisk(int $projectedRequiredBytes): bool
+    {
+        $limitStr = ini_get('memory_limit');
+        if ($limitStr === false || $limitStr === '' || $limitStr === '-1') {
+            return false;
+        }
+
+        $limitBytes = ImageOptimizerService::parseMemoryLimit((string) $limitStr);
+        if ($limitBytes <= 0) {
+            return false;
+        }
+
+        $used = memory_get_usage(true);
+        return ($used + ($projectedRequiredBytes * 2)) > ($limitBytes * 0.85);
     }
 }

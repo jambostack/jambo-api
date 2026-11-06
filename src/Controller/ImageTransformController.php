@@ -6,6 +6,7 @@ use App\Entity\Media;
 use App\Entity\ProjectStorageProfile;
 use App\Repository\ProjectStorageProfileRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\ImageOptimizerService;
 use App\Service\ImageTransformService;
 use App\Service\StorageDriverFactory;
 use Doctrine\ORM\EntityManagerInterface;
@@ -25,6 +26,10 @@ class ImageTransformController extends AbstractController
     private const MAX_OUTPUT_PIXELS = 12_000_000; // 12 MP
     private const MAX_SOURCE_PIXELS = 30_000_000; // 30 MP
     private const MAX_SOURCE_BYTES = 26_214_400;  // 25 MB
+    private const MAX_ASPECT_RATIO = 25.0;        // 25:1
+    private const MAX_SOURCE_ASPECT_RATIO = 50.0; // 50:1
+    private const MAX_DECOMPRESSION_RATIO = 500;
+    private const DECOMPRESSION_BOMB_THRESHOLD_BYTES = 5_000_000; // 5 MB
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -52,6 +57,12 @@ class ImageTransformController extends AbstractController
             }
         }
         return strtr($default, $parameters);
+    }
+
+    private function isProjectPublic(Media $media): bool
+    {
+        $project = $media->project;
+        return $project === null || (bool) $project->publicApi;
     }
 
     private function checkRateLimit(Request $request): ?Response
@@ -106,26 +117,46 @@ class ImageTransformController extends AbstractController
             return new Response($this->trans('media.file_not_found', 'File not found'), 404, self::SECURITY_HEADERS);
         }
 
+        $isPublic = $this->isProjectPublic($media);
+
         $params = $request->query->all();
         $hasParams = !empty(array_intersect_key($params, array_flip(['w', 'h', 'fit', 'fmt', 'q', 'bg'])));
 
         // Protection: SVG or non-raster media types cannot be transformed by GD/Imagick
         $isSvg = str_contains((string) $media->mimeType, 'svg') || strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) === 'svg';
         if ($isSvg) {
-            return new BinaryFileResponse($filePath, 200, [
+            $etag = '"' . sha1_file($filePath) . '"';
+            $lastModified = new \DateTime('@' . filemtime($filePath));
+            $response = new BinaryFileResponse($filePath, 200, [
                 'Content-Type' => 'image/svg+xml',
                 'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none';",
                 'X-Content-Type-Options' => 'nosniff',
-                'Cache-Control' => 'public, max-age=31536000, immutable',
+                'Vary' => 'Origin, Accept-Encoding',
+                'ETag' => $etag,
             ]);
+            $this->applyCacheControl($response, $isPublic);
+            $response->setLastModified($lastModified);
+            if ($response->isNotModified($request)) {
+                return $response;
+            }
+            return $response;
         }
 
         if (!$hasParams) {
-            return new BinaryFileResponse($filePath, 200, [
+            $etag = '"' . sha1_file($filePath) . '"';
+            $lastModified = new \DateTime('@' . filemtime($filePath));
+            $response = new BinaryFileResponse($filePath, 200, [
                 'Content-Type' => $media->mimeType ?? 'application/octet-stream',
                 'X-Content-Type-Options' => 'nosniff',
-                'Cache-Control' => 'public, max-age=31536000, immutable',
+                'Vary' => 'Origin, Accept, Accept-Encoding',
+                'ETag' => $etag,
             ]);
+            $this->applyCacheControl($response, $isPublic);
+            $response->setLastModified($lastModified);
+            if ($response->isNotModified($request)) {
+                return $response;
+            }
+            return $response;
         }
 
         // Anti-DoS mémoire : contrôle de taille de fichier source
@@ -141,73 +172,130 @@ class ImageTransformController extends AbstractController
         }
         $srcW = (int) ($sourceInfo[0] ?? 0);
         $srcH = (int) ($sourceInfo[1] ?? 0);
-        if ($srcW > 10000 || $srcH > 10000 || ($srcW * $srcH > self::MAX_SOURCE_PIXELS)) {
+        if ($srcW <= 0 || $srcH <= 0 || $srcW > 10000 || $srcH > 10000 || ($srcW * $srcH > self::MAX_SOURCE_PIXELS)) {
             return new Response($this->trans('media.dimensions_too_large', 'Source image dimensions exceed memory safety thresholds (max 30 MP).'), 422, self::SECURITY_HEADERS);
         }
 
-        // Bounding & validation of transformation parameters
+        // Anti-DoS : Ratio d'aspect de l'image source
+        $srcRatio = (float) ($srcW / $srcH);
+        if ($srcRatio > self::MAX_SOURCE_ASPECT_RATIO || $srcRatio < (1.0 / self::MAX_SOURCE_ASPECT_RATIO)) {
+            return new Response($this->trans('media.source_aspect_ratio_exceeded', 'Source image aspect ratio exceeds maximum safety threshold (50:1).'), 422, self::SECURITY_HEADERS);
+        }
+
+        // Anti-DoS : Détection de bombe de décompression (pixel bomb)
+        $uncompressedBytes = $srcW * $srcH * 4;
+        if ($sourceSize !== false && $sourceSize > 0) {
+            $decompressionRatio = $uncompressedBytes / $sourceSize;
+            if ($decompressionRatio > self::MAX_DECOMPRESSION_RATIO && $uncompressedBytes > self::DECOMPRESSION_BOMB_THRESHOLD_BYTES) {
+                return new Response($this->trans('media.image_bomb_detected', 'Suspicious compression ratio detected (potential image decompression bomb).'), 422, self::SECURITY_HEADERS);
+            }
+        }
+
+        // Anti-DoS : Risque d'épuisement mémoire PHP
+        if ($this->isMemoryExhaustionRisk($uncompressedBytes)) {
+            return new Response($this->trans('media.memory_limit_exceeded', 'Insufficient server memory headroom to safely decode and transform this image.'), 422, self::SECURITY_HEADERS);
+        }
+
+        // Validation stricte des paramètres de transformation
         $validatedParams = [];
         if (isset($params['w'])) {
             $rawW = $params['w'];
-            if (!is_numeric($rawW) || (int) $rawW < 1 || (int) $rawW > 4000) {
+            if (!is_scalar($rawW) || str_contains((string) $rawW, "\0") || !is_numeric($rawW) || (int) $rawW < 1 || (int) $rawW > 4000) {
                 return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422, self::SECURITY_HEADERS);
             }
             $validatedParams['w'] = (int) $rawW;
         }
         if (isset($params['h'])) {
             $rawH = $params['h'];
-            if (!is_numeric($rawH) || (int) $rawH < 1 || (int) $rawH > 4000) {
+            if (!is_scalar($rawH) || str_contains((string) $rawH, "\0") || !is_numeric($rawH) || (int) $rawH < 1 || (int) $rawH > 4000) {
                 return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422, self::SECURITY_HEADERS);
             }
             $validatedParams['h'] = (int) $rawH;
         }
 
-        // Anti-DoS mémoire : borne du nombre total de pixels en sortie
-        if (isset($validatedParams['w'], $validatedParams['h']) && ($validatedParams['w'] * $validatedParams['h'] > self::MAX_OUTPUT_PIXELS)) {
-            return new Response($this->trans('media.pixel_limit_exceeded', 'Requested image dimensions exceed maximum output pixel limit (12 MP).'), 422, self::SECURITY_HEADERS);
+        // Anti-DoS mémoire : ratio d'aspect de la sortie
+        if (isset($validatedParams['w'], $validatedParams['h'])) {
+            $outputRatio = (float) ($validatedParams['w'] / $validatedParams['h']);
+            if ($outputRatio > self::MAX_ASPECT_RATIO || $outputRatio < (1.0 / self::MAX_ASPECT_RATIO)) {
+                return new Response($this->trans('media.aspect_ratio_exceeded', 'Requested image aspect ratio exceeds maximum allowed threshold (25:1).'), 422, self::SECURITY_HEADERS);
+            }
+
+            if ($validatedParams['w'] * $validatedParams['h'] > self::MAX_OUTPUT_PIXELS) {
+                return new Response($this->trans('media.pixel_limit_exceeded', 'Requested image dimensions exceed maximum output pixel limit (12 MP).'), 422, self::SECURITY_HEADERS);
+            }
         }
 
         if (isset($params['q'])) {
             $rawQ = $params['q'];
-            if (!is_numeric($rawQ) || (int) $rawQ < 1 || (int) $rawQ > 100) {
+            if (!is_scalar($rawQ) || str_contains((string) $rawQ, "\0") || !is_numeric($rawQ) || (int) $rawQ < 1 || (int) $rawQ > 100) {
                 return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422, self::SECURITY_HEADERS);
             }
             $validatedParams['q'] = (int) $rawQ;
         }
         if (isset($params['fit'])) {
-            $rawFit = (string) $params['fit'];
-            if (!in_array($rawFit, ['contain', 'cover', 'fill', 'crop', 'scale-down'], true)) {
+            $rawFit = $params['fit'];
+            if (!is_scalar($rawFit) || str_contains((string) $rawFit, "\0") || !in_array((string) $rawFit, ['contain', 'cover', 'fill', 'crop', 'scale-down'], true)) {
                 return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422, self::SECURITY_HEADERS);
             }
-            $validatedParams['fit'] = $rawFit;
+            $validatedParams['fit'] = (string) $rawFit;
         }
         if (isset($params['fmt'])) {
-            $rawFmt = strtolower((string) $params['fmt']);
-            if (!in_array($rawFmt, ['webp', 'avif', 'png', 'jpg', 'jpeg', 'gif'], true)) {
+            $rawFmt = $params['fmt'];
+            if (!is_scalar($rawFmt) || str_contains((string) $rawFmt, "\0")) {
                 return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422, self::SECURITY_HEADERS);
             }
-            $validatedParams['fmt'] = $rawFmt;
+            $cleanFmt = strtolower((string) $rawFmt);
+            if (!in_array($cleanFmt, ['webp', 'avif', 'png', 'jpg', 'jpeg', 'gif'], true)) {
+                return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422, self::SECURITY_HEADERS);
+            }
+            $validatedParams['fmt'] = $cleanFmt;
         }
         if (isset($params['bg'])) {
-            $rawBg = (string) $params['bg'];
-            if (!preg_match('/^#[0-9a-fA-F]{3,8}$/', $rawBg)) {
+            $rawBg = $params['bg'];
+            if (!is_scalar($rawBg) || str_contains((string) $rawBg, "\0") || !preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) $rawBg)) {
                 return new Response($this->trans('media.invalid_params', 'Invalid image transformation parameters.'), 422, self::SECURITY_HEADERS);
             }
-            $validatedParams['bg'] = $rawBg;
+            $validatedParams['bg'] = (string) $rawBg;
         }
 
+        $tenantUuid = $media->project?->uuid?->toRfc4122();
+
         try {
-            $cachePath = $this->imageTransform->transform($filePath, $validatedParams);
+            $cachePath = $this->imageTransform->transform($filePath, $validatedParams, $tenantUuid);
         } catch (\Throwable) {
             return new Response($this->trans('media.transform_failed', 'Image transformation failed.'), 422, self::SECURITY_HEADERS);
         }
 
-        return new BinaryFileResponse($cachePath, 200, [
+        $etag = '"' . sha1_file($cachePath) . '"';
+        $lastModified = new \DateTime('@' . filemtime($cachePath));
+        $response = new BinaryFileResponse($cachePath, 200, [
             'Content-Type' => $this->imageTransform->getMimeType($cachePath),
             'X-Content-Type-Options' => 'nosniff',
-            'Cache-Control' => 'public, max-age=31536000, immutable',
+            'Vary' => 'Origin, Accept, Accept-Encoding',
             'X-Image-Transform' => 'cached',
+            'ETag' => $etag,
         ]);
+        $this->applyCacheControl($response, $isPublic);
+        $response->setLastModified($lastModified);
+        if ($response->isNotModified($request)) {
+            return $response;
+        }
+
+        return $response;
+    }
+
+    private function applyCacheControl(BinaryFileResponse $response, bool $isPublic): void
+    {
+        if ($isPublic) {
+            $response->setPublic();
+            $response->setMaxAge(31536000);
+            $response->headers->addCacheControlDirective('immutable', true);
+        } else {
+            $response->setPrivate();
+            $response->headers->addCacheControlDirective('no-cache', true);
+            $response->headers->addCacheControlDirective('no-store', true);
+            $response->headers->addCacheControlDirective('must-revalidate', true);
+        }
     }
 
     #[Route('/cdn/media/{uuid}/info', name: 'cdn_media_info', methods: ['GET'])]
@@ -247,14 +335,18 @@ class ImageTransformController extends AbstractController
         }
 
         $imageSize = @getimagesize($filePath);
+        $w = $imageSize[0] ?? null;
+        $h = $imageSize[1] ?? null;
+        $ratio = ($w !== null && $h !== null && $h > 0) ? round($w / $h, 4) : null;
 
         return new JsonResponse([
             'uuid' => $media->uuid->toRfc4122(),
             'name' => $media->originalName ?? $media->fileName,
             'mimeType' => $media->mimeType,
             'size' => $media->fileSize,
-            'width' => $imageSize[0] ?? null,
-            'height' => $imageSize[1] ?? null,
+            'width' => $w,
+            'height' => $h,
+            'aspectRatio' => $ratio,
             'url' => $this->generateUrl('cdn_media_transform', ['uuid' => $media->uuid->toRfc4122()], 0),
             'transformations' => [
                 'resize' => '?w=800&h=600',
@@ -417,5 +509,21 @@ class ImageTransformController extends AbstractController
             }
         }
         return false;
+    }
+
+    private function isMemoryExhaustionRisk(int $projectedRequiredBytes): bool
+    {
+        $limitStr = ini_get('memory_limit');
+        if ($limitStr === false || $limitStr === '' || $limitStr === '-1') {
+            return false;
+        }
+
+        $limitBytes = ImageOptimizerService::parseMemoryLimit((string) $limitStr);
+        if ($limitBytes <= 0) {
+            return false;
+        }
+
+        $used = memory_get_usage(true);
+        return ($used + ($projectedRequiredBytes * 2)) > ($limitBytes * 0.85);
     }
 }

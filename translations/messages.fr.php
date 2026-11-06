@@ -4026,4 +4026,21 @@ return [
     'realtime.token_expired' => 'Le jeton temps réel a expiré.',
     'realtime.token_signature_invalid' => 'La signature du jeton temps réel est invalide.',
     'realtime.token_claims_mismatch' => 'Le jeton ne contient pas les revendications Mercure requises.',
+
+    // ─── Cycle 121: Image Processing, Optimization & Decompression Bomb Hardening ───
+    'media.image_bomb_detected' => 'Taux de compression suspect détecté (bombe de décompression d\'image potentielle).',
+    'media.aspect_ratio_exceeded' => 'Le ratio d\'aspect demandé pour l\'image dépasse le seuil maximal autorisé (25:1).',
+    'media.source_aspect_ratio_exceeded' => 'Le ratio d\'aspect de l\'image source dépasse le seuil de sécurité maximal (50:1).',
+    'media.memory_limit_exceeded' => 'Marge de mémoire serveur insuffisante pour décoder et transformer cette image en toute sécurité.',
+    'media.decompression_bomb' => 'Bombe de décompression détectée. Expansion de l\'image rejetée.',
+    'media.format_not_supported' => 'Le format d\'image n\'est pas pris en charge pour l\'optimisation dynamique.',
+    'media.optimization_failed' => 'L\'optimisation de l\'image a échoué.',
+    'media.strip_metadata_failed' => 'Échec de la suppression des métadonnées de l\'image.',
+    'media.preset_not_found' => 'Préréglage d\'optimisation d\'image introuvable.',
+    'media.zip_bomb_detected' => 'Taux de compression ou nombre d\'entrées suspect détecté (protection anti-bombe ZIP).',
+    'upload.error.zip_bomb_detected' => 'L\'archive présente un ratio de compression suspect ou un nombre excessif de fichiers (bombe ZIP détectée).',
+    'upload.error.image_bomb_detected' => 'L\'image présente un ratio de compression suspect (bombe de décompression potentielle détectée).',
+    'upload.error.image_dimensions_too_large' => 'Les dimensions de l\'image dépassent les limites de sécurité (max 10000x10000, 30 MP).',
+    'upload.error.image_aspect_ratio_exceeded' => 'Le ratio d\'aspect de l\'image dépasse le seuil maximal de sécurité autorisé (50:1).',
+    'cli.invalid_tenant_uuid' => 'L\'option --tenant doit être un UUID RFC 4122 valide.',
 ];

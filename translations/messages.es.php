@@ -4008,4 +4008,21 @@ return [
     'realtime.token_expired' => 'El token en tiempo real ha expirado.',
     'realtime.token_signature_invalid' => 'La firma del token en tiempo real no es válida.',
     'realtime.token_claims_mismatch' => 'El token no contiene los reclamos de autorización Mercure requeridos.',
+
+    // ─── Cycle 121: Image Processing, Optimization & Decompression Bomb Hardening ───
+    'media.image_bomb_detected' => 'Se detectó una relación de compresión sospechosa (posible bomba de descompresión de imagen).',
+    'media.aspect_ratio_exceeded' => 'La relación de aspecto solicitada para la imagen supera el umbral máximo permitido (25:1).',
+    'media.source_aspect_ratio_exceeded' => 'La relación de aspecto de la imagen de origen supera el umbral de seguridad máximo (50:1).',
+    'media.memory_limit_exceeded' => 'Margen de memoria del servidor insuficiente para decodificar y transformar esta imagen de forma segura.',
+    'media.decompression_bomb' => 'Bomba de descompresión detectada. Expansión de imagen rechazada.',
+    'media.format_not_supported' => 'El formato de imagen no es compatible con la optimización dinámica.',
+    'media.optimization_failed' => 'La optimización de la imagen falló.',
+    'media.strip_metadata_failed' => 'Error al eliminar los metadatos de la imagen.',
+    'media.preset_not_found' => 'Preajuste de optimización de imagen no encontrado.',
+    'media.zip_bomb_detected' => 'Se detectó una relación de compresión o recuento de entradas sospechoso (protección contra bomba ZIP).',
+    'upload.error.zip_bomb_detected' => 'El archivo contiene una relación de compresión sospechosa o archivos excesivos (bomba ZIP detectada).',
+    'upload.error.image_bomb_detected' => 'La imagen presenta una relación de compresión sospechosa (posible bomba de descompresión detectada).',
+    'upload.error.image_dimensions_too_large' => 'Las dimensiones de la imagen superan los límites de seguridad (máx. 10000x10000, 30 MP).',
+    'upload.error.image_aspect_ratio_exceeded' => 'La relación de aspecto de la imagen supera el umbral de seguridad máximo permitido (50:1).',
+    'cli.invalid_tenant_uuid' => 'La opción --tenant debe ser un UUID RFC 4122 válido.',
 ];

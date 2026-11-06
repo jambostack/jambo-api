@@ -330,6 +330,33 @@ class UploadSecurityValidator
             }
         }
 
+        // 5. Protection anti-bombe ZIP sur archives compressées
+        if (in_array($extension, ['zip', 'docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp'], true)) {
+            if (ImageOptimizerService::detectZipBomb($filePath)) {
+                throw new \InvalidArgumentException($this->trans('upload.error.zip_bomb_detected', [], 'Archive contains suspicious compression ratio or excessive files (ZIP bomb detected).'));
+            }
+        }
+
+        // 6. Protection anti-bombe de décompression d'images et dimensions excessives
+        if (in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif'], true)) {
+            $imgSize = @getimagesize($filePath);
+            if ($imgSize !== false && isset($imgSize[0], $imgSize[1])) {
+                $w = (int) $imgSize[0];
+                $h = (int) $imgSize[1];
+                if ($w <= 0 || $h <= 0 || $w > 10000 || $h > 10000 || ($w * $h > 30_000_000)) {
+                    throw new \InvalidArgumentException($this->trans('upload.error.image_dimensions_too_large', [], 'Image dimensions exceed safety limits (max 10000x10000, 30 MP).'));
+                }
+                if (($w / $h > 50.0) || ($h / $w > 50.0)) {
+                    throw new \InvalidArgumentException($this->trans('upload.error.image_aspect_ratio_exceeded', [], 'Image aspect ratio exceeds maximum allowed safety threshold (50:1).'));
+                }
+                $fileSize = @filesize($filePath) ?: 1;
+                $uncompressed = $w * $h * 4;
+                if ($uncompressed > 5_000_000 && ($uncompressed / $fileSize) > 500) {
+                    throw new \InvalidArgumentException($this->trans('upload.error.image_bomb_detected', [], 'Image presents suspicious compression ratio (potential decompression bomb detected).'));
+                }
+            }
+        }
+
         return $mime;
     }
 

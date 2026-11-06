@@ -4008,4 +4008,21 @@ return [
     'realtime.token_expired' => 'Realtime token has expired.',
     'realtime.token_signature_invalid' => 'Realtime token signature is invalid.',
     'realtime.token_claims_mismatch' => 'Token is missing valid Mercure authorization claims.',
+
+    // ─── Cycle 121: Image Processing, Optimization & Decompression Bomb Hardening ───
+    'media.image_bomb_detected' => 'Suspicious compression ratio detected (potential image decompression bomb).',
+    'media.aspect_ratio_exceeded' => 'Requested image aspect ratio exceeds maximum allowed threshold (25:1).',
+    'media.source_aspect_ratio_exceeded' => 'Source image aspect ratio exceeds maximum safety threshold (50:1).',
+    'media.memory_limit_exceeded' => 'Insufficient server memory headroom to safely decode and transform this image.',
+    'media.decompression_bomb' => 'Decompression bomb detected. Image expansion rejected.',
+    'media.format_not_supported' => 'Image format is not supported for dynamic optimization.',
+    'media.optimization_failed' => 'Image optimization failed.',
+    'media.strip_metadata_failed' => 'Failed to strip metadata from image.',
+    'media.preset_not_found' => 'Image optimization preset not found.',
+    'media.zip_bomb_detected' => 'Suspicious compression ratio or entry count detected (ZIP bomb protection).',
+    'upload.error.zip_bomb_detected' => 'Archive contains suspicious compression ratio or excessive files (ZIP bomb detected).',
+    'upload.error.image_bomb_detected' => 'Image presents suspicious compression ratio (potential decompression bomb detected).',
+    'upload.error.image_dimensions_too_large' => 'Image dimensions exceed safety limits (max 10000x10000, 30 MP).',
+    'upload.error.image_aspect_ratio_exceeded' => 'Image aspect ratio exceeds maximum allowed safety threshold (50:1).',
+    'cli.invalid_tenant_uuid' => 'The --tenant option must be a valid RFC 4122 UUID.',
 ];

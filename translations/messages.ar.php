@@ -4010,4 +4010,21 @@ return [
     'realtime.token_expired' => 'انتهت صلاحية رمز الوقت الفعلي.',
     'realtime.token_signature_invalid' => 'توقيع رمز الوقت الفعلي غير صالح.',
     'realtime.token_claims_mismatch' => 'يفتقر الرمز إلى مطالبات تفويض Mercure المطلوبة.',
+
+    // ─── Cycle 121: Image Processing, Optimization & Decompression Bomb Hardening ───
+    'media.image_bomb_detected' => 'تم اكتشاف نسبة ضغط مريبة (قنبلة إلغاء ضغط صور محتملة).',
+    'media.aspect_ratio_exceeded' => 'نسبة العرض إلى الارتفاع المطلوبة للصورة تتجاوز الحد الأقصى المسموح به (25:1).',
+    'media.source_aspect_ratio_exceeded' => 'نسبة العرض إلى الارتفاع للصورة المصدر تتجاوز حد الأمان الأقصى (50:1).',
+    'media.memory_limit_exceeded' => 'مساحة ذاكرة الخادم غير كافية لفك تشفير هذه الصورة وتحويلها بأمان.',
+    'media.decompression_bomb' => 'تم اكتشاف قنبلة إلغاء ضغط. تم رفض توسيع الصورة.',
+    'media.format_not_supported' => 'تنسيق الصورة غير مدعوم للتحسين الديناميكي.',
+    'media.optimization_failed' => 'فشل تحسين الصورة.',
+    'media.strip_metadata_failed' => 'فشل تجريد البيانات الوصفية من الصورة.',
+    'media.preset_not_found' => 'الإعداد المسبق لتحسين الصورة غير موجود.',
+    'media.zip_bomb_detected' => 'تم اكتشاف نسبة ضغط أو عدد إدخالات مريب (حماية من قنبلة ZIP).',
+    'upload.error.zip_bomb_detected' => 'يحتوي الأرشيف على نسبة ضغط مريبة أو عدد ملفات مفرط (تم اكتشاف قنبلة ZIP).',
+    'upload.error.image_bomb_detected' => 'تحتوي الصورة على نسبة ضغط مريبة (تم اكتشاف قنبلة إلغاء ضغط محتملة).',
+    'upload.error.image_dimensions_too_large' => 'أبعاد الصورة تتجاوز حدود الأمان (الحد الأقصى 10000x10000، 30 ميجابكسل).',
+    'upload.error.image_aspect_ratio_exceeded' => 'نسبة العرض إلى الارتفاع للصورة تتجاوز حد الأمان الأقصى المسموح به (50:1).',
+    'cli.invalid_tenant_uuid' => 'يجب أن يكون خيار --tenant بتنسيق RFC 4122 UUID صالح.',
 ];

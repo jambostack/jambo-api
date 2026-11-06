@@ -21,6 +21,8 @@ class PruneMediaCacheCommand extends Command
     use LockableTrait;
     use CliSecurityTrait;
 
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+
     public function __construct(
         private readonly ImageTransformService $imageTransformService,
         ?TranslatorInterface $translator = null,
@@ -44,6 +46,13 @@ class PruneMediaCacheCommand extends Command
                 'm',
                 InputOption::VALUE_REQUIRED,
                 'Maximum total size in megabytes for the image cache directory',
+                null
+            )
+            ->addOption(
+                'tenant',
+                't',
+                InputOption::VALUE_REQUIRED,
+                'Optional project/tenant UUID to prune only isolated cache for that tenant',
                 null
             );
     }
@@ -75,13 +84,25 @@ class PruneMediaCacheCommand extends Command
                 $maxSizeBytes = $maxMbInt * 1024 * 1024;
             }
 
+            $tenant = $input->getOption('tenant');
+            if ($tenant !== null) {
+                $tenant = trim((string) $tenant);
+                if (!preg_match(self::UUID_REGEX, $tenant)) {
+                    $io->error($this->trans('cli.invalid_tenant_uuid', [], null, null, 'The --tenant option must be a valid RFC 4122 UUID.'));
+                    return Command::INVALID;
+                }
+            }
+
             $io->title('Image Transform Cache Pruning');
             $io->text(sprintf('Cleaning cache files older than %d days...', $days));
             if ($maxSizeBytes !== null) {
                 $io->text(sprintf('Enforcing max cache size: %d MB', (int) $maxMb));
             }
+            if ($tenant !== null) {
+                $io->text(sprintf('Targeting isolated tenant cache: %s', $tenant));
+            }
 
-            $result = $this->imageTransformService->pruneCache($days, $maxSizeBytes);
+            $result = $this->imageTransformService->pruneCache($days, $maxSizeBytes, $tenant);
 
             $freedMb = round($result['freedBytes'] / (1024 * 1024), 2);
             $remainingMb = round($result['remainingBytes'] / (1024 * 1024), 2);
