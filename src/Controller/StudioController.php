@@ -34,6 +34,13 @@ class StudioController extends InertiaController
 {
     private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
 
+    public const MAX_PAYLOAD_BYTES = 2097152; // 2MB
+    public const MAX_CHAT_PAYLOAD_BYTES = 10485760; // 10MB
+    public const MAX_ACTIONS_PER_REQUEST = 50;
+    public const MAX_GENERATE_IMAGES_BATCH = 10;
+    public const MAX_TRANSLATE_ENTRIES = 20;
+    public const MAX_COLLECTIONS_PER_PROJECT = 100;
+
     private const SECURITY_HEADERS = [
         'Cache-Control' => 'no-store, no-cache, must-revalidate',
         'X-Content-Type-Options' => 'nosniff',
@@ -58,6 +65,7 @@ class StudioController extends InertiaController
         private readonly ?RateLimiterFactory $aiLimiter = null,
         ?TranslatorInterface $translator = null,
         private ?\App\Service\Security\PageCompositionSecurityService $compositionSecurity = null,
+        private ?\App\Service\AuditService $auditService = null,
     ) {
         $this->ssrfProtection ??= new \App\Service\Security\SsrfProtectionService();
         $this->compositionSecurity ??= new \App\Service\Security\PageCompositionSecurityService(null, $this->ssrfProtection, $translator);
@@ -71,10 +79,22 @@ class StudioController extends InertiaController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function currentUserIdentifier(): string
+    {
+        try {
+            return $this->getUser()?->getUserIdentifier() ?? 'system';
+        } catch (\Throwable) {
+            return 'system';
+        }
+    }
+
     private function checkRateLimit(Request $request): ?JsonResponse
     {
         if ($this->aiLimiter !== null) {
-            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            $identifier = $this->currentUserIdentifier();
+            if ($identifier === 'system') {
+                $identifier = $request->getClientIp() ?: '127.0.0.1';
+            }
             if (false === $this->aiLimiter->create($identifier)->consume(1)->isAccepted()) {
                 return $this->jsonResponse([
                     'error' => $this->trans('studio.rate_limit_exceeded', [], 'Too many AI requests. Please retry later.'),
@@ -365,6 +385,10 @@ EUSER;
     #[Route('/api/projects/{uuid}/studio/ai-schema', name: 'studio_ai_schema', methods: ['POST'])]
     public function aiSchema(string $uuid, Request $request): JsonResponse
     {
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->jsonResponse(['error' => $this->trans('studio.payload_too_large', ['%max%' => '2MB'], 'Request payload exceeds maximum allowed size (2MB).')], 413);
+        }
+
         if ($resp = $this->checkRateLimit($request)) return $resp;
 
         $project = $this->findProject($uuid);
@@ -467,6 +491,10 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/ai-chat', name: 'studio_ai_chat', methods: ['POST'])]
     public function aiChat(string $uuid, Request $request): Response
     {
+        if (strlen($request->getContent()) > self::MAX_CHAT_PAYLOAD_BYTES) {
+            return $this->jsonResponse(['error' => $this->trans('studio.payload_too_large', ['%max%' => '10MB'], 'Request payload exceeds maximum allowed size (10MB).')], 413);
+        }
+
         if ($resp = $this->checkRateLimit($request)) return $resp;
 
         $project = $this->findProject($uuid);
@@ -493,7 +521,7 @@ PROMPT;
             if ($text !== null && $text !== '') {
                 $attachmentContext = "\n\n--- FICHIER JOINT : {$name} ---\n" . mb_substr($text, 0, 8000) . "\n--- FIN DU FICHIER ---";
             } elseif (!str_starts_with($mimeType, 'image/') && empty($attachment['base64']) && empty($attachment['mediaUuid'])) {
-                $attachmentContext = "\n\n[Fichier joint : {$name} — contenu non extractible]";
+                $attachmentContext = "\n\n" . $this->trans('studio.attachment_unsupported', ['%name%' => $name], "[Fichier joint : {$name} — contenu non extractible]");
             }
         }
 
@@ -783,6 +811,12 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/apply-entries', name: 'studio_apply_entries', methods: ['POST'])]
     public function applyEntries(string $uuid, Request $request): JsonResponse
     {
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->jsonResponse(['error' => $this->trans('studio.payload_too_large', ['%max%' => '2MB'], 'Request payload exceeds maximum allowed size (2MB).')], 413);
+        }
+
+        if ($resp = $this->checkRateLimit($request)) return $resp;
+
         $project = $this->findProject($uuid);
         if (!$project) return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
         $this->denyAccessUnlessGranted('project.manage', $project);
@@ -828,6 +862,17 @@ PROMPT;
         $this->saveFieldValues($entry, $collection, $entryData);
 
         $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'studio_apply_entries',
+            project: $project,
+            input: ['collection' => $collectionSlug],
+            output: ['success' => true, 'uuid' => $entry->uuid?->toRfc4122()],
+            status: 'success',
+            createdBy: $this->currentUserIdentifier(),
+            source: 'studio_api',
+        );
+        $this->auditService?->flush();
 
         return $this->jsonResponse(['success' => true, 'uuid' => $entry->uuid?->toRfc4122()], 201);
     }
@@ -931,6 +976,17 @@ PROMPT;
         $this->denyAccessUnlessGranted('project.manage', $project);
 
         $this->chatMessageRepository->deleteByProject($project);
+
+        $this->auditService?->log(
+            toolName: 'studio_chat_messages_clear',
+            project: $project,
+            input: [],
+            output: ['success' => true],
+            status: 'success',
+            createdBy: $this->currentUserIdentifier(),
+            source: 'studio_api',
+        );
+        $this->auditService?->flush();
 
         return $this->jsonResponse(['success' => true]);
     }
@@ -1090,7 +1146,7 @@ PROMPT;
 
         // Fallback texte : note dans le prompt
         $name = (string) ($attachment['name'] ?? 'fichier');
-        $note = "\n\n[Fichier joint : {$name} — analyse visuelle non disponible avec ce provider]";
+        $note = "\n\n" . $this->trans('studio.attachment_no_vision', ['%name%' => $name], "[Fichier joint : {$name} — analyse visuelle non disponible avec ce provider]");
         return ['role' => 'user', 'content' => $prompt . $note];
     }
 
@@ -1267,6 +1323,12 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/schema', name: 'studio_schema_apply', methods: ['POST'])]
     public function applySchema(string $uuid, Request $request): JsonResponse
     {
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->jsonResponse(['error' => $this->trans('studio.payload_too_large', ['%max%' => '2MB'], 'Request payload exceeds maximum allowed size (2MB).')], 413);
+        }
+
+        if ($resp = $this->checkRateLimit($request)) return $resp;
+
         $project = $this->findProject($uuid);
         if (!$project) {
             return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
@@ -1293,6 +1355,32 @@ PROMPT;
         // soit la source (chat IA, schéma IA, builder visuel), les conventions de
         // nommage sont toujours respectées en base.
         $collections = $this->normalizeSchema($rawCollections);
+
+        // Vérification du quota total de collections par projet
+        $existingCollections = $this->em->getRepository(Collection::class)
+            ->findBy(['project' => $project, 'deletedAt' => null]);
+        $existingMap = [];
+        foreach ($existingCollections as $ec) {
+            if ($ec->uuid) $existingMap[$ec->uuid->toRfc4122()] = true;
+            $existingMap[$ec->slug] = true;
+        }
+
+        $newColsCount = 0;
+        foreach ($collections as $colData) {
+            $cUuid = !empty($colData['uuid']) ? (string) $colData['uuid'] : null;
+            $cSlug = !empty($colData['slug']) ? (string) $colData['slug'] : $this->slugify($colData['name'] ?? '');
+            if (($cUuid && isset($existingMap[$cUuid])) || isset($existingMap[$cSlug])) {
+                continue;
+            }
+            $newColsCount++;
+        }
+
+        if ((count($existingCollections) + $newColsCount) > self::MAX_COLLECTIONS_PER_PROJECT) {
+            return $this->jsonResponse([
+                'error' => $this->trans('studio.quota.project_collections_exceeded', ['%max%' => (string) self::MAX_COLLECTIONS_PER_PROJECT], sprintf('Project collection limit exceeded (maximum %d collections).', self::MAX_COLLECTIONS_PER_PROJECT)),
+                'code' => 'MAX_COLLECTIONS_EXCEEDED',
+            ], 422);
+        }
 
         $created = 0;
         $updated = 0;
@@ -1421,6 +1509,17 @@ PROMPT;
 
         $this->em->flush();
 
+        $this->auditService?->log(
+            toolName: 'studio_schema_apply',
+            project: $project,
+            input: ['collections_count' => count($collections)],
+            output: ['created' => $created, 'updated' => $updated, 'deleted' => $deleted],
+            status: 'success',
+            createdBy: $this->currentUserIdentifier(),
+            source: 'studio_api',
+        );
+        $this->auditService?->flush();
+
         return $this->jsonResponse([
             'success' => true,
             'created' => $created,
@@ -1450,6 +1549,10 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/ai-execute', name: 'studio_ai_execute', methods: ['POST'])]
     public function aiExecute(string $uuid, Request $request): JsonResponse
     {
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->jsonResponse(['error' => $this->trans('studio.payload_too_large', ['%max%' => '2MB'], 'Request payload exceeds maximum allowed size (2MB).')], 413);
+        }
+
         if ($resp = $this->checkRateLimit($request)) return $resp;
 
         $project = $this->findProject($uuid);
@@ -1460,6 +1563,10 @@ PROMPT;
         if (!is_array($body)) return $this->jsonResponse(['error' => $this->trans('studio.invalid_json', [], 'Invalid JSON body')], 400);
         $actions = $body['actions'] ?? [];
         if (empty($actions)) return $this->jsonResponse(['error' => $this->trans('studio.no_actions_provided', [], 'No actions provided')], 422);
+
+        if (count($actions) > self::MAX_ACTIONS_PER_REQUEST) {
+            return $this->jsonResponse(['error' => $this->trans('studio.too_many_actions', ['%max%' => (string) self::MAX_ACTIONS_PER_REQUEST], sprintf('Too many actions in request (maximum %d).', self::MAX_ACTIONS_PER_REQUEST))], 422);
+        }
 
         $log = [];
         $halt = false;
@@ -1500,6 +1607,17 @@ PROMPT;
             $log[] = ['tool' => $tool, 'result' => $result];
         }
 
+        $this->auditService?->log(
+            toolName: 'studio_ai_execute',
+            project: $project,
+            input: ['actions_count' => count($actions)],
+            output: ['log_count' => count($log), 'halted' => $halt],
+            status: 'success',
+            createdBy: $this->currentUserIdentifier(),
+            source: 'studio_api',
+        );
+        $this->auditService?->flush();
+
         return $this->jsonResponse(['log' => $log, 'halted' => $halt]);
     }
 
@@ -1509,6 +1627,10 @@ PROMPT;
     #[Route('/api/projects/{uuid}/studio/ai-generate-image', name: 'studio_ai_generate_image', methods: ['POST'])]
     public function aiGenerateImage(string $uuid, Request $request): JsonResponse
     {
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->jsonResponse(['error' => $this->trans('studio.payload_too_large', ['%max%' => '2MB'], 'Request payload exceeds maximum allowed size (2MB).')], 413);
+        }
+
         if ($resp = $this->checkRateLimit($request)) return $resp;
 
         $project = $this->findProject($uuid);
@@ -1546,7 +1668,7 @@ PROMPT;
                 'image/gif'  => 'gif',
             ];
             if (!isset($allowedMimes[$mime])) {
-                throw new \InvalidArgumentException(sprintf('Le fichier téléchargé n\'est pas une image valide (type MIME: %s).', $mime));
+                throw new \InvalidArgumentException($this->trans('studio.invalid_image_mime', ['%mime%' => (string) $mime], sprintf('Le fichier téléchargé n\'est pas une image valide (type MIME: %s).', $mime)));
             }
 
             $ext = $allowedMimes[$mime];
@@ -1594,14 +1716,14 @@ PROMPT;
         $response = $this->httpClient->request('GET', $url, $options);
         $status = $response->getStatusCode();
         if ($status < 200 || $status >= 300) {
-            throw new \RuntimeException('Échec du téléchargement de l\'image distante : HTTP ' . $status);
+            throw new \RuntimeException($this->trans('studio.image_download_failed', ['%status%' => (string) $status], 'Échec du téléchargement de l\'image distante : HTTP ' . $status));
         }
 
         $maxBytes = 10 * 1024 * 1024; // 10 Mo
         $content = $this->ssrfProtection->readSafeResponseBody($response, $maxBytes);
 
         if (strlen($content) === 0) {
-            throw new \RuntimeException('Contenu image vide');
+            throw new \RuntimeException($this->trans('studio.empty_image_content', [], 'Contenu image vide'));
         }
 
         return $content;
@@ -1632,6 +1754,13 @@ PROMPT;
         }
 
         $normalized = $this->normalizeSchema($collections);
+
+        $existingCount = $this->em->getRepository(Collection::class)
+            ->count(['project' => $project, 'deletedAt' => null]);
+        if (($existingCount + count($normalized)) > self::MAX_COLLECTIONS_PER_PROJECT) {
+            return ['error' => $this->trans('studio.quota.project_collections_exceeded', ['%max%' => (string) self::MAX_COLLECTIONS_PER_PROJECT], sprintf('Project collection limit exceeded (maximum %d collections).', self::MAX_COLLECTIONS_PER_PROJECT))];
+        }
+
         $created = 0;
 
         // Passe 1 : persister les collections (flush pour assigner les ids,
@@ -1785,8 +1914,12 @@ PROMPT;
         $uuids = $params['uuids'] ?? [];
         $patch = $params['patch'] ?? [];
 
-        if (empty($uuids) || empty($patch) || !is_array($patch)) return ['error' => $this->trans('studio.uuids_and_patch_required', [], 'uuids et patch requis')];
+        if (empty($uuids) || empty($patch) || !is_array($uuids) || !is_array($patch)) return ['error' => $this->trans('studio.uuids_and_patch_required', [], 'uuids et patch requis')];
         if ($collectionSlug === '') return ['error' => $this->trans('studio.collection_required', [], 'Collection requise')];
+
+        if (count($uuids) > \App\Service\Security\PageCompositionSecurityService::MAX_BATCH_ENTRIES) {
+            return ['error' => $this->trans('studio.quota.max_batch_entries_exceeded', ['%max%' => (string) \App\Service\Security\PageCompositionSecurityService::MAX_BATCH_ENTRIES], sprintf('Batch entry quota exceeded (max %d).', \App\Service\Security\PageCompositionSecurityService::MAX_BATCH_ENTRIES))];
+        }
 
         try {
             $this->compositionSecurity->assertJsonDepth($patch);
@@ -1847,7 +1980,11 @@ PROMPT;
         $uuids = $params['uuids'] ?? [];
 
         if ($collectionSlug === '') return ['error' => $this->trans('studio.collection_required', [], 'Collection requise')];
-        if (empty($uuids)) return ['deleted' => 0];
+        if (empty($uuids) || !is_array($uuids)) return ['deleted' => 0];
+
+        if (count($uuids) > \App\Service\Security\PageCompositionSecurityService::MAX_BATCH_ENTRIES) {
+            return ['error' => $this->trans('studio.quota.max_batch_entries_exceeded', ['%max%' => (string) \App\Service\Security\PageCompositionSecurityService::MAX_BATCH_ENTRIES], sprintf('Batch entry quota exceeded (max %d).', \App\Service\Security\PageCompositionSecurityService::MAX_BATCH_ENTRIES))];
+        }
 
         $collection = $this->em->getRepository(Collection::class)
             ->findOneBy(['project' => $project, 'slug' => $collectionSlug, 'deletedAt' => null]);
@@ -1870,7 +2007,11 @@ PROMPT;
     private function executeGenerateImages(Project $project, array $params): array
     {
         $prompts = $params['prompts'] ?? [];
-        if (empty($prompts)) return ['error' => $this->trans('studio.no_prompts_provided', [], 'Aucun prompt')];
+        if (empty($prompts) || !is_array($prompts)) return ['error' => $this->trans('studio.no_prompts_provided', [], 'Aucun prompt')];
+
+        if (count($prompts) > self::MAX_GENERATE_IMAGES_BATCH) {
+            return ['error' => $this->trans('studio.quota.max_prompts_exceeded', ['%max%' => (string) self::MAX_GENERATE_IMAGES_BATCH], sprintf('Maximum %d image prompts per request.', self::MAX_GENERATE_IMAGES_BATCH))];
+        }
 
         $caps = $this->aiService->getCapabilities();
         if (!$caps['images']) {
@@ -1957,10 +2098,10 @@ PROMPT;
         // Récupérer les entrées source
         if (empty($uuids)) {
             $entries = $this->em->getRepository(\App\Entity\ContentEntry::class)
-                ->findByCollectionPaginated($collection, 1, 200, $sourceLocale);
+                ->findByCollectionPaginated($collection, 1, self::MAX_TRANSLATE_ENTRIES, $sourceLocale);
         } else {
             $entries = [];
-            foreach ($uuids as $uuid) {
+            foreach (array_slice((array) $uuids, 0, self::MAX_TRANSLATE_ENTRIES) as $uuid) {
                 $e = $this->em->getRepository(\App\Entity\ContentEntry::class)
                     ->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'locale' => $sourceLocale]);
                 if ($e) $entries[] = $e;
@@ -2094,8 +2235,12 @@ PROMPT;
      * Generate TypeScript types from the project schema.
      */
     #[Route('/api/projects/{uuid}/studio/generate-types', name: 'studio_generate_types', methods: ['GET'])]
-    public function generateTypes(string $uuid): JsonResponse
+    public function generateTypes(string $uuid, ?Request $request = null): JsonResponse
     {
+        if ($request !== null && ($resp = $this->checkRateLimit($request))) {
+            return $resp;
+        }
+
         $project = $this->findProject($uuid);
         if (!$project) {
             return $this->jsonResponse(['error' => $this->trans('studio.project_not_found', [], 'Project not found')], 404);
@@ -2113,16 +2258,36 @@ PROMPT;
                 if ($f->isDeleted()) continue;
                 $optional = $f->isRequired ? '' : '?';
                 $tsType = $this->mapPhpTypeToTs($f->type);
-                $fields[] = "  {$f->slug}{$optional}: {$tsType};";
+                $fieldSlug = (string) $f->slug;
+                $fieldKey = preg_match('/^[a-zA-Z_$][a-zA-Z0-9_$]*$/', $fieldSlug) ? $fieldSlug : json_encode($fieldSlug);
+                $fields[] = "  {$fieldKey}{$optional}: {$tsType};";
             }
 
+            $interfaceName = $this->sanitizeTsIdentifier((string) $collection->slug, true);
             $types[] = [
-                'name' => ucfirst($collection->slug),
-                'code' => "export interface " . ucfirst($collection->slug) . " {\n  uuid: string;\n  locale: string;\n  status: 'draft' | 'published';\n" . implode("\n", $fields) . "\n  created_at: string;\n  updated_at: string;\n}",
+                'name' => $interfaceName,
+                'code' => "export interface {$interfaceName} {\n  uuid: string;\n  locale: string;\n  status: 'draft' | 'published';\n" . implode("\n", $fields) . "\n  created_at: string;\n  updated_at: string;\n}",
             ];
         }
 
         return $this->jsonResponse(['types' => $types]);
+    }
+
+    private function sanitizeTsIdentifier(string $name, bool $isInterface = false): string
+    {
+        if ($isInterface) {
+            $pascal = $this->toPascalCase($name);
+            if ($pascal === '' || !ctype_alpha($pascal[0])) {
+                $pascal = 'Type' . $pascal;
+            }
+            return $pascal;
+        }
+
+        $clean = preg_replace('/[^a-zA-Z0-9_]/', '', $name);
+        if ($clean === '' || preg_match('/^[0-9]/', $clean)) {
+            $clean = 'prop_' . $clean;
+        }
+        return $clean;
     }
 
     private function slugify(string $text): string
