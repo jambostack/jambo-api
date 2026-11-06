@@ -2859,6 +2859,7 @@ return [
     'share.project_not_found'                         => 'المشروع غير موجود.',
     'share.auth_required'                             => 'المصادقة مطلوبة.',
     'share.payload_too_large'                         => 'حجم البيانات كبير جداً (الحد الأقصى 16 كيلوبايت).',
+    'share.invalid_content_type'                      => 'يجب أن يكون Content-Type هو application/json.',
     'share.invalid_json'                              => 'محتوى JSON غير صالح.',
     'share.entry_not_found'                           => 'السجل غير موجود.',
     'share.invalid_duration'                          => 'المدة المحددة غير صالحة.',

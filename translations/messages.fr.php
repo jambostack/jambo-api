@@ -2875,6 +2875,7 @@ return [
     'share.project_not_found'                         => 'Projet introuvable.',
     'share.auth_required'                             => 'Authentification requise.',
     'share.payload_too_large'                         => 'Charge utile trop volumineuse (max 16 Ko).',
+    'share.invalid_content_type'                      => 'Le Content-Type doit être application/json.',
     'share.invalid_json'                              => 'Corps JSON invalide.',
     'share.entry_not_found'                           => 'Entrée introuvable.',
     'share.invalid_duration'                          => 'Durée invalide.',

@@ -40,8 +40,18 @@ class ShareService
 
     public function resolve(string $plainToken): ?Share
     {
+        if (strlen($plainToken) < 8 || strlen($plainToken) > 128 || !preg_match('/^[A-Za-z0-9_\-]+$/', $plainToken)) {
+            return null;
+        }
+
         $hash = ApiToken::hashToken($plainToken, $this->appSecret);
-        return $this->shares->findOneByTokenHash($hash);
+        $share = $this->shares->findOneByTokenHash($hash);
+
+        if ($share !== null && !hash_equals($share->tokenHash, $hash)) {
+            return null;
+        }
+
+        return $share;
     }
 
     public function revoke(Share $share): void

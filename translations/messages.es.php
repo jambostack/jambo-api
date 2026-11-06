@@ -2857,6 +2857,7 @@ return [
     'share.project_not_found'                         => 'Proyecto no encontrado.',
     'share.auth_required'                             => 'Autenticación requerida.',
     'share.payload_too_large'                         => 'Carga útil demasiado grande (máx. 16 KB).',
+    'share.invalid_content_type'                      => 'Content-Type debe ser application/json.',
     'share.invalid_json'                              => 'Cuerpo JSON no válido.',
     'share.entry_not_found'                           => 'Entrada no encontrada.',
     'share.invalid_duration'                          => 'Duración no válida.',

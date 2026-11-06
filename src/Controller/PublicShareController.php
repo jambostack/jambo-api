@@ -30,6 +30,8 @@ class PublicShareController extends AbstractController
         'X-Robots-Tag' => 'noindex, nofollow, noarchive, nosnippet',
         'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
         'Content-Security-Policy' => "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' https://fonts.gstatic.com; frame-ancestors 'none'; form-action 'none';",
+        'Permissions-Policy' => 'camera=(), microphone=(), geolocation=()',
+        'Cross-Origin-Resource-Policy' => 'same-origin',
     ];
 
     public function __construct(
@@ -60,55 +62,197 @@ class PublicShareController extends AbstractController
             || str_contains((string) $request->headers->get('Accept'), 'application/json');
 
         if (!in_array($_format, ['html', 'json'], true)) {
+            $this->auditService?->log(
+                toolName: 'public_share_invalid_attempt',
+                project: null,
+                input: ['format' => $_format, 'ip' => $request->getClientIp()],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Unsupported response format requested',
+                createdBy: $request->getClientIp(),
+                source: 'public_share',
+            );
+            $this->auditService?->flush();
             return $this->renderError(404, 'unsupported_format', true);
         }
 
-        if ($this->shareLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            $limiter = $this->shareLimiter->create($identifier);
-            if (false === $limiter->consume(1)->isAccepted()) {
-                $this->auditService?->log(
-                    toolName: 'public_share_rate_limit',
-                    project: null,
-                    input: ['ip' => $identifier],
-                    output: null,
-                    status: 'failure',
-                    errorMessage: 'Rate limit exceeded',
-                    source: 'public_share',
-                );
-                return $this->renderError(429, 'too_many_requests', $wantsJson);
-            }
+        $identifier = $request->getClientIp() ?: '127.0.0.1';
+        $limiter = $this->shareLimiter?->create($identifier);
+        if ($limiter !== null && false === $limiter->consume(1)->isAccepted()) {
+            $this->auditService?->log(
+                toolName: 'public_share_rate_limit',
+                project: null,
+                input: ['ip' => $identifier],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Rate limit exceeded',
+                createdBy: $identifier,
+                source: 'public_share',
+            );
+            $this->auditService?->flush();
+            return $this->renderError(429, 'too_many_requests', $wantsJson);
         }
 
         $tokenLength = strlen($token);
         if ($tokenLength < self::MIN_TOKEN_LENGTH || $tokenLength > self::MAX_TOKEN_LENGTH || !preg_match('/^[A-Za-z0-9_\-]+$/', $token)) {
+            $limiter?->consume(2);
+            $this->auditService?->log(
+                toolName: 'public_share_invalid_attempt',
+                project: null,
+                input: [
+                    'ip' => $identifier,
+                    'token_prefix' => substr($token, 0, 10),
+                    'reason' => 'invalid_token_format',
+                ],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Invalid token format',
+                createdBy: $identifier,
+                source: 'public_share',
+            );
+            $this->auditService?->flush();
             return $this->renderError(404, 'invalid', $wantsJson);
         }
 
         $share = $this->shares->resolve($token);
 
-        if ($share === null || $share->isRevoked()) {
+        if ($share === null) {
+            $limiter?->consume(2);
+            $this->auditService?->log(
+                toolName: 'public_share_not_found',
+                project: null,
+                input: [
+                    'ip' => $identifier,
+                    'token_prefix' => substr($token, 0, 12) . '...',
+                    'reason' => 'token_not_found',
+                ],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Share token not found',
+                createdBy: $identifier,
+                source: 'public_share',
+            );
+            $this->auditService?->flush();
             return $this->renderError(404, 'invalid', $wantsJson);
         }
+
+        if ($share->isRevoked()) {
+            $this->auditService?->log(
+                toolName: 'public_share_revoked',
+                project: $share->project,
+                input: [
+                    'ip' => $identifier,
+                    'share_id' => $share->id,
+                    'revoked_at' => $share->revokedAt?->format('c'),
+                ],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Share link has been revoked',
+                createdBy: $identifier,
+                source: 'public_share',
+            );
+            $this->auditService?->flush();
+            return $this->renderError(404, 'invalid', $wantsJson);
+        }
+
         if ($share->isExpired()) {
+            $this->auditService?->log(
+                toolName: 'public_share_expired',
+                project: $share->project,
+                input: [
+                    'ip' => $identifier,
+                    'share_id' => $share->id,
+                    'expires_at' => $share->expiresAt?->format('c'),
+                ],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Share link has expired',
+                createdBy: $identifier,
+                source: 'public_share',
+            );
+            $this->auditService?->flush();
             return $this->renderError(410, 'expired', $wantsJson);
         }
+
         $entry = $share->entry;
         if ($entry === null || $entry->isDeleted()) {
+            $this->auditService?->log(
+                toolName: 'public_share_security_violation',
+                project: $share->project,
+                input: [
+                    'ip' => $identifier,
+                    'share_id' => $share->id,
+                    'reason' => 'entry_missing_or_deleted',
+                ],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Entry missing or deleted',
+                createdBy: $identifier,
+                source: 'public_share',
+            );
+            $this->auditService?->flush();
             return $this->renderError(404, 'invalid', $wantsJson);
         }
 
         // Integrity check: if entry has a collection, ensure it is not soft-deleted
         if ($entry->collection !== null && $entry->collection->isDeleted()) {
+            $this->auditService?->log(
+                toolName: 'public_share_security_violation',
+                project: $share->project,
+                input: [
+                    'ip' => $identifier,
+                    'share_id' => $share->id,
+                    'reason' => 'collection_deleted',
+                ],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Collection deleted',
+                createdBy: $identifier,
+                source: 'public_share',
+            );
+            $this->auditService?->flush();
             return $this->renderError(404, 'invalid', $wantsJson);
         }
 
         // Multi-tenant check: entry must match share project
         if ($share->project === null || $entry->project?->id !== $share->project->id) {
+            $this->auditService?->log(
+                toolName: 'public_share_security_violation',
+                project: $share->project,
+                input: [
+                    'ip' => $identifier,
+                    'share_id' => $share->id,
+                    'reason' => 'tenant_mismatch',
+                ],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Tenant mismatch',
+                createdBy: $identifier,
+                source: 'public_share',
+            );
+            $this->auditService?->flush();
             return $this->renderError(404, 'invalid', $wantsJson);
         }
 
         $this->shares->recordAccess($share);
+
+        $this->auditService?->log(
+            toolName: 'public_share_access',
+            project: $share->project,
+            input: [
+                'ip' => $identifier,
+                'share_id' => $share->id,
+                'format' => $_format,
+            ],
+            output: [
+                'entry_uuid' => $entry->uuid?->toString(),
+                'view_count' => $share->viewCount,
+            ],
+            status: 'success',
+            createdBy: $identifier,
+            source: 'public_share',
+        );
+        $this->auditService?->flush();
 
         $data = $this->formatter->formatEntry($entry);
 
