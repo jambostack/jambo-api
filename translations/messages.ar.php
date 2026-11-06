@@ -3775,4 +3775,18 @@ return [
     'versioning.label_updated_successfully' => 'تم تحديث تسمية الإصدار بنجاح.',
     'versioning.quota_exceeded' => 'تم تجاوز حصة إصدارات المشروع (الحد الأقصى %max% إصدار).',
     'versioning.snapshot_too_large' => 'حمولة لقطة الإصدار تتجاوز الحد الأقصى المسموح به (الحد الأقصى %max% كيلوبايت).',
+
+    // Cycle #94 - Template Export/Import & Schema Hardening
+    'template.import_success' => 'تم استيراد القالب بنجاح.',
+    'template.export_success' => 'تم تصدير القالب بنجاح.',
+    'template.invalid_blueprint_format' => 'بنية القالب أو المخطط غير صالحة.',
+    'template.invalid_yaml' => 'صيغة YAML غير صالحة: %error%',
+    'template.field_type_unsupported' => 'نوع الحقل غير مدعوم: %type%.',
+    'template.project_collection_limit_exceeded' => 'تم الوصول إلى الحد الأقصى للمجموعات في هذا المشروع (الحد الأقصى %max% مجموعة مسموح بها).',
+    'template.collection_applied_success' => 'تم تطبيق قالب المجموعة بنجاح.',
+    'template.collection_name_required' => 'اسم المجموعة مطلوب.',
+    'template.collections_required' => 'مجموعة واحدة على الأقل مطلوبة في القالب.',
+    'template.too_many_collections' => 'يحتوي القالب على عدد كبير جدًا من المجموعات (الحد الأقصى %max%).',
+    'template.target_project_not_found' => 'المشروع المستهدف غير موجود.',
+    'template.collection_already_exists' => 'توجد بالفعل مجموعة بالمعرف المختصر \'%slug%\' في هذا المشروع.',
 ];

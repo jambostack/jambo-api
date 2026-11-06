@@ -119,29 +119,56 @@ class BlueprintImportCommand extends Command
                 continue;
             }
 
+            $cleanColName = trim(strip_tags(preg_replace('/[\x00-\x1F\x7F]/', '', (string) $colData['name'])));
             $collection = new Collection();
             $collection->project = $project;
-            $collection->name = substr((string) $colData['name'], 0, 100);
+            $collection->name = substr($cleanColName !== '' ? $cleanColName : 'Collection', 0, 100);
             $slug = substr(preg_replace('/[^a-z0-9_-]/i', '-', strtolower((string) ($colData['slug'] ?? $colData['name']))), 0, 100);
-            $collection->slug = $slug;
+            $collection->slug = $slug ?: 'collection-' . ($importedCollections + 1);
             $this->em->persist($collection);
             $importedCollections++;
 
-            foreach ($colData['fields'] ?? [] as $fDef) {
+            $rawFields = is_array($colData['fields'] ?? null) ? array_slice($colData['fields'], 0, 100) : [];
+            $seenFieldSlugs = [];
+
+            foreach ($rawFields as $fDef) {
                 if (!is_array($fDef) || empty($fDef['name'])) {
                     continue;
                 }
 
-                $rawType = strtolower((string) ($fDef['type'] ?? 'text'));
+                $rawType = strtolower(trim((string) ($fDef['type'] ?? 'text')));
+                $aliasMap = [
+                    'textarea'    => 'longtext',
+                    'rich_text'   => 'richtext',
+                    'select'      => 'enumeration',
+                    'multiselect' => 'tags',
+                    'file'        => 'media',
+                    'int'         => 'number',
+                    'integer'     => 'number',
+                    'float'       => 'decimal',
+                    'bool'        => 'boolean',
+                    'string'      => 'text',
+                ];
+                if (isset($aliasMap[$rawType])) {
+                    $rawType = $aliasMap[$rawType];
+                }
+
                 $type = in_array($rawType, self::ALLOWED_FIELD_TYPES, true) ? $rawType : 'text';
+
+                $cleanFieldName = trim(strip_tags(preg_replace('/[\x00-\x1F\x7F]/', '', (string) $fDef['name'])));
+                $fSlug = substr(preg_replace('/[^a-z0-9_-]/i', '-', strtolower((string) ($fDef['slug'] ?? $fDef['name']))), 0, 100);
+                if ($fSlug === '' || isset($seenFieldSlugs[$fSlug])) {
+                    $fSlug = ($fSlug ?: 'field') . '-' . ($importedFields + 1);
+                }
+                $seenFieldSlugs[$fSlug] = true;
 
                 $field = new Field();
                 $field->collection = $collection;
-                $field->name = substr((string) $fDef['name'], 0, 100);
-                $field->slug = substr(preg_replace('/[^a-z0-9_-]/i', '-', strtolower((string) ($fDef['slug'] ?? $fDef['name']))), 0, 100);
+                $field->name = substr($cleanFieldName !== '' ? $cleanFieldName : 'Field', 0, 100);
+                $field->slug = $fSlug;
                 $field->type = $type;
                 $field->isRequired = (bool) ($fDef['is_required'] ?? false);
-                $field->order = (int) ($fDef['order'] ?? $fDef['sort_order'] ?? 0);
+                $field->order = min(1000, max(0, (int) ($fDef['order'] ?? $fDef['sort_order'] ?? 0)));
                 $this->em->persist($field);
                 $importedFields++;
             }

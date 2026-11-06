@@ -2,8 +2,11 @@
 
 namespace App\Controller;
 
+use App\Entity\Collection;
 use App\Entity\CollectionTemplate;
 use App\Entity\CollectionTemplateField;
+use App\Entity\Field;
+use App\Entity\Project;
 use App\Repository\CollectionRepository;
 use App\Repository\CollectionTemplateRepository;
 use App\Repository\ProjectRepository;
@@ -13,14 +16,17 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Yaml\Yaml;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/collection-templates', name: 'api_collection_template_')]
 class CollectionTemplateController extends AbstractController
 {
     public const MAX_TEMPLATES_COUNT = 200;
+    public const MAX_COLLECTIONS_PER_PROJECT = 100;
     public const MAX_FIELDS_PER_TEMPLATE = 100;
     public const MAX_NAME_LENGTH = 255;
     public const MAX_DESCRIPTION_LENGTH = 2000;
@@ -54,6 +60,27 @@ class CollectionTemplateController extends AbstractController
             return strtr($default, $parameters);
         }
         return $id;
+    }
+
+    private function normalizeFieldType(string $rawType): ?string
+    {
+        $type = strtolower(trim($rawType));
+        $aliasMap = [
+            'textarea'    => 'longtext',
+            'rich_text'   => 'richtext',
+            'select'      => 'enumeration',
+            'multiselect' => 'tags',
+            'file'        => 'media',
+            'int'         => 'number',
+            'integer'     => 'number',
+            'float'       => 'decimal',
+            'bool'        => 'boolean',
+            'string'      => 'text',
+        ];
+        if (isset($aliasMap[$type])) {
+            $type = $aliasMap[$type];
+        }
+        return in_array($type, FieldController::ALLOWED_TYPES, true) ? $type : null;
     }
 
     private function checkRateLimit(Request $request): ?JsonResponse
@@ -132,6 +159,413 @@ class CollectionTemplateController extends AbstractController
         }
 
         return new JsonResponse($this->serialize($template, true), 200, self::SECURITY_HEADERS);
+    }
+
+    #[Route('/{id}/export', name: 'export', methods: ['GET'], requirements: ['id' => '\d+'])]
+    public function export(int $id, ?Request $request = null): Response
+    {
+        if ($request !== null && ($rateLimit = $this->checkRateLimit($request))) {
+            return $rateLimit;
+        }
+
+        if ($id <= 0) {
+            return new JsonResponse(['error' => $this->trans('template.not_found', [], 'Template not found')], 404, self::SECURITY_HEADERS);
+        }
+
+        $template = $this->templateRepository->find($id);
+        if ($template === null) {
+            return new JsonResponse(['error' => $this->trans('template.not_found', [], 'Template not found')], 404, self::SECURITY_HEADERS);
+        }
+
+        $data = [
+            'version'     => '1.0',
+            'type'        => 'collection_template',
+            'id'          => $template->id,
+            'name'        => $template->name,
+            'description' => $template->description,
+            'isSingleton' => $template->isSingleton,
+            'fields'      => $template->fields->map(fn ($f) => [
+                'name'       => $f->name,
+                'slug'       => $f->slug,
+                'type'       => $f->type,
+                'options'    => $f->options,
+                'order'      => $f->order,
+                'isRequired' => $f->isRequired,
+            ])->toArray(),
+            'exportedAt'  => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
+        ];
+
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $safeSlug = preg_replace('/[^a-zA-Z0-9_-]/', '-', strtolower($template->name)) ?: 'template';
+        $filename = sprintf('collection-template-%d-%s.json', $template->id, $safeSlug);
+
+        $response = new Response($json, 200, [
+            'Content-Type'        => 'application/json; charset=utf-8',
+            'Content-Disposition' => sprintf('attachment; filename="%s"', $filename),
+        ]);
+        foreach (self::SECURITY_HEADERS as $k => $v) {
+            $response->headers->set($k, $v);
+        }
+
+        return $response;
+    }
+
+    #[Route('/import', name: 'import', methods: ['POST'])]
+    public function import(Request $request): JsonResponse
+    {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
+        if (!$this->getUser()) {
+            return new JsonResponse(['error' => $this->trans('template.auth_required', [], 'Authentication required')], 401, self::SECURITY_HEADERS);
+        }
+
+        if (!$this->isGranted('ROLE_ADMIN') && !$this->isGranted('ROLE_SUPER_ADMIN')) {
+            throw $this->createAccessDeniedException($this->trans('template.admin_required', [], 'Admin privileges required.'));
+        }
+
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return new JsonResponse([
+                'error' => $this->trans('template.payload_too_large', [], 'Payload too large (max 512KB).'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413, self::SECURITY_HEADERS);
+        }
+
+        $templateCount = $this->templateRepository->count([]);
+        if ($templateCount >= self::MAX_TEMPLATES_COUNT) {
+            return new JsonResponse([
+                'error' => $this->trans('template.max_templates_exceeded', ['%max%' => self::MAX_TEMPLATES_COUNT], 'Maximum number of templates reached.'),
+                'code' => 'MAX_TEMPLATES_EXCEEDED',
+            ], 422, self::SECURITY_HEADERS);
+        }
+
+        $uploadedFile = $request->files->get('file');
+        $rawContent = '';
+        $isYaml = false;
+
+        if ($uploadedFile !== null) {
+            if (!$uploadedFile->isValid()) {
+                return new JsonResponse(['error' => $this->trans('template.invalid_blueprint_format')], 422, self::SECURITY_HEADERS);
+            }
+            if ($uploadedFile->getSize() > self::MAX_PAYLOAD_BYTES) {
+                return new JsonResponse(['error' => $this->trans('template.payload_too_large'), 'code' => 'PAYLOAD_TOO_LARGE'], 413, self::SECURITY_HEADERS);
+            }
+            $ext = strtolower($uploadedFile->getClientOriginalExtension());
+            if (in_array($ext, ['yaml', 'yml'], true)) {
+                $isYaml = true;
+            } elseif ($ext !== 'json') {
+                return new JsonResponse(['error' => $this->trans('template.invalid_blueprint_format')], 422, self::SECURITY_HEADERS);
+            }
+            $rawContent = (string) file_get_contents($uploadedFile->getPathname());
+        } else {
+            $rawContent = $request->getContent();
+            $contentType = (string) $request->headers->get('Content-Type', '');
+            if (str_contains($contentType, 'yaml') || str_contains($contentType, 'x-yaml')) {
+                $isYaml = true;
+            }
+        }
+
+        if (trim($rawContent) === '') {
+            return new JsonResponse(['error' => $this->trans('template.invalid_blueprint_format')], 422, self::SECURITY_HEADERS);
+        }
+
+        $data = null;
+        if ($isYaml) {
+            try {
+                $data = Yaml::parse($rawContent, Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE);
+            } catch (\Throwable $e) {
+                return new JsonResponse(['error' => $this->trans('template.invalid_yaml', ['%error%' => $e->getMessage()])], 400, self::SECURITY_HEADERS);
+            }
+        } else {
+            $data = json_decode($rawContent, true);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+                try {
+                    $data = Yaml::parse($rawContent, Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE);
+                } catch (\Throwable) {
+                    return new JsonResponse(['error' => $this->trans('template.invalid_json')], 400, self::SECURITY_HEADERS);
+                }
+            }
+        }
+
+        if (!is_array($data)) {
+            return new JsonResponse(['error' => $this->trans('template.invalid_blueprint_format')], 422, self::SECURITY_HEADERS);
+        }
+
+        $rawName = isset($data['name']) && is_scalar($data['name']) ? $this->sanitizeText((string) $data['name']) : '';
+        if ($rawName === '') {
+            return new JsonResponse(['error' => $this->trans('template.name_required')], 422, self::SECURITY_HEADERS);
+        }
+        $name = mb_substr($rawName, 0, self::MAX_NAME_LENGTH);
+
+        $rawDesc = isset($data['description']) && is_scalar($data['description']) ? $this->sanitizeText((string) $data['description']) : null;
+        $description = $rawDesc !== null && $rawDesc !== '' ? mb_substr($rawDesc, 0, self::MAX_DESCRIPTION_LENGTH) : null;
+
+        $rawFields = $data['fields'] ?? [];
+        if (!is_array($rawFields)) {
+            return new JsonResponse(['error' => $this->trans('template.fields_must_be_array')], 422, self::SECURITY_HEADERS);
+        }
+        if (count($rawFields) > self::MAX_FIELDS_PER_TEMPLATE) {
+            return new JsonResponse(['error' => $this->trans('template.max_fields_exceeded')], 422, self::SECURITY_HEADERS);
+        }
+
+        $template = new CollectionTemplate();
+        $template->name = $name;
+        $template->description = $description;
+        $template->isSingleton = (bool) ($data['isSingleton'] ?? $data['is_singleton'] ?? false);
+
+        $seenSlugs = [];
+        foreach (array_slice($rawFields, 0, self::MAX_FIELDS_PER_TEMPLATE) as $i => $f) {
+            if (!is_array($f)) {
+                return new JsonResponse(['error' => $this->trans('template.fields_must_be_array')], 422, self::SECURITY_HEADERS);
+            }
+            $fieldName = isset($f['name']) && is_scalar($f['name']) ? $this->sanitizeText((string) $f['name']) : '';
+            $fieldSlug = isset($f['slug']) && is_scalar($f['slug']) ? preg_replace('/[^a-zA-Z0-9_-]/', '', trim((string) $f['slug'])) : '';
+            if ($fieldName === '') {
+                $fieldName = 'Field ' . ($i + 1);
+            }
+            if ($fieldSlug === '') {
+                $fieldSlug = 'field_' . ($i + 1);
+            }
+            if (isset($seenSlugs[$fieldSlug])) {
+                $fieldSlug = mb_substr($fieldSlug, 0, 120) . '_' . ($i + 1);
+            }
+            $seenSlugs[$fieldSlug] = true;
+
+            $rawType = is_string($f['type'] ?? null) ? trim($f['type']) : 'text';
+            $fieldType = $this->normalizeFieldType($rawType);
+            if ($fieldType === null) {
+                return new JsonResponse([
+                    'error' => $this->trans('template.field_invalid_type', ['%name%' => $fieldName, '%type%' => $rawType]),
+                    'code'  => 'INVALID_FIELD_TYPE',
+                ], 422, self::SECURITY_HEADERS);
+            }
+
+            $options = null;
+            if (isset($f['options']) && is_array($f['options'])) {
+                if ($this->getArrayDepth($f['options']) > self::MAX_OPTIONS_DEPTH) {
+                    return new JsonResponse([
+                        'error' => $this->trans('template.field_options_too_deep'),
+                        'code'  => 'OPTIONS_TOO_DEEP',
+                    ], 422, self::SECURITY_HEADERS);
+                }
+                if (strlen((string) json_encode($f['options'])) > self::MAX_OPTIONS_PAYLOAD_BYTES) {
+                    return new JsonResponse([
+                        'error' => $this->trans('template.field_options_too_large'),
+                        'code'  => 'OPTIONS_TOO_LARGE',
+                    ], 422, self::SECURITY_HEADERS);
+                }
+                $options = $f['options'];
+
+                if ($fieldType === 'relation') {
+                    $relation = is_array($options['relation'] ?? null) ? $options['relation'] : [];
+                    $relType = (int) ($relation['type'] ?? $options['relationType'] ?? 1);
+                    $target = $relation['collection_slug'] ?? $options['targetCollection'] ?? null;
+                    if ($target === 'end_users') {
+                        $options = ['targetCollection' => 'end_users', 'relation' => ['type' => $relType, 'collection_slug' => 'end_users']];
+                    } elseif (is_string($target) && preg_match('/^[a-zA-Z0-9_\-]+$/', $target)) {
+                        $options = ['relation' => ['type' => $relType, 'collection_slug' => $target]];
+                    } else {
+                        $options = ['relation' => ['type' => $relType, 'orphan' => true, 'collection_slug' => null]];
+                    }
+                }
+            }
+
+            $field = new CollectionTemplateField();
+            $field->name = mb_substr($fieldName, 0, self::MAX_NAME_LENGTH);
+            $field->slug = mb_substr($fieldSlug, 0, 128);
+            $field->type = $fieldType;
+            $field->options = $options;
+            $field->order = min(1000, max(0, (int) ($f['order'] ?? $i)));
+            $field->isRequired = (bool) ($f['isRequired'] ?? $f['is_required'] ?? false);
+            $field->collectionTemplate = $template;
+            $template->fields->add($field);
+            $this->em->persist($field);
+        }
+
+        $this->em->persist($template);
+        $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'collection_template_import',
+            project: null,
+            input: ['name' => $template->name, 'fields_count' => $template->fields->count()],
+            output: ['id' => $template->id],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
+
+        return new JsonResponse($this->serialize($template, true), 201, self::SECURITY_HEADERS);
+    }
+
+    #[Route('/{id}/apply/{projectUuid}', name: 'apply', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function apply(int $id, string $projectUuid, Request $request): JsonResponse
+    {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
+        if (!$this->getUser()) {
+            return new JsonResponse(['error' => $this->trans('template.auth_required', [], 'Authentication required')], 401, self::SECURITY_HEADERS);
+        }
+
+        if ($id <= 0) {
+            return new JsonResponse(['error' => $this->trans('template.not_found', [], 'Template not found')], 404, self::SECURITY_HEADERS);
+        }
+
+        $template = $this->templateRepository->find($id);
+        if ($template === null) {
+            return new JsonResponse(['error' => $this->trans('template.not_found', [], 'Template not found')], 404, self::SECURITY_HEADERS);
+        }
+
+        if (!preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/', $projectUuid)) {
+            return new JsonResponse(['error' => $this->trans('template.target_project_not_found', [], 'Target project not found.')], 404, self::SECURITY_HEADERS);
+        }
+
+        try {
+            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => $this->trans('template.target_project_not_found', [], 'Target project not found.')], 404, self::SECURITY_HEADERS);
+        }
+
+        if ($project === null) {
+            return new JsonResponse(['error' => $this->trans('template.target_project_not_found', [], 'Target project not found.')], 404, self::SECURITY_HEADERS);
+        }
+
+        if ($request->attributes->get('_project') !== $project) {
+            $this->denyAccessUnlessGranted('collection.create', $project);
+        }
+
+        // Quota check: max collections per project
+        $activeCollectionsCount = 0;
+        foreach ($project->collections as $col) {
+            if (!method_exists($col, 'isDeleted') || !$col->isDeleted()) {
+                $activeCollectionsCount++;
+            }
+        }
+        if ($activeCollectionsCount >= self::MAX_COLLECTIONS_PER_PROJECT) {
+            return new JsonResponse([
+                'error' => $this->trans('template.project_collection_limit_exceeded', ['%max%' => self::MAX_COLLECTIONS_PER_PROJECT]),
+                'code'  => 'PROJECT_COLLECTION_LIMIT_EXCEEDED',
+            ], 422, self::SECURITY_HEADERS);
+        }
+
+        $data = [];
+        if (trim($request->getContent()) !== '') {
+            try {
+                $data = $request->toArray();
+            } catch (\Throwable) {
+                return new JsonResponse(['error' => $this->trans('template.invalid_json')], 400, self::SECURITY_HEADERS);
+            }
+        }
+
+        $customName = isset($data['name']) && is_scalar($data['name']) ? $this->sanitizeText((string) $data['name']) : '';
+        $collectionName = $customName !== '' ? mb_substr($customName, 0, self::MAX_NAME_LENGTH) : $template->name;
+
+        $customSlug = isset($data['slug']) && is_scalar($data['slug']) ? preg_replace('/[^a-zA-Z0-9_-]/', '', trim((string) $data['slug'])) : '';
+        $baseSlug = $customSlug !== '' ? $customSlug : (preg_replace('/[^a-zA-Z0-9_-]/', '', strtolower($template->name)) ?: 'collection');
+        $baseSlug = mb_substr($baseSlug, 0, 120);
+
+        // Deduplication du slug de collection dans le projet
+        $candidateSlug = $baseSlug;
+        $suffix = 1;
+        while ($this->collectionRepository->findOneBy(['project' => $project, 'slug' => $candidateSlug, 'deletedAt' => null]) !== null) {
+            $candidateSlug = $baseSlug . '_' . $suffix++;
+        }
+
+        $collection = new Collection();
+        $collection->project = $project;
+        $collection->name = $collectionName;
+        $collection->slug = $candidateSlug;
+        $collection->description = $template->description;
+        $collection->isSingleton = $template->isSingleton;
+        $project->collections->add($collection);
+        $this->em->persist($collection);
+
+        foreach ($template->fields as $i => $tf) {
+            $rawType = $tf->type;
+            $fieldType = $this->normalizeFieldType($rawType) ?? 'text';
+
+            $options = is_array($tf->options) ? $tf->options : null;
+            if ($options !== null && (strlen((string) json_encode($options)) > self::MAX_OPTIONS_PAYLOAD_BYTES || $this->getArrayDepth($options) > self::MAX_OPTIONS_DEPTH)) {
+                $options = null;
+            }
+
+            if ($fieldType === 'relation' && is_array($options)) {
+                $relation = is_array($options['relation'] ?? null) ? $options['relation'] : [];
+                $relType = (int) ($relation['type'] ?? $options['relationType'] ?? 1);
+                $targetSlug = $relation['collection_slug'] ?? $options['targetCollection'] ?? null;
+
+                if ($targetSlug === 'end_users') {
+                    $options = [
+                        'targetCollection' => 'end_users',
+                        'relation' => ['type' => $relType, 'collection_slug' => 'end_users'],
+                    ];
+                } elseif (is_string($targetSlug) && $targetSlug !== '') {
+                    $targetColl = $this->collectionRepository->findOneBy(['project' => $project, 'slug' => $targetSlug, 'deletedAt' => null]);
+                    if ($targetColl !== null) {
+                        $options = [
+                            'relation' => [
+                                'type' => $relType,
+                                'collection' => $targetColl->id,
+                                'collection_slug' => $targetColl->slug,
+                            ],
+                        ];
+                    } else {
+                        $options = [
+                            'relation' => [
+                                'type' => $relType,
+                                'orphan' => true,
+                                'collection_slug' => null,
+                            ],
+                        ];
+                    }
+                } else {
+                    $options = [
+                        'relation' => [
+                            'type' => $relType,
+                            'orphan' => true,
+                            'collection_slug' => null,
+                        ],
+                    ];
+                }
+            }
+
+            $field = new Field();
+            $field->name = mb_substr($tf->name, 0, self::MAX_NAME_LENGTH);
+            $field->slug = mb_substr($tf->slug, 0, 128);
+            $field->type = $fieldType;
+            $field->order = min(1000, max(0, $tf->order));
+            $field->isRequired = $tf->isRequired;
+            $field->options = $options;
+            $field->collection = $collection;
+
+            $collection->fields->add($field);
+            $this->em->persist($field);
+        }
+
+        $this->em->flush();
+
+        $this->auditService?->log(
+            toolName: 'collection_template_apply',
+            project: $project,
+            input: ['template_id' => $id, 'collection_name' => $collectionName, 'collection_slug' => $candidateSlug],
+            output: ['collection_id' => $collection->id, 'fields_count' => $collection->fields->count()],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
+
+        return new JsonResponse([
+            'id'          => $collection->id,
+            'name'        => $collection->name,
+            'slug'        => $collection->slug,
+            'fieldsCount' => $collection->fields->count(),
+        ], 201, self::SECURITY_HEADERS);
     }
 
     #[Route('', name: 'create', methods: ['POST'])]

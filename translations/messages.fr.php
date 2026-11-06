@@ -3791,4 +3791,18 @@ return [
     'versioning.label_updated_successfully' => 'Libellé de version mis à jour avec succès.',
     'versioning.quota_exceeded' => 'Quota de versions du projet dépassé (maximum %max% versions).',
     'versioning.snapshot_too_large' => 'La capture de version dépasse la taille maximale autorisée (max %max% Ko).',
+
+    // Cycle #94 - Template Export/Import & Schema Hardening
+    'template.import_success' => 'Template importé avec succès.',
+    'template.export_success' => 'Template exporté avec succès.',
+    'template.invalid_blueprint_format' => 'Structure de template ou blueprint invalide.',
+    'template.invalid_yaml' => 'Format YAML invalide : %error%',
+    'template.field_type_unsupported' => 'Type de champ non supporté : %type%.',
+    'template.project_collection_limit_exceeded' => 'Limite de collections atteinte pour ce projet (maximum %max% collections autorisées).',
+    'template.collection_applied_success' => 'Template de collection appliqué avec succès.',
+    'template.collection_name_required' => 'Le nom de la collection est requis.',
+    'template.collections_required' => 'Au moins une collection est requise dans le template.',
+    'template.too_many_collections' => 'Le template contient trop de collections (maximum %max%).',
+    'template.target_project_not_found' => 'Projet cible introuvable.',
+    'template.collection_already_exists' => 'Une collection avec le slug \'%slug%\' existe déjà dans ce projet.',
 ];

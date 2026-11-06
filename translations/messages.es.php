@@ -3773,4 +3773,18 @@ return [
     'versioning.label_updated_successfully' => 'Etiqueta de versión actualizada con éxito.',
     'versioning.quota_exceeded' => 'Cuota de versiones del proyecto excedida (máximo %max% versiones).',
     'versioning.snapshot_too_large' => 'La instantánea de versión excede el tamaño máximo permitido (máx %max% KB).',
+
+    // Cycle #94 - Template Export/Import & Schema Hardening
+    'template.import_success' => 'Plantilla importada con éxito.',
+    'template.export_success' => 'Plantilla exportada con éxito.',
+    'template.invalid_blueprint_format' => 'Estructura de plantilla o blueprint no válida.',
+    'template.invalid_yaml' => 'Formato YAML no válido: %error%',
+    'template.field_type_unsupported' => 'Tipo de campo no admitido: %type%.',
+    'template.project_collection_limit_exceeded' => 'Límite de colecciones alcanzado para este proyecto (máximo %max% colecciones permitidas).',
+    'template.collection_applied_success' => 'Plantilla de colección aplicada con éxito.',
+    'template.collection_name_required' => 'El nombre de la colección es obligatorio.',
+    'template.collections_required' => 'Se requiere al menos una colección en la plantilla.',
+    'template.too_many_collections' => 'La plantilla contiene demasiadas colecciones (máximo %max%).',
+    'template.target_project_not_found' => 'Proyecto de destino no encontrado.',
+    'template.collection_already_exists' => 'Ya existe una colección con el slug \'%slug%\' en este proyecto.',
 ];
