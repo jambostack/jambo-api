@@ -83,12 +83,24 @@ class TusController extends AbstractController
     private function checkRateLimit(Request $request): ?Response
     {
         if ($this->tusLimiter !== null) {
-            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
-            if (false === $this->tusLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $user = null;
+            try {
+                $user = $this->getUser();
+            } catch (\Throwable) {}
+            $identifier = $user?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            $limit = $this->tusLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return $this->errorResponse(
                     $this->trans('tus.rate_limit_exceeded', [], 'Too many upload requests. Please retry later.'),
                     'RATE_LIMIT_EXCEEDED',
-                    429
+                    429,
+                    [
+                        'Retry-After' => (string) $retryAfter,
+                        'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                        'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                        'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                    ]
                 );
             }
         }

@@ -4034,4 +4034,9 @@ return [
     'webhook.outbound_rate_limit_exceeded' => 'تم تجاوز الحد الأقصى لمعدل خطافات الويب الصادرة لهذا المشروع.',
     'webhook.rate_limit_exceeded_retry' => 'طلبات خطاف ويب كثيرة جدًا. يُرجى إعادة المحاولة بعد %seconds% ثانية.',
     'webhook.test_rate_limit_retry' => 'طلبات اختبار خطاف ويب كثيرة جدًا. يُرجى إعادة المحاولة بعد %seconds% ثانية.',
+
+    // ─── Cycle 123: Upload Double-Extension, SVG/CDATA Defense, Quarantine I18N & Rate-Limit Standards ───
+    'upload.error.compound_extension_forbidden' => 'امتداد الملف المركب ".%extension%" محظور تمامًا.',
+    'upload.error.svg_cdata_script' => 'يحتوي ملف SVG على نمط برمجي خطير داخل كتلة CDATA.',
+    'media.manual_quarantine_reason' => 'حجر إداري يدوي.',
 ];

@@ -4050,4 +4050,9 @@ return [
     'webhook.outbound_rate_limit_exceeded' => 'Limite de débit de webhooks sortants dépassée pour ce projet.',
     'webhook.rate_limit_exceeded_retry' => 'Trop de requêtes de webhook. Veuillez réessayer dans %seconds% secondes.',
     'webhook.test_rate_limit_retry' => 'Trop de requêtes de test de webhook. Veuillez réessayer dans %seconds% secondes.',
+
+    // ─── Cycle 123: Upload Double-Extension, SVG/CDATA Defense, Quarantine I18N & Rate-Limit Standards ───
+    'upload.error.compound_extension_forbidden' => 'L\'extension de fichier composée ".%extension%" est strictement interdite.',
+    'upload.error.svg_cdata_script' => 'Le fichier SVG contient un script dangereux à l\'intérieur d\'un bloc CDATA.',
+    'media.manual_quarantine_reason' => 'Mise en quarantaine administrative manuelle.',
 ];

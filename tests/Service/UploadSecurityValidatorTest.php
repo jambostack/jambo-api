@@ -45,6 +45,26 @@ class UploadSecurityValidatorTest extends TestCase
         }
     }
 
+    public function testSanitizeAndValidateFilenameRejectsCompoundForbiddenExtensions(): void
+    {
+        $compound = ['photo.php.jpg', 'exploit.phar.png', 'document.phtml.pdf', 'archive.exe.zip', 'avatar.php5.webp'];
+        foreach ($compound as $file) {
+            try {
+                $this->validator->sanitizeAndValidateFilename($file);
+                $this->fail("Expected exception for compound extension in $file");
+            } catch (\InvalidArgumentException $e) {
+                $this->assertStringContainsString('Compound file extension', $e->getMessage());
+            }
+        }
+    }
+
+    public function testSanitizeAndValidateFilenameAllowsSafeMultiDotFiles(): void
+    {
+        $this->assertSame('report.2026.04.12.pdf', $this->validator->sanitizeAndValidateFilename('report.2026.04.12.pdf'));
+        $this->assertSame('archive.tar.gz', $this->validator->sanitizeAndValidateFilename('archive.tar.gz'));
+        $this->assertSame('my.backup.sql.gz', $this->validator->sanitizeAndValidateFilename('my.backup.sql.gz'));
+    }
+
     public function testValidateFileContentAllowsValidJpeg(): void
     {
         $tempFile = tempnam(sys_get_temp_dir(), 'test_jpg');
@@ -160,6 +180,50 @@ class UploadSecurityValidatorTest extends TestCase
 
         try {
             $this->validator->validateFileContent($tempFile, 'svg');
+        } finally {
+            @unlink($tempFile);
+        }
+    }
+
+    public function testValidateFileContentRejectsSvgWithCdataScript(): void
+    {
+        $tempFile = tempnam(sys_get_temp_dir(), 'test_cdata_svg');
+        file_put_contents($tempFile, '<svg><script><![CDATA[alert(document.cookie)]]></script></svg>');
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        try {
+            $this->validator->validateFileContent($tempFile, 'svg');
+        } finally {
+            @unlink($tempFile);
+        }
+    }
+
+    public function testValidateFileContentRejectsSvgWithXhtmlNamespace(): void
+    {
+        $tempFile = tempnam(sys_get_temp_dir(), 'test_xhtml_svg');
+        file_put_contents($tempFile, '<svg xmlns="http://www.w3.org/2000/svg" xmlns:html="http://www.w3.org/1999/xhtml"><text>Test</text></svg>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('SVG file contains forbidden script pattern or namespace.');
+
+        try {
+            $this->validator->validateFileContent($tempFile, 'svg');
+        } finally {
+            @unlink($tempFile);
+        }
+    }
+
+    public function testValidateFileContentRejectsObfuscatedPhpInMedia(): void
+    {
+        $tempFile = tempnam(sys_get_temp_dir(), 'test_obf_php');
+        file_put_contents($tempFile, "\xFF\xD8\xFF\xE0<\x00?\x00p\x00h\x00p\x00 \x00s\x00y\x00s\x00t\x00e\x00m\x00(\x00");
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('dangerous PHP executable code');
+
+        try {
+            $this->validator->validateFileContent($tempFile, 'jpg');
         } finally {
             @unlink($tempFile);
         }

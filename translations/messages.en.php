@@ -4032,4 +4032,9 @@ return [
     'webhook.outbound_rate_limit_exceeded' => 'Outbound webhook rate limit exceeded for this project.',
     'webhook.rate_limit_exceeded_retry' => 'Too many webhook requests. Please retry in %seconds% seconds.',
     'webhook.test_rate_limit_retry' => 'Too many webhook test requests. Please retry in %seconds% seconds.',
+
+    // ─── Cycle 123: Upload Double-Extension, SVG/CDATA Defense, Quarantine I18N & Rate-Limit Standards ───
+    'upload.error.compound_extension_forbidden' => 'Compound file extension ".%extension%" is strictly forbidden.',
+    'upload.error.svg_cdata_script' => 'SVG file contains dangerous script pattern inside CDATA block.',
+    'media.manual_quarantine_reason' => 'Manual administrative quarantine.',
 ];

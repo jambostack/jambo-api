@@ -78,9 +78,23 @@ class BackupController extends AbstractController
     private function checkRateLimit(Request $request): ?JsonResponse
     {
         if ($this->tokenLimiter !== null) {
-            $identifier = $this->getUser()?->getUserIdentifier() ?: ($request->getClientIp() ?: '127.0.0.1');
-            if (false === $this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->secureJson(['error' => $this->trans('backup.rate_limit_exceeded', [], 'Too many backup requests. Please retry later.')], 429);
+            $user = null;
+            try {
+                $user = $this->getUser();
+            } catch (\Throwable) {}
+            $identifier = $user?->getUserIdentifier() ?: ($request->getClientIp() ?: '127.0.0.1');
+            $limit = $this->tokenLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+                return $this->secureJson([
+                    'error' => $this->trans('backup.rate_limit_exceeded', [], 'Too many backup requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
         }
         return null;

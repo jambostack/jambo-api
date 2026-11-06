@@ -70,12 +70,23 @@ class MediaController extends AbstractController
     private function checkRateLimit(Request $request): ?JsonResponse
     {
         if ($this->mediaLimiter !== null) {
-            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
-            if (false === $this->mediaLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $user = null;
+            try {
+                $user = $this->getUser();
+            } catch (\Throwable) {}
+            $identifier = $user?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            $limit = $this->mediaLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return new JsonResponse([
                     'error' => $this->trans('media.rate_limit_exceeded', [], 'Too many media requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
             }
         }
         return null;
@@ -590,7 +601,7 @@ class MediaController extends AbstractController
         } catch (\Throwable) {}
 
         $media->isQuarantined = true;
-        $media->quarantineReason = $reason !== '' ? $reason : 'Manual administrative quarantine';
+        $media->quarantineReason = ($reason !== null && $reason !== '') ? $reason : $this->trans('media.manual_quarantine_reason', [], 'Manual administrative quarantine');
         $this->em->flush();
 
         $this->auditService?->log('media_quarantined', $media->project, [

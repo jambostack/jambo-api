@@ -63,6 +63,27 @@ class PreviewController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->previewLimiter !== null) {
+            $identifier = $request->getClientIp() ?: '127.0.0.1';
+            $limit = $this->previewLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+                return $this->jsonResponse([
+                    'error' => $this->trans('preview.rate_limit_exceeded', [], 'Too many preview requests. Try again later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
+            }
+        }
+        return null;
+    }
+
     /**
      * Genere un token de preview pour une entree.
      * Protege par l'auth admin Symfony standard.
@@ -70,11 +91,8 @@ class PreviewController extends AbstractController
     #[Route('/token/{entryUuid}', name: 'token', methods: ['GET'])]
     public function token(string $projectUuid, string $entryUuid, Request $request): JsonResponse
     {
-        if ($this->previewLimiter !== null) {
-            $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
-            if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->jsonResponse(['error' => $this->trans('preview.rate_limit_exceeded', [], 'Too many preview requests. Try again later.')], 429);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if (!$this->getUser()) {
@@ -165,11 +183,8 @@ class PreviewController extends AbstractController
         if (!preg_match(self::UUID_REGEX, $projectUuid)) {
             return $this->jsonResponse(['error' => $this->trans('preview.project_not_found', [], 'Project not found')], 404);
         }
-        if ($this->previewLimiter !== null) {
-            $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
-            if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->jsonResponse(['error' => $this->trans('preview.rate_limit_exceeded', [], 'Too many preview requests. Try again later.')], 429);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if (strlen($request->getContent()) > 1048576) {
@@ -269,11 +284,8 @@ class PreviewController extends AbstractController
     #[Route('/content/{collection}/{entryUuid}', name: 'content', methods: ['GET'])]
     public function content(string $projectUuid, string $collection, string $entryUuid, Request $request): JsonResponse
     {
-        if ($this->previewLimiter !== null) {
-            $limiter = $this->previewLimiter->create($request->getClientIp() ?: '127.0.0.1');
-            if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->jsonResponse(['error' => $this->trans('preview.rate_limit_exceeded', [], 'Too many preview requests. Try again later.')], 429);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if (!preg_match(self::UUID_REGEX, $projectUuid)) {

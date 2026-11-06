@@ -91,6 +91,17 @@ class UploadSecurityValidator
             throw new \InvalidArgumentException($this->trans('upload.error.extension_not_allowed', ['%extension%' => $extension], sprintf('File type ".%s" is not allowed.', $extension)));
         }
 
+        $parts = explode('.', strtolower($clean));
+        if (count($parts) > 2) {
+            array_pop($parts);
+            array_shift($parts);
+            foreach ($parts as $part) {
+                if (in_array($part, self::FORBIDDEN_EXTENSIONS, true)) {
+                    throw new \InvalidArgumentException($this->trans('upload.error.compound_extension_forbidden', ['%extension%' => $part], sprintf('Compound file extension ".%s" is strictly forbidden.', $part)));
+                }
+            }
+        }
+
         return $clean;
     }
 
@@ -129,11 +140,13 @@ class UploadSecurityValidator
 
         // 1. Détection polyglotte / injection PHP
         $lowerSample = strtolower($sample);
+        $strippedSample = str_replace(["\x00", "\r", "\n", "\t"], '', $lowerSample);
         if (
-            str_contains($lowerSample, '<?php') ||
-            str_contains($lowerSample, '<?=') ||
-            str_contains($lowerSample, '<script language="php"') ||
-            str_contains($lowerSample, '<script language=\'php\'')
+            str_contains($strippedSample, '<?php') ||
+            str_contains($strippedSample, '<?=') ||
+            str_contains($strippedSample, '<script language="php"') ||
+            str_contains($strippedSample, '<script language=\'php\'') ||
+            preg_match('/<\?[x\s]/i', $strippedSample)
         ) {
             throw new \InvalidArgumentException($this->trans('upload.error.php_code_detected', [], 'File contains dangerous PHP executable code.'));
         }
@@ -307,7 +320,7 @@ class UploadSecurityValidator
                 if ($extension === 'svg') {
                     $lower = strtolower($content);
                     // 4a. Balises actives dangereuses
-                    if (preg_match('/<\s*(?:script|foreignobject|iframe|object|embed|applet|meta|form|input)\b/i', $content)) {
+                    if (preg_match('/<\s*(?:[a-z0-9_-]+:)?(?:script|foreignobject|iframe|object|embed|applet|meta|form|input)\b/i', $content)) {
                         throw new \InvalidArgumentException($this->trans('upload.error.svg_script_detected', [], 'SVG file contains dangerous active script pattern: <script>'));
                     }
                     // 4b. Gestionnaires d'événements inline (onload, onclick, onmouseover, onfocus, etc.)
@@ -315,15 +328,19 @@ class UploadSecurityValidator
                         throw new \InvalidArgumentException($this->trans('upload.error.svg_event_handlers', [], 'SVG file contains dangerous inline event handler attributes.'));
                     }
                     // 4c. URLs actives ou data:text/html dans href ou xlink:href
-                    if (preg_match('/(?:href|xlink:href)\s*=\s*["\']?\s*(?:javascript:|data:\s*text\/html)/i', $content)) {
+                    if (preg_match('/(?:href|xlink:href)\s*=\s*["\']?\s*(?:javascript:|data:\s*text\/html|vbscript:)/i', $content)) {
                         throw new \InvalidArgumentException($this->trans('upload.error.svg_href_script', [], 'SVG file contains dangerous script or data URI in href attribute.'));
                     }
                     // 4d. Animations injectant javascript dans les attributs (animate/set)
-                    if (preg_match('/<\s*(?:animate|set)\b[^>]*\bvalues?\s*=\s*["\']?[^"\'>]*javascript:/i', $content)) {
+                    if (preg_match('/<\s*(?:animate|set)\b[^>]*\bvalues?\s*=\s*["\']?[^"\'>]*(?:javascript:|vbscript:)/i', $content)) {
                         throw new \InvalidArgumentException($this->trans('upload.error.svg_animation_script', [], 'SVG file contains dangerous script animation pattern.'));
                     }
-                    // 4e. Recherche globale javascript: ou XML namespaces frauduleux (ex: xmlns:script)
-                    if (str_contains($lower, 'xmlns:script') || str_contains($lower, 'javascript:')) {
+                    // 4e. CDATA-wrapped javascript ou scripts
+                    if (preg_match('/<!\[CDATA\[.*?(?:<script|javascript:|alert\(|eval\(|document\.cookie).*?\]\]>/is', $content)) {
+                        throw new \InvalidArgumentException($this->trans('upload.error.svg_cdata_script', [], 'SVG file contains dangerous script pattern inside CDATA block.'));
+                    }
+                    // 4f. Recherche globale javascript:, vbscript: ou XML namespaces frauduleux (ex: xmlns:script, xhtml)
+                    if (str_contains($lower, 'xmlns:script') || str_contains($lower, 'javascript:') || str_contains($lower, 'vbscript:') || str_contains($lower, 'http://www.w3.org/1999/xhtml')) {
                         throw new \InvalidArgumentException($this->trans('upload.error.svg_forbidden_pattern', [], 'SVG file contains forbidden script pattern or namespace.'));
                     }
                 }
