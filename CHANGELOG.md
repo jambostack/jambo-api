@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.210] — 2026-11-06
+
+### Form Submissions Batch Operations, Status Filtering, CSV Export & UI Hardening (Cycle #140)
+- **Batch Operations for Form Submissions (`src/Controller/Admin/FormController.php`, `src/Repository/FormSubmissionRepository.php`)**:
+  - Implemented `admin_forms_submissions_batch` endpoint (`POST /admin-api/{projectUuid}/forms/{id}/submissions/batch`) supporting bulk operations: `mark_read`, `mark_unread`, `mark_spam`, `mark_ham`, and `delete`.
+  - Enforced security limits (500 items max per batch request, rate limiting, and project permission checks `project.manage`).
+  - Added dedicated bulk repository methods in `FormSubmissionRepository`: `batchMarkRead()`, `batchMarkSpam()`, and `batchDelete()`.
+  - Integrated audit trail logging via `AuditService::log()` (`admin_form_submissions_batch`) for complete enterprise traceability.
+- **Read/Unread Status Filtering & CSV Export Expansion (`src/Controller/Admin/FormController.php`, `src/Repository/FormSubmissionRepository.php`)**:
+  - Enhanced `admin_forms_submissions` with `read` query parameter (`read`, `unread`, or all), updating `countByForm()` and `findPaginatedByForm()`.
+  - Enhanced `admin_forms_submissions_export_csv` with combined `read` and `spam` filtering, enabling targeted CSV exports with full spreadsheet formula injection sanitization.
+- **Administrative Interface Hardening & Full I18N Compliance (`assets/js/pages/Projects/Forms/Index.tsx`)**:
+  - Replaced hardcoded strings with comprehensive i18n translation keys.
+  - Added multi-select checkbox controls with bulk action bar (mark as read/unread, mark as valid/spam, batch delete).
+  - Added direct CSV export button in the submissions modal preserving active filter state.
+  - Added interactive filter tabs (All, Unread, Read, Valid, Spam) and pagination controls (Previous/Next page with total indicator).
+- **Strict I18N Parity Across 4 Languages (`translations/messages.{en,fr,es,ar}.php`)**:
+  - Added 23 new translation keys across English, French, Spanish, and Arabic dictionaries, strictly maintaining 3,855 key parity across all four locales.
+- **Automated Test Suite Expansion (`tests/Controller/Admin/FormControllerBatchSubmissionsTest.php`)**:
+  - Added 6 end-to-end integration tests covering status filtering, batch read/unread updates, batch spam/ham toggling, batch deletions, validation constraints, and filtered CSV export.
+
 ## [1.26.209] — 2026-11-06
 
 ### Form Submission Event Architecture, Realtime Mercure Broadcast & SSRF-Protected Webhooks (Cycle #139)

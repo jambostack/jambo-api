@@ -25,7 +25,7 @@ class FormSubmissionRepository extends ServiceEntityRepository
         return $this->findBy(['form' => $form], ['createdAt' => 'DESC']);
     }
 
-    public function countByForm(Form $form, ?string $spamFilter = null): int
+    public function countByForm(Form $form, ?string $spamFilter = null, ?string $readFilter = null): int
     {
         $qb = $this->createQueryBuilder('fs')
             ->select('COUNT(fs.id)')
@@ -38,13 +38,19 @@ class FormSubmissionRepository extends ServiceEntityRepository
             $qb->andWhere('fs.isSpam = :isSpam')->setParameter('isSpam', false);
         }
 
+        if ($readFilter === 'read') {
+            $qb->andWhere('fs.isRead = :isRead')->setParameter('isRead', true);
+        } elseif ($readFilter === 'unread') {
+            $qb->andWhere('fs.isRead = :isRead')->setParameter('isRead', false);
+        }
+
         return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
     /**
      * @return FormSubmission[]
      */
-    public function findPaginatedByForm(Form $form, int $page = 1, int $perPage = 25, ?string $spamFilter = null): array
+    public function findPaginatedByForm(Form $form, int $page = 1, int $perPage = 25, ?string $spamFilter = null, ?string $readFilter = null): array
     {
         $qb = $this->createQueryBuilder('fs')
             ->where('fs.form = :form')
@@ -59,7 +65,74 @@ class FormSubmissionRepository extends ServiceEntityRepository
             $qb->andWhere('fs.isSpam = :isSpam')->setParameter('isSpam', false);
         }
 
+        if ($readFilter === 'read') {
+            $qb->andWhere('fs.isRead = :isRead')->setParameter('isRead', true);
+        } elseif ($readFilter === 'unread') {
+            $qb->andWhere('fs.isRead = :isRead')->setParameter('isRead', false);
+        }
+
         return $qb->getQuery()->getResult();
+    }
+
+    /**
+     * @param int[] $ids
+     */
+    public function batchMarkRead(Form $form, array $ids, bool $isRead): int
+    {
+        if (empty($ids)) {
+            return 0;
+        }
+
+        return (int) $this->createQueryBuilder('fs')
+            ->update()
+            ->set('fs.isRead', ':isRead')
+            ->where('fs.form = :form')
+            ->andWhere('fs.id IN (:ids)')
+            ->setParameter('isRead', $isRead)
+            ->setParameter('form', $form)
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute();
+    }
+
+    /**
+     * @param int[] $ids
+     */
+    public function batchMarkSpam(Form $form, array $ids, bool $isSpam): int
+    {
+        if (empty($ids)) {
+            return 0;
+        }
+
+        return (int) $this->createQueryBuilder('fs')
+            ->update()
+            ->set('fs.isSpam', ':isSpam')
+            ->where('fs.form = :form')
+            ->andWhere('fs.id IN (:ids)')
+            ->setParameter('isSpam', $isSpam)
+            ->setParameter('form', $form)
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute();
+    }
+
+    /**
+     * @param int[] $ids
+     */
+    public function batchDelete(Form $form, array $ids): int
+    {
+        if (empty($ids)) {
+            return 0;
+        }
+
+        return (int) $this->createQueryBuilder('fs')
+            ->delete()
+            ->where('fs.form = :form')
+            ->andWhere('fs.id IN (:ids)')
+            ->setParameter('form', $form)
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute();
     }
 
     public function deleteByForm(Form $form): int

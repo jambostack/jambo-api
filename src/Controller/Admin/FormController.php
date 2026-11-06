@@ -422,9 +422,13 @@ class FormController extends AbstractController
         if ($spamFilter !== null && !in_array($spamFilter, ['spam', 'ham'], true)) {
             $spamFilter = null;
         }
+        $readFilter = $request->query->get('read'); // 'read', 'unread', or omit for all
+        if ($readFilter !== null && !in_array($readFilter, ['read', 'unread'], true)) {
+            $readFilter = null;
+        }
 
-        $total = $this->submissionRepo->countByForm($form, $spamFilter);
-        $items = $this->submissionRepo->findPaginatedByForm($form, $page, $perPage, $spamFilter);
+        $total = $this->submissionRepo->countByForm($form, $spamFilter, $readFilter);
+        $items = $this->submissionRepo->findPaginatedByForm($form, $page, $perPage, $spamFilter, $readFilter);
 
         $data = array_map(fn (FormSubmission $s) => [
             'id' => $s->id,
@@ -460,7 +464,12 @@ class FormController extends AbstractController
         $this->auditService?->log(
             toolName: 'admin_form_submissions_export',
             project: $form->project,
-            input: ['id' => $form->id, 'slug' => $form->slug, 'spam_filter' => $request->query->get('spam')],
+            input: [
+                'id' => $form->id,
+                'slug' => $form->slug,
+                'spam_filter' => $request->query->get('spam'),
+                'read_filter' => $request->query->get('read'),
+            ],
             output: ['exported' => true],
             status: 'success',
             createdBy: $this->getUser()?->getUserIdentifier(),
@@ -471,6 +480,10 @@ class FormController extends AbstractController
         $spamFilter = $request->query->get('spam'); // 'spam', 'ham', or omit for all
         if ($spamFilter !== null && !in_array($spamFilter, ['spam', 'ham'], true)) {
             $spamFilter = null;
+        }
+        $readFilter = $request->query->get('read'); // 'read', 'unread', or omit for all
+        if ($readFilter !== null && !in_array($readFilter, ['read', 'unread'], true)) {
+            $readFilter = null;
         }
 
         // Extraire la liste ordonnée des noms / labels de champs
@@ -493,7 +506,7 @@ class FormController extends AbstractController
         $slug = preg_replace('/[^a-zA-Z0-9_\-]+/', '_', $form->slug ?: 'form');
         $filename = sprintf('submissions_%s_%s.csv', $slug, date('Ymd_His'));
 
-        $response = new StreamedResponse(function () use ($form, $spamFilter, $fieldKeys, $fieldLabels, $sanitizer) {
+        $response = new StreamedResponse(function () use ($form, $spamFilter, $readFilter, $fieldKeys, $fieldLabels, $sanitizer) {
             $output = fopen('php://output', 'w');
             if ($output === false) {
                 return;
@@ -516,7 +529,7 @@ class FormController extends AbstractController
                 if ($exportedCount >= $maxExportRecords) {
                     break;
                 }
-                $submissions = $this->submissionRepo->findPaginatedByForm($form, $page, $perPage, $spamFilter);
+                $submissions = $this->submissionRepo->findPaginatedByForm($form, $page, $perPage, $spamFilter, $readFilter);
                 if (empty($submissions)) {
                     break;
                 }
@@ -693,6 +706,94 @@ class FormController extends AbstractController
             'id' => $submission->id,
             'isRead' => $submission->isRead,
             'isSpam' => $submission->isSpam,
+        ]);
+    }
+
+    // ── Actions groupées sur les soumissions ────────────────────────────────
+
+    #[Route('/admin-api/{projectUuid}/forms/{id}/submissions/batch', name: 'admin_forms_submissions_batch', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function batchSubmissionsAction(string $projectUuid, int $id, Request $request): JsonResponse
+    {
+        if ($rateLimit = $this->checkRateLimit($request)) {
+            return $rateLimit;
+        }
+
+        $form = $this->formRepo->find($id);
+        if (!$form || $form->project?->uuid?->toRfc4122() !== $projectUuid) {
+            return $this->secureJson(['error' => $this->trans('form.admin.form_not_found', [], 'Form not found.'), 'code' => 'FORM_NOT_FOUND'], 404);
+        }
+        $this->denyAccessUnlessGranted('project.manage', $form->project);
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('form.admin.payload_too_large', [], 'Form payload exceeds maximum size limit (512 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
+        try {
+            $data = $request->toArray();
+        } catch (\Throwable) {
+            return $this->secureJson(['error' => $this->trans('form.admin.invalid_json', [], 'Invalid JSON payload.'), 'code' => 'INVALID_JSON'], 400);
+        }
+
+        $action = $data['action'] ?? null;
+        $ids = $data['ids'] ?? null;
+
+        if (!is_string($action) || !in_array($action, ['mark_read', 'mark_unread', 'mark_spam', 'mark_ham', 'delete'], true)) {
+            return $this->secureJson(['error' => $this->trans('form.admin.invalid_batch_action', [], 'Invalid batch action specified.'), 'code' => 'INVALID_BATCH_ACTION'], 422);
+        }
+
+        if (!is_array($ids) || empty($ids)) {
+            return $this->secureJson(['error' => $this->trans('form.admin.empty_batch_ids', [], 'No submission IDs provided for batch operation.'), 'code' => 'EMPTY_BATCH_IDS'], 422);
+        }
+
+        if (count($ids) > 500) {
+            return $this->secureJson(['error' => $this->trans('form.admin.batch_limit_exceeded', [], 'Batch operation exceeds maximum 500 items limit.'), 'code' => 'BATCH_LIMIT_EXCEEDED'], 422);
+        }
+
+        $sanitizedIds = [];
+        foreach ($ids as $val) {
+            if (is_int($val) || (is_string($val) && ctype_digit($val))) {
+                $sanitizedIds[] = (int) $val;
+            }
+        }
+
+        if (empty($sanitizedIds)) {
+            return $this->secureJson(['error' => $this->trans('form.admin.empty_batch_ids', [], 'No submission IDs provided for batch operation.'), 'code' => 'EMPTY_BATCH_IDS'], 422);
+        }
+
+        $affected = 0;
+        switch ($action) {
+            case 'mark_read':
+                $affected = $this->submissionRepo->batchMarkRead($form, $sanitizedIds, true);
+                break;
+            case 'mark_unread':
+                $affected = $this->submissionRepo->batchMarkRead($form, $sanitizedIds, false);
+                break;
+            case 'mark_spam':
+                $affected = $this->submissionRepo->batchMarkSpam($form, $sanitizedIds, true);
+                break;
+            case 'mark_ham':
+                $affected = $this->submissionRepo->batchMarkSpam($form, $sanitizedIds, false);
+                break;
+            case 'delete':
+                $affected = $this->submissionRepo->batchDelete($form, $sanitizedIds);
+                break;
+        }
+
+        $this->auditService?->log(
+            toolName: 'admin_form_submissions_batch',
+            project: $form->project,
+            input: ['form_id' => $form->id, 'action' => $action, 'count' => count($sanitizedIds)],
+            output: ['affected' => $affected, 'success' => true],
+            status: 'success',
+            createdBy: $this->getUser()?->getUserIdentifier(),
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
+
+        return $this->secureJson([
+            'success' => true,
+            'action' => $action,
+            'affected' => $affected,
         ]);
     }
 
