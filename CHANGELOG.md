@@ -7,6 +7,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.209] — 2026-11-06
+
+### Form Submission Event Architecture, Realtime Mercure Broadcast & SSRF-Protected Webhooks (Cycle #139)
+- **Form Submission Event & Subscriber Architecture (`src/Event/FormSubmittedEvent.php`, `src/EventSubscriber/FormSubmissionSubscriber.php`, `src/Service/Form/SubmitHandler.php`)**:
+  - Implemented decoupled `FormSubmittedEvent` triggered upon successful validation and persistence of valid (non-spam) form submissions.
+  - Implemented `FormSubmissionSubscriber` subscribing to `FormSubmittedEvent::SUBMITTED`, centralizing post-submit operations including realtime streaming, member notifications, and webhook forwarding.
+- **Realtime Mercure Form Streaming (`src/Service/MercurePublisher.php`, `assets/js/hooks/useRealtime.ts`)**:
+  - Added `MercurePublisher::formSubmitted()`, broadcasting submission events across `projects/{uuid}/forms` and `projects/{uuid}/forms/{formSlug}` topics, with automated fallback to JSONL log rotation when Mercure Hub is offline.
+  - Extended frontend `useRealtime` hook with `form.submitted` toast handling.
+- **SSRF-Protected Outbound Form Webhooks (`src/EventSubscriber/FormSubmissionSubscriber.php`, `src/Service/Security/SsrfProtectionService.php`)**:
+  - Integrated `SsrfProtectionService::isSafeUrl()` on form webhook URLs, blocking SSRF attempts targeting link-local, cloud metadata (169.254.169.254, IMDSv2), private RFC 1918 subnets, and loopback vectors.
+  - Enforced tenant isolation by validating project UUID before dispatching asynchronous `SendWebhookMessage` payloads.
+- **Targeted Project Member Notifications (`src/Service/NotificationService.php`)**:
+  - Added `NotificationService::notifyFormSubmission()` and registered `TYPE_FORM_SUBMISSION = 'form_submission'` in type validation.
+  - Automatically notifies all active project members (`ProjectMemberStatus::Active`) when a new submission is received, generating deep links to the form submissions administrative screen.
+- **Strict I18N Compliance & Parity Synchronization (`translations/messages.{en,fr,es,ar}.php`, `assets/js/hooks/useRealtime.ts`)**:
+  - Replaced hardcoded toast notification strings in `useRealtime.ts` with `useTranslation` (`t()`).
+  - Added 5 new translation keys across English, French, Spanish, and Arabic dictionaries, maintaining strict 3,832 key parity with zero discrepancies.
+
 ## [1.26.208] — 2026-11-06
 
 ### Realtime Event Stream, Doctrine Eager Pagination & Targeted Notification Hardening (Cycle #137)

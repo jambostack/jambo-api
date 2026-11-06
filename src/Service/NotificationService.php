@@ -21,6 +21,7 @@ class NotificationService
     public const TYPE_STATUS_CHANGE = 'status_change';
     public const TYPE_AUTOMATION = 'automation';
     public const TYPE_SYSTEM = 'system';
+    public const TYPE_FORM_SUBMISSION = 'form_submission';
 
     public const MAX_USER_NOTIFICATIONS = 1000;
     public const MAX_USER_UNREAD_NOTIFICATIONS = 500;
@@ -250,6 +251,48 @@ class NotificationService
         );
     }
 
+    /**
+     * Notifie un utilisateur membre du projet lors de la réception d'une soumission de formulaire.
+     */
+    public function notifyFormSubmission(
+        User $recipient,
+        string $formName,
+        string $formSlug,
+        Project $project,
+        int $submissionId,
+    ): Notification {
+        $locale = $recipient->locale ?? 'en';
+
+        $title = $this->trans(
+            id: 'notification.form_submission_title',
+            parameters: ['%form%' => $formName],
+            locale: $locale,
+            default: sprintf('New submission for form "%s"', $formName)
+        );
+
+        $body = $this->trans(
+            id: 'notification.form_submission_body',
+            parameters: [
+                '%form%' => $formName,
+                '%slug%' => $formSlug,
+            ],
+            locale: $locale,
+            default: sprintf('A new entry was submitted for form "%s" (%s).', $formName, $formSlug)
+        );
+
+        $projectIdentifier = $project->uuid?->toRfc4122() ?? ($project->id ? (string) $project->id : 'default');
+        $link = sprintf('/projects/%s/forms/%s/submissions', $projectIdentifier, $formSlug);
+
+        return $this->create(
+            recipient: $recipient,
+            type: self::TYPE_FORM_SUBMISSION,
+            title: $title,
+            body: $body,
+            link: $link,
+            project: $project
+        );
+    }
+
     public function trans(string $id, array $parameters = [], ?string $locale = null, string $default = ''): string
     {
         if ($this->translator !== null) {
@@ -275,6 +318,7 @@ class NotificationService
             self::TYPE_STATUS_CHANGE,
             self::TYPE_AUTOMATION,
             self::TYPE_SYSTEM,
+            self::TYPE_FORM_SUBMISSION,
         ];
 
         return in_array($type, $validTypes, true) ? $type : self::TYPE_COMMENT;

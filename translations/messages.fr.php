@@ -4191,4 +4191,9 @@ return [
     'batch.export.invalid_format' => 'Format d\'exportation non pris en charge. Formats autorisés : csv, jsonl.',
     'batch.export.empty_collection' => 'La collection est vide, aucun élément à exporter.',
     'batch.export.stream_failed' => 'Échec du flux d\'exportation : %error%',
+    'realtime.form_submission' => 'Soumission de formulaire',
+    'realtime.form_submitted_title' => 'Soumission de formulaire reçue',
+    'realtime.form_submitted_desc' => 'Une nouvelle réponse a été envoyée',
+    'notification.form_submission_title' => 'Nouvelle soumission pour le formulaire « %form% »',
+    'notification.form_submission_body' => 'Une nouvelle entrée a été soumise pour le formulaire « %form% » (%slug%).',
 ];

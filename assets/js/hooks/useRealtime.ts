@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { usePage } from '@inertiajs/react';
 import { type SharedData } from '@/types/index.d';
+import { useTranslation } from '@/lib/i18n';
 
 const STORAGE_PREFIX = 'rt_since_';
 
@@ -40,6 +41,7 @@ function storeSince(projectUuid: string, since: number): void {
  * Usage : useRealtime(project.uuid);
  */
 export function useRealtime(projectUuid?: string) {
+    const t = useTranslation();
     const pageProps = usePage<SharedData>().props;
     const currentUserId = pageProps.auth?.user?.id;
     const sinceRef = useRef<number | null>(projectUuid ? getStoredSince(projectUuid) : null);
@@ -176,31 +178,37 @@ export function useRealtime(projectUuid?: string) {
         const dispatchToast = (evt: { event?: string; data?: { title?: string } }) => {
             switch (evt.event) {
                 case 'media.uploaded':
-                    toast.success(evt.data?.title || 'Fichier téléversé', {
-                        description: 'Upload terminé',
+                    toast.success(evt.data?.title || t('realtime.media_uploaded'), {
+                        description: t('realtime.upload_completed'),
                         duration: 4000,
                     });
                     break;
                 case 'media.deleted':
-                    toast.info((evt.data?.title || 'Fichier') + ' supprimé', {
+                    toast.info((evt.data?.title || t('realtime.file')) + ' ' + t('realtime.deleted'), {
                         duration: 3000,
                     });
                     break;
                 case 'entry.created':
-                    toast.success(evt.data?.title || 'Créé', {
-                        description: 'Nouveau contenu',
+                    toast.success(evt.data?.title || t('realtime.created'), {
+                        description: t('realtime.new_content'),
                         duration: 4000,
                     });
                     break;
                 case 'entry.updated':
-                    toast.info(evt.data?.title || 'Mis à jour', {
-                        description: 'Contenu modifié',
+                    toast.info(evt.data?.title || t('realtime.updated'), {
+                        description: t('realtime.content_modified'),
                         duration: 3000,
                     });
                     break;
                 case 'status.changed':
-                    toast.info(evt.data?.title || 'Statut changé', {
+                    toast.info(evt.data?.title || t('realtime.status_changed'), {
                         duration: 4000,
+                    });
+                    break;
+                case 'form.submitted':
+                    toast.success(evt.data?.title || t('realtime.form_submitted_title'), {
+                        description: t('realtime.form_submitted_desc'),
+                        duration: 5000,
                     });
                     break;
             }

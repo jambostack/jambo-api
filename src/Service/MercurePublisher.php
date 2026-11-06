@@ -128,6 +128,7 @@ class MercurePublisher
             str_starts_with($event, 'entry.')  => "projects/{$projectUuid}/content",
             str_starts_with($event, 'media.')  => "projects/{$projectUuid}/media",
             str_starts_with($event, 'status.') => "projects/{$projectUuid}/status",
+            str_starts_with($event, 'form.')   => "projects/{$projectUuid}/forms",
             default                             => "projects/{$projectUuid}",
         };
     }
@@ -206,6 +207,34 @@ class MercurePublisher
                 'to'         => $toStatus,
                 'collection' => $collectionSlug,
                 'title'      => "{$entryTitle} → {$toStatus}",
+                'time'       => time(),
+            ],
+        ], $extraTopics);
+    }
+
+    /** Une soumission de formulaire a été reçue */
+    public function formSubmitted(string $projectUuid, string $formSlug, array $submission, ?string $formTitle = null): void
+    {
+        $defaultTitle = $this->trans('realtime.form_submission', [], 'Form Submission');
+        $resolvedTitle = $formTitle ?? $defaultTitle;
+
+        $extraTopics = [
+            "projects/{$projectUuid}/forms",
+            "projects/{$projectUuid}/forms/{$formSlug}",
+        ];
+
+        $this->publish($projectUuid, [
+            'event' => 'form.submitted',
+            'topic' => "projects/{$projectUuid}/forms/{$formSlug}",
+            'data'  => [
+                'action'     => 'submitted',
+                'form'       => $formSlug,
+                'title'      => $resolvedTitle,
+                'submission' => [
+                    'id'        => $submission['id'] ?? null,
+                    'isSpam'    => $submission['isSpam'] ?? false,
+                    'createdAt' => $submission['createdAt'] ?? time(),
+                ],
                 'time'       => time(),
             ],
         ], $extraTopics);

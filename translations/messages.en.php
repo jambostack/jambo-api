@@ -4173,4 +4173,9 @@ return [
     'batch.export.invalid_format' => 'Unsupported export format. Allowed formats: csv, jsonl.',
     'batch.export.empty_collection' => 'Collection is empty, nothing to export.',
     'batch.export.stream_failed' => 'Streaming export failed: %error%',
+    'realtime.form_submission' => 'Form Submission',
+    'realtime.form_submitted_title' => 'Form submission received',
+    'realtime.form_submitted_desc' => 'A new response was submitted',
+    'notification.form_submission_title' => 'New submission for form "%form%"',
+    'notification.form_submission_body' => 'A new entry was submitted for form "%form%" (%slug%).',
 ];

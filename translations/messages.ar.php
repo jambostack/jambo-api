@@ -4175,4 +4175,9 @@ return [
     'batch.export.invalid_format' => 'تنسيق التصدير غير مدعوم. التنسيقات المسموح بها: csv, jsonl.',
     'batch.export.empty_collection' => 'المجموعة فارغة، لا يوجد شيء لتصديره.',
     'batch.export.stream_failed' => 'فشل بث التصدير: %error%',
+    'realtime.form_submission' => 'إرسال النموذج',
+    'realtime.form_submitted_title' => 'تم استلام إرسال النموذج',
+    'realtime.form_submitted_desc' => 'تم إرسال رد جديد بنجاح',
+    'notification.form_submission_title' => 'إرسال جديد للنموذج «%form%»',
+    'notification.form_submission_body' => 'تم تقديم إدخال جديد للنموذج «%form%» (%slug%).',
 ];

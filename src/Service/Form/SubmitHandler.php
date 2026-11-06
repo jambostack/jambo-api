@@ -4,6 +4,7 @@ namespace App\Service\Form;
 
 use App\Entity\Form;
 use App\Entity\FormSubmission;
+use App\Event\FormSubmittedEvent;
 use App\Service\UploadSecurityValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -13,6 +14,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\ConstraintViolationList;
 use Symfony\Component\Validator\Exception\ValidationFailedException;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 class SubmitHandler
 {
@@ -24,6 +26,7 @@ class SubmitHandler
         private readonly ?UploadSecurityValidator $uploadValidator = null,
         #[Autowire(param: 'kernel.project_dir')]
         private readonly ?string $projectDir = null,
+        private readonly ?EventDispatcherInterface $eventDispatcher = null,
     ) {}
 
     /**
@@ -151,6 +154,12 @@ class SubmitHandler
         // 7. Trigger post-submit workflows if the submission is not spam
         if (!$isSpam) {
             $this->triggerWorkflows($form, $submission, $data);
+            if ($this->eventDispatcher !== null && $form->project !== null) {
+                $this->eventDispatcher->dispatch(
+                    new FormSubmittedEvent($form, $submission, $form->project, $data),
+                    FormSubmittedEvent::SUBMITTED
+                );
+            }
         }
 
         return $submission;

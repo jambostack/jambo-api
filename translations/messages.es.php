@@ -4173,4 +4173,9 @@ return [
     'batch.export.invalid_format' => 'Formato de exportación no compatible. Formatos permitidos: csv, jsonl.',
     'batch.export.empty_collection' => 'La colección está vacía, no hay nada que exportar.',
     'batch.export.stream_failed' => 'Error en la transmisión de exportación: %error%',
+    'realtime.form_submission' => 'Envío de formulario',
+    'realtime.form_submitted_title' => 'Envío de formulario recibido',
+    'realtime.form_submitted_desc' => 'Se ha enviado una nueva respuesta',
+    'notification.form_submission_title' => 'Nuevo envío para el formulario «%form%»',
+    'notification.form_submission_body' => 'Se ha enviado una nueva entrada para el formulario «%form%» (%slug%).',
 ];
