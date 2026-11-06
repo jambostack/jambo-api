@@ -51,11 +51,26 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
             $headers->set('X-Content-Type-Options', 'nosniff');
         }
 
-        // 2. Strict-Transport-Security (HSTS)
+        // 2. X-XSS-Protection: 0 (Modern W3C standard to disable legacy buggy filter and rely on CSP)
+        if (!$headers->has('X-XSS-Protection')) {
+            $headers->set('X-XSS-Protection', '0');
+        }
+
+        // 3. Strict-Transport-Security (HSTS)
         // Enforce when HTTPS is active, behind an HTTPS reverse-proxy, or in prod environment
+        $forwardedProto = (string) $request->headers->get('X-Forwarded-Proto', '');
+        $isForwardedHttps = false;
+        if ($forwardedProto !== '') {
+            $protos = array_map('trim', explode(',', strtolower($forwardedProto)));
+            $isForwardedHttps = in_array('https', $protos, true);
+        }
+
         $isSecure = $request->isSecure()
             || strtolower((string) $request->server->get('HTTPS')) === 'on'
-            || strtolower((string) $request->headers->get('X-Forwarded-Proto')) === 'https';
+            || strtolower((string) $request->server->get('REQUEST_SCHEME')) === 'https'
+            || strtolower((string) $request->headers->get('X-Forwarded-Ssl')) === 'on'
+            || (string) $request->headers->get('X-Forwarded-Port') === '443'
+            || $isForwardedHttps;
 
         if ($isSecure || $this->environment === 'prod') {
             if (!$headers->has('Strict-Transport-Security')) {
@@ -63,12 +78,12 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
             }
         }
 
-        // 3. Permissions-Policy
+        // 4. Permissions-Policy: restricted dangerous features
         if (!$headers->has('Permissions-Policy')) {
-            $headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+            $headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), screen-wake-lock=(), accelerometer=(), gyroscope=(), magnetometer=()');
         }
 
-        // 4. Referrer-Policy
+        // 5. Referrer-Policy
         if (!$headers->has('Referrer-Policy')) {
             $headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         }
@@ -121,6 +136,9 @@ class SecurityHeadersSubscriber implements EventSubscriberInterface
                 "form-action 'self'",
                 "object-src 'none'",
             ];
+            if ($isSecure || $this->environment === 'prod') {
+                $cspDirectives[] = 'upgrade-insecure-requests';
+            }
             $headers->set('Content-Security-Policy', implode('; ', $cspDirectives) . ';');
         } elseif ($isStrictDenyRoute) {
             $existingCsp = (string) $headers->get('Content-Security-Policy', '');

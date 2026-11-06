@@ -303,4 +303,39 @@ class SecurityHeadersSubscriberTest extends TestCase
 
         $this->assertEmpty($response->headers->getCookies());
     }
+
+    public function testXXssProtectionIsDisabledInFavorOfCsp(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber('prod');
+        $request = Request::create('/api/test');
+        $response = new Response('', 200);
+
+        $subscriber->onKernelResponse($this->makeEvent($request, $response));
+
+        $this->assertSame('0', $response->headers->get('X-XSS-Protection'));
+    }
+
+    public function testHstsDetectedWithMultiValueXForwardedProto(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber('dev');
+        $request = Request::create('http://example.com/api/test');
+        $request->headers->set('X-Forwarded-Proto', 'https, http');
+        $response = new Response('', 200);
+
+        $subscriber->onKernelResponse($this->makeEvent($request, $response));
+
+        $this->assertNotNull($response->headers->get('Strict-Transport-Security'));
+    }
+
+    public function testCspIncludesUpgradeInsecureRequestsInProd(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber('prod');
+        $request = Request::create('https://example.com/page');
+        $response = new Response('<html></html>', 200, ['Content-Type' => 'text/html']);
+
+        $subscriber->onKernelResponse($this->makeEvent($request, $response));
+
+        $csp = (string) $response->headers->get('Content-Security-Policy');
+        $this->assertStringContainsString('upgrade-insecure-requests', $csp);
+    }
 }

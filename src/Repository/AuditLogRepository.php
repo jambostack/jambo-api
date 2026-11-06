@@ -34,6 +34,8 @@ class AuditLogRepository extends ServiceEntityRepository
     public function findByTool(string $toolName, int $limit = 50): array
     {
         return $this->createQueryBuilder('a')
+            ->addSelect('p')
+            ->leftJoin('a.project', 'p')
             ->where('a.toolName = :tool')
             ->setParameter('tool', $toolName)
             ->orderBy('a.createdAt', 'DESC')
@@ -46,6 +48,8 @@ class AuditLogRepository extends ServiceEntityRepository
     public function findErrors(int $limit = 50): array
     {
         return $this->createQueryBuilder('a')
+            ->addSelect('p')
+            ->leftJoin('a.project', 'p')
             ->where('a.status = :status')
             ->setParameter('status', 'error')
             ->orderBy('a.createdAt', 'DESC')

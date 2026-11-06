@@ -251,7 +251,12 @@ class ContentEntryRepository extends ServiceEntityRepository
     public function findByAssigneePaginated(Collection $collection, User $assignee, int $page = 1, int $perPage = 15, ?string $locale = null, ?string $status = null): array
     {
         $qb = $this->createQueryBuilder('e')
-            ->andWhere('e.collection = :collection')
+            ->addSelect('fv', 'cb', 'ub', 'at')
+            ->leftJoin('e.fieldValues', 'fv')
+            ->leftJoin('e.createdBy', 'cb')
+            ->leftJoin('e.updatedBy', 'ub')
+            ->leftJoin('e.assignedTo', 'at')
+            ->where('e.collection = :collection')
             ->andWhere('e.assignedTo = :assignee')
             ->andWhere('e.deletedAt IS NULL')
             ->setParameter('collection', $collection)
@@ -267,7 +272,8 @@ class ContentEntryRepository extends ServiceEntityRepository
             $qb->andWhere('e.status = :status')->setParameter('status', $status);
         }
 
-        return $qb->getQuery()->getResult();
+        $paginator = new Paginator($qb->getQuery(), fetchJoinCollection: true);
+        return iterator_to_array($paginator);
     }
 
     /**
