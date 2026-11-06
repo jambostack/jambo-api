@@ -853,7 +853,19 @@ class AutomationController extends AbstractController
                 'error' => $run->errorMessage,
                 'action_output' => $run->actionOutput,
             ]);
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            $this->auditService?->log(
+                toolName: 'automation_run_exception',
+                project: $project,
+                input: ['id' => $automation->id, 'name' => $automation->name],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Automation run threw exception: ' . $e->getMessage(),
+                createdBy: $this->getUserSafeIdentifier($request),
+                source: 'automation_execution'
+            );
+            $this->auditService?->flush();
+
             return $this->secureJson([
                 'success' => false,
                 'error' => $this->trans('automation.admin.execution_failed', [], 'Execution failed'),
