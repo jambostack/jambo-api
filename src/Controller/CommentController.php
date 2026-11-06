@@ -74,15 +74,34 @@ class CommentController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function getSafeUser(): ?\Symfony\Component\Security\Core\User\UserInterface
+    {
+        if (!isset($this->container)) {
+            return null;
+        }
+        try {
+            return $this->getUser();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function checkRateLimit(Request $request, ?\App\Entity\User $user = null): ?JsonResponse
     {
         if ($this->commentLimiter !== null) {
             $identifier = $user?->id ? ('user_' . $user->id) : ($request->getClientIp() ?: '127.0.0.1');
-            if (false === $this->commentLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->commentLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return $this->secureJson([
                     'error' => $this->trans('comment.too_many_requests', [], 'Too many comment requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
         }
         return null;
@@ -150,7 +169,7 @@ class CommentController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, string $collectionSlug, int $entryId, Request $request): JsonResponse
     {
-        if ($rateLimitResponse = $this->checkRateLimit($request, $this->getUser() instanceof \App\Entity\User ? $this->getUser() : null)) {
+        if ($rateLimitResponse = $this->checkRateLimit($request, $this->getSafeUser() instanceof \App\Entity\User ? $this->getSafeUser() : null)) {
             return $rateLimitResponse;
         }
 

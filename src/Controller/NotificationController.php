@@ -429,11 +429,18 @@ class NotificationController extends AbstractController
                 }
             } catch (\Throwable) {}
 
-            if (!$this->notificationLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->notificationLimiter->create($identifier)->consume(1);
+            if (!$limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return $this->secureJson([
                     'error' => $this->trans('notification.rate_limit_exceeded', [], 'Too many notification requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
         }
         return null;

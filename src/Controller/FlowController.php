@@ -70,7 +70,8 @@ class FlowController extends AbstractController
     {
         if ($this->flowLimiter !== null) {
             $identifier = $this->resolveIdentifier($request);
-            if (false === $this->flowLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->flowLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
                 $this->auditService?->log(
                     toolName: 'flow_rate_limit_exceeded',
                     project: null,
@@ -83,10 +84,16 @@ class FlowController extends AbstractController
                 );
                 $this->auditService?->flush();
 
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return new JsonResponse([
                     'error' => $this->trans('flow.admin.rate_limit_exceeded', [], 'Too many flow requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
             }
         }
         return null;

@@ -39,8 +39,7 @@ class VersioningController extends AbstractController
         private ?AuditService $auditService = null,
     ) {}
 
-    #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions', name: 'versions_list', methods: ['GET'])]
-    public function list(string $projectUuid, string $collectionSlug, string $uuid, Request $request): JsonResponse
+    private function checkRateLimit(Request $request): ?JsonResponse
     {
         if ($this->versioningLimiter !== null) {
             $identifier = $request->getClientIp() ?: '127.0.0.1';
@@ -51,12 +50,28 @@ class VersioningController extends AbstractController
                 }
             } catch (\Throwable) {}
 
-            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->versioningLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return new JsonResponse([
                     'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
             }
+        }
+        return null;
+    }
+
+    #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions', name: 'versions_list', methods: ['GET'])]
+    public function list(string $projectUuid, string $collectionSlug, string $uuid, Request $request): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
@@ -90,21 +105,8 @@ class VersioningController extends AbstractController
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}/restore', name: 'versions_restore', requirements: ['versionNumber' => '\d+'], methods: ['POST'])]
     public function restore(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
     {
-        if ($this->versioningLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if ($versionNumber < 1 || $versionNumber > 1000000) {
@@ -149,21 +151,8 @@ class VersioningController extends AbstractController
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/diff', name: 'versions_diff', methods: ['GET'])]
     public function diff(string $projectUuid, string $collectionSlug, string $uuid, Request $request): JsonResponse
     {
-        if ($this->versioningLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if ($request->query->has('v1')) {
@@ -205,21 +194,8 @@ class VersioningController extends AbstractController
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/prune', name: 'versions_prune', methods: ['POST', 'DELETE'])]
     public function prune(string $projectUuid, string $collectionSlug, string $uuid, Request $request): JsonResponse
     {
-        if ($this->versioningLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         $entry = $this->findEntry($projectUuid, $collectionSlug, $uuid);
@@ -267,21 +243,8 @@ class VersioningController extends AbstractController
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}', name: 'versions_detail', requirements: ['versionNumber' => '\d+'], methods: ['GET'])]
     public function detail(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
     {
-        if ($this->versioningLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if ($versionNumber < 1 || $versionNumber > 1000000) {
@@ -317,21 +280,8 @@ class VersioningController extends AbstractController
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}', name: 'versions_delete', requirements: ['versionNumber' => '\d+'], methods: ['DELETE'])]
     public function delete(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
     {
-        if ($this->versioningLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if ($versionNumber < 1 || $versionNumber > 1000000) {
@@ -377,21 +327,8 @@ class VersioningController extends AbstractController
     #[Route('/api/projects/{projectUuid}/versions/prune', name: 'project_versions_prune', methods: ['POST'])]
     public function pruneProjectVersions(string $projectUuid, Request $request): JsonResponse
     {
-        if ($this->versioningLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
@@ -474,21 +411,8 @@ class VersioningController extends AbstractController
     #[Route('/api/projects/{projectUuid}/collections/{collectionSlug}/entries/{uuid}/versions/{versionNumber}/label', name: 'versions_update_label', requirements: ['versionNumber' => '\d+'], methods: ['PATCH', 'PUT'])]
     public function updateLabel(string $projectUuid, string $collectionSlug, string $uuid, int $versionNumber, Request $request): JsonResponse
     {
-        if ($this->versioningLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->versioningLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('versioning.rate_limit_exceeded', [], 'Too many versioning requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {

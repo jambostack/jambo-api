@@ -61,15 +61,34 @@ class ColumnSettingController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
-    private function checkRateLimit(Request $request, User $user): ?JsonResponse
+    private function getSafeUser(): ?\Symfony\Component\Security\Core\User\UserInterface
+    {
+        if (!isset($this->container)) {
+            return null;
+        }
+        try {
+            return $this->getUser();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function checkRateLimit(Request $request, ?User $user = null): ?JsonResponse
     {
         if ($this->projectLimiter !== null) {
-            $identifier = $user->id ? ('user_' . $user->id) : ($request->getClientIp() ?: '127.0.0.1');
-            if (false === $this->projectLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $identifier = $user?->id ? ('user_' . $user->id) : ($request->getClientIp() ?: '127.0.0.1');
+            $limit = $this->projectLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return $this->secureJson([
                     'error' => $this->trans('column_setting.rate_limit_exceeded', [], 'Too many column settings requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
         }
         return null;
@@ -109,16 +128,16 @@ class ColumnSettingController extends AbstractController
     #[Route('', name: 'show', methods: ['GET'])]
     public function show(string $projectUuid, string $collectionSlug, ?Request $request = null): JsonResponse
     {
-        $user = $this->getUser();
+        if ($request !== null && ($error = $this->checkRateLimit($request, $this->getSafeUser() instanceof User ? $this->getSafeUser() : null))) {
+            return $error;
+        }
+
+        $user = $this->getSafeUser();
         if (!$user instanceof User) {
             return $this->secureJson([
                 'error' => $this->trans('column_setting.auth_required', [], 'Authentication required.'),
                 'code'  => 'AUTH_REQUIRED',
             ], 401);
-        }
-
-        if ($request !== null && ($error = $this->checkRateLimit($request, $user))) {
-            return $error;
         }
 
         $resolved = $this->resolve($projectUuid, $collectionSlug);
@@ -139,16 +158,16 @@ class ColumnSettingController extends AbstractController
     #[Route('', name: 'update', methods: ['PUT', 'PATCH'])]
     public function update(string $projectUuid, string $collectionSlug, ?Request $request = null): JsonResponse
     {
-        $user = $this->getUser();
+        if ($request !== null && ($error = $this->checkRateLimit($request, $this->getSafeUser() instanceof User ? $this->getSafeUser() : null))) {
+            return $error;
+        }
+
+        $user = $this->getSafeUser();
         if (!$user instanceof User) {
             return $this->secureJson([
                 'error' => $this->trans('column_setting.auth_required', [], 'Authentication required.'),
                 'code'  => 'AUTH_REQUIRED',
             ], 401);
-        }
-
-        if ($request !== null && ($error = $this->checkRateLimit($request, $user))) {
-            return $error;
         }
 
         $resolved = $this->resolve($projectUuid, $collectionSlug);
@@ -257,16 +276,16 @@ class ColumnSettingController extends AbstractController
     #[Route('', name: 'delete', methods: ['DELETE'])]
     public function reset(string $projectUuid, string $collectionSlug, ?Request $request = null): JsonResponse
     {
-        $user = $this->getUser();
+        if ($request !== null && ($error = $this->checkRateLimit($request, $this->getSafeUser() instanceof User ? $this->getSafeUser() : null))) {
+            return $error;
+        }
+
+        $user = $this->getSafeUser();
         if (!$user instanceof User) {
             return $this->secureJson([
                 'error' => $this->trans('column_setting.auth_required', [], 'Authentication required.'),
                 'code'  => 'AUTH_REQUIRED',
             ], 401);
-        }
-
-        if ($request !== null && ($error = $this->checkRateLimit($request, $user))) {
-            return $error;
         }
 
         $resolved = $this->resolve($projectUuid, $collectionSlug);

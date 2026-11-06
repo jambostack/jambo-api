@@ -78,19 +78,28 @@ class PublicShareController extends AbstractController
 
         $identifier = $request->getClientIp() ?: '127.0.0.1';
         $limiter = $this->shareLimiter?->create($identifier);
-        if ($limiter !== null && false === $limiter->consume(1)->isAccepted()) {
-            $this->auditService?->log(
-                toolName: 'public_share_rate_limit',
-                project: null,
-                input: ['ip' => $identifier],
-                output: null,
-                status: 'failure',
-                errorMessage: 'Rate limit exceeded',
-                createdBy: $identifier,
-                source: 'public_share',
-            );
-            $this->auditService?->flush();
-            return $this->renderError(429, 'too_many_requests', $wantsJson);
+        if ($limiter !== null) {
+            $limit = $limiter->consume(1);
+            if (false === $limit->isAccepted()) {
+                $this->auditService?->log(
+                    toolName: 'public_share_rate_limit',
+                    project: null,
+                    input: ['ip' => $identifier],
+                    output: null,
+                    status: 'failure',
+                    errorMessage: 'Rate limit exceeded',
+                    createdBy: $identifier,
+                    source: 'public_share',
+                );
+                $this->auditService?->flush();
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+                return $this->renderError(429, 'too_many_requests', $wantsJson, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
+            }
         }
 
         $tokenLength = strlen($token);
@@ -266,7 +275,7 @@ class PublicShareController extends AbstractController
         ], new Response('', 200, self::SECURITY_HEADERS));
     }
 
-    private function renderError(int $status, string $reason, bool $wantsJson = false): Response
+    private function renderError(int $status, string $reason, bool $wantsJson = false, array $extraHeaders = []): Response
     {
         $localizedMessage = $this->trans("public_share.error.{$reason}", [], match ($reason) {
             'expired' => 'This shared link has expired.',
@@ -275,15 +284,17 @@ class PublicShareController extends AbstractController
             default => 'Invalid or non-existent shared link.',
         });
 
+        $headers = array_merge(self::SECURITY_HEADERS, $extraHeaders);
+
         if ($wantsJson) {
             return new JsonResponse([
                 'error'   => $reason,
                 'message' => $localizedMessage,
-            ], $status, self::SECURITY_HEADERS);
+            ], $status, $headers);
         }
         return $this->render('share/error.html.twig', [
             'reason'  => $reason,
             'message' => $localizedMessage,
-        ], new Response('', $status, self::SECURITY_HEADERS));
+        ], new Response('', $status, $headers));
     }
 }

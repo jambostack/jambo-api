@@ -104,15 +104,34 @@ class MediaFolderController extends AbstractController
         return $id;
     }
 
+    private function getSafeUser(): ?\Symfony\Component\Security\Core\User\UserInterface
+    {
+        if (!isset($this->container)) {
+            return null;
+        }
+        try {
+            return $this->getUser();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function checkRateLimit(Request $request): ?JsonResponse
     {
         if ($this->mediaLimiter !== null) {
-            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
-            if (false === $this->mediaLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $identifier = $this->getSafeUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            $limit = $this->mediaLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return new JsonResponse([
                     'error' => $this->trans('media_folder.rate_limit_exceeded', [], 'Too many folder requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
             }
         }
         return null;

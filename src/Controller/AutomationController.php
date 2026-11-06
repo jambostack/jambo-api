@@ -135,7 +135,8 @@ class AutomationController extends AbstractController
         }
         $identifier = $this->resolveIdentifier($request);
 
-        if (false === $this->automationLimiter->create($identifier)->consume(1)->isAccepted()) {
+        $limit = $this->automationLimiter->create($identifier)->consume(1);
+        if (false === $limit->isAccepted()) {
             $this->auditService?->log(
                 toolName: 'automation_rate_limit_exceeded',
                 project: null,
@@ -148,10 +149,16 @@ class AutomationController extends AbstractController
             );
             $this->auditService?->flush();
 
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
             return $this->secureJson([
                 'error' => $this->trans('automation.admin.rate_limit_exceeded', [], 'Too many automation requests. Please retry later.'),
                 'code'  => 'RATE_LIMIT_EXCEEDED',
-            ], 429);
+            ], 429, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]);
         }
         return null;
     }
@@ -164,7 +171,8 @@ class AutomationController extends AbstractController
         }
         $identifier = $this->resolveIdentifier($request);
 
-        if (false === $limiter->create('exec_' . $identifier)->consume(1)->isAccepted()) {
+        $limit = $limiter->create('exec_' . $identifier)->consume(1);
+        if (false === $limit->isAccepted()) {
             $this->auditService?->log(
                 toolName: 'automation_execution_rate_limit_exceeded',
                 project: null,
@@ -177,10 +185,16 @@ class AutomationController extends AbstractController
             );
             $this->auditService?->flush();
 
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
             return $this->secureJson([
                 'error' => $this->trans('automation.admin.execution_rate_limit_exceeded', [], 'Too many automation execution requests. Please retry later.'),
                 'code'  => 'RATE_LIMIT_EXCEEDED',
-            ], 429);
+            ], 429, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]);
         }
         return null;
     }

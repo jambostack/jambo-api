@@ -111,7 +111,8 @@ class RoleController extends AbstractController
                 }
             } catch (\Throwable) {}
 
-            if (false === $this->roleLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->roleLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
                 $this->auditService->log(
                     toolName: 'role_rate_limit_exceeded',
                     project: null,
@@ -124,10 +125,16 @@ class RoleController extends AbstractController
                 );
                 $this->auditService->flush();
 
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return $this->secureJson([
                     'error' => $this->translator->trans('role.admin.rate_limit_exceeded', [], 'messages'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
         }
         return null;

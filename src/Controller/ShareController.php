@@ -75,15 +75,32 @@ class ShareController extends AbstractController
         }
     }
 
-    #[Route('', name: 'store', methods: ['POST'])]
-    public function store(string $projectUuid, Request $request): JsonResponse
+    private function checkRateLimit(Request $request): ?JsonResponse
     {
         if ($this->shareLimiter !== null) {
             $identifier = $this->getSafeUser()?->getUserIdentifier() ?? ($request->getClientIp() ?: '127.0.0.1');
-            $limiter = $this->shareLimiter->create($identifier);
-            if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->secureJson(['error' => $this->trans('share.rate_limit_exceeded', [], 'Too many share requests. Try again later.')], 429);
+            $limit = $this->shareLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+                return $this->secureJson([
+                    'error' => $this->trans('share.rate_limit_exceeded', [], 'Too many share requests. Try again later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
+        }
+        return null;
+    }
+
+    #[Route('', name: 'store', methods: ['POST'])]
+    public function store(string $projectUuid, Request $request): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         $project = $this->resolveProject($projectUuid);
@@ -184,12 +201,8 @@ class ShareController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(string $projectUuid, ?Request $request = null): JsonResponse
     {
-        if ($this->shareLimiter !== null && $request !== null) {
-            $identifier = $this->getSafeUser()?->getUserIdentifier() ?? ($request->getClientIp() ?: '127.0.0.1');
-            $limiter = $this->shareLimiter->create($identifier);
-            if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->secureJson(['error' => $this->trans('share.rate_limit_exceeded', [], 'Too many share requests. Try again later.')], 429);
-            }
+        if ($request !== null && ($rateLimitResponse = $this->checkRateLimit($request))) {
+            return $rateLimitResponse;
         }
 
         $project = $this->resolveProject($projectUuid);
@@ -262,12 +275,8 @@ class ShareController extends AbstractController
     #[Route('/{id}', name: 'destroy', methods: ['DELETE'], requirements: ['id' => '\d+'])]
     public function destroy(string $projectUuid, int $id, ?Request $request = null): JsonResponse
     {
-        if ($this->shareLimiter !== null && $request !== null) {
-            $identifier = $this->getSafeUser()?->getUserIdentifier() ?? ($request->getClientIp() ?: '127.0.0.1');
-            $limiter = $this->shareLimiter->create($identifier);
-            if (false === $limiter->consume(1)->isAccepted()) {
-                return $this->secureJson(['error' => $this->trans('share.rate_limit_exceeded', [], 'Too many share requests. Try again later.')], 429);
-            }
+        if ($request !== null && ($rateLimitResponse = $this->checkRateLimit($request))) {
+            return $rateLimitResponse;
         }
 
         $project = $this->resolveProject($projectUuid);

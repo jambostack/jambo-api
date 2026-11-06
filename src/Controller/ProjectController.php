@@ -68,6 +68,39 @@ class ProjectController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function getSafeUser(): ?\Symfony\Component\Security\Core\User\UserInterface
+    {
+        if (!isset($this->container)) {
+            return null;
+        }
+        try {
+            return $this->getUser();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function checkRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->projectLimiter !== null) {
+            $identifier = ($this->getSafeUser()?->getUserIdentifier() ?? $request->getClientIp()) ?: '127.0.0.1';
+            $limit = $this->projectLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+                return $this->secureJson([
+                    'error' => $this->trans('project.rate_limit_exceeded', [], 'Too many project requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
+            }
+        }
+        return null;
+    }
+
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(): JsonResponse
     {
@@ -85,14 +118,8 @@ class ProjectController extends AbstractController
     #[Route('', name: 'create', methods: ['POST'])]
     public function create(Request $request): JsonResponse
     {
-        if ($this->projectLimiter !== null) {
-            $identifier = ($this->getUser()?->getUserIdentifier() ?? $request->getClientIp()) ?: '127.0.0.1';
-            if (false === $this->projectLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->secureJson([
-                    'error' => $this->trans('project.rate_limit_exceeded', [], 'Too many project requests. Please retry later.'),
-                    'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         $user = $this->getUser();
@@ -416,14 +443,8 @@ class ProjectController extends AbstractController
     #[Route('/{uuid}/clone', name: 'clone', methods: ['POST'])]
     public function cloneProject(string $uuid, Request $request): JsonResponse
     {
-        if ($this->projectLimiter !== null) {
-            $identifier = ($this->getUser()?->getUserIdentifier() ?? $request->getClientIp()) ?: '127.0.0.1';
-            if (false === $this->projectLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->secureJson([
-                    'error' => $this->trans('project.rate_limit_exceeded', [], 'Too many project requests. Please retry later.'),
-                    'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         $currentUser = $this->getUser();
@@ -545,14 +566,8 @@ class ProjectController extends AbstractController
     #[Route('/{uuid}/members', name: 'members_add', methods: ['POST'])]
     public function addMember(string $uuid, Request $request): JsonResponse
     {
-        if ($this->projectLimiter !== null) {
-            $identifier = ($this->getUser()?->getUserIdentifier() ?? $request->getClientIp()) ?: '127.0.0.1';
-            if (false === $this->projectLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->secureJson([
-                    'error' => $this->trans('project.rate_limit_exceeded', [], 'Too many project requests. Please retry later.'),
-                    'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $uuid)) {

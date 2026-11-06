@@ -41,8 +41,7 @@ class InsightsController extends AbstractController
         return $id;
     }
 
-    #[Route('/insights/summary', name: 'insights_summary', methods: ['GET'])]
-    public function summary(?Request $request = null): JsonResponse
+    private function checkRateLimit(?Request $request): ?JsonResponse
     {
         if ($this->insightsLimiter !== null && $request !== null) {
             $identifier = $request->getClientIp() ?: '127.0.0.1';
@@ -53,12 +52,28 @@ class InsightsController extends AbstractController
                 }
             } catch (\Throwable) {}
 
-            if (false === $this->insightsLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->insightsLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return new JsonResponse([
                     'error' => $this->trans('insights.rate_limit_exceeded', [], 'Too many insights requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
             }
+        }
+        return null;
+    }
+
+    #[Route('/insights/summary', name: 'insights_summary', methods: ['GET'])]
+    public function summary(?Request $request = null): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         try {
@@ -81,21 +96,8 @@ class InsightsController extends AbstractController
     #[Route('/api/projects/{project}/insights', name: 'api_insights_project', methods: ['GET'])]
     public function project(string $project, Request $request): JsonResponse
     {
-        if ($this->insightsLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->insightsLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('insights.rate_limit_exceeded', [], 'Too many insights requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         $isNumeric = is_numeric($project) && (int) $project > 0;
