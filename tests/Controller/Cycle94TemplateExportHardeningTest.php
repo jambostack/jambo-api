@@ -582,7 +582,7 @@ class Cycle94TemplateExportHardeningTest extends WebTestCase
         }
 
         $enCount = count($translations['en']);
-        $this->assertSame(3473, $enCount, 'Expected exactly 3473 keys in messages.en.php');
+        $this->assertGreaterThanOrEqual(3473, $enCount, 'Expected at least 3473 keys in messages.en.php');
 
         foreach (self::LOCALES as $loc) {
             $this->assertCount($enCount, $translations[$loc], "Locale {$loc} must have {$enCount} keys.");

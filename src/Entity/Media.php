@@ -78,6 +78,12 @@ class Media
     #[ORM\Column(type: 'json', nullable: true)]
     public ?array $storagePaths = null;
 
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    public bool $isQuarantined = false;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    public ?string $quarantineReason = null;
+
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable();

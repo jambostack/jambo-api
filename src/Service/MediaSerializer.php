@@ -64,6 +64,8 @@ class MediaSerializer
             ] : null,
             'alt'               => $media->alt,
             'caption'           => $media->caption,
+            'is_quarantined'    => $media->isQuarantined,
+            'quarantine_reason' => $media->quarantineReason,
             'created_at'        => $media->createdAt->format(\DateTimeInterface::ATOM),
             'updated_at'        => $media->updatedAt->format(\DateTimeInterface::ATOM),
         ];

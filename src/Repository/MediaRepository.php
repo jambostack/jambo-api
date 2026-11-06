@@ -25,6 +25,7 @@ class MediaRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('m')
             ->where('m.project = :project')
             ->andWhere('m.deletedAt IS NULL')
+            ->andWhere('m.isQuarantined = false')
             ->setParameter('project', $project)
             ->orderBy('m.createdAt', 'DESC')
             ->setFirstResult(($page - 1) * $perPage)
@@ -39,6 +40,7 @@ class MediaRepository extends ServiceEntityRepository
             ->select('COUNT(m.id)')
             ->where('m.project = :project')
             ->andWhere('m.deletedAt IS NULL')
+            ->andWhere('m.isQuarantined = false')
             ->setParameter('project', $project)
             ->getQuery()
             ->getSingleScalarResult();

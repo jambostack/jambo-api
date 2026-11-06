@@ -226,6 +226,37 @@ class DirectUploadService
             $this->uploadValidator->validateSizeAndQuota($intent->project, $effectiveSize);
         }
 
+        // Inspection de l'en-tête et des magic bytes de l'objet sur S3 pour contrer les téléversements frauduleux
+        $sampleBytes = '';
+        try {
+            $rangeObj = $s3Client->getObject([
+                'Bucket' => $profile->s3Bucket,
+                'Key'    => $intent->storageKey,
+                'Range'  => 'bytes=0-65535',
+            ]);
+            $sampleBytes = (string) $rangeObj['Body'];
+        } catch (\Throwable) {
+            $sampleBytes = '';
+        }
+
+        if ($sampleBytes !== '' && $this->uploadValidator !== null) {
+            $ext = pathinfo($intent->originalFilename, PATHINFO_EXTENSION);
+            try {
+                $this->uploadValidator->validateBufferContent($sampleBytes, $ext);
+            } catch (\InvalidArgumentException $e) {
+                // Nettoyage immédiat de l'objet malveillant sur S3
+                try {
+                    $s3Client->deleteObject([
+                        'Bucket' => $profile->s3Bucket,
+                        'Key'    => $intent->storageKey,
+                    ]);
+                } catch (\Throwable) {}
+                $intent->status = AssetUploadIntent::STATUS_ABORTED;
+                $this->em->flush();
+                throw $e;
+            }
+        }
+
         $media = new Media();
         $media->uuid = Uuid::v4();
         $media->project = $intent->project;
@@ -234,6 +265,10 @@ class DirectUploadService
         $media->mimeType = $intent->clientMimeType;
         $media->fileSize = $effectiveSize;
         $media->createdBy = $user;
+        $media->storageProfile = $profile;
+        if ($profile->uuid !== null) {
+            $media->storagePaths = [$profile->uuid->toRfc4122() => $intent->storageKey];
+        }
 
         $intent->status = AssetUploadIntent::STATUS_COMPLETED;
 

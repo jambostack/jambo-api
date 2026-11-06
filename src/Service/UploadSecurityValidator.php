@@ -121,6 +121,122 @@ class UploadSecurityValidator
     }
 
     /**
+     * Valide le contenu réel d'un échantillon binaire ou mémoire (magic bytes, absence de polyglotte PHP / scripts).
+     */
+    public function validateBufferContent(string $sample, string $extension): void
+    {
+        $extension = strtolower($extension);
+
+        // 1. Détection polyglotte / injection PHP
+        $lowerSample = strtolower($sample);
+        if (
+            str_contains($lowerSample, '<?php') ||
+            str_contains($lowerSample, '<?=') ||
+            str_contains($lowerSample, '<script language="php"') ||
+            str_contains($lowerSample, '<script language=\'php\'')
+        ) {
+            throw new \InvalidArgumentException($this->trans('upload.error.php_code_detected', [], 'File contains dangerous PHP executable code.'));
+        }
+
+        // 2. Détection scripts actifs dans les formats de texte / données
+        if (in_array($extension, ['txt', 'csv', 'json', 'yaml', 'yml', 'md'], true)) {
+            if (
+                preg_match('/<\s*(?:script|iframe|object|embed|applet)\b/i', $sample) ||
+                preg_match('/\bon[a-z0-9_-]+\s*=/i', $sample)
+            ) {
+                throw new \InvalidArgumentException($this->trans('upload.error.script_injection_detected', [], 'Text or data file contains active script injection tags.'));
+            }
+        }
+
+        // 3. Validation signatures Magic Bytes strictes pour les formats binaires majeurs
+        $magic = substr($sample, 0, 32);
+
+        if (in_array($extension, ['jpg', 'jpeg'], true)) {
+            if (strlen($magic) < 3 || substr($magic, 0, 3) !== "\xFF\xD8\xFF") {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_jpeg', [], 'Corrupted or invalid JPEG image header.'));
+            }
+        } elseif ($extension === 'png') {
+            if (strlen($magic) < 8 || substr($magic, 0, 8) !== "\x89PNG\r\n\x1a\n") {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_png', [], 'Corrupted or invalid PNG image header.'));
+            }
+        } elseif ($extension === 'gif') {
+            if (strlen($magic) < 6 || (!str_starts_with($magic, 'GIF87a') && !str_starts_with($magic, 'GIF89a'))) {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_gif', [], 'Corrupted or invalid GIF image header.'));
+            }
+        } elseif ($extension === 'pdf') {
+            if (strlen($magic) < 4 || substr($magic, 0, 4) !== '%PDF') {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_pdf', [], 'Corrupted or invalid PDF header.'));
+            }
+        } elseif ($extension === 'webp') {
+            if (strlen($magic) < 12 || substr($magic, 0, 4) !== 'RIFF' || substr($magic, 8, 4) !== 'WEBP') {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_webp', [], 'Corrupted or invalid WebP image header.'));
+            }
+        } elseif ($extension === 'avif') {
+            if (strlen($magic) < 12 || substr($magic, 4, 4) !== 'ftyp') {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_avif', [], 'Corrupted or invalid AVIF image header.'));
+            }
+        } elseif ($extension === 'bmp') {
+            if (strlen($magic) < 2 || substr($magic, 0, 2) !== 'BM') {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_bmp', [], 'Corrupted or invalid BMP image header.'));
+            }
+        } elseif ($extension === 'ico') {
+            if (strlen($magic) < 4 || (substr($magic, 0, 4) !== "\x00\x00\x01\x00" && substr($magic, 0, 4) !== "\x00\x00\x02\x00")) {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_ico', [], 'Corrupted or invalid ICO image header.'));
+            }
+        } elseif (in_array($extension, ['tif', 'tiff'], true)) {
+            if (strlen($magic) < 4 || (substr($magic, 0, 4) !== "II*\x00" && substr($magic, 0, 4) !== "MM\x00*")) {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_tiff', [], 'Corrupted or invalid TIFF image header.'));
+            }
+        } elseif (in_array($extension, ['mp4', 'mov', 'm4a'], true)) {
+            if (strlen($magic) < 8 || substr($magic, 4, 4) !== 'ftyp') {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_mp4', [], 'Corrupted or invalid MP4/MOV container header.'));
+            }
+        } elseif (in_array($extension, ['webm', 'mkv'], true)) {
+            if (strlen($magic) < 4 || substr($magic, 0, 4) !== "\x1A\x45\xDF\xA3") {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_matroska', [], 'Corrupted or invalid WebM/MKV container header.'));
+            }
+        } elseif ($extension === 'avi') {
+            if (strlen($magic) < 12 || substr($magic, 0, 4) !== 'RIFF' || substr($magic, 8, 4) !== 'AVI ') {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_avi', [], 'Corrupted or invalid AVI container header.'));
+            }
+        } elseif ($extension === 'wav') {
+            if (strlen($magic) < 12 || substr($magic, 0, 4) !== 'RIFF' || substr($magic, 8, 4) !== 'WAVE') {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_wav', [], 'Corrupted or invalid WAV audio header.'));
+            }
+        } elseif ($extension === 'ogg') {
+            if (strlen($magic) < 4 || substr($magic, 0, 4) !== 'OggS') {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_ogg', [], 'Corrupted or invalid OGG container header.'));
+            }
+        } elseif ($extension === 'flac') {
+            if (strlen($magic) < 4 || substr($magic, 0, 4) !== 'fLaC') {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_flac', [], 'Corrupted or invalid FLAC audio header.'));
+            }
+        } elseif ($extension === 'mp3') {
+            $hasId3 = str_starts_with($magic, 'ID3');
+            $hasFrameSync = strlen($magic) >= 2 && ord($magic[0]) === 0xFF && (ord($magic[1]) & 0xE0) === 0xE0;
+            if (!$hasId3 && !$hasFrameSync) {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_mp3', [], 'Corrupted or invalid MP3 audio header.'));
+            }
+        } elseif (in_array($extension, ['zip', 'docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp'], true)) {
+            if (strlen($magic) < 4 || (
+                substr($magic, 0, 4) !== "PK\x03\x04" &&
+                substr($magic, 0, 4) !== "PK\x05\x06" &&
+                substr($magic, 0, 4) !== "PK\x07\x08"
+            )) {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_archive', [], 'Corrupted or invalid ZIP/OpenDocument header.'));
+            }
+        } elseif ($extension === 'gz') {
+            if (strlen($magic) < 2 || substr($magic, 0, 2) !== "\x1F\x8B") {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_gzip', [], 'Corrupted or invalid GZIP header.'));
+            }
+        } elseif ($extension === '7z') {
+            if (strlen($magic) < 6 || substr($magic, 0, 6) !== "7z\xBC\xAF\x27\x1C") {
+                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_7z', [], 'Corrupted or invalid 7-Zip header.'));
+            }
+        }
+    }
+
+    /**
      * Valide le contenu réel du fichier (magic bytes, absence de code PHP injecté, sanitization SVG).
      */
     public function validateFileContent(string $filePath, string $extension): string
@@ -142,51 +258,40 @@ class UploadSecurityValidator
             throw new \InvalidArgumentException($this->trans('upload.error.mime_not_allowed', ['%mime%' => $mime], sprintf('File MIME type "%s" is forbidden.', $mime)));
         }
 
-        // 2. Détection polyglotte / injection PHP dans le fichier
+        // 2. Détection polyglotte et magic bytes via échantillon
         $handle = fopen($filePath, 'rb');
-        if ($handle) {
-            $sample = fread($handle, 65536);
-            fclose($handle);
-
-            if ($sample !== false) {
-                $lowerSample = strtolower($sample);
-                if (
-                    str_contains($lowerSample, '<?php') ||
-                    str_contains($lowerSample, '<?=') ||
-                    str_contains($lowerSample, '<script language="php"') ||
-                    str_contains($lowerSample, '<script language=\'php\'')
-                ) {
-                    throw new \InvalidArgumentException($this->trans('upload.error.php_code_detected', [], 'File contains dangerous PHP executable code.'));
-                }
-            }
-        }
-
-        // 3. Validation signatures Magic Bytes strictes pour les formats binaires majeurs
-        $handle = fopen($filePath, 'rb');
-        $magic = $handle ? fread($handle, 16) : '';
+        $sample = $handle ? fread($handle, 65536) : '';
         if ($handle) {
             fclose($handle);
         }
 
-        if (in_array($extension, ['jpg', 'jpeg'], true)) {
-            if (strlen($magic) < 3 || substr($magic, 0, 3) !== "\xFF\xD8\xFF") {
-                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_jpeg', [], 'Corrupted or invalid JPEG image header.'));
+        if ($sample !== '') {
+            $this->validateBufferContent($sample, $extension);
+        }
+
+        // 3. Validation de cohérence MIME déclarée vs détectée
+        $baseMime = strtolower(explode(';', $mime)[0]);
+        $images = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'ico', 'tiff', 'tif', 'svg'];
+        if (in_array($extension, $images, true)) {
+            if (!str_starts_with($baseMime, 'image/') && !in_array($baseMime, ['application/octet-stream', 'text/xml', 'application/xml', 'text/plain'], true)) {
+                throw new \InvalidArgumentException($this->trans('upload.error.mime_mismatch_image', ['%mime%' => $baseMime, '%ext%' => $extension], sprintf('MIME type "%s" does not match image extension ".%s".', $baseMime, $extension)));
             }
-        } elseif ($extension === 'png') {
-            if (strlen($magic) < 8 || substr($magic, 0, 8) !== "\x89PNG\r\n\x1a\n") {
-                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_png', [], 'Corrupted or invalid PNG image header.'));
+        }
+        $audios = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'];
+        if (in_array($extension, $audios, true)) {
+            if (!str_starts_with($baseMime, 'audio/') && !in_array($baseMime, ['application/ogg', 'application/octet-stream'], true)) {
+                throw new \InvalidArgumentException($this->trans('upload.error.mime_mismatch_audio', ['%mime%' => $baseMime, '%ext%' => $extension], sprintf('MIME type "%s" does not match audio extension ".%s".', $baseMime, $extension)));
             }
-        } elseif ($extension === 'gif') {
-            if (strlen($magic) < 6 || (!str_starts_with($magic, 'GIF87a') && !str_starts_with($magic, 'GIF89a'))) {
-                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_gif', [], 'Corrupted or invalid GIF image header.'));
+        }
+        $videos = ['mp4', 'webm', 'mov', 'avi', 'mkv'];
+        if (in_array($extension, $videos, true)) {
+            if (!str_starts_with($baseMime, 'video/') && !in_array($baseMime, ['application/mp4', 'application/octet-stream'], true)) {
+                throw new \InvalidArgumentException($this->trans('upload.error.mime_mismatch_video', ['%mime%' => $baseMime, '%ext%' => $extension], sprintf('MIME type "%s" does not match video extension ".%s".', $baseMime, $extension)));
             }
-        } elseif ($extension === 'pdf') {
-            if (strlen($magic) < 4 || substr($magic, 0, 4) !== '%PDF') {
-                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_pdf', [], 'Corrupted or invalid PDF header.'));
-            }
-        } elseif ($extension === 'webp') {
-            if (strlen($magic) < 12 || substr($magic, 0, 4) !== 'RIFF' || substr($magic, 8, 4) !== 'WEBP') {
-                throw new \InvalidArgumentException($this->trans('upload.error.corrupted_webp', [], 'Corrupted or invalid WebP image header.'));
+        }
+        if ($extension === 'pdf') {
+            if ($baseMime !== 'application/pdf' && $baseMime !== 'application/x-pdf' && $baseMime !== 'application/octet-stream') {
+                throw new \InvalidArgumentException($this->trans('upload.error.mime_mismatch_pdf', ['%mime%' => $baseMime], sprintf('MIME type "%s" is not valid for PDF document.', $baseMime)));
             }
         }
 
@@ -235,6 +340,12 @@ class UploadSecurityValidator
     {
         if ($fileSize <= 0) {
             throw new \InvalidArgumentException($this->trans('upload.error.size_zero', [], 'File size must be greater than 0.'));
+        }
+
+        // Vérification de la disponibilité physique d'espace disque hôte (anti-épuisement de partition)
+        $diskFree = @disk_free_space(sys_get_temp_dir());
+        if ($diskFree !== false && $diskFree < 52428800) { // 50 MB
+            throw new \RuntimeException($this->trans('upload.error.server_disk_full', [], 'Server storage volume has critically low disk space. Upload rejected.'));
         }
 
         // Taille maximale par fichier (défaut 100 Mo)

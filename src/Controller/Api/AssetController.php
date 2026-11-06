@@ -11,6 +11,7 @@ use App\Repository\ProjectRepository;
 use App\Repository\ProjectStorageProfileRepository;
 use App\Repository\StorageRuleRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\AuditService;
 use App\Service\StorageDriverFactory;
 use App\Service\StorageManager;
 use App\Service\UploadSecurityValidator;
@@ -18,9 +19,11 @@ use Doctrine\ORM\EntityManagerInterface;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -40,6 +43,9 @@ class AssetController extends AbstractController
         private StorageDriverFactory $driverFactory,
         private ?UploadSecurityValidator $uploadValidator = null,
         private ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.media_limiter')]
+        private ?RateLimiterFactory $mediaLimiter = null,
+        private ?AuditService $auditService = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -126,7 +132,7 @@ class AssetController extends AbstractController
             return $this->corsResponse($this->json(['error' => $this->trans('asset.file_not_found', [], 'File not found.')], 404));
         }
 
-        if ($media === null) {
+        if ($media === null || $media->isQuarantined) {
             return $this->corsResponse($this->json(['error' => $this->trans('asset.file_not_found', [], 'File not found.')], 404));
         }
 
@@ -162,6 +168,16 @@ class AssetController extends AbstractController
             return $this->corsResponse(new JsonResponse(null, 204));
         }
 
+        if ($this->mediaLimiter !== null) {
+            $identifier = $this->security->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->mediaLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->corsResponse(new JsonResponse([
+                    'error' => $this->trans('media.rate_limit_exceeded', [], 'Too many media requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429));
+            }
+        }
+
         $project = $this->resolvePublicProject($projectId);
         if ($project instanceof JsonResponse) {
             return $project;
@@ -191,23 +207,49 @@ class AssetController extends AbstractController
             }
         }
 
+        $rawAlt = $request->request->get('alt');
+        $alt = is_scalar($rawAlt) ? trim((string) $rawAlt) : null;
+        if ($alt !== null) {
+            if (mb_strlen($alt) > 500) {
+                return $this->corsResponse(new JsonResponse(['error' => $this->trans('media.alt_too_long', ['%max%' => 500], 'Alt text cannot exceed 500 characters.')], 422));
+            }
+            if (preg_match('/[\x00-\x1F\x7F]/', $alt)) {
+                return $this->corsResponse(new JsonResponse(['error' => $this->trans('media.alt_control_chars', [], 'Alt text contains invalid control characters.')], 422));
+            }
+        }
+
+        $rawCaption = $request->request->get('caption');
+        $caption = is_scalar($rawCaption) ? trim((string) $rawCaption) : null;
+        if ($caption !== null) {
+            if (mb_strlen($caption) > 2000) {
+                return $this->corsResponse(new JsonResponse(['error' => $this->trans('media.caption_too_long', ['%max%' => 2000], 'Caption cannot exceed 2000 characters.')], 422));
+            }
+            if (preg_match('/[\x00-\x1F\x7F]/', $caption)) {
+                return $this->corsResponse(new JsonResponse(['error' => $this->trans('media.caption_control_chars', [], 'Caption contains invalid control characters.')], 422));
+            }
+        }
+
+        $cleanFilename = $this->uploadValidator !== null
+            ? $this->uploadValidator->sanitizeAndValidateFilename($uploadedFile->getClientOriginalName())
+            : basename($uploadedFile->getClientOriginalName());
+
         $media = new Media();
         $media->project = $project;
-        $media->alt     = $request->request->get('alt');
-        $media->caption = $request->request->get('caption');
-        $media->originalName = $uploadedFile->getClientOriginalName();
+        $media->alt     = $alt;
+        $media->caption = $caption;
+        $media->originalName = $cleanFilename;
         $media->setFile($uploadedFile);
 
-        $this->em->persist($media);
-        $this->em->flush();
+        $this->em->wrapInTransaction(function () use ($media, $project, $uploadedFile) {
+            if ($this->uploadValidator !== null) {
+                $this->uploadValidator->validateSizeAndQuota($project, $uploadedFile->getSize());
+            }
+            $this->em->persist($media);
+            $this->em->flush();
+        });
 
         // ── Écrire sur le(s) storage(s) via StorageManager ──
-        // Après le flush, VichUploader a déplacé le fichier temporaire vers son
-        // emplacement définitif ; $uploadedFile->getRealPath() renvoie alors false.
-        // On lit donc le flux depuis le fichier stocké (cf. ImageTransformController).
         $storageManager = new StorageManager($project, $this->profileRepo, $this->ruleRepo, $this->driverFactory);
-        // Le mapping Vich « media_files » range le fichier sous un dossier par projet
-        // (ProjectDirNamer) : public/uploads/media/{projectUuid}/{fileName}.
         $localPath = $this->getParameter('kernel.project_dir') . '/public/uploads/media/' . (string) $project->uuid . '/' . $media->fileName;
         if (!is_file($localPath)) {
             $localPath = $uploadedFile->getRealPath() ?: $uploadedFile->getPathname();
@@ -231,12 +273,24 @@ class AssetController extends AbstractController
 
         $this->em->flush();
 
+        $this->auditService?->log('asset_upload', $project, ['file' => $cleanFilename], ['id' => $media->id], 'success', null, $this->security->getUser()?->getUserIdentifier(), 'public_api');
+
         return $this->corsResponse($this->json(['data' => $this->serializeMedia($media)], 201));
     }
 
     #[Route('/{uuid}', name: 'delete', methods: ['DELETE'])]
     public function delete(Request $request, string $projectId, string $uuid): Response
     {
+        if ($this->mediaLimiter !== null) {
+            $identifier = $this->security->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
+            if (false === $this->mediaLimiter->create($identifier)->consume(1)->isAccepted()) {
+                return $this->corsResponse(new JsonResponse([
+                    'error' => $this->trans('media.rate_limit_exceeded', [], 'Too many media requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429));
+            }
+        }
+
         $project = $this->resolvePublicProject($projectId);
         if ($project instanceof JsonResponse) {
             return $this->corsResponse($project);
@@ -257,8 +311,17 @@ class AssetController extends AbstractController
             return $this->corsResponse($this->json(['error' => $this->trans('asset.file_not_found', [], 'File not found.')], 404));
         }
 
+        if (!empty($media->storagePaths)) {
+            try {
+                $storageManager = new StorageManager($project, $this->profileRepo, $this->ruleRepo, $this->driverFactory);
+                $storageManager->delete($media->storagePaths);
+            } catch (\Throwable) {}
+        }
+
         $media->deletedAt = new \DateTimeImmutable();
         $this->em->flush();
+
+        $this->auditService?->log('asset_delete', $project, ['uuid' => $uuid], ['id' => $media->id], 'success', null, $this->security->getUser()?->getUserIdentifier(), 'public_api');
 
         return $this->corsResponse(new JsonResponse(null, 204));
     }

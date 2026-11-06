@@ -8,9 +8,13 @@ use App\Entity\Project;
 use App\Repository\MediaFolderRepository;
 use App\Repository\MediaRepository;
 use App\Repository\ProjectRepository;
+use App\Repository\ProjectStorageProfileRepository;
+use App\Repository\StorageRuleRepository;
 use App\Service\AuditService;
 use App\Service\MediaSerializer;
 use App\Service\MercurePublisher;
+use App\Service\StorageDriverFactory;
+use App\Service\StorageManager;
 use App\Service\UploadSecurityValidator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -19,6 +23,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Uid\Uuid;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Vich\UploaderBundle\Handler\UploadHandler;
@@ -44,6 +49,11 @@ class MediaController extends AbstractController
         private ?RateLimiterFactory $mediaLimiter = null,
         private ?AuditService $auditService = null,
         private ?TranslatorInterface $translator = null,
+        private ?ProjectStorageProfileRepository $profileRepo = null,
+        private ?StorageRuleRepository $ruleRepo = null,
+        private ?StorageDriverFactory $driverFactory = null,
+        #[Autowire(param: 'kernel.secret')]
+        private ?string $appSecret = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -330,6 +340,12 @@ class MediaController extends AbstractController
 
             if ($media) {
                 $filename = $media->originalName ?? $media->fileName ?? (string) $identifier;
+                if (!empty($media->storagePaths) && $this->profileRepo !== null && $this->ruleRepo !== null && $this->driverFactory !== null) {
+                    try {
+                        $storageManager = new StorageManager($media->project, $this->profileRepo, $this->ruleRepo, $this->driverFactory);
+                        $storageManager->delete($media->storagePaths);
+                    } catch (\Throwable) {}
+                }
                 $this->uploadHandler->remove($media, 'file');
                 $this->em->remove($media);
                 $this->mercure->mediaDeleted($projectUuid, $filename);
@@ -533,6 +549,12 @@ class MediaController extends AbstractController
         }
 
         $filename = $media->originalName ?? $media->fileName ?? $uuid;
+        if (!empty($media->storagePaths) && $this->profileRepo !== null && $this->ruleRepo !== null && $this->driverFactory !== null) {
+            try {
+                $storageManager = new StorageManager($media->project, $this->profileRepo, $this->ruleRepo, $this->driverFactory);
+                $storageManager->delete($media->storagePaths);
+            } catch (\Throwable) {}
+        }
         $this->uploadHandler->remove($media, 'file');
         $this->em->remove($media);
         $this->em->flush();
@@ -542,6 +564,127 @@ class MediaController extends AbstractController
         $this->mercure->mediaDeleted($projectUuid, $filename);
 
         return new JsonResponse(null, 204, self::SECURITY_HEADERS);
+    }
+
+    #[Route('/{uuid}/quarantine', name: 'quarantine', methods: ['POST'])]
+    public function quarantine(string $projectUuid, string $uuid, Request $request): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        $media = $this->findMedia($projectUuid, $uuid);
+        if ($media instanceof JsonResponse) {
+            return $media;
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.update', $media->project);
+        }
+
+        $reason = null;
+        try {
+            $data = $request->toArray();
+            if (isset($data['reason']) && is_scalar($data['reason'])) {
+                $reason = mb_substr(trim((string) $data['reason']), 0, 255);
+            }
+        } catch (\Throwable) {}
+
+        $media->isQuarantined = true;
+        $media->quarantineReason = $reason !== '' ? $reason : 'Manual administrative quarantine';
+        $this->em->flush();
+
+        $this->auditService?->log('media_quarantined', $media->project, [
+            'uuid' => $uuid,
+            'reason' => $media->quarantineReason,
+        ], ['id' => $media->id], 'success', null, $this->getUser()?->getUserIdentifier(), 'admin_api');
+
+        return new JsonResponse(['data' => $this->mediaSerializer->serialize($media)], 200, self::SECURITY_HEADERS);
+    }
+
+    #[Route('/{uuid}/release-quarantine', name: 'release_quarantine', methods: ['POST'])]
+    public function releaseQuarantine(string $projectUuid, string $uuid, Request $request): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        $media = $this->findMedia($projectUuid, $uuid);
+        if ($media instanceof JsonResponse) {
+            return $media;
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('content.update', $media->project);
+        }
+
+        $media->isQuarantined = false;
+        $media->quarantineReason = null;
+        $this->em->flush();
+
+        $this->auditService?->log('media_quarantine_released', $media->project, [
+            'uuid' => $uuid,
+        ], ['id' => $media->id], 'success', null, $this->getUser()?->getUserIdentifier(), 'admin_api');
+
+        return new JsonResponse(['data' => $this->mediaSerializer->serialize($media)], 200, self::SECURITY_HEADERS);
+    }
+
+    #[Route('/{uuid}/signed-url', name: 'signed_url', methods: ['POST', 'GET'])]
+    public function generateSignedUrl(string $projectUuid, string $uuid, Request $request): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        $media = $this->findMedia($projectUuid, $uuid);
+        if ($media instanceof JsonResponse) {
+            return $media;
+        }
+        if ($this->getUser()) {
+            $this->denyAccessUnlessGranted('project.view', $media->project);
+        }
+
+        if ($media->isQuarantined) {
+            return new JsonResponse([
+                'error' => $this->trans('media.quarantined', [], 'This media file is currently in quarantine and cannot be accessed.'),
+                'code' => 'MEDIA_QUARANTINED',
+            ], 403, self::SECURITY_HEADERS);
+        }
+
+        $ttl = 3600; // 1 heure par défaut
+        try {
+            $data = $request->toArray();
+            if (isset($data['ttl']) && is_numeric($data['ttl'])) {
+                $ttl = (int) $data['ttl'];
+            }
+        } catch (\Throwable) {
+            if ($request->query->has('ttl') && is_numeric($request->query->get('ttl'))) {
+                $ttl = (int) $request->query->get('ttl');
+            }
+        }
+
+        // Borner TTL : entre 60 secondes (1 min) et 86400 secondes (24 heures)
+        $ttl = max(60, min(86400, $ttl));
+        $expires = time() + $ttl;
+
+        $secret = $this->appSecret ?: 'jambo-default-secret-key-32b!';
+        $mediaUuidStr = $media->uuid?->toRfc4122() ?? $uuid;
+        $sig = hash_hmac('sha256', "media:{$mediaUuidStr}:{$expires}", $secret);
+
+        $params = ['uuid' => $mediaUuidStr, 'expires' => $expires, 'sig' => $sig];
+        // Propager d'éventuels paramètres de transformation (w, h, fit, fmt, q)
+        foreach (['w', 'h', 'fit', 'fmt', 'q', 'bg'] as $transformKey) {
+            if ($request->query->has($transformKey)) {
+                $params[$transformKey] = $request->query->get($transformKey);
+            }
+        }
+
+        $signedUrl = $this->generateUrl('cdn_media_transform', $params, UrlGeneratorInterface::ABSOLUTE_URL);
+
+        return new JsonResponse([
+            'signed_url' => $signedUrl,
+            'expires_at' => (new \DateTimeImmutable("@$expires"))->format(\DateTimeInterface::ATOM),
+            'expires'    => $expires,
+            'ttl'        => $ttl,
+        ], 200, self::SECURITY_HEADERS);
     }
 
     private function resolveProject(string $projectUuid): ?Project

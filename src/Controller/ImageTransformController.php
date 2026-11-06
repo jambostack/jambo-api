@@ -39,6 +39,8 @@ class ImageTransformController extends AbstractController
         private ?TranslatorInterface $translator = null,
         #[Autowire(service: 'limiter.image_transform_limiter')]
         private ?RateLimiterFactory $imageTransformLimiter = null,
+        #[Autowire(param: 'kernel.secret')]
+        private ?string $appSecret = null,
     ) {}
 
     private function trans(string $key, string $default, array $parameters = []): string
@@ -87,6 +89,11 @@ class ImageTransformController extends AbstractController
         // Vérifier que le média existe, n'est pas supprimé, et est accessible
         if (!$media || $media->isDeleted()) {
             return new Response($this->trans('media.not_found', 'Media not found'), 404, self::SECURITY_HEADERS);
+        }
+
+        // Protection Quarantaine : les fichiers en quarantaine sont bloqués
+        if ($media->isQuarantined && !$this->canAccessQuarantinedMedia($media)) {
+            return new Response($this->trans('media.quarantined', 'This media file is currently in quarantine and cannot be accessed.'), 403, self::SECURITY_HEADERS);
         }
 
         // Vérifier les autorisations d'accès au média (publicApi, session utilisateur ou ApiToken)
@@ -224,6 +231,11 @@ class ImageTransformController extends AbstractController
             return new JsonResponse(['error' => $this->trans('media.not_found', 'Media not found')], 404, self::SECURITY_HEADERS);
         }
 
+        // Protection Quarantaine : les fichiers en quarantaine sont bloqués
+        if ($media->isQuarantined && !$this->canAccessQuarantinedMedia($media)) {
+            return new JsonResponse(['error' => $this->trans('media.quarantined', 'This media file is currently in quarantine and cannot be accessed.')], 403, self::SECURITY_HEADERS);
+        }
+
         // Vérifier les autorisations d'accès au média (publicApi, session utilisateur ou ApiToken)
         if (!$this->canAccessMedia($media, $request)) {
             return new JsonResponse(['error' => $this->trans('media.access_denied', 'Access denied')], 403, self::SECURITY_HEADERS);
@@ -359,6 +371,20 @@ class ImageTransformController extends AbstractController
             return true;
         }
 
+        // Vérification des URLs temporaires signées pour les médias privés
+        $expires = $request->query->getInt('expires', 0);
+        $sig = (string) $request->query->get('sig', $request->query->get('signature', ''));
+        if ($expires > 0 && $sig !== '') {
+            if ($expires >= time()) {
+                $secret = $this->appSecret ?: 'jambo-default-secret-key-32b!';
+                $mediaUuidStr = $media->uuid?->toRfc4122();
+                $expectedSig = hash_hmac('sha256', "media:{$mediaUuidStr}:{$expires}", $secret);
+                if (hash_equals($expectedSig, $sig)) {
+                    return true;
+                }
+            }
+        }
+
         $user = $this->getUser();
         if ($user instanceof \App\Entity\User) {
             if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
@@ -376,6 +402,20 @@ class ImageTransformController extends AbstractController
             }
         }
 
+        return false;
+    }
+
+    private function canAccessQuarantinedMedia(Media $media): bool
+    {
+        $user = $this->getUser();
+        if ($user instanceof \App\Entity\User) {
+            if (in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+                return true;
+            }
+            if ($media->project !== null && $media->project->hasMember($user)) {
+                return true;
+            }
+        }
         return false;
     }
 }
