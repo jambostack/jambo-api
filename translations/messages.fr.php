@@ -3977,4 +3977,14 @@ return [
     'oidc.discovery_failed' => 'Échec de la découverte OpenID Connect ou fournisseur inaccessible.',
     'auth.social.callback_rate_limited' => 'Trop de tentatives de retour d\'authentification. Veuillez réessayer plus tard.',
     'oidc.callback_rate_limited' => 'Trop de tentatives de retour OIDC. Veuillez réessayer plus tard.',
+
+    // ─── Cycle 115-116: Strict Inbound Headers & Payload Security Hardening ───
+    'form.unsupported_content_type' => 'En-tête Content-Type non pris en charge. application/json, application/x-www-form-urlencoded ou multipart/form-data attendu.',
+    'form.invalid_json_payload' => 'Charge utile JSON invalide ou malformée.',
+    'webhook.unsupported_content_type' => 'En-tête Content-Type non pris en charge. application/json attendu.',
+    'api_key.unsupported_content_type' => 'En-tête Content-Type non pris en charge. application/json attendu.',
+    'token.unsupported_content_type' => 'En-tête Content-Type non pris en charge. application/json attendu.',
+    'project.mailer.unsupported_content_type' => 'En-tête Content-Type non pris en charge. application/json attendu.',
+    'project.storage.unsupported_content_type' => 'En-tête Content-Type non pris en charge. application/json attendu.',
+    'project.jwt_ttl.unsupported_content_type' => 'En-tête Content-Type non pris en charge. application/json attendu.',
 ];

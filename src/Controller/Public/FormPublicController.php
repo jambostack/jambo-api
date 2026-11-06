@@ -140,11 +140,29 @@ class FormPublicController extends AbstractController
             }
         }
 
+        // Pré-contrôle d'en-tête Content-Length
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_CONTENT_LENGTH) {
+            return $this->secureJson([
+                'error' => $this->trans('form.payload_too_large', [], 'Payload too large (max 1MB).'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
         if (strlen($request->getContent()) > self::MAX_CONTENT_LENGTH) {
             return $this->secureJson([
                 'error' => $this->trans('form.payload_too_large', [], 'Payload too large (max 1MB).'),
                 'code' => 'PAYLOAD_TOO_LARGE',
             ], 413);
+        }
+
+        $rawContentType = (string) $request->headers->get('Content-Type', '');
+        $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
+        if ($contentType !== '' && !in_array($contentType, ['application/json', 'application/x-www-form-urlencoded', 'multipart/form-data'], true)) {
+            return $this->secureJson([
+                'error' => $this->trans('form.unsupported_content_type', [], 'Unsupported Content-Type header. Expected application/json, application/x-www-form-urlencoded, or multipart/form-data.'),
+                'code' => 'UNSUPPORTED_MEDIA_TYPE',
+            ], 415);
         }
 
         if (!preg_match(self::UUID_REGEX, $projectUuid)) {
@@ -214,8 +232,16 @@ class FormPublicController extends AbstractController
             }
         }
 
-        $contentType = (string) $request->headers->get('Content-Type');
-        if (str_contains($contentType, 'application/json') || empty($contentType)) {
+        if ($contentType === 'application/json') {
+            try {
+                $data = $request->toArray();
+            } catch (\Throwable) {
+                return $this->secureJson([
+                    'error' => $this->trans('form.invalid_json_payload', [], 'Invalid or malformed JSON payload.'),
+                    'code' => 'INVALID_JSON_PAYLOAD',
+                ], 400);
+            }
+        } elseif (empty($contentType) && $request->getContent() !== '') {
             try {
                 $data = $request->toArray();
             } catch (\Throwable) {

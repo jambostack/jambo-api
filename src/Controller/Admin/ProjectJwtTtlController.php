@@ -95,8 +95,22 @@ class ProjectJwtTtlController extends AbstractController
             return $project;
         }
 
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('project.jwt_ttl.payload_too_large', [], 'Payload exceeds maximum size limit (16 KB).')], 413);
+        }
+
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->trans('project.jwt_ttl.payload_too_large', [], 'Payload exceeds maximum size limit (16 KB).')], 413);
+        }
+
+        $rawContentType = (string) $request->headers->get('Content-Type', '');
+        $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
+        if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+            return $this->secureJson([
+                'error' => $this->trans('project.jwt_ttl.unsupported_content_type', [], 'Unsupported Content-Type header. Expected application/json.'),
+                'code' => 'UNSUPPORTED_MEDIA_TYPE',
+            ], 415);
         }
 
         try {

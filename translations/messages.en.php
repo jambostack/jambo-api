@@ -3959,4 +3959,14 @@ return [
     'oidc.discovery_failed' => 'OpenID Connect discovery failed or provider is unreachable.',
     'auth.social.callback_rate_limited' => 'Too many authentication callback attempts. Please retry later.',
     'oidc.callback_rate_limited' => 'Too many OIDC callback attempts. Please retry later.',
+
+    // ─── Cycle 115-116: Strict Inbound Headers & Payload Security Hardening ───
+    'form.unsupported_content_type' => 'Unsupported Content-Type header. Expected application/json, application/x-www-form-urlencoded, or multipart/form-data.',
+    'form.invalid_json_payload' => 'Invalid or malformed JSON payload.',
+    'webhook.unsupported_content_type' => 'Unsupported Content-Type header. Expected application/json.',
+    'api_key.unsupported_content_type' => 'Unsupported Content-Type header. Expected application/json.',
+    'token.unsupported_content_type' => 'Unsupported Content-Type header. Expected application/json.',
+    'project.mailer.unsupported_content_type' => 'Unsupported Content-Type header. Expected application/json.',
+    'project.storage.unsupported_content_type' => 'Unsupported Content-Type header. Expected application/json.',
+    'project.jwt_ttl.unsupported_content_type' => 'Unsupported Content-Type header. Expected application/json.',
 ];

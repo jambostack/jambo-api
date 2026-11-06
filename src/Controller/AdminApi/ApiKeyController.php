@@ -238,6 +238,16 @@ class ApiKeyController extends AbstractController
             ], 422);
         }
 
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            $this->auditService?->log('api_key_create_failure', $project, ['reason' => 'payload_too_large'], null, 'failure', 'Payload exceeds maximum size limit.', $operator, 'api_key_controller');
+            $this->auditService?->flush();
+            return $this->secureJson([
+                'error' => $this->trans('api_key.payload_too_large', [], 'Payload exceeds maximum size limit.'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413);
+        }
+
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             $this->auditService?->log('api_key_create_failure', $project, ['reason' => 'payload_too_large'], null, 'failure', 'Payload exceeds maximum size limit.', $operator, 'api_key_controller');
             $this->auditService?->flush();
@@ -246,6 +256,7 @@ class ApiKeyController extends AbstractController
                 'code'  => 'PAYLOAD_TOO_LARGE',
             ], 413);
         }
+
 
         try {
             $data = $request->toArray();

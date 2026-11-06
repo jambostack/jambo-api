@@ -3961,4 +3961,14 @@ return [
     'oidc.discovery_failed' => 'فشل اكتشاف OpenID Connect أو لا يمكن الوصول إلى المزود.',
     'auth.social.callback_rate_limited' => 'محاولات استرجاع مصادقة كثيرة جدًا. يُرجى إعادة المحاولة لاحقًا.',
     'oidc.callback_rate_limited' => 'محاولات استرجاع OIDC كثيرة جدًا. يُرجى إعادة المحاولة لاحقًا.',
+
+    // ─── Cycle 115-116: Strict Inbound Headers & Payload Security Hardening ───
+    'form.unsupported_content_type' => 'رأس Content-Type غير مدعوم. يُتوقع application/json أو application/x-www-form-urlencoded أو multipart/form-data.',
+    'form.invalid_json_payload' => 'حمولة JSON غير صالحة أو مشوهة.',
+    'webhook.unsupported_content_type' => 'رأس Content-Type غير مدعوم. يُتوقع application/json.',
+    'api_key.unsupported_content_type' => 'رأس Content-Type غير مدعوم. يُتوقع application/json.',
+    'token.unsupported_content_type' => 'رأس Content-Type غير مدعوم. يُتوقع application/json.',
+    'project.mailer.unsupported_content_type' => 'رأس Content-Type غير مدعوم. يُتوقع application/json.',
+    'project.storage.unsupported_content_type' => 'رأس Content-Type غير مدعوم. يُتوقع application/json.',
+    'project.jwt_ttl.unsupported_content_type' => 'رأس Content-Type غير مدعوم. يُتوقع application/json.',
 ];

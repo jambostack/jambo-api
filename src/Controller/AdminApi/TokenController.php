@@ -129,6 +129,22 @@ class TokenController extends AbstractController
             return $this->secureJson(['error' => $this->trans('token.invalid_content_type', [], 'Content-Type must be application/json.')], 415);
         }
 
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            $this->auditService?->log(
+                toolName: 'personal_access_token_create_failure',
+                project: null,
+                input: ['reason' => 'payload_too_large'],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Payload exceeds maximum size limit.',
+                createdBy: $this->getUserIdentifier($request),
+                source: 'admin_api_token',
+            );
+            $this->auditService?->flush();
+            return $this->secureJson(['error' => $this->trans('token.payload_too_large', [], 'Payload exceeds maximum size limit.')], 413);
+        }
+
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             $this->auditService?->log(
                 toolName: 'personal_access_token_create_failure',
@@ -416,6 +432,22 @@ class TokenController extends AbstractController
             );
             $this->auditService?->flush();
             return $this->secureJson(['error' => $this->trans('token.invalid_content_type', [], 'Content-Type must be application/json.')], 415);
+        }
+
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            $this->auditService?->log(
+                toolName: 'personal_access_token_create_failure',
+                project: null,
+                input: ['reason' => 'payload_too_large'],
+                output: null,
+                status: 'failure',
+                errorMessage: 'Payload exceeds maximum size limit.',
+                createdBy: $this->getUserIdentifier($request),
+                source: 'admin_api_token',
+            );
+            $this->auditService?->flush();
+            return $this->secureJson(['error' => $this->trans('token.payload_too_large', [], 'Payload exceeds maximum size limit.')], 413);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {

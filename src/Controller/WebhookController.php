@@ -218,6 +218,15 @@ class WebhookController extends AbstractController
             ], 413);
         }
 
+        $rawContentType = (string) $request->headers->get('Content-Type', '');
+        $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
+        if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+            return $this->secureJson([
+                'error' => $this->trans('webhook.unsupported_content_type', [], 'Unsupported Content-Type header. Expected application/json.'),
+                'code' => 'UNSUPPORTED_MEDIA_TYPE',
+            ], 415);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -398,6 +407,15 @@ class WebhookController extends AbstractController
             ], 413);
         }
 
+        $rawContentType = (string) $request->headers->get('Content-Type', '');
+        $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
+        if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+            return $this->secureJson([
+                'error' => $this->trans('webhook.unsupported_content_type', [], 'Unsupported Content-Type header. Expected application/json.'),
+                'code' => 'UNSUPPORTED_MEDIA_TYPE',
+            ], 415);
+        }
+
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
@@ -546,6 +564,15 @@ class WebhookController extends AbstractController
                 'error' => $this->trans('webhook.payload_too_large', [], 'Webhook payload too large (max 512KB).'),
                 'code' => 'PAYLOAD_TOO_LARGE',
             ], 413);
+        }
+
+        $rawContentType = (string) $request->headers->get('Content-Type', '');
+        $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
+        if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+            return $this->secureJson([
+                'error' => $this->trans('webhook.unsupported_content_type', [], 'Unsupported Content-Type header. Expected application/json.'),
+                'code' => 'UNSUPPORTED_MEDIA_TYPE',
+            ], 415);
         }
 
         $data = [];

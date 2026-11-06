@@ -46,6 +46,29 @@ class ProjectStorageController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function validateJsonPayload(Request $request): ?JsonResponse
+    {
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        }
+
+        $rawContentType = (string) $request->headers->get('Content-Type', '');
+        $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
+        if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+            return $this->secureJson([
+                'error' => $this->trans('project.storage.unsupported_content_type', [], 'Unsupported Content-Type header. Expected application/json.'),
+                'code' => 'UNSUPPORTED_MEDIA_TYPE',
+            ], 415);
+        }
+
+        return null;
+    }
+
     // ── Stratégie ──────────────────────────────────────────────────────
 
     #[Route('/api/admin/projects/{uuid}/storage', name: 'admin_project_storage_get', methods: ['GET'])]
@@ -84,8 +107,8 @@ class ProjectStorageController extends AbstractController
             return $project;
         }
 
-        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        if ($payloadErr = $this->validateJsonPayload($request)) {
+            return $payloadErr;
         }
 
         try {
@@ -126,8 +149,8 @@ class ProjectStorageController extends AbstractController
             return $project;
         }
 
-        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        if ($payloadErr = $this->validateJsonPayload($request)) {
+            return $payloadErr;
         }
 
         try {
@@ -173,8 +196,8 @@ class ProjectStorageController extends AbstractController
             return $this->secureJson(['error' => $this->trans('project.storage.profile_not_found', [], 'Profile not found.')], 404);
         }
 
-        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        if ($payloadErr = $this->validateJsonPayload($request)) {
+            return $payloadErr;
         }
 
         try {
@@ -321,8 +344,8 @@ class ProjectStorageController extends AbstractController
             return $project;
         }
 
-        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        if ($payloadErr = $this->validateJsonPayload($request)) {
+            return $payloadErr;
         }
 
         try {
@@ -364,8 +387,8 @@ class ProjectStorageController extends AbstractController
             return $this->secureJson(['error' => $this->trans('project.storage.rule_not_found', [], 'Rule not found.')], 404);
         }
 
-        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->secureJson(['error' => $this->trans('project.storage.payload_too_large', [], 'Payload exceeds maximum size limit (64 KB).'), 'code' => 'PAYLOAD_TOO_LARGE'], 413);
+        if ($payloadErr = $this->validateJsonPayload($request)) {
+            return $payloadErr;
         }
 
         try {

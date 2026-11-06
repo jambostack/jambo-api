@@ -3959,4 +3959,14 @@ return [
     'oidc.discovery_failed' => 'Error de detección de OpenID Connect o proveedor inaccesible.',
     'auth.social.callback_rate_limited' => 'Demasiados intentos de devolución de autenticación. Inténtelo más tarde.',
     'oidc.callback_rate_limited' => 'Demasiados intentos de devolución OIDC. Inténtelo más tarde.',
+
+    // ─── Cycle 115-116: Strict Inbound Headers & Payload Security Hardening ───
+    'form.unsupported_content_type' => 'Encabezado Content-Type no compatible. Se esperaba application/json, application/x-www-form-urlencoded o multipart/form-data.',
+    'form.invalid_json_payload' => 'Carga útil JSON no válida o con formato incorrecto.',
+    'webhook.unsupported_content_type' => 'Encabezado Content-Type no compatible. Se esperaba application/json.',
+    'api_key.unsupported_content_type' => 'Encabezado Content-Type no compatible. Se esperaba application/json.',
+    'token.unsupported_content_type' => 'Encabezado Content-Type no compatible. Se esperaba application/json.',
+    'project.mailer.unsupported_content_type' => 'Encabezado Content-Type no compatible. Se esperaba application/json.',
+    'project.storage.unsupported_content_type' => 'Encabezado Content-Type no compatible. Se esperaba application/json.',
+    'project.jwt_ttl.unsupported_content_type' => 'Encabezado Content-Type no compatible. Se esperaba application/json.',
 ];
