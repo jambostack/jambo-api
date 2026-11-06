@@ -81,15 +81,24 @@ class RealtimeController extends AbstractController
             return null;
         }
 
-        $identifier = ($this->getUser()?->getUserIdentifier() ?? $request->getClientIp()) ?: '127.0.0.1';
+        $user = null;
+        try {
+            $user = $this->getUser();
+        } catch (\Throwable) {}
+        $identifier = ($user?->getUserIdentifier() ?? $request->getClientIp()) ?: '127.0.0.1';
         $limiter = $this->realtimeLimiter->create($identifier);
         $limitResult = $limiter->consume(1);
         if (false === $limitResult->isAccepted()) {
-            $retryAfter = max(1, $limitResult->getRetryAfter()->getTimestamp() - time());
+            $retryAfter = max(1, ($limitResult->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
             return $this->secureJson([
                 'error' => $this->trans('realtime.rate_limit_exceeded', [], 'Too many realtime requests. Try again later.'),
                 'code'  => 'RATE_LIMIT_EXCEEDED',
-            ], 429, ['Retry-After' => (string) $retryAfter]);
+            ], 429, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limitResult->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limitResult->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limitResult->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]);
         }
 
         return null;

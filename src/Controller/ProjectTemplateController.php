@@ -100,8 +100,7 @@ class ProjectTemplateController extends AbstractController
         return trim(strip_tags(preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text)));
     }
 
-    #[Route('', name: 'index', methods: ['GET'])]
-    public function index(?Request $request = null): JsonResponse
+    private function checkRateLimit(?Request $request): ?JsonResponse
     {
         if ($this->templateLimiter !== null && $request !== null) {
             $identifier = $request->getClientIp() ?: '127.0.0.1';
@@ -112,12 +111,28 @@ class ProjectTemplateController extends AbstractController
                 }
             } catch (\Throwable) {}
 
-            if (false === $this->templateLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->templateLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return new JsonResponse([
                     'error' => $this->trans('template.rate_limit_exceeded', [], 'Too many template requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
             }
+        }
+        return null;
+    }
+
+    #[Route('', name: 'index', methods: ['GET'])]
+    public function index(?Request $request = null): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         $templates = $this->templateRepository->findBy([], ['createdAt' => 'DESC']);
@@ -135,21 +150,8 @@ class ProjectTemplateController extends AbstractController
     #[Route('/{id}', name: 'show', methods: ['GET'], requirements: ['id' => '\d+'])]
     public function show(int $id, ?Request $request = null): JsonResponse
     {
-        if ($this->templateLimiter !== null && $request !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->templateLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('template.rate_limit_exceeded', [], 'Too many template requests. Please retry later.'),
-                    'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if ($id <= 0) {
@@ -173,21 +175,8 @@ class ProjectTemplateController extends AbstractController
     #[Route('/{id}/export', name: 'export', methods: ['GET'], requirements: ['id' => '\d+'])]
     public function export(int $id, ?Request $request = null): Response
     {
-        if ($this->templateLimiter !== null && $request !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->templateLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('template.rate_limit_exceeded', [], 'Too many template requests. Please retry later.'),
-                    'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if ($id <= 0) {
@@ -227,21 +216,8 @@ class ProjectTemplateController extends AbstractController
     #[Route('/import', name: 'import', methods: ['POST'])]
     public function import(Request $request): JsonResponse
     {
-        if ($this->templateLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->templateLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('template.rate_limit_exceeded', [], 'Too many template requests. Please retry later.'),
-                    'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         if (!$this->getUser()) {
@@ -514,21 +490,8 @@ class ProjectTemplateController extends AbstractController
     #[Route('/from-project/{projectUuid}', name: 'save_from_project', methods: ['POST'])]
     public function saveFromProject(string $projectUuid, Request $request): JsonResponse
     {
-        if ($this->templateLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->templateLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('template.rate_limit_exceeded', [], 'Too many template requests. Please retry later.'),
-                    'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         try {
@@ -612,21 +575,8 @@ class ProjectTemplateController extends AbstractController
     #[Route('/{id}/apply', name: 'apply', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function apply(int $id, Request $request): JsonResponse
     {
-        if ($this->templateLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->templateLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('template.rate_limit_exceeded', [], 'Too many template requests. Please retry later.'),
-                    'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         $user = $this->getUser();
@@ -681,21 +631,8 @@ class ProjectTemplateController extends AbstractController
     #[Route('/{id}', name: 'delete', methods: ['DELETE'], requirements: ['id' => '\d+'])]
     public function delete(int $id, ?Request $request = null): JsonResponse
     {
-        if ($this->templateLimiter !== null && $request !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
-
-            if (false === $this->templateLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('template.rate_limit_exceeded', [], 'Too many template requests. Please retry later.'),
-                    'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
         }
 
         $this->denyAccessUnlessGranted('ROLE_SUPER_ADMIN');

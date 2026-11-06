@@ -62,12 +62,18 @@ class ProjectOpenApiController extends AbstractController
 
         // Rate limiting : 60 requêtes par minute par client IP
         if ($this->openapiLimiter !== null) {
-            $limiter = $this->openapiLimiter->create($request->getClientIp() ?: '127.0.0.1');
-            if (false === $limiter->consume(1)->isAccepted()) {
+            $limit = $this->openapiLimiter->create($request->getClientIp() ?: '127.0.0.1')->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return $this->corsResponse(new JsonResponse([
                     'error' => $this->trans('project_openapi.rate_limit_exceeded', [], 'Too many requests. Please try again later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429));
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
             }
         }
 

@@ -127,8 +127,20 @@ class ProjectExportImportController extends AbstractController
     public function export(string $uuid, Request $request): Response
     {
         $identifier = $this->resolveIdentifier($request);
-        if ($this->exportLimiter !== null && false === $this->exportLimiter->create($identifier)->consume(1)->isAccepted()) {
-            return new JsonResponse(['error' => $this->trans('project.export_import.rate_limit_export', [], 'Too many export requests. Please retry later.')], 429);
+        if ($this->exportLimiter !== null) {
+            $limit = $this->exportLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+                return new JsonResponse([
+                    'error' => $this->trans('project.export_import.rate_limit_export', [], 'Too many export requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
+            }
         }
 
         try {
@@ -267,8 +279,20 @@ class ProjectExportImportController extends AbstractController
         }
 
         $identifier = $this->resolveIdentifier($request);
-        if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
-            return new JsonResponse(['error' => $this->trans('project.export_import.rate_limit_import', [], 'Too many import requests. Please retry later.')], 429);
+        if ($this->importLimiter !== null) {
+            $limit = $this->importLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+                return new JsonResponse([
+                    'error' => $this->trans('project.export_import.rate_limit_import', [], 'Too many import requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
+            }
         }
 
         $uploadedFile = $request->files->get('file');
@@ -403,8 +427,20 @@ class ProjectExportImportController extends AbstractController
         }
 
         $identifier = $this->resolveIdentifier($request);
-        if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
-            return new JsonResponse(['error' => $this->trans('project.export_import.rate_limit_import', [], 'Too many import requests. Please retry later.')], 429);
+        if ($this->importLimiter !== null) {
+            $limit = $this->importLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+                return new JsonResponse([
+                    'error' => $this->trans('project.export_import.rate_limit_import', [], 'Too many import requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
+            }
         }
 
         $uploadedFile = $request->files->get('file');
@@ -469,8 +505,20 @@ class ProjectExportImportController extends AbstractController
     public function importMerge(string $uuid, Request $request): JsonResponse
     {
         $identifier = $this->resolveIdentifier($request);
-        if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
-            return new JsonResponse(['error' => $this->trans('project.export_import.rate_limit_import', [], 'Too many import requests. Please retry later.')], 429);
+        if ($this->importLimiter !== null) {
+            $limit = $this->importLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+                return new JsonResponse([
+                    'error' => $this->trans('project.export_import.rate_limit_import', [], 'Too many import requests. Please retry later.'),
+                    'code'  => 'RATE_LIMIT_EXCEEDED',
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
+            }
         }
 
         try {

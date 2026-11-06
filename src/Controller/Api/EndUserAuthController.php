@@ -113,6 +113,20 @@ class EndUserAuthController extends AbstractController
         }
     }
 
+    private function rateLimitResponse(\Symfony\Component\RateLimiter\RateLimit $limit, string $transKey, string $defaultMsg): JsonResponse
+    {
+        $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+        return $this->secureJson([
+            'error' => $this->trans($transKey, [], $defaultMsg),
+            'code'  => 'RATE_LIMIT_EXCEEDED',
+        ], 429, [
+            'Retry-After' => (string) $retryAfter,
+            'X-RateLimit-Limit' => (string) $limit->getLimit(),
+            'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+            'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+        ]);
+    }
+
     #[OA\Post(
         path: '/api/{projectId}/auth/register',
         summary: 'Register a new end-user',
@@ -143,13 +157,13 @@ class EndUserAuthController extends AbstractController
         $clientIp = $request->getClientIp() ?: '127.0.0.1';
 
         if ($this->registerLimiter !== null) {
-            $limiter = $this->registerLimiter->create($clientIp);
-            if (!$limiter->consume()->isAccepted()) {
+            $limit = $this->registerLimiter->create($clientIp)->consume(1);
+            if (!$limit->isAccepted()) {
                 $this->audit('enduser_register_rate_limited', null, [
                     'project_id' => $projectId,
                     'ip'         => $clientIp,
                 ], 'failure');
-                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_register', [], 'Too many registration requests. Please retry later.')], 429);
+                return $this->rateLimitResponse($limit, 'enduser.auth.rate_limit_register', 'Too many registration requests. Please retry later.');
             }
         }
 
@@ -280,13 +294,13 @@ class EndUserAuthController extends AbstractController
         $clientIp = $request->getClientIp() ?: '127.0.0.1';
 
         if ($this->loginLimiter !== null) {
-            $limiter = $this->loginLimiter->create($clientIp);
-            if (!$limiter->consume()->isAccepted()) {
+            $limit = $this->loginLimiter->create($clientIp)->consume(1);
+            if (!$limit->isAccepted()) {
                 $this->audit('enduser_login_rate_limited', null, [
                     'project_id' => $projectId,
                     'ip'         => $clientIp,
                 ], 'failure');
-                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_login', [], 'Too many login attempts. Please retry later.')], 429);
+                return $this->rateLimitResponse($limit, 'enduser.auth.rate_limit_login', 'Too many login attempts. Please retry later.');
             }
         }
 
@@ -449,13 +463,13 @@ class EndUserAuthController extends AbstractController
         $clientIp = $request->getClientIp() ?: '127.0.0.1';
 
         if ($this->twoFactorLimiter !== null) {
-            $limiter = $this->twoFactorLimiter->create($clientIp);
-            if (!$limiter->consume()->isAccepted()) {
-                $this->audit('enduser_2fa_rate_limited', $project, [
+            $limit = $this->twoFactorLimiter->create($clientIp)->consume(1);
+            if (!$limit->isAccepted()) {
+                $this->audit('enduser_2fa_rate_limited', null, [
                     'project_id' => $projectId,
                     'ip'         => $clientIp,
                 ], 'failure');
-                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_2fa', [], 'Too many 2FA verification attempts. Please retry later.')], 429);
+                return $this->rateLimitResponse($limit, 'enduser.auth.rate_limit_2fa', 'Too many 2FA verification attempts. Please retry later.');
             }
         }
 
@@ -1014,13 +1028,13 @@ class EndUserAuthController extends AbstractController
         $clientIp = $request->getClientIp() ?: '127.0.0.1';
 
         if ($this->passwordResetLimiter !== null) {
-            $limiter = $this->passwordResetLimiter->create($clientIp);
-            if (!$limiter->consume()->isAccepted()) {
+            $limit = $this->passwordResetLimiter->create($clientIp)->consume(1);
+            if (!$limit->isAccepted()) {
                 $this->audit('enduser_password_reset_rate_limited', null, [
                     'project_id' => $projectId,
                     'ip'         => $clientIp,
                 ], 'failure');
-                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_forgot', [], 'Too many password reset requests. Please retry later.')], 429);
+                return $this->rateLimitResponse($limit, 'enduser.auth.rate_limit_forgot', 'Too many password reset requests. Please retry later.');
             }
         }
 
@@ -1164,13 +1178,13 @@ class EndUserAuthController extends AbstractController
         $clientIp = $request->getClientIp() ?: '127.0.0.1';
 
         if ($this->passwordResetLimiter !== null) {
-            $limiter = $this->passwordResetLimiter->create($clientIp);
-            if (!$limiter->consume()->isAccepted()) {
+            $limit = $this->passwordResetLimiter->create($clientIp)->consume(1);
+            if (!$limit->isAccepted()) {
                 $this->audit('enduser_password_reset_rate_limited', null, [
                     'project_id' => $projectId,
                     'ip'         => $clientIp,
                 ], 'failure');
-                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_reset', [], 'Too many password reset attempts. Please retry later.')], 429);
+                return $this->rateLimitResponse($limit, 'enduser.auth.rate_limit_reset', 'Too many password reset attempts. Please retry later.');
             }
         }
 
@@ -1298,9 +1312,9 @@ class EndUserAuthController extends AbstractController
         $clientIp = $request->getClientIp() ?: '127.0.0.1';
 
         if ($this->socialAuthLimiter !== null) {
-            $limiter = $this->socialAuthLimiter->create($clientIp);
-            if (!$limiter->consume()->isAccepted()) {
-                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_social', [], 'Too many social login requests. Please retry later.')], 429);
+            $limit = $this->socialAuthLimiter->create($clientIp)->consume(1);
+            if (!$limit->isAccepted()) {
+                return $this->rateLimitResponse($limit, 'enduser.auth.rate_limit_social', 'Too many social login requests. Please retry later.');
             }
         }
 
@@ -1373,16 +1387,17 @@ class EndUserAuthController extends AbstractController
         $clientIp = $request->getClientIp() ?: '127.0.0.1';
 
         if ($this->loginLimiter !== null) {
-            $limiter = $this->loginLimiter->create($clientIp);
-            if (!$limiter->consume()->isAccepted()) {
-                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_login', [], 'Too many login attempts. Please retry later.')], 429);
+            $limit = $this->loginLimiter->create($clientIp)->consume(1);
+            if (!$limit->isAccepted()) {
+                return $this->rateLimitResponse($limit, 'enduser.auth.rate_limit_login', 'Too many login attempts. Please retry later.');
             }
         }
 
         if ($this->socialAuthLimiter !== null) {
             $socialLimiter = $this->socialAuthLimiter->create($clientIp);
-            if (!$socialLimiter->consume()->isAccepted()) {
-                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_social', [], 'Too many social login requests. Please retry later.')], 429);
+            $socialLimit = $socialLimiter->consume(1);
+            if (!$socialLimit->isAccepted()) {
+                return $this->rateLimitResponse($socialLimit, 'enduser.auth.rate_limit_social', 'Too many social login requests. Please retry later.');
             }
         }
 

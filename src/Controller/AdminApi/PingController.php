@@ -45,13 +45,20 @@ class PingController extends AbstractController
 
         if ($this->adminApiLimiter !== null) {
             $identifier = $userIdentifier ?? ($request->getClientIp() ?: '127.0.0.1');
-            if (!$this->adminApiLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->adminApiLimiter->create($identifier)->consume(1);
+            if (!$limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 $this->auditService?->log('admin_api_ping_rate_limit_exceeded', null, ['identifier' => $identifier], null, 'failure', 'Too many ping requests.', $userIdentifier, 'admin_api_ping');
                 $this->auditService?->flush();
                 return new JsonResponse([
                     'error' => $this->trans('admin_api.ping.rate_limit_exceeded', [], 'Too many ping requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
+                ], 429, array_merge(self::SECURITY_HEADERS, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
             }
         }
 

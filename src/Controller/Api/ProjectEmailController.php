@@ -89,9 +89,18 @@ class ProjectEmailController extends AbstractController
 
         // Rate limiting
         $identifier = $request->getClientIp() ?: '127.0.0.1';
-        $limiter = $this->emailLimiter->create($identifier);
-        if (!$limiter->consume()->isAccepted()) {
-            return $this->secureJson(['error' => $this->trans('email.rate_limit_exceeded', [], 'Trop de requetes. Reessayez plus tard.')], 429);
+        $limit = $this->emailLimiter->create($identifier)->consume(1);
+        if (!$limit->isAccepted()) {
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+            return $this->secureJson([
+                'error' => $this->trans('email.rate_limit_exceeded', [], 'Trop de requêtes. Réessayez plus tard.'),
+                'code'  => 'RATE_LIMIT_EXCEEDED',
+            ], 429, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]);
         }
 
         if (strlen($request->getContent()) > self::MAX_PUBLIC_PAYLOAD_BYTES) {
@@ -199,9 +208,18 @@ class ProjectEmailController extends AbstractController
         }
 
         // Rate limiting (basé sur le projet)
-        $limiter = $this->adminEmailLimiter->create('project_' . $project->id);
-        if (!$limiter->consume()->isAccepted()) {
-            return $this->secureJson(['error' => $this->trans('email.rate_limit_exceeded', [], 'Trop de requêtes. Réessayez plus tard.')], 429);
+        $limit = $this->adminEmailLimiter->create('project_' . $project->id)->consume(1);
+        if (!$limit->isAccepted()) {
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+            return $this->secureJson([
+                'error' => $this->trans('email.rate_limit_exceeded', [], 'Trop de requêtes. Réessayez plus tard.'),
+                'code'  => 'RATE_LIMIT_EXCEEDED',
+            ], 429, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]);
         }
 
         if (strlen($request->getContent()) > self::MAX_ADMIN_PAYLOAD_BYTES) {

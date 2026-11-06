@@ -170,11 +170,18 @@ class AssetController extends AbstractController
 
         if ($this->mediaLimiter !== null) {
             $identifier = $this->security->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
-            if (false === $this->mediaLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->mediaLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return $this->corsResponse(new JsonResponse([
                     'error' => $this->trans('media.rate_limit_exceeded', [], 'Too many media requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429));
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
             }
         }
 
@@ -283,11 +290,18 @@ class AssetController extends AbstractController
     {
         if ($this->mediaLimiter !== null) {
             $identifier = $this->security->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
-            if (false === $this->mediaLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->mediaLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return $this->corsResponse(new JsonResponse([
                     'error' => $this->trans('media.rate_limit_exceeded', [], 'Too many media requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429));
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]));
             }
         }
 

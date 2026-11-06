@@ -59,12 +59,18 @@ class RedirectPublicController extends AbstractController
     public function resolve(string $projectUuid, Request $request): Response
     {
         if ($this->redirectLimiter !== null) {
-            $limiter = $this->redirectLimiter->create($request->getClientIp() ?: '127.0.0.1');
-            if (false === $limiter->consume(1)->isAccepted()) {
+            $limit = $this->redirectLimiter->create($request->getClientIp() ?: '127.0.0.1')->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return $this->secureJson([
                     'error' => $this->trans('redirect.rate_limit_exceeded', [], 'Too many redirect requests. Try again later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
         }
 

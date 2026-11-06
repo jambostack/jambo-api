@@ -86,11 +86,18 @@ class ApiKeyController extends AbstractController
             $identifier = $pat->user->getUserIdentifier();
         }
 
-        if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+        $limit = $this->tokenLimiter->create($identifier)->consume(1);
+        if (!$limit->isAccepted()) {
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
             return $this->secureJson([
                 'error' => $this->trans('api_key.rate_limit_exceeded', [], 'Too many API key requests. Please retry later.'),
                 'code'  => 'RATE_LIMIT_EXCEEDED',
-            ], 429);
+            ], 429, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]);
         }
 
         return null;

@@ -187,7 +187,7 @@ class McpController extends AbstractController
             $limiter = $this->mcpLimiter->create($identifier);
             $rateLimit = $limiter->consume(1);
             if (!$rateLimit->isAccepted()) {
-                $retryAfter = (string) ceil(max(1, $rateLimit->getRetryAfter()->getTimestamp() - time()));
+                $retryAfter = (string) ceil(max(1, ($rateLimit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time()));
                 $this->auditService?->log(
                     toolName: 'mcp_rate_limit_exceeded',
                     project: null,
@@ -198,10 +198,14 @@ class McpController extends AbstractController
                     createdBy: $identifier,
                     source: 'mcp_controller',
                 );
-                return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429, [
+                return $this->secureJson([
+                    'error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, [
                     'Retry-After' => $retryAfter,
                     'X-RateLimit-Limit' => (string) $rateLimit->getLimit(),
                     'X-RateLimit-Remaining' => '0',
+                    'X-RateLimit-Reset' => (string) ($rateLimit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
                 ]);
             }
         }
@@ -333,11 +337,15 @@ class McpController extends AbstractController
             $limiter = $this->mcpLimiter->create($identifier);
             $rateLimit = $limiter->consume(1);
             if (!$rateLimit->isAccepted()) {
-                $retryAfter = (string) ceil(max(1, $rateLimit->getRetryAfter()->getTimestamp() - time()));
-                return $this->secureJson(['error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.')], 429, [
+                $retryAfter = (string) ceil(max(1, ($rateLimit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time()));
+                return $this->secureJson([
+                    'error' => $this->trans('mcp.rate_limit_exceeded', [], 'Too many MCP requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, [
                     'Retry-After' => $retryAfter,
                     'X-RateLimit-Limit' => (string) $rateLimit->getLimit(),
                     'X-RateLimit-Remaining' => '0',
+                    'X-RateLimit-Reset' => (string) ($rateLimit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
                 ]);
             }
             $headers['X-RateLimit-Limit'] = (string) $rateLimit->getLimit();

@@ -46,11 +46,15 @@ class SeoPublicController extends AbstractController
     private function checkRateLimit(?Request $request): ?Response
     {
         if ($request !== null && $this->seoLimiter !== null) {
-            $limiter = $this->seoLimiter->create($request->getClientIp() ?: '127.0.0.1');
-            if (false === $limiter->consume(1)->isAccepted()) {
+            $limit = $this->seoLimiter->create($request->getClientIp() ?: '127.0.0.1')->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return new Response($this->trans('seo.rate_limit_exceeded', [], 'Too many SEO requests. Try again later.'), 429, array_merge(self::SECURITY_HEADERS, [
                     'Content-Type' => 'text/plain',
-                    'Retry-After' => '60',
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
                 ]));
             }
         }

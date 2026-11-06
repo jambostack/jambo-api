@@ -97,11 +97,18 @@ class CollectionTemplateController extends AbstractController
             }
         } catch (\Throwable) {}
 
-        if (false === $this->templateLimiter->create($identifier)->consume(1)->isAccepted()) {
+        $limit = $this->templateLimiter->create($identifier)->consume(1);
+        if (false === $limit->isAccepted()) {
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
             return new JsonResponse([
                 'error' => $this->trans('template.rate_limit_exceeded', [], 'Too many template requests. Please retry later.'),
                 'code'  => 'RATE_LIMIT_EXCEEDED',
-            ], 429, self::SECURITY_HEADERS);
+            ], 429, array_merge(self::SECURITY_HEADERS, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]));
         }
 
         return null;

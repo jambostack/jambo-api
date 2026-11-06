@@ -614,7 +614,9 @@ class TokenController extends AbstractController
             }
         } catch (\Throwable) {}
 
-        if (!$this->tokenLimiter->create($identifier)->consume(1)->isAccepted()) {
+        $limit = $this->tokenLimiter->create($identifier)->consume(1);
+        if (!$limit->isAccepted()) {
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
             $this->auditService?->log(
                 toolName: 'personal_access_token_rate_limited',
                 project: null,
@@ -626,7 +628,12 @@ class TokenController extends AbstractController
                 source: 'admin_api_token',
             );
             $this->auditService?->flush();
-            throw new TooManyRequestsHttpException(60, $this->trans('token.rate_limit_exceeded', [], 'Too many token management requests. Please retry later.'));
+            throw new TooManyRequestsHttpException($retryAfter, $this->trans('token.rate_limit_exceeded', [], 'Too many token management requests. Please retry later.'), null, 0, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]);
         }
     }
 }

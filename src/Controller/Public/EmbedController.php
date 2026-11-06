@@ -72,10 +72,14 @@ class EmbedController extends AbstractController
         ];
 
         if ($this->formViewLimiter !== null) {
-            $limiter = $this->formViewLimiter->create($request->getClientIp() ?: '127.0.0.1');
-            if (false === $limiter->consume(1)->isAccepted()) {
+            $limit = $this->formViewLimiter->create($request->getClientIp() ?: '127.0.0.1')->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return new Response($this->renderErrorHtml($this->trans('form.rate_limit_exceeded', [], 'Too many requests. Try again later.')), 429, array_merge($errorHeaders, [
-                    'Retry-After' => '60',
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
                 ]));
             }
         }

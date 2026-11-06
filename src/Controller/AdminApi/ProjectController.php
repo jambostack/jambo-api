@@ -64,7 +64,9 @@ class ProjectController extends AbstractController
             $identifier = $pat->user->getUserIdentifier();
         }
 
-        if (!$this->adminApiLimiter->create($identifier)->consume(1)->isAccepted()) {
+        $limit = $this->adminApiLimiter->create($identifier)->consume(1);
+        if (!$limit->isAccepted()) {
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
             $this->auditService?->log(
                 toolName: 'admin_project_rate_limit_exceeded',
                 project: null,
@@ -80,7 +82,12 @@ class ProjectController extends AbstractController
             return new JsonResponse([
                 'error' => $this->trans('admin_api.rate_limit_exceeded', [], 'Too many API requests. Please retry later.'),
                 'code' => 'RATE_LIMIT_EXCEEDED',
-            ], 429, self::SECURITY_HEADERS);
+            ], 429, array_merge(self::SECURITY_HEADERS, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]));
         }
         return null;
     }

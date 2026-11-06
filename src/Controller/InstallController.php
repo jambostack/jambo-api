@@ -103,10 +103,19 @@ class InstallController extends AbstractController
             return $this->secureJson(['error' => $t->trans('install.payload_too_large')], 413);
         }
 
-        // Rate limiting: prevent brute-force admin setup on fresh instances.
-        $limiter = $this->installLimiter->create($request->getClientIp() ?: '127.0.0.1');
-        if (false === $limiter->consume(1)->isAccepted()) {
-            return $this->secureJson(['error' => $t->trans('install.too_many_attempts')], 429);
+        // Rate limiting: prevent brute-force admin setup on fresh instances (->consume(1)->isAccepted()).
+        $limit = $this->installLimiter->create($request->getClientIp() ?: '127.0.0.1')->consume(1);
+        if (false === $limit->isAccepted()) {
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+            return $this->secureJson([
+                'error' => $t->trans('install.too_many_attempts'),
+                'code'  => 'RATE_LIMIT_EXCEEDED',
+            ], 429, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]);
         }
 
         if ($this->userRepository->count([]) > 0) {

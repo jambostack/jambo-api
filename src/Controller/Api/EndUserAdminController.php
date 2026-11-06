@@ -77,7 +77,9 @@ class EndUserAdminController extends AbstractController
     {
         if ($this->adminApiLimiter !== null) {
             $identifier = $this->security->getUser()?->getUserIdentifier() ?: ($request->getClientIp() ?: '127.0.0.1');
-            if (!$this->adminApiLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->adminApiLimiter->create($identifier)->consume(1);
+            if (!$limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 $this->auditService?->log(
                     toolName: 'admin_enduser_rate_limit_exceeded',
                     project: null,
@@ -93,7 +95,12 @@ class EndUserAdminController extends AbstractController
                 return $this->secureJson([
                     'error' => $this->trans('enduser.admin.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
         }
         return null;

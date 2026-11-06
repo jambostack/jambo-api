@@ -76,7 +76,7 @@ class WebhookInboundController extends AbstractController
             $limiter = $this->webhookInboundLimiter->create($request->getClientIp() ?: '127.0.0.1');
             $limit = $limiter->consume(1);
             if (false === $limit->isAccepted()) {
-                $retryAfter = max(1, $limit->getRetryAfter()?->getTimestamp() - time());
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
                 return $this->secureJson([
                     'error' => $this->trans('automation.admin.webhook_rate_limit', [], 'Too many webhook requests. Try again later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',

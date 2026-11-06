@@ -82,11 +82,18 @@ class ContentController extends AbstractController
             return null;
         }
         $identifier = $projectIdentifier ?: ($request->getClientIp() ?: '127.0.0.1');
-        if (false === $this->contentLimiter->create($identifier)->consume(1)->isAccepted()) {
+        $limit = $this->contentLimiter->create($identifier)->consume(1);
+        if (false === $limit->isAccepted()) {
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
             return $this->secureJson([
                 'error' => $this->trans('api_content.rate_limit_exceeded', [], 'Too many content API requests. Please retry later.'),
                 'code'  => 'RATE_LIMIT_EXCEEDED',
-            ], 429);
+            ], 429, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]);
         }
         return null;
     }

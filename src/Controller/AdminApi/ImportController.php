@@ -88,10 +88,22 @@ class ImportController extends AbstractController
         }
 
         $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?? 'anonymous';
-        if ($this->importLimiter !== null && false === $this->importLimiter->create($identifier)->consume(1)->isAccepted()) {
-            $this->auditService?->log('admin_api_import_rate_limit_exceeded', null, ['identifier' => $identifier], null, 'failure', 'Too many import requests.', $identifier, 'admin_api_import');
-            $this->auditService?->flush();
-            return $this->secureJson(['error' => $this->trans('admin_api.import.too_many_requests', [], 'Too many import requests. Please retry later.')], 429);
+        if ($this->importLimiter !== null) {
+            $limit = $this->importLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
+                $this->auditService?->log('admin_api_import_rate_limit_exceeded', null, ['identifier' => $identifier], null, 'failure', 'Too many import requests.', $identifier, 'admin_api_import');
+                $this->auditService?->flush();
+                return $this->secureJson([
+                    'error' => $this->trans('admin_api.import.too_many_requests', [], 'Too many import requests. Please retry later.'),
+                    'code' => 'RATE_LIMIT_EXCEEDED',
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
+            }
         }
 
         try {

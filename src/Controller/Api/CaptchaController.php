@@ -52,12 +52,20 @@ class CaptchaController extends AbstractController
         }
 
         // Rate limiting
-        $limiter = $this->captchaLimiter->create($request->getClientIp());
-        if (!$limiter->consume()->isAccepted()) {
+        $identifier = $request->getClientIp() ?: '127.0.0.1';
+        $limiter = $this->captchaLimiter->create($identifier);
+        $limit = $limiter->consume(1);
+        if (!$limit->isAccepted()) {
+            $retryAfter = max(1, ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)) - time());
             return new JsonResponse([
                 'error' => $this->trans('captcha.rate_limit_exceeded', [], 'Too many requests. Please retry later.'),
                 'code'  => 'RATE_LIMIT_EXCEEDED',
-            ], 429);
+            ], 429, [
+                'Retry-After' => (string) $retryAfter,
+                'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+            ]);
         }
 
         // Générer le captcha
