@@ -28,6 +28,23 @@ class ProjectMemberRepository extends ServiceEntityRepository
         ]);
     }
 
+    /**
+     * @return ProjectMember[]
+     */
+    public function findActiveByUser(User $user): array
+    {
+        return $this->createQueryBuilder('pm')
+            ->join('pm.project', 'p')
+            ->leftJoin('pm.role', 'r')
+            ->addSelect('p', 'r')
+            ->where('pm.user = :user')
+            ->andWhere('pm.status = :status')
+            ->setParameter('user', $user)
+            ->setParameter('status', ProjectMemberStatus::Active)
+            ->getQuery()
+            ->getResult();
+    }
+
     public function findByProject(Project $project): array
     {
         return $this->createQueryBuilder('pm')

@@ -3994,4 +3994,13 @@ return [
     'mcp.too_many_arguments' => 'Too many arguments provided (max %max%).',
     'mcp.invalid_transform_dimensions' => 'Invalid image transform dimensions (width and height must be between 1 and 4000).',
     'mcp.invalid_control_characters' => 'Invalid Request: body contains invalid control characters.',
+
+    // ─── Cycle 120: Realtime & Mercure Security & Multi-Tenant Isolation ───
+    'realtime.unsupported_content_type' => 'Unsupported Media Type: Content-Type must be application/json.',
+    'realtime.null_byte_detected' => 'Null bytes or control characters are strictly forbidden in realtime requests.',
+    'realtime.event_spoofing_denied' => 'Direct publishing to reserved system events is not permitted.',
+    'realtime.payload_invalid_structure' => 'Realtime payload contains invalid structure or excessive depth.',
+    'realtime.topic_depth_exceeded' => 'Topic hierarchy exceeds maximum allowed depth.',
+    'realtime.rate_limit_exceeded_retry' => 'Too many realtime requests. Please retry in %seconds% seconds.',
+    'mercure.tenant_access_denied' => 'Cross-tenant topic subscription or publication is strictly forbidden.',
 ];

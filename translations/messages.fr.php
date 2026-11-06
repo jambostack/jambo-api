@@ -4012,4 +4012,13 @@ return [
     'mcp.too_many_arguments' => 'Trop d\'arguments fournis (maximum %max%).',
     'mcp.invalid_transform_dimensions' => 'Dimensions de transformation d\'image invalides (largeur et hauteur doivent être comprises entre 1 et 4000).',
     'mcp.invalid_control_characters' => 'Requête invalide : le corps contient des caractères de contrôle invalides.',
+
+    // ─── Cycle 120: Realtime & Mercure Security & Multi-Tenant Isolation ───
+    'realtime.unsupported_content_type' => 'Type de média non supporté : Content-Type doit être application/json.',
+    'realtime.null_byte_detected' => 'Les octets nuls et caractères de contrôle sont strictement interdits dans les requêtes temps réel.',
+    'realtime.event_spoofing_denied' => 'La publication directe vers des événements système réservés n\'est pas autorisée.',
+    'realtime.payload_invalid_structure' => 'La charge utile temps réel contient une structure invalide ou une profondeur excessive.',
+    'realtime.topic_depth_exceeded' => 'La hiérarchie du topic dépasse la profondeur maximale autorisée.',
+    'realtime.rate_limit_exceeded_retry' => 'Trop de requêtes temps réel. Veuillez réessayer dans %seconds% secondes.',
+    'mercure.tenant_access_denied' => 'L\'abonnement ou la publication de topics inter-tenants est strictement interdit.',
 ];

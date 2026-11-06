@@ -1,7 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\EventSubscriber;
 
+use App\Entity\Role;
+use App\Entity\User;
+use App\Repository\ProjectMemberRepository;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
@@ -11,11 +16,10 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 
 /**
- * Pose le cookie mercureAuthorization après un login admin réussi.
+ * Sets the mercureAuthorization cookie after successful login.
  *
- * Le navigateur envoie automatiquement ce cookie sur les requêtes
- * EventSource vers le hub Mercure (Path=/.well-known/mercure).
- * Aucun code JS n'est nécessaire pour l'authentification SSE.
+ * Scopes topics strictly to projects the authenticated user belongs to.
+ * Super admins receive global wildcard access ['*'].
  */
 class MercureCookieSubscriber implements EventSubscriberInterface
 {
@@ -24,6 +28,7 @@ class MercureCookieSubscriber implements EventSubscriberInterface
         private readonly string $mercurePublicUrl,
         private readonly RequestStack $requestStack,
         private readonly bool $mercureEnabled = false,
+        private readonly ?ProjectMemberRepository $memberRepo = null,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -40,20 +45,47 @@ class MercureCookieSubscriber implements EventSubscriberInterface
         }
 
         $user = $event->getUser();
-        if (!$user instanceof \App\Entity\User) {
-            // Ne concerne que les admins (User entity), pas les end-users
+        if (!$user instanceof User) {
             return;
         }
 
-        // Authentification stateless (ex. firewall admin_api / token) : aucune
-        // réponse n'est attachée à l'événement — rien à quoi accrocher le cookie.
         if ($event->getResponse() === null) {
             return;
         }
 
-        // Si le secret Mercure n'est pas configuré ou trop court, on ne fait rien
         if (strlen($this->mercureJwtSecret) < 32) {
             return;
+        }
+
+        $isSuperAdmin = $user->isSuperAdmin() || in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true);
+
+        if ($isSuperAdmin) {
+            $subscribeTopics = ['*'];
+            $publishTopics   = ['*'];
+        } else {
+            $subscribeTopics = [];
+            $publishTopics   = [];
+
+            if ($this->memberRepo !== null) {
+                $memberships = $this->memberRepo->findActiveByUser($user);
+                foreach ($memberships as $membership) {
+                    $projUuid = $membership->project?->uuid?->toRfc4122();
+                    if ($projUuid !== null) {
+                        $subscribeTopics[] = "projects/{$projUuid}";
+                        $subscribeTopics[] = "projects/{$projUuid}/*";
+
+                        $role = $membership->role;
+                        $roleName = strtolower($role instanceof Role ? $role->name : (is_string($role) ? $role : ''));
+                        $canPub = in_array($roleName, ['owner', 'admin', 'manager', 'editor'], true)
+                            || ($role instanceof Role && ($role->hasPermission('realtime.publish') || $role->hasPermission('content.edit')));
+
+                        if ($canPub) {
+                            $publishTopics[] = "projects/{$projUuid}";
+                            $publishTopics[] = "projects/{$projUuid}/*";
+                        }
+                    }
+                }
+            }
         }
 
         $jwtConfig = Configuration::forSymmetricSigner(
@@ -61,19 +93,20 @@ class MercureCookieSubscriber implements EventSubscriberInterface
             InMemory::plainText($this->mercureJwtSecret),
         );
 
+        $domain = parse_url($this->mercurePublicUrl, PHP_URL_HOST) ?: '';
         $now = new \DateTimeImmutable();
         $token = $jwtConfig->builder()
             ->issuedAt($now)
             ->expiresAt($now->modify('+24 hours'))
+            ->identifiedBy(bin2hex(random_bytes(16)))
+            ->relatedTo($user->getUserIdentifier())
+            ->issuedBy($domain !== '' ? 'https://' . $domain : 'jambostack')
             ->withClaim('mercure', [
-                'subscribe' => ['*'],   // L'admin peut souscrire à tous les topics
-                'publish'   => ['*'],
+                'subscribe' => array_values(array_unique($subscribeTopics)),
+                'publish'   => array_values(array_unique($publishTopics)),
             ])
             ->getToken($jwtConfig->signer(), $jwtConfig->signingKey())
             ->toString();
-
-        // Déterminer le domaine du cookie à partir de l'URL publique Mercure
-        $domain = parse_url($this->mercurePublicUrl, PHP_URL_HOST) ?: '';
 
         $cookie = Cookie::create('mercureAuthorization')
             ->withValue($token)
@@ -81,7 +114,7 @@ class MercureCookieSubscriber implements EventSubscriberInterface
             ->withDomain($domain !== '' ? $domain : null)
             ->withHttpOnly(true)
             ->withSecure($this->requestStack->getCurrentRequest()?->isSecure() ?? false)
-            ->withSameSite('Strict')
+            ->withSameSite(Cookie::SAMESITE_STRICT)
             ->withExpires($now->modify('+24 hours'));
 
         $event->getResponse()->headers->setCookie($cookie);

@@ -85,11 +85,11 @@ class Cycle112EndUserSecurityHardeningTest extends WebTestCase
         $this->client->loginUser($this->admin);
         $baseUrl = $this->projectUrl('/end-users');
 
-        // Giant payload exceeding 64KB
+        // Giant payload exceeding MAX_PAYLOAD_BYTES (128KB)
         $giantPayload = json_encode([
             'email'    => 'oversized@test.com',
             'password' => 'ValidPass123!',
-            'data'     => str_repeat('A', 70000),
+            'data'     => str_repeat('A', 140000),
         ]);
 
         $this->client->request('POST', $baseUrl, [], [], ['CONTENT_TYPE' => 'application/json'], $giantPayload);

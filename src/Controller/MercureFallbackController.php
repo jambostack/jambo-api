@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Controller;
 
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -17,7 +19,9 @@ class MercureFallbackController extends AbstractController
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options'        => 'DENY',
-        'Cache-Control'          => 'no-store',
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate, private',
+        'Referrer-Policy'        => 'no-referrer',
+        'X-XSS-Protection'       => '0',
     ];
 
     public function __construct(
@@ -51,11 +55,13 @@ class MercureFallbackController extends AbstractController
         if ($this->realtimeLimiter !== null) {
             $identifier = $request->getClientIp() ?: '127.0.0.1';
             $limiter = $this->realtimeLimiter->create($identifier);
-            if (false === $limiter->consume(1)->isAccepted()) {
+            $limitResult = $limiter->consume(1);
+            if (false === $limitResult->isAccepted()) {
+                $retryAfter = max(1, $limitResult->getRetryAfter()->getTimestamp() - time());
                 return new JsonResponse([
                     'error' => $this->trans('mercure.rate_limit_exceeded', [], 'Too many requests. Try again later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
+                ], 429, array_merge(self::SECURITY_HEADERS, ['Retry-After' => (string) $retryAfter]));
             }
         }
 
@@ -65,7 +71,7 @@ class MercureFallbackController extends AbstractController
         if ($request->isMethod('GET')) {
             $closedMsg = $this->trans('mercure.hub_not_available', [], 'Mercure hub not available on this host.');
             return new StreamedResponse(function () use ($closedMsg) {
-                echo "event: close\ndata: " . json_encode(['error' => $closedMsg]) . "\n\n";
+                echo "event: close\ndata: " . json_encode(['error' => $closedMsg], JSON_THROW_ON_ERROR) . "\n\n";
                 flush();
             }, 200, [
                 'Content-Type' => 'text/event-stream',

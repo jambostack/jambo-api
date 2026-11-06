@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Mercure;
 
 use App\Entity\Project;
+use App\Entity\Role;
 use App\Entity\User;
 use App\Repository\ProjectMemberRepository;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -14,8 +15,9 @@ class MercureTopicSecurityService
     public const MAX_TOPICS_PER_REQUEST = 20;
     public const MAX_TOPIC_LENGTH = 255;
     public const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    public const MAX_TOPIC_DEPTH = 5;
 
-    private const ALLOWED_TOPIC_REGEX = '/^projects\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/[a-zA-Z0-9_\-\.]{1,64})*$/';
+    private const ALLOWED_TOPIC_REGEX = '/^projects\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/[a-zA-Z0-9_\-\.]{1,64}){0,5}$/';
 
     public function __construct(
         private readonly ProjectMemberRepository $memberRepo,
@@ -37,11 +39,12 @@ class MercureTopicSecurityService
      */
     public function getDefaultTopics(string $projectUuid): array
     {
+        $safeUuid = strtolower(trim($projectUuid));
         return [
-            "projects/{$projectUuid}",
-            "projects/{$projectUuid}/content",
-            "projects/{$projectUuid}/media",
-            "projects/{$projectUuid}/status",
+            "projects/{$safeUuid}",
+            "projects/{$safeUuid}/content",
+            "projects/{$safeUuid}/media",
+            "projects/{$safeUuid}/status",
         ];
     }
 
@@ -49,10 +52,20 @@ class MercureTopicSecurityService
      * Validates and returns sanitized topics for a specific project.
      *
      * @param string[]|string|null $topics
-     * @return array{topics: string[], error?: string}
+     * @return array{topics: string[], error?: string, code?: string}
      */
     public function validateAndFilterTopics(string $projectUuid, $topics): array
     {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $projectUuid)) {
+            return [
+                'topics' => [],
+                'error'  => $this->trans('realtime.invalid_project_uuid', [], 'Invalid project UUID format.'),
+                'code'   => 'INVALID_PROJECT_UUID',
+            ];
+        }
+
+        $projectUuid = strtolower(trim($projectUuid));
+
         if ($topics === null || $topics === '' || $topics === []) {
             return ['topics' => $this->getDefaultTopics($projectUuid)];
         }
@@ -62,11 +75,19 @@ class MercureTopicSecurityService
         }
 
         if (!is_array($topics)) {
-            return ['topics' => [], 'error' => $this->trans('realtime.invalid_topic_format', [], 'Topics must be an array or comma-separated list.')];
+            return [
+                'topics' => [],
+                'error'  => $this->trans('realtime.invalid_topic_format', [], 'Topics must be an array or comma-separated list.'),
+                'code'   => 'INVALID_TOPIC_FORMAT',
+            ];
         }
 
         if (count($topics) > self::MAX_TOPICS_PER_REQUEST) {
-            return ['topics' => [], 'error' => $this->trans('realtime.too_many_topics', ['%max%' => self::MAX_TOPICS_PER_REQUEST], 'Too many topics requested (max ' . self::MAX_TOPICS_PER_REQUEST . ').')];
+            return [
+                'topics' => [],
+                'error'  => $this->trans('realtime.too_many_topics', ['%max%' => self::MAX_TOPICS_PER_REQUEST], 'Too many topics requested (max ' . self::MAX_TOPICS_PER_REQUEST . ').'),
+                'code'   => 'TOO_MANY_TOPICS',
+            ];
         }
 
         $sanitized = [];
@@ -74,7 +95,20 @@ class MercureTopicSecurityService
 
         foreach ($topics as $topic) {
             if (!is_string($topic)) {
-                return ['topics' => [], 'error' => $this->trans('realtime.invalid_topic_format', [], 'Each topic must be a string.')];
+                return [
+                    'topics' => [],
+                    'error'  => $this->trans('realtime.invalid_topic_format', [], 'Each topic must be a string.'),
+                    'code'   => 'INVALID_TOPIC_FORMAT',
+                ];
+            }
+
+            // Reject control characters or null bytes early
+            if (preg_match('/[\x00-\x1F\x7F]/', $topic)) {
+                return [
+                    'topics' => [],
+                    'error'  => $this->trans('realtime.null_byte_detected', [], 'Null bytes or control characters are strictly forbidden in realtime requests.'),
+                    'code'   => 'NULL_BYTE_DETECTED',
+                ];
             }
 
             $topic = trim($topic);
@@ -83,10 +117,14 @@ class MercureTopicSecurityService
             }
 
             if (strlen($topic) > self::MAX_TOPIC_LENGTH) {
-                return ['topics' => [], 'error' => $this->trans('realtime.topic_too_long', ['%max%' => self::MAX_TOPIC_LENGTH], 'Topic exceeds maximum length.')];
+                return [
+                    'topics' => [],
+                    'error'  => $this->trans('realtime.topic_too_long', ['%max%' => self::MAX_TOPIC_LENGTH], 'Topic exceeds maximum length.'),
+                    'code'   => 'TOPIC_TOO_LONG',
+                ];
             }
 
-            // Reject dangerous characters, wildcards, directory traversal, null bytes
+            // Reject dangerous characters, wildcards, directory traversal, URL encoding, null bytes
             if (
                 str_contains($topic, '..') ||
                 str_contains($topic, "\0") ||
@@ -95,19 +133,42 @@ class MercureTopicSecurityService
                 str_contains($topic, '?') ||
                 str_contains($topic, '#') ||
                 str_contains($topic, '+') ||
+                str_contains($topic, '%') ||
                 str_contains($topic, '//')
             ) {
-                return ['topics' => [], 'error' => $this->trans('realtime.invalid_topic', [], 'Topic contains illegal characters or wildcards.')];
+                return [
+                    'topics' => [],
+                    'error'  => $this->trans('realtime.invalid_topic', [], 'Topic contains illegal characters or wildcards.'),
+                    'code'   => 'ILLEGAL_CHARACTERS',
+                ];
+            }
+
+            // Check topic segment nesting depth
+            $slashCount = substr_count($topic, '/');
+            if ($slashCount > (1 + self::MAX_TOPIC_DEPTH)) {
+                return [
+                    'topics' => [],
+                    'error'  => $this->trans('realtime.topic_depth_exceeded', [], 'Topic hierarchy exceeds maximum allowed depth.'),
+                    'code'   => 'TOPIC_DEPTH_EXCEEDED',
+                ];
             }
 
             // Enforce structure regex
             if (!preg_match(self::ALLOWED_TOPIC_REGEX, $topic)) {
-                return ['topics' => [], 'error' => $this->trans('realtime.invalid_topic', [], 'Topic format is invalid.')];
+                return [
+                    'topics' => [],
+                    'error'  => $this->trans('realtime.invalid_topic', [], 'Topic format is invalid.'),
+                    'code'   => 'INVALID_TOPIC_FORMAT',
+                ];
             }
 
             // Strict multi-tenant isolation: topic must belong to this project
             if ($topic !== $expectedPrefix && !str_starts_with($topic, $expectedPrefix . '/')) {
-                return ['topics' => [], 'error' => $this->trans('realtime.topic_access_denied', [], 'Cross-tenant topic subscription is forbidden.')];
+                return [
+                    'topics' => [],
+                    'error'  => $this->trans('realtime.topic_access_denied', [], 'Cross-tenant topic subscription is forbidden.'),
+                    'code'   => 'FORBIDDEN',
+                ];
             }
 
             $sanitized[] = $topic;
@@ -144,8 +205,21 @@ class MercureTopicSecurityService
             return false;
         }
 
-        // Project owners/managers/editors can publish
-        $roleName = $role instanceof \App\Entity\Role ? $role->name : (is_string($role) ? $role : '');
-        return in_array(strtolower($roleName), ['owner', 'admin', 'manager', 'editor'], true);
+        if ($role instanceof Role) {
+            $name = strtolower($role->name);
+            if (in_array($name, ['owner', 'admin', 'manager', 'editor'], true)) {
+                return true;
+            }
+            if ($role->hasPermission('realtime.publish') || $role->hasPermission('content.edit') || $role->hasPermission('project.manage')) {
+                return true;
+            }
+            return false;
+        }
+
+        if (is_string($role)) {
+            return in_array(strtolower($role), ['owner', 'admin', 'manager', 'editor'], true);
+        }
+
+        return false;
     }
 }

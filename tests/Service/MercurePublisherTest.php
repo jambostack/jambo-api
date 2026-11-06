@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Tests\Service;
 
 use App\Service\MercurePublisher;
@@ -10,7 +12,6 @@ use Symfony\Component\Mercure\Update;
 class MercurePublisherTest extends TestCase
 {
     private string $projectDir;
-    private HubInterface&\PHPUnit\Framework\MockObject\MockObject $hub;
 
     protected function setUp(): void
     {
@@ -18,7 +19,6 @@ class MercurePublisherTest extends TestCase
         if (!is_dir($this->projectDir . '/var/realtime')) {
             mkdir($this->projectDir . '/var/realtime', 0700, true);
         }
-        $this->hub = $this->createMock(HubInterface::class);
     }
 
     protected function tearDown(): void
@@ -35,11 +35,12 @@ class MercurePublisherTest extends TestCase
 
     public function testContentChangedPublishesToHubAndDoesNotWriteJsonl(): void
     {
-        $publisher = new MercurePublisher($this->projectDir, $this->hub);
+        $hub = $this->createMock(HubInterface::class);
+        $publisher = new MercurePublisher($this->projectDir, $hub);
         $projectUuid = 'bafb2021-079e-44b0-8fe9-35af563dc2b2';
         $entry = ['uuid' => 'e-1', 'name' => 'Test'];
 
-        $this->hub->expects($this->once())
+        $hub->expects($this->once())
             ->method('publish')
             ->with($this->callback(function (Update $update) use ($projectUuid) {
                 return in_array("projects/{$projectUuid}/content", $update->getTopics(), true)
@@ -72,9 +73,12 @@ class MercurePublisherTest extends TestCase
 
     public function testContentChangedFallsBackToJsonlWhenHubThrows(): void
     {
-        $this->hub->method('publish')->willThrowException(new \RuntimeException('Connection refused'));
+        $hub = $this->createMock(HubInterface::class);
+        $hub->expects($this->once())
+            ->method('publish')
+            ->willThrowException(new \RuntimeException('Connection refused'));
 
-        $publisher = new MercurePublisher($this->projectDir, $this->hub);
+        $publisher = new MercurePublisher($this->projectDir, $hub);
         $projectUuid = 'bafb2021-079e-44b0-8fe9-35af563dc2b2';
         $entry = ['uuid' => 'e-3', 'name' => 'Error'];
 

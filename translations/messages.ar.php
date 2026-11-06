@@ -3996,4 +3996,13 @@ return [
     'mcp.too_many_arguments' => 'تم توفير عدد كبير جداً من الوسائط (الحد الأقصى %max%).',
     'mcp.invalid_transform_dimensions' => 'أبعاد تحويل الصورة غير صالحة (يجب أن يكون العرض والارتفاع بين 1 و 4000).',
     'mcp.invalid_control_characters' => 'طلب غير صالح: يحتوي نص الطلب على أحرف تحكم غير صالحة.',
+
+    // ─── Cycle 120: Realtime & Mercure Security & Multi-Tenant Isolation ───
+    'realtime.unsupported_content_type' => 'نوع الوسائط غير مدعوم: يجب أن يكون Content-Type بتنسيق application/json.',
+    'realtime.null_byte_detected' => 'البايتات الفارغة وأحرف التحكم محظورة تمامًا في طلبات البث المباشر.',
+    'realtime.event_spoofing_denied' => 'النشر المباشر على أحداث النظام المحجوزة غير مسموح به.',
+    'realtime.payload_invalid_structure' => 'تحتوي حمولة البث المباشر على هيكل غير صالح أو عمق مفرط.',
+    'realtime.topic_depth_exceeded' => 'تتجاوز تسلسل الموضوع الحد الأقصى للعمق المسموح به.',
+    'realtime.rate_limit_exceeded_retry' => 'طلبات البث المباشر كثيرة جدًا. يرجى إعادة المحاولة بعد %seconds% ثانية.',
+    'mercure.tenant_access_denied' => 'الاشتراك أو النشر في مواضيع عبر المستأجرين محظور تمامًا.',
 ];

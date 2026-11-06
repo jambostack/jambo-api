@@ -165,6 +165,7 @@ services:
             $mercureJwtSecret: '%env(MERCURE_JWT_SECRET)%'
             $mercurePublicUrl: '%env(MERCURE_PUBLIC_URL)%'
             $mercureEnabled: '%mercure_enabled%'
+            $memberRepo: '@App\Repository\ProjectMemberRepository'
 
     # ── SchemaGenerator — projectDir pour les resolvers GraphQL Subscription ──
     App\GraphQL\SchemaGenerator:

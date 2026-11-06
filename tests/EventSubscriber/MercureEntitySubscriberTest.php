@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Tests\EventSubscriber;
 
 use App\Entity\Collection;
@@ -81,7 +83,7 @@ class MercureEntitySubscriberTest extends TestCase
         $entry = $this->makeEntry('proj-1', 'entry-1');
         $projectUuid = $entry->project->uuid->toRfc4122();
         $entryUuid = $entry->uuid->toRfc4122();
-        $args = new PostPersistEventArgs($entry, $this->createMock(EntityManagerInterface::class));
+        $args = new PostPersistEventArgs($entry, $this->createStub(EntityManagerInterface::class));
 
         $this->mercure->expects($this->once())
             ->method('contentChanged')
@@ -97,7 +99,7 @@ class MercureEntitySubscriberTest extends TestCase
         $entry = $this->makeEntry('proj-2', 'entry-2');
         $projectUuid = $entry->project->uuid->toRfc4122();
         $entryUuid = $entry->uuid->toRfc4122();
-        $args = new PostUpdateEventArgs($entry, $this->createMock(EntityManagerInterface::class));
+        $args = new PostUpdateEventArgs($entry, $this->createStub(EntityManagerInterface::class));
 
         $this->mercure->expects($this->once())
             ->method('contentChanged')
@@ -113,7 +115,7 @@ class MercureEntitySubscriberTest extends TestCase
         $entry = $this->makeEntry('proj-3', 'entry-3');
         $projectUuid = $entry->project->uuid->toRfc4122();
         $entryUuid = $entry->uuid->toRfc4122();
-        $args = new PreRemoveEventArgs($entry, $this->createMock(EntityManagerInterface::class));
+        $args = new PreRemoveEventArgs($entry, $this->createStub(EntityManagerInterface::class));
 
         $this->mercure->expects($this->once())
             ->method('contentChanged')
@@ -130,7 +132,7 @@ class MercureEntitySubscriberTest extends TestCase
     {
         $media = $this->makeMedia('proj-media', 'photo.jpg');
         $projectUuid = $media->project->uuid->toRfc4122();
-        $args = new PreRemoveEventArgs($media, $this->createMock(EntityManagerInterface::class));
+        $args = new PreRemoveEventArgs($media, $this->createStub(EntityManagerInterface::class));
 
         $this->mercure->expects($this->once())
             ->method('mediaDeleted')
@@ -150,11 +152,11 @@ class MercureEntitySubscriberTest extends TestCase
 
         $changeSet = ['status' => ['draft', 'published']];
 
-        $uow = $this->createMock(UnitOfWork::class);
+        $uow = $this->createStub(UnitOfWork::class);
         $uow->method('getScheduledEntityUpdates')->willReturn([$entry]);
-        $uow->method('getEntityChangeSet')->with($entry)->willReturn($changeSet);
+        $uow->method('getEntityChangeSet')->willReturn($changeSet);
 
-        $em = $this->createMock(EntityManagerInterface::class);
+        $em = $this->createStub(EntityManagerInterface::class);
         $em->method('getUnitOfWork')->willReturn($uow);
 
         // onFlush stocke les événements, postFlush les publie
@@ -179,7 +181,7 @@ class MercureEntitySubscriberTest extends TestCase
         $project->uuid = Uuid::v4();
         $project->name = 'Test';
 
-        $args = new PostPersistEventArgs($project, $this->createMock(EntityManagerInterface::class));
+        $args = new PostPersistEventArgs($project, $this->createStub(EntityManagerInterface::class));
 
         $this->mercure->expects($this->never())
             ->method($this->anything());

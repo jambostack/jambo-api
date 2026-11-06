@@ -3994,4 +3994,13 @@ return [
     'mcp.too_many_arguments' => 'Demasiados argumentos proporcionados (máximo %max%).',
     'mcp.invalid_transform_dimensions' => 'Dimensiones de transformación de imagen no válidas (ancho y alto deben estar entre 1 y 4000).',
     'mcp.invalid_control_characters' => 'Solicitud no válida: el cuerpo contiene caracteres de control no válidos.',
+
+    // ─── Cycle 120: Realtime & Mercure Security & Multi-Tenant Isolation ───
+    'realtime.unsupported_content_type' => 'Tipo de medio no soportado: Content-Type debe ser application/json.',
+    'realtime.null_byte_detected' => 'Los bytes nulos o caracteres de control están estrictamente prohibidos en solicitudes en tiempo real.',
+    'realtime.event_spoofing_denied' => 'No se permite la publicación directa en eventos reservados del sistema.',
+    'realtime.payload_invalid_structure' => 'La carga útil en tiempo real contiene una estructura no válida o una profundidad excesiva.',
+    'realtime.topic_depth_exceeded' => 'La jerarquía del tema excede la profundidad máxima permitida.',
+    'realtime.rate_limit_exceeded_retry' => 'Demasiadas solicitudes en tiempo real. Inténtelo de nuevo en %seconds% segundos.',
+    'mercure.tenant_access_denied' => 'La suscripción o publicación de temas entre inquilinos está estrictamente prohibida.',
 ];
