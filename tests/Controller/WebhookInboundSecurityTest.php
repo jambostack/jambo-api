@@ -307,4 +307,141 @@ class WebhookInboundSecurityTest extends WebTestCase
         $data = json_decode((string) $client->getResponse()->getContent(), true);
         $this->assertSame('Payload too large (max 2MB)', $data['error']);
     }
+
+    public function testAuthenticatesWithShopifyHmacHeader(): void
+    {
+        /** @var KernelBrowser $client */
+        [$client, $automation] = $this->createClientAndAutomation();
+        $payload = json_encode(['id' => 891234, 'line_items' => [['title' => 'Widget', 'price' => '19.99']]]);
+        $expectedB64 = base64_encode(hash_hmac('sha256', $payload, $this->secret, true));
+
+        $client->request(
+            'POST',
+            '/api/webhooks/inbound/' . $automation->uuid->toRfc4122(),
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_SHOPIFY_HMAC_SHA256' => $expectedB64,
+                'HTTP_X_SHOPIFY_WEBHOOK_ID' => 'shop-wh-12345',
+            ],
+            $payload
+        );
+
+        $this->assertResponseIsSuccessful();
+        $data = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+    }
+
+    public function testAuthenticatesWithPaddleSignature(): void
+    {
+        /** @var KernelBrowser $client */
+        [$client, $automation] = $this->createClientAndAutomation();
+        $payload = json_encode(['event_id' => 'evt_123', 'event_type' => 'transaction.completed']);
+        $ts = time();
+        $h1 = hash_hmac('sha256', "{$ts}:{$payload}", $this->secret);
+
+        $client->request(
+            'POST',
+            '/api/webhooks/inbound/' . $automation->uuid->toRfc4122(),
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_PADDLE_SIGNATURE' => "ts={$ts};h1={$h1}",
+            ],
+            $payload
+        );
+
+        $this->assertResponseIsSuccessful();
+        $data = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+    }
+
+    public function testAuthenticatesWithGitHubLegacySha1(): void
+    {
+        /** @var KernelBrowser $client */
+        [$client, $automation] = $this->createClientAndAutomation();
+        $payload = json_encode(['action' => 'opened', 'issue' => ['number' => 42]]);
+        $hmacSha1 = hash_hmac('sha1', $payload, $this->secret);
+
+        $client->request(
+            'POST',
+            '/api/webhooks/inbound/' . $automation->uuid->toRfc4122(),
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_HUB_SIGNATURE' => 'sha1=' . $hmacSha1,
+            ],
+            $payload
+        );
+
+        $this->assertResponseIsSuccessful();
+        $data = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertTrue($data['success']);
+    }
+
+    public function testRejectsUnsupportedContentTypeWith415(): void
+    {
+        /** @var KernelBrowser $client */
+        [$client, $automation] = $this->createClientAndAutomation();
+        $payload = 'binary_data_here';
+
+        $client->request(
+            'POST',
+            '/api/webhooks/inbound/' . $automation->uuid->toRfc4122(),
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/octet-stream',
+                'HTTP_X_WEBHOOK_SECRET' => $this->secret,
+            ],
+            $payload
+        );
+
+        $this->assertResponseStatusCodeSame(415);
+        $data = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertSame('UNSUPPORTED_MEDIA_TYPE', $data['code']);
+    }
+
+    public function testDetectsReplayWithStripeSignature(): void
+    {
+        /** @var KernelBrowser $client */
+        [$client, $automation] = $this->createClientAndAutomation();
+        $payload = json_encode(['type' => 'charge.succeeded', 'id' => 'ch_123']);
+        $timestamp = time();
+        $hmac = hash_hmac('sha256', "{$timestamp}.{$payload}", $this->secret);
+        $stripeSig = "t={$timestamp},v1={$hmac}";
+
+        // First request succeeds
+        $client->request(
+            'POST',
+            '/api/webhooks/inbound/' . $automation->uuid->toRfc4122(),
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_STRIPE_SIGNATURE' => $stripeSig,
+            ],
+            $payload
+        );
+        $this->assertResponseIsSuccessful();
+
+        // Immediate identical replay is blocked with 409 REPLAY_DETECTED
+        $client->request(
+            'POST',
+            '/api/webhooks/inbound/' . $automation->uuid->toRfc4122(),
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_STRIPE_SIGNATURE' => $stripeSig,
+            ],
+            $payload
+        );
+        $this->assertResponseStatusCodeSame(409);
+        $data = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertSame('REPLAY_DETECTED', $data['code']);
+    }
 }

@@ -125,4 +125,77 @@ class WebhookServiceTest extends TestCase
         $this->assertSame(200, $log->statusCode);
         $this->assertSame('{"received": true}', $log->responseBody);
     }
+
+    public function testSendIncludesMultiFormatSignaturesAndStandardHeaders(): void
+    {
+        $capturedRequest = null;
+        $client = new MockHttpClient(function ($method, $url, $options) use (&$capturedRequest) {
+            $capturedRequest = ['method' => $method, 'url' => $url, 'options' => $options];
+            return new MockResponse('{"status":"ok"}', ['http_code' => 200]);
+        });
+        $service = new WebhookService($this->webhookRepo, $this->em, $client, $this->secretService, $this->ssrf);
+
+        $webhook = new Webhook();
+        $webhook->url = 'https://example.com/receiver';
+        $webhook->isActive = true;
+        $webhook->secret = $this->secretService->encrypt('signature-verification-secret');
+
+        $this->em->expects($this->once())->method('persist');
+        $this->em->expects($this->once())->method('flush');
+
+        $log = $service->send($webhook, 'order.paid', ['amount' => 15000]);
+        $this->assertNotNull($log);
+        $this->assertSame('succeeded', $log->status);
+
+        $this->assertNotNull($capturedRequest);
+        $headers = $capturedRequest['options']['headers'] ?? [];
+        $headersCombined = implode("\n", $headers);
+
+        $this->assertStringContainsString('X-JamboApi-Signature: sha256=', $headersCombined);
+        $this->assertStringContainsString('X-JamboApi-Signature-256: t=', $headersCombined);
+        $this->assertStringContainsString('X-Hub-Signature-256: sha256=', $headersCombined);
+        $this->assertStringContainsString('Webhook-Id:', $headersCombined);
+        $this->assertStringContainsString('Webhook-Timestamp:', $headersCombined);
+        $this->assertStringContainsString('X-JamboApi-Event: order.paid', $headersCombined);
+    }
+
+    public function testSendEnforcesOutboundRateLimit(): void
+    {
+        $limiterFactory = new \Symfony\Component\RateLimiter\RateLimiterFactory(
+            ['id' => 'wh_out_test', 'policy' => 'sliding_window', 'limit' => 1, 'interval' => '60 seconds'],
+            new \Symfony\Component\RateLimiter\Storage\InMemoryStorage()
+        );
+
+        $project = new Project();
+        $project->name = 'Rate Limited Project';
+        $project->uuid = \Symfony\Component\Uid\Uuid::v4();
+        $projectUuidStr = $project->uuid->toRfc4122();
+
+        // Exhaust the 1-request quota
+        $limiterFactory->create('wh_out_' . $projectUuidStr)->consume(1);
+
+        $client = new MockHttpClient();
+        $service = new WebhookService(
+            $this->webhookRepo,
+            $this->em,
+            $client,
+            $this->secretService,
+            $this->ssrf,
+            null,
+            $limiterFactory
+        );
+
+        $webhook = new Webhook();
+        $webhook->project = $project;
+        $webhook->url = 'https://example.com/receiver';
+        $webhook->isActive = true;
+
+        $this->em->expects($this->once())->method('persist');
+        $this->em->expects($this->once())->method('flush');
+
+        $log = $service->send($webhook, 'user.created', ['email' => 'throttled@example.com']);
+        $this->assertNotNull($log);
+        $this->assertSame('failed', $log->status);
+        $this->assertStringContainsString('Outbound webhook rate limit exceeded', $log->errorMessage ?? '');
+    }
 }

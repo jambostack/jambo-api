@@ -9,6 +9,7 @@ use App\Entity\WebhookLog;
 use App\Repository\WebhookRepository;
 use App\Service\Security\SsrfProtectionService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Uid\Uuid;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -23,8 +24,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  * - Absence de suivi des redirections (max_redirects = 0) pour contrer le rebond SSRF.
  * - DNS Pinning systématique via l'IP résolue et validée.
  * - Timeouts stricts (inactivité 5s, durée maximale 10s).
- * - Signature HMAC SHA256 si un secret est configuré.
+ * - Signature HMAC SHA256 si un secret est configuré (X-JamboApi-Signature, X-JamboApi-Signature-256, X-Hub-Signature-256).
  * - Bornage mémoire de la réponse lue (max 2 Ko) pour prévenir les bombes OOM.
+ * - Rate limiting sortant par projet/tenant pour éviter les tempêtes de requêtes (DDoS outbound).
  * - Internationalisation (I18N) des messages et erreurs.
  */
 class WebhookService
@@ -45,6 +47,7 @@ class WebhookService
         private WebhookSecretService $secretService,
         ?SsrfProtectionService $ssrfProtection = null,
         private ?TranslatorInterface $translator = null,
+        private ?RateLimiterFactory $webhookOutboundLimiter = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
     }
@@ -112,6 +115,23 @@ class WebhookService
             return $log;
         }
 
+        // Contrôle de rate limiting sortant par projet / tenant
+        if ($this->webhookOutboundLimiter !== null && $webhook->project?->uuid !== null) {
+            $limiterKey = 'wh_out_' . $webhook->project->uuid->toRfc4122();
+            $limit = $this->webhookOutboundLimiter->create($limiterKey)->consume(1);
+            if (!$limit->isAccepted()) {
+                $log = new WebhookLog();
+                $log->webhook        = $webhook;
+                $log->event          = $event;
+                $log->requestPayload = substr($payloadJson, 0, 1024);
+                $log->status         = 'failed';
+                $log->errorMessage   = $this->trans('webhook.outbound_rate_limit_exceeded', [], 'Outbound webhook rate limit exceeded for this project.');
+                $this->em->persist($log);
+                $this->em->flush();
+                return $log;
+            }
+        }
+
         $timestamp = time();
         $deliveryId = Uuid::v4()->toRfc4122();
 
@@ -122,6 +142,8 @@ class WebhookService
             'X-JamboApi-Delivery'  => $deliveryId,
             'X-JamboApi-Timestamp' => (string) $timestamp,
             'X-JamboApi-Project'   => $webhook->project?->uuid?->toRfc4122() ?? '',
+            'Webhook-Id'           => $deliveryId,
+            'Webhook-Timestamp'    => (string) $timestamp,
         ];
 
         if ($webhook->secret !== null) {
@@ -129,6 +151,7 @@ class WebhookService
                 $plainSecret = $this->secretService->decrypt($webhook->secret);
                 $headers['X-JamboApi-Signature'] = 'sha256=' . hash_hmac('sha256', $payloadJson, $plainSecret);
                 $headers['X-JamboApi-Signature-256'] = "t={$timestamp},v1=" . hash_hmac('sha256', "{$timestamp}.{$payloadJson}", $plainSecret);
+                $headers['X-Hub-Signature-256'] = 'sha256=' . hash_hmac('sha256', $payloadJson, $plainSecret);
             } catch (\Throwable $e) {
                 // Erreur de déchiffrement du secret
                 $log = new WebhookLog();

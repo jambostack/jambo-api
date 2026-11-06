@@ -63,13 +63,19 @@ class SsrfProtectionService
 
     /** Sous-réseaux IPv6 privés et réservés à bloquer systématiquement. */
     private const BLOCKED_IPV6_CIDRS = [
-        '::/128',          // Unspecified (RFC 4291)
-        '::1/128',         // Loopback (RFC 4291)
-        '100::/64',        // Discard-Only (RFC 6666)
-        '2001:db8::/32',   // Documentation (RFC 3849)
-        'fc00::/7',        // Unique Local Address ULA / Private (RFC 4193)
-        'fe80::/10',       // Link-Local Unicast (RFC 4291)
-        'ff00::/8',        // Multicast (RFC 4291)
+        '::/128',            // Unspecified (RFC 4291)
+        '::1/128',           // Loopback (RFC 4291)
+        '100::/64',          // Discard-Only (RFC 6666)
+        '2001:db8::/32',     // Documentation (RFC 3849)
+        '2001:2::/48',       // Benchmarking (RFC 5180)
+        '2001:10::/28',      // ORCHID (RFC 4843)
+        '2001:20::/28',      // ORCHIDv2 (RFC 7343)
+        '2001::/32',         // Teredo tunneling (RFC 4380)
+        '64:ff9b:1::/48',    // Local-Use IPv4/IPv6 translation (RFC 8215)
+        'fc00::/7',          // Unique Local Address ULA / Private (RFC 4193)
+        'fe80::/10',         // Link-Local Unicast (RFC 4291)
+        'fec0::/10',         // Site-Local (RFC 3879 - deprecated/reserved)
+        'ff00::/8',          // Multicast (RFC 4291)
         'fd00:ec2::254/128', // AWS IMDSv2 IPv6 metadata
     ];
 
@@ -78,12 +84,20 @@ class SsrfProtectionService
         'localhost',
         'ip6-localhost',
         'ip6-loopback',
+        'loopback',
         'host.docker.internal',
         'gateway.docker.internal',
+        'docker.for.mac.localhost',
+        'docker.for.win.localhost',
         'kubernetes.default',
         'kubernetes.default.svc',
+        'metadata',
+        'metadata.google',
         'metadata.google.internal',
+        'metadata.azure.com',
+        'metadata.internal',
         'instance-data',
+        'wpad',
     ];
 
     private const BLOCKED_HOST_SUFFIXES = [
@@ -96,6 +110,9 @@ class SsrfProtectionService
         '.arpa',
         '.test',
         '.invalid',
+        '.localtest.me',
+        '.vcap.me',
+        '.lvh.me',
     ];
 
     /**
@@ -150,6 +167,11 @@ class SsrfProtectionService
         $cleanHost = strtolower(trim($host, " \t[]"));
         if ($cleanHost === '') {
             throw new \InvalidArgumentException($this->trans('ssrf.host_empty', [], 'Host cannot be empty'));
+        }
+
+        // Rejet des adresses à portée locale / zone index IPv6 (RFC 6874, ex: fe80::1%eth0)
+        if (str_contains($cleanHost, '%')) {
+            throw new \InvalidArgumentException($this->trans('ssrf.private_address_forbidden', [], 'Accès aux adresses privées ou réservées interdit (SSRF protection)'));
         }
 
         if (strlen($cleanHost) > 255) {
@@ -212,6 +234,11 @@ class SsrfProtectionService
         $cleanHost = strtolower(trim($rawHost, " \t\n\r\0\x0B[]"));
         if ($cleanHost === '') {
             throw new \InvalidArgumentException($this->trans('ssrf.invalid_host', [], 'Invalid host in URL'));
+        }
+
+        // Rejet des adresses à portée locale / zone index IPv6 (RFC 6874, ex: fe80::1%eth0)
+        if (str_contains($cleanHost, '%')) {
+            throw new \InvalidArgumentException($this->trans('ssrf.private_address_forbidden', [], 'Accès aux adresses privées ou réservées interdit (SSRF protection)'));
         }
 
         // Validation du port
@@ -430,7 +457,29 @@ class SsrfProtectionService
             return true;
         }
 
-        // 3. Vérification des CIDRs IPv6 bloqués
+        // 3. Détection des adresses 6to4 (2002::/16, RFC 3056) encapsulant une IPv4 dans les octets 2 à 5
+        if (substr($bin, 0, 2) === "\x20\x02") {
+            $extractedIpv4Bin = substr($bin, 2, 4);
+            $extractedIpv4 = inet_ntop($extractedIpv4Bin);
+            if ($extractedIpv4 !== false) {
+                return $this->isPrivateOrReservedIpv4($extractedIpv4, $extractedIpv4Bin);
+            }
+            return true;
+        }
+
+        // 4. Détection des adresses IPv4-compatibles (::w.x.y.z, RFC 4291)
+        if (substr($bin, 0, 12) === str_repeat("\x00", 12)) {
+            $extractedIpv4Bin = substr($bin, 12, 4);
+            if ($extractedIpv4Bin !== str_repeat("\x00", 4) && $extractedIpv4Bin !== "\x00\x00\x00\x01") {
+                $extractedIpv4 = inet_ntop($extractedIpv4Bin);
+                if ($extractedIpv4 !== false) {
+                    return $this->isPrivateOrReservedIpv4($extractedIpv4, $extractedIpv4Bin);
+                }
+                return true;
+            }
+        }
+
+        // 5. Vérification des CIDRs IPv6 bloqués
         foreach (self::BLOCKED_IPV6_CIDRS as $cidr) {
             if ($this->matchesCidr($bin, $cidr)) {
                 return true;

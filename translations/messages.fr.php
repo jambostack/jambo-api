@@ -4043,4 +4043,11 @@ return [
     'upload.error.image_dimensions_too_large' => 'Les dimensions de l\'image dépassent les limites de sécurité (max 10000x10000, 30 MP).',
     'upload.error.image_aspect_ratio_exceeded' => 'Le ratio d\'aspect de l\'image dépasse le seuil maximal de sécurité autorisé (50:1).',
     'cli.invalid_tenant_uuid' => 'L\'option --tenant doit être un UUID RFC 4122 valide.',
+
+    // ─── Cycle 122: Inbound/Outbound Webhooks, HMAC Verification & Anti-SSRF Hardening ───
+    'automation.admin.webhook_unsupported_content_type' => 'En-tête Content-Type du webhook non supporté. Attendu : application/json ou application/x-www-form-urlencoded.',
+    'automation.admin.webhook_rate_limit_retry' => 'Trop de requêtes de webhook entrant. Veuillez réessayer dans %seconds% secondes.',
+    'webhook.outbound_rate_limit_exceeded' => 'Limite de débit de webhooks sortants dépassée pour ce projet.',
+    'webhook.rate_limit_exceeded_retry' => 'Trop de requêtes de webhook. Veuillez réessayer dans %seconds% secondes.',
+    'webhook.test_rate_limit_retry' => 'Trop de requêtes de test de webhook. Veuillez réessayer dans %seconds% secondes.',
 ];

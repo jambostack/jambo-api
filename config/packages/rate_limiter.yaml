@@ -200,6 +200,10 @@ framework:
             policy: sliding_window
             limit: 10
             interval: '60 seconds'
+        webhook_outbound_limiter:
+            policy: sliding_window
+            limit: 120
+            interval: '60 seconds'
 
 when@test:
     framework:
@@ -385,6 +389,10 @@ when@test:
                 limit: 10000
                 interval: '60 seconds'
             webhook_test_limiter:
+                policy: sliding_window
+                limit: 10000
+                interval: '60 seconds'
+            webhook_outbound_limiter:
                 policy: sliding_window
                 limit: 10000
                 interval: '60 seconds'

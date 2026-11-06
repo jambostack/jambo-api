@@ -4027,4 +4027,11 @@ return [
     'upload.error.image_dimensions_too_large' => 'أبعاد الصورة تتجاوز حدود الأمان (الحد الأقصى 10000x10000، 30 ميجابكسل).',
     'upload.error.image_aspect_ratio_exceeded' => 'نسبة العرض إلى الارتفاع للصورة تتجاوز حد الأمان الأقصى المسموح به (50:1).',
     'cli.invalid_tenant_uuid' => 'يجب أن يكون خيار --tenant بتنسيق RFC 4122 UUID صالح.',
+
+    // ─── Cycle 122: Inbound/Outbound Webhooks, HMAC Verification & Anti-SSRF Hardening ───
+    'automation.admin.webhook_unsupported_content_type' => 'ترويسة Content-Type لخطاف الويب غير مدعومة. المتوقع: application/json أو application/x-www-form-urlencoded.',
+    'automation.admin.webhook_rate_limit_retry' => 'طلبات خطاف ويب واردة كثيرة جدًا. يُرجى إعادة المحاولة بعد %seconds% ثانية.',
+    'webhook.outbound_rate_limit_exceeded' => 'تم تجاوز الحد الأقصى لمعدل خطافات الويب الصادرة لهذا المشروع.',
+    'webhook.rate_limit_exceeded_retry' => 'طلبات خطاف ويب كثيرة جدًا. يُرجى إعادة المحاولة بعد %seconds% ثانية.',
+    'webhook.test_rate_limit_retry' => 'طلبات اختبار خطاف ويب كثيرة جدًا. يُرجى إعادة المحاولة بعد %seconds% ثانية.',
 ];

@@ -198,4 +198,46 @@ class SsrfProtectionServiceTest extends TestCase
         $this->assertSame(100, strlen($read));
         $this->assertSame(str_repeat('A', 100), $read);
     }
+
+    public function testRejects6to4AndIpv4CompatibleEmbeddedPrivateAddresses(): void
+    {
+        $blocked6to4 = [
+            'http://[2002:7f00:0001::]/test',   // 6to4 embedding 127.0.0.1
+            'http://[2002:a9fe:a9fe::]/test',   // 6to4 embedding 169.254.169.254
+            'http://[2002:0a00:0001::]/test',   // 6to4 embedding 10.0.0.1
+            'http://[2002:c0a8:0001::]/test',   // 6to4 embedding 192.168.0.1
+            'http://[::127.0.0.1]/test',        // IPv4-compatible 127.0.0.1
+            'http://[::169.254.169.254]/test',  // IPv4-compatible 169.254.169.254
+            'http://[fec0::1]/test',            // IPv6 Site-Local
+            'http://[2001:2::1]/test',          // IPv6 Benchmarking
+            'http://[2001::1]/test',            // Teredo tunneling
+        ];
+
+        foreach ($blocked6to4 as $url) {
+            $this->assertFalse($this->service->isSafeUrl($url), "URL $url should be blocked by SSRF protection");
+        }
+    }
+
+    public function testRejectsIpv6ScopeZoneIdAndMetadataHostnames(): void
+    {
+        $blockedHosts = [
+            'http://[fe80::1%eth0]/test',
+            'http://[fe80::1%25eth0]/test',
+            'http://metadata/computeMetadata/v1/',
+            'http://metadata.google/computeMetadata/v1/',
+            'http://metadata.azure.com/',
+            'http://metadata.internal/',
+            'http://wpad/wpad.dat',
+            'http://loopback/',
+            'http://docker.for.mac.localhost/',
+            'http://docker.for.win.localhost/',
+            'http://foo.localtest.me/',
+            'http://bar.vcap.me/',
+            'http://baz.lvh.me/',
+        ];
+
+        foreach ($blockedHosts as $url) {
+            $this->assertFalse($this->service->isSafeUrl($url), "URL $url should be blocked by SSRF protection");
+        }
+    }
 }

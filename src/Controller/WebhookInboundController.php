@@ -74,11 +74,18 @@ class WebhookInboundController extends AbstractController
         // Rate limiting : 120 requêtes par minute par IP
         if ($this->webhookInboundLimiter !== null) {
             $limiter = $this->webhookInboundLimiter->create($request->getClientIp() ?: '127.0.0.1');
-            if (false === $limiter->consume(1)->isAccepted()) {
+            $limit = $limiter->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, $limit->getRetryAfter()?->getTimestamp() - time());
                 return $this->secureJson([
                     'error' => $this->trans('automation.admin.webhook_rate_limit', [], 'Too many webhook requests. Try again later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
         }
 
@@ -158,6 +165,26 @@ class WebhookInboundController extends AbstractController
                 'error' => $this->trans('automation.admin.payload_too_large', [], 'Payload too large (max 2MB)'),
                 'code' => 'PAYLOAD_TOO_LARGE',
             ], 413);
+        }
+
+        // Validation Content-Type (filtrage des formats binaires ou non-webhooks)
+        $rawContentType = (string) $request->headers->get('Content-Type', '');
+        $mediaType = strtolower(trim(explode(';', $rawContentType)[0]));
+        if ($request->getContent() !== '' && $mediaType !== '') {
+            $allowedTypes = [
+                'application/json',
+                'application/x-www-form-urlencoded',
+                'application/cloudevents+json',
+                'application/webhook+json',
+                'text/json',
+                'text/plain',
+            ];
+            if (!in_array($mediaType, $allowedTypes, true) && !str_ends_with($mediaType, '+json')) {
+                return $this->secureJson([
+                    'error' => $this->trans('automation.admin.webhook_unsupported_content_type', [], 'Unsupported webhook Content-Type. Expected application/json or application/x-www-form-urlencoded.'),
+                    'code' => 'UNSUPPORTED_MEDIA_TYPE',
+                ], 415);
+            }
         }
 
         // Parse et contrôle strict de la taille du corps (max 2 Mo)
@@ -389,28 +416,48 @@ class WebhookInboundController extends AbstractController
 
         $nonce = null;
         $deliveryId = $request->headers->get('X-GitHub-Delivery')
+            ?? $request->headers->get('X-Shopify-Webhook-Id')
             ?? $request->headers->get('X-Webhook-ID')
             ?? $request->headers->get('Webhook-Id')
+            ?? $request->headers->get('webhook-id')
             ?? $request->headers->get('X-Delivery-Id')
             ?? $request->headers->get('X-Webhook-Nonce')
-            ?? $request->headers->get('X-Nonce');
+            ?? $request->headers->get('X-Nonce')
+            ?? $request->headers->get('Idempotency-Key')
+            ?? $request->headers->get('X-Idempotency-Key');
 
         if ($deliveryId !== null && trim($deliveryId) !== '') {
             $nonce = 'deliv:' . trim($deliveryId);
         } else {
-            $sig = $request->headers->get('Stripe-Signature')
-                ?? $request->headers->get('X-Slack-Signature')
-                ?? $request->headers->get('webhook-signature')
-                ?? $request->headers->get('X-Hub-Signature-256')
-                ?? $request->headers->get('X-Signature-SHA256')
-                ?? $request->headers->get('X-Webhook-Signature');
-            $ts = $request->headers->get('X-Slack-Request-Timestamp')
-                ?? $request->headers->get('webhook-timestamp')
-                ?? $request->headers->get('X-Webhook-Timestamp')
-                ?? $request->headers->get('X-Timestamp')
-                ?? $request->headers->get('X-JamboApi-Timestamp');
-            if ($sig !== null && $ts !== null) {
-                $nonce = 'sigts:' . hash('sha256', $sig . ':' . $ts);
+            $stripeSig = $request->headers->get('Stripe-Signature');
+            if ($stripeSig !== null && trim($stripeSig) !== '') {
+                $nonce = 'stripe:' . hash('sha256', trim($stripeSig));
+            } else {
+                $slackSig = $request->headers->get('X-Slack-Signature');
+                $slackTs = $request->headers->get('X-Slack-Request-Timestamp');
+                if ($slackSig !== null && $slackTs !== null && trim($slackSig) !== '') {
+                    $nonce = 'slack:' . hash('sha256', trim($slackSig) . ':' . trim($slackTs));
+                } else {
+                    $sig = $request->headers->get('webhook-signature')
+                        ?? $request->headers->get('X-Hub-Signature-256')
+                        ?? $request->headers->get('X-Hub-Signature')
+                        ?? $request->headers->get('X-Signature-SHA256')
+                        ?? $request->headers->get('X-Webhook-Signature')
+                        ?? $request->headers->get('X-Shopify-Hmac-Sha256')
+                        ?? $request->headers->get('Paddle-Signature');
+
+                    $ts = $request->headers->get('webhook-timestamp')
+                        ?? $request->headers->get('X-Webhook-Timestamp')
+                        ?? $request->headers->get('X-Timestamp')
+                        ?? $request->headers->get('X-JamboApi-Timestamp');
+
+                    if ($sig !== null && $ts !== null && trim($sig) !== '') {
+                        $nonce = 'sigts:' . hash('sha256', trim($sig) . ':' . trim($ts));
+                    } elseif ($sig !== null && trim($sig) !== '') {
+                        // Anti-rejeu par signature et payload hash (fenêtre de validité de 300s)
+                        $nonce = 'sigbody:' . hash('sha256', trim($sig) . ':' . hash('sha256', $body));
+                    }
+                }
             }
         }
 
@@ -435,7 +482,7 @@ class WebhookInboundController extends AbstractController
     }
 
     /**
-     * Valide le secret via token direct, signature HMAC standard (GitHub, Stripe, Svix, Slack)
+     * Valide le secret via token direct, signature HMAC standard (GitHub, Stripe, Svix, Slack, Shopify, Paddle)
      * et prévient les attaques par rejeu de timestamp.
      */
     private function verifyWebhookSecretOrSignature(Request $request, string $body, string $secret): bool
@@ -446,7 +493,7 @@ class WebhookInboundController extends AbstractController
             return $this->verifyTimestampHeader($request);
         }
 
-        // 2. Standard GitHub : X-Hub-Signature-256 (sha256=<hex>)
+        // 2. Standard GitHub : X-Hub-Signature-256 (sha256=<hex>) & X-Hub-Signature (sha1=<hex>)
         $hubSig = $request->headers->get('X-Hub-Signature-256');
         if ($hubSig !== null) {
             if (str_starts_with($hubSig, 'sha256=')) {
@@ -454,6 +501,16 @@ class WebhookInboundController extends AbstractController
             }
             $expected = hash_hmac('sha256', $body, $secret);
             if (hash_equals($expected, $hubSig)) {
+                return $this->verifyTimestampHeader($request);
+            }
+        }
+        $hubSig1 = $request->headers->get('X-Hub-Signature');
+        if ($hubSig1 !== null) {
+            if (str_starts_with($hubSig1, 'sha1=')) {
+                $hubSig1 = substr($hubSig1, 5);
+            }
+            $expected1 = hash_hmac('sha1', $body, $secret);
+            if (hash_equals($expected1, $hubSig1)) {
                 return $this->verifyTimestampHeader($request);
             }
         }
@@ -501,13 +558,50 @@ class WebhookInboundController extends AbstractController
             }
         }
 
-        // 5. Standard GitLab : X-Gitlab-Token
+        // 5. Standard Shopify : X-Shopify-Hmac-Sha256 (base64)
+        $shopifySig = $request->headers->get('X-Shopify-Hmac-Sha256');
+        if ($shopifySig !== null && trim($shopifySig) !== '') {
+            $expectedB64 = base64_encode(hash_hmac('sha256', $body, $secret, true));
+            if (hash_equals($expectedB64, trim($shopifySig))) {
+                return $this->verifyTimestampHeader($request);
+            }
+        }
+
+        // 6. Standard Paddle : Paddle-Signature (ts=<ts>;h1=<hex>)
+        $paddleSig = $request->headers->get('Paddle-Signature');
+        if ($paddleSig !== null && trim($paddleSig) !== '') {
+            $pParts = explode(';', $paddleSig);
+            $pTs = null;
+            $pH1 = null;
+            foreach ($pParts as $pPart) {
+                $pkv = explode('=', trim($pPart), 2);
+                if (count($pkv) === 2) {
+                    if ($pkv[0] === 'ts') {
+                        $pTs = $pkv[1];
+                    } elseif ($pkv[0] === 'h1') {
+                        $pH1 = $pkv[1];
+                    }
+                }
+            }
+            if ($pTs !== null && $pH1 !== null && is_numeric($pTs)) {
+                $tsInt = (int) $pTs;
+                $now = time();
+                if (($now - $tsInt) <= 300 && ($tsInt - $now) <= 60) {
+                    $expectedPaddle = hash_hmac('sha256', "{$pTs}:{$body}", $secret);
+                    if (hash_equals($expectedPaddle, $pH1)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // 7. Standard GitLab : X-Gitlab-Token
         $gitlabToken = $request->headers->get('X-Gitlab-Token');
         if ($gitlabToken !== null && hash_equals($secret, $gitlabToken)) {
             return $this->verifyTimestampHeader($request);
         }
 
-        // 6. Standard Slack : X-Slack-Signature (v0=<hex>) & X-Slack-Request-Timestamp
+        // 8. Standard Slack : X-Slack-Signature (v0=<hex>) & X-Slack-Request-Timestamp
         $slackSig = $request->headers->get('X-Slack-Signature');
         $slackTs = $request->headers->get('X-Slack-Request-Timestamp');
         if ($slackSig !== null && $slackTs !== null && is_numeric($slackTs)) {
@@ -524,7 +618,7 @@ class WebhookInboundController extends AbstractController
             }
         }
 
-        // 7. Standard Svix / Standard Webhooks : webhook-signature, webhook-id, webhook-timestamp
+        // 9. Standard Svix / Standard Webhooks : webhook-signature, webhook-id, webhook-timestamp
         $svixSig = $request->headers->get('webhook-signature');
         $svixId = $request->headers->get('webhook-id') ?? $request->headers->get('msg_id');
         $svixTs = $request->headers->get('webhook-timestamp');
@@ -553,7 +647,7 @@ class WebhookInboundController extends AbstractController
             }
         }
 
-        // 8. Standard Authorization: Bearer <secret>
+        // 10. Standard Authorization: Bearer <secret>
         $authHeader = $request->headers->get('Authorization');
         if ($authHeader !== null && str_starts_with($authHeader, 'Bearer ')) {
             $bearer = substr($authHeader, 7);
@@ -570,7 +664,8 @@ class WebhookInboundController extends AbstractController
         $tsHeader = $request->headers->get('X-Webhook-Timestamp')
             ?? $request->headers->get('X-Timestamp')
             ?? $request->headers->get('X-JamboApi-Timestamp')
-            ?? $request->headers->get('Webhook-Timestamp');
+            ?? $request->headers->get('Webhook-Timestamp')
+            ?? $request->headers->get('webhook-timestamp');
         if ($tsHeader !== null && is_numeric($tsHeader)) {
             $ts = (int) $tsHeader;
             $now = time();
@@ -597,8 +692,9 @@ class WebhookInboundController extends AbstractController
             'content-type', 'user-agent', 'accept', 'accept-language',
             'x-forwarded-for', 'x-real-ip', 'x-request-id',
             'x-github-event', 'x-gitlab-event', 'x-event-key',
-            'x-delivery-id', 'x-github-delivery', 'webhook-id', 'webhook-timestamp',
+            'x-delivery-id', 'x-github-delivery', 'x-shopify-webhook-id', 'webhook-id', 'webhook-timestamp',
             'x-slack-request-timestamp', 'x-webhook-timestamp', 'x-jamboapi-event',
+            'idempotency-key', 'x-idempotency-key', 'paddle-signature',
         ];
 
         foreach ($request->headers->all() as $name => $values) {

@@ -58,6 +58,7 @@ class WebhookController extends AbstractController
         private ?RequestStack $requestStack = null,
         private ?RateLimiterFactory $webhookLimiter = null,
         private ?RateLimiterFactory $webhookTestLimiter = null,
+        private ?RateLimiterFactory $webhookOutboundLimiter = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
         $this->webhookService = $webhookService ?? new WebhookService(
@@ -66,7 +67,8 @@ class WebhookController extends AbstractController
             new \Symfony\Component\HttpClient\NativeHttpClient(),
             $this->secretService,
             $this->ssrfProtection,
-            $this->translator
+            $this->translator,
+            $this->webhookOutboundLimiter
         );
     }
 
@@ -124,7 +126,9 @@ class WebhookController extends AbstractController
     {
         if ($this->webhookLimiter !== null) {
             $identifier = $this->resolveIdentifier($request);
-            if (false === $this->webhookLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->webhookLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, $limit->getRetryAfter()?->getTimestamp() - time());
                 $this->auditService?->log(
                     toolName: 'webhook_rate_limit_exceeded',
                     project: null,
@@ -140,7 +144,12 @@ class WebhookController extends AbstractController
                 return $this->secureJson([
                     'error' => $this->trans('webhook.rate_limit_exceeded', [], 'Too many webhook requests. Please retry later.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
         }
         return null;
@@ -746,7 +755,9 @@ class WebhookController extends AbstractController
         $req = $request ?? $this->requestStack?->getCurrentRequest();
         if ($this->webhookTestLimiter !== null && $req !== null) {
             $identifier = $this->resolveIdentifier($req);
-            if (false === $this->webhookTestLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $limit = $this->webhookTestLimiter->create($identifier)->consume(1);
+            if (false === $limit->isAccepted()) {
+                $retryAfter = max(1, $limit->getRetryAfter()?->getTimestamp() - time());
                 $this->auditService?->log(
                     toolName: 'webhook_test_rate_limit_exceeded',
                     project: null,
@@ -762,7 +773,12 @@ class WebhookController extends AbstractController
                 return $this->secureJson([
                     'error' => $this->trans('webhook.test_rate_limit_exceeded', [], 'Too many webhook test requests. Please retry in a few moments.'),
                     'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
+                ], 429, [
+                    'Retry-After' => (string) $retryAfter,
+                    'X-RateLimit-Limit' => (string) $limit->getLimit(),
+                    'X-RateLimit-Remaining' => (string) $limit->getRemainingTokens(),
+                    'X-RateLimit-Reset' => (string) ($limit->getRetryAfter()?->getTimestamp() ?? (time() + 60)),
+                ]);
             }
         }
 

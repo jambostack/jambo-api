@@ -11,6 +11,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -29,6 +30,7 @@ class SendWebhookMessageHandler
         ?WebhookService $webhookService = null,
         private LoggerInterface $logger = new NullLogger(),
         private ?TranslatorInterface $translator = null,
+        private ?RateLimiterFactory $webhookOutboundLimiter = null,
     ) {
         $this->ssrfProtection = $ssrfProtection ?? new SsrfProtectionService();
         $this->webhookService = $webhookService ?? new WebhookService(
@@ -37,7 +39,8 @@ class SendWebhookMessageHandler
             $this->httpClient,
             $this->secretService,
             $this->ssrfProtection,
-            $this->translator
+            $this->translator,
+            $this->webhookOutboundLimiter
         );
     }
 

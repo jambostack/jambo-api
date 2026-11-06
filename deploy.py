@@ -22,7 +22,7 @@ except ImportError:
 HOST = os.getenv('JAMBO_HOST', 'folina.o2switch.net')
 USER = os.getenv('JAMBO_USER', 'gupi7723')
 PASS = os.getenv('JAMBO_PASS')
-KEY_FILE = os.getenv('JAMBO_SSH_KEY')
+KEY_FILE = os.getenv('JAMBO_SSH_KEY', '/root/.ssh/id_ed25519' if os.path.exists('/root/.ssh/id_ed25519') else None)
 REMOTE = os.getenv('JAMBO_REMOTE_DIR', '/home/gupi7723/api.jambostack.site')
 
 def run_command_subprocess(cmd):
