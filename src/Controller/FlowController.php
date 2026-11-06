@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Service\AuditService;
 use App\Service\Flow\FlowValidator;
 use App\Service\Flow\NodeRegistry;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -22,9 +23,14 @@ class FlowController extends AbstractController
     public const MAX_EDGES_COUNT = 200;
 
     private const SECURITY_HEADERS = [
-        'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
-        'Pragma' => 'no-cache',
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate, private',
+        'Pragma'                 => 'no-cache',
+        'Referrer-Policy'        => 'no-referrer',
+        'X-Robots-Tag'           => 'noindex, nofollow, noarchive, nosnippet',
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+        'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none';",
     ];
 
     private readonly FlowValidator $validator;
@@ -35,6 +41,7 @@ class FlowController extends AbstractController
         private readonly ?TranslatorInterface $translator = null,
         #[Autowire(service: 'limiter.flow_limiter')]
         private readonly ?RateLimiterFactory $flowLimiter = null,
+        private readonly ?AuditService $auditService = null,
     ) {
         $this->validator = $validator ?? new FlowValidator();
     }
@@ -47,24 +54,49 @@ class FlowController extends AbstractController
         return $default ?? $id;
     }
 
-    #[Route('/node-catalog', name: 'api_automation_node_catalog', methods: ['GET'])]
-    public function nodeCatalog(?Request $request = null): JsonResponse
+    private function resolveIdentifier(?Request $request): string
     {
-        if ($this->flowLimiter !== null && $request !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
+        try {
+            $user = $this->getUser();
+            if ($user !== null) {
+                return 'user_' . $user->getUserIdentifier();
+            }
+        } catch (\Throwable) {}
 
+        return $request?->getClientIp() ?: '127.0.0.1';
+    }
+
+    private function checkFlowRateLimit(Request $request): ?JsonResponse
+    {
+        if ($this->flowLimiter !== null) {
+            $identifier = $this->resolveIdentifier($request);
             if (false === $this->flowLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log(
+                    toolName: 'flow_rate_limit_exceeded',
+                    project: null,
+                    input: ['identifier' => $identifier],
+                    output: null,
+                    status: 'failure',
+                    errorMessage: 'Flow rate limit exceeded',
+                    createdBy: $identifier,
+                    source: 'flow_management'
+                );
+                $this->auditService?->flush();
+
                 return new JsonResponse([
                     'error' => $this->trans('flow.admin.rate_limit_exceeded', [], 'Too many flow requests. Please retry later.'),
                     'code'  => 'RATE_LIMIT_EXCEEDED',
                 ], 429, self::SECURITY_HEADERS);
             }
+        }
+        return null;
+    }
+
+    #[Route('/node-catalog', name: 'api_automation_node_catalog', methods: ['GET'])]
+    public function nodeCatalog(?Request $request = null): JsonResponse
+    {
+        if ($request !== null && ($rateLimit = $this->checkFlowRateLimit($request))) {
+            return $rateLimit;
         }
 
         return new JsonResponse([
@@ -76,21 +108,16 @@ class FlowController extends AbstractController
     #[Route('/validate-flow', name: 'api_automation_validate_flow', methods: ['POST'])]
     public function validateFlow(Request $request): JsonResponse
     {
-        if ($this->flowLimiter !== null) {
-            $identifier = $request->getClientIp() ?: '127.0.0.1';
-            try {
-                $user = $this->getUser();
-                if ($user !== null) {
-                    $identifier = $user->getUserIdentifier();
-                }
-            } catch (\Throwable) {}
+        if ($rateLimit = $this->checkFlowRateLimit($request)) {
+            return $rateLimit;
+        }
 
-            if (false === $this->flowLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return new JsonResponse([
-                    'error' => $this->trans('flow.admin.rate_limit_exceeded', [], 'Too many flow requests. Please retry later.'),
-                    'code'  => 'RATE_LIMIT_EXCEEDED',
-                ], 429, self::SECURITY_HEADERS);
-            }
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            return new JsonResponse([
+                'error' => $this->trans('flow.admin.payload_too_large', [], 'Flow payload exceeds maximum allowed size (512 KB).'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413, self::SECURITY_HEADERS);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
