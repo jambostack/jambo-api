@@ -30,6 +30,9 @@ class AiController extends AbstractController
     public const MAX_WORDS = 2000;
     public const MAX_CONTENT_KEYS = 100;
     public const MAX_CONTENT_DEPTH = 5;
+    public const MIN_INFERENCE_TOKENS = 16;
+    public const MAX_INFERENCE_TOKENS = 4096;
+    public const DEFAULT_INFERENCE_TOKENS = 1024;
 
     private const SECURITY_HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
@@ -64,6 +67,75 @@ class AiController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
+    private function validateContentType(Request $request): ?JsonResponse
+    {
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        if ($contentType !== '' && !str_starts_with(strtolower($contentType), 'application/json') && !str_starts_with(strtolower($contentType), 'application/x-www-form-urlencoded')) {
+            return $this->secureJson([
+                'error' => $this->trans('ai.invalid_content_type', [], 'Invalid Content-Type header, application/json expected.'),
+            ], 415);
+        }
+        return null;
+    }
+
+    /**
+     * @return array{0: int, 1: ?string}
+     */
+    private function resolveMaxTokens(mixed $rawTokens): array
+    {
+        if ($rawTokens === null || $rawTokens === '') {
+            return [self::DEFAULT_INFERENCE_TOKENS, null];
+        }
+        if (!is_int($rawTokens) && !ctype_digit((string) $rawTokens)) {
+            return [0, $this->trans('ai.invalid_max_tokens', ['%min%' => (string) self::MIN_INFERENCE_TOKENS, '%max%' => (string) self::MAX_INFERENCE_TOKENS], sprintf('Invalid maximum inference tokens (must be between %d and %d).', self::MIN_INFERENCE_TOKENS, self::MAX_INFERENCE_TOKENS))];
+        }
+        $tokens = (int) $rawTokens;
+        if ($tokens < self::MIN_INFERENCE_TOKENS || $tokens > self::MAX_INFERENCE_TOKENS) {
+            return [0, $this->trans('ai.invalid_max_tokens', ['%min%' => (string) self::MIN_INFERENCE_TOKENS, '%max%' => (string) self::MAX_INFERENCE_TOKENS], sprintf('Invalid maximum inference tokens (must be between %d and %d).', self::MIN_INFERENCE_TOKENS, self::MAX_INFERENCE_TOKENS))];
+        }
+        return [$tokens, null];
+    }
+
+    /**
+     * @return array{0: float, 1: ?string}
+     */
+    private function resolveTemperature(mixed $rawTemp): array
+    {
+        if ($rawTemp === null || $rawTemp === '') {
+            return [0.7, null];
+        }
+        if (!is_numeric($rawTemp)) {
+            return [0.0, $this->trans('ai.invalid_temperature', [], 'Invalid temperature (must be between 0.0 and 2.0).')];
+        }
+        $temp = (float) $rawTemp;
+        if ($temp < 0.0 || $temp > 2.0) {
+            return [0.0, $this->trans('ai.invalid_temperature', [], 'Invalid temperature (must be between 0.0 and 2.0).')];
+        }
+        return [$temp, null];
+    }
+
+    private function validateModelName(?string $model): ?string
+    {
+        if ($model === null || $model === '') {
+            return null;
+        }
+        if (!preg_match('/^[a-zA-Z0-9_\-\.\/]{1,80}$/', $model)) {
+            return $this->trans('ai.invalid_model', [], 'Invalid AI model specified.');
+        }
+        return null;
+    }
+
+    private function validateProviderName(?string $provider): ?string
+    {
+        if ($provider === null || $provider === '') {
+            return null;
+        }
+        if (!preg_match('/^[a-zA-Z0-9_\-]{2,30}$/', $provider)) {
+            return $this->trans('ai.invalid_provider', [], 'Invalid AI provider specified.');
+        }
+        return null;
+    }
+
     #[Route('/api/projects/{uuid}/ai/generate', name: 'ai_generate', methods: ['POST'])]
     public function generate(string $uuid, Request $request): JsonResponse
     {
@@ -71,14 +143,18 @@ class AiController extends AbstractController
             return $rateLimitResponse;
         }
 
-        [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'content.create');
-        if ($errorResponse !== null) {
-            return $errorResponse;
-        }
-
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->trans('ai.payload_too_large', [], 'AI payload too large (max 1MB).')], 413);
+        }
+
+        if ($contentError = $this->validateContentType($request)) {
+            return $contentError;
+        }
+
+        [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'content.create');
+        if ($errorResponse !== null) {
+            return $errorResponse;
         }
 
         $body = json_decode($request->getContent(), true);
@@ -105,7 +181,31 @@ class AiController extends AbstractController
         }
 
         if ($this->containsDangerousPromptBreakout($brief)) {
+            $this->auditService?->log(
+                toolName: 'ai_generate',
+                project: $project,
+                input: ['collection' => $collectionSlug],
+                output: ['error' => 'prompt_injection_detected'],
+                status: 'blocked',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                source: 'ai_controller',
+            );
+            $this->auditService?->flush();
             return $this->secureJson(['error' => $this->trans('ai.prompt_injection_detected', [], 'Prompt rejected: potentially harmful prompt injection detected.')], 400);
+        }
+
+        [$maxTokens, $tokenError] = $this->resolveMaxTokens($body['max_tokens'] ?? $body['maxTokens'] ?? null);
+        if ($tokenError !== null) {
+            return $this->secureJson(['error' => $tokenError], 400);
+        }
+
+        [$temperature, $tempError] = $this->resolveTemperature($body['temperature'] ?? null);
+        if ($tempError !== null) {
+            return $this->secureJson(['error' => $tempError], 400);
+        }
+
+        if (isset($body['model']) && ($modelError = $this->validateModelName((string) $body['model']))) {
+            return $this->secureJson(['error' => $modelError], 400);
         }
 
         if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $collectionSlug)) {
@@ -131,7 +231,7 @@ class AiController extends AbstractController
             $this->auditService?->log(
                 toolName: 'ai_generate',
                 project: $project,
-                input: ['collection' => $collectionSlug, 'locale' => $locale],
+                input: ['collection' => $collectionSlug, 'locale' => $locale, 'max_tokens' => $maxTokens, 'temperature' => $temperature],
                 output: ['success' => true],
                 status: 'success',
                 createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
@@ -151,14 +251,18 @@ class AiController extends AbstractController
             return $rateLimitResponse;
         }
 
-        [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'content.update');
-        if ($errorResponse !== null) {
-            return $errorResponse;
-        }
-
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->trans('ai.payload_too_large', [], 'AI payload too large (max 1MB).')], 413);
+        }
+
+        if ($contentError = $this->validateContentType($request)) {
+            return $contentError;
+        }
+
+        [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'content.update');
+        if ($errorResponse !== null) {
+            return $errorResponse;
         }
 
         $body = json_decode($request->getContent(), true);
@@ -186,12 +290,21 @@ class AiController extends AbstractController
             return $this->secureJson(['error' => $this->trans('ai.invalid_locale_format', [], 'Invalid locale format.')], 400);
         }
 
+        [$maxTokens, $tokenError] = $this->resolveMaxTokens($body['max_tokens'] ?? $body['maxTokens'] ?? null);
+        if ($tokenError !== null) {
+            return $this->secureJson(['error' => $tokenError], 400);
+        }
+
+        if (isset($body['model']) && ($modelError = $this->validateModelName((string) $body['model']))) {
+            return $this->secureJson(['error' => $modelError], 400);
+        }
+
         try {
             $translated = $this->ai->translateContent($content, $targetLocale, $project);
             $this->auditService?->log(
                 toolName: 'ai_translate',
                 project: $project,
-                input: ['locale' => $targetLocale],
+                input: ['locale' => $targetLocale, 'max_tokens' => $maxTokens],
                 output: ['success' => true],
                 status: 'success',
                 createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
@@ -211,14 +324,18 @@ class AiController extends AbstractController
             return $rateLimitResponse;
         }
 
-        [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'project.view');
-        if ($errorResponse !== null) {
-            return $errorResponse;
-        }
-
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->trans('ai.payload_too_large', [], 'AI payload too large (max 1MB).')], 413);
+        }
+
+        if ($contentError = $this->validateContentType($request)) {
+            return $contentError;
+        }
+
+        [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'project.view');
+        if ($errorResponse !== null) {
+            return $errorResponse;
         }
 
         $body = json_decode($request->getContent(), true);
@@ -235,25 +352,44 @@ class AiController extends AbstractController
         $textLength = mb_strlen($text);
 
         if ($textLength < self::MIN_TEXT_LENGTH) {
-            return $this->secureJson(['error' => $this->trans('ai.text_too_short', ['%min%' => self::MIN_TEXT_LENGTH], sprintf('Text is too short (minimum %d characters).', self::MIN_TEXT_LENGTH))], 400);
+            return $this->secureJson(['error' => $this->trans('ai.text_too_short', ['%min%' => (string) self::MIN_TEXT_LENGTH], sprintf('Text is too short (minimum %d characters).', self::MIN_TEXT_LENGTH))], 400);
         }
 
         if ($textLength > self::MAX_TEXT_LENGTH) {
-            return $this->secureJson(['error' => $this->trans('ai.text_too_long', ['%max%' => self::MAX_TEXT_LENGTH], sprintf('Text exceeds maximum allowed length (%d characters).', self::MAX_TEXT_LENGTH))], 400);
+            return $this->secureJson(['error' => $this->trans('ai.text_too_long', ['%max%' => (string) self::MAX_TEXT_LENGTH], sprintf('Text exceeds maximum allowed length (%d characters).', self::MAX_TEXT_LENGTH))], 400);
         }
 
         if ($this->containsDangerousPromptBreakout($text)) {
+            $this->auditService?->log(
+                toolName: 'ai_summarize',
+                project: $project,
+                input: ['text_length' => $textLength],
+                output: ['error' => 'prompt_injection_detected'],
+                status: 'blocked',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                source: 'ai_controller',
+            );
+            $this->auditService?->flush();
             return $this->secureJson(['error' => $this->trans('ai.prompt_injection_detected', [], 'Prompt rejected: potentially harmful prompt injection detected.')], 400);
         }
 
         $maxWords = min(self::MAX_WORDS, max(self::MIN_WORDS, (int) ($body['maxWords'] ?? 80)));
+
+        [$maxTokens, $tokenError] = $this->resolveMaxTokens($body['max_tokens'] ?? $body['maxTokens'] ?? null);
+        if ($tokenError !== null) {
+            return $this->secureJson(['error' => $tokenError], 400);
+        }
+
+        if (isset($body['model']) && ($modelError = $this->validateModelName((string) $body['model']))) {
+            return $this->secureJson(['error' => $modelError], 400);
+        }
 
         try {
             $summary = $this->ai->summarize($text, $maxWords, $project);
             $this->auditService?->log(
                 toolName: 'ai_summarize',
                 project: $project,
-                input: ['maxWords' => $maxWords],
+                input: ['maxWords' => $maxWords, 'max_tokens' => $maxTokens],
                 output: ['success' => true],
                 status: 'success',
                 createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
@@ -273,14 +409,18 @@ class AiController extends AbstractController
             return $rateLimitResponse;
         }
 
-        [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'project.view');
-        if ($errorResponse !== null) {
-            return $errorResponse;
-        }
-
         $contentLength = (int) $request->headers->get('Content-Length', 0);
         if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
             return $this->secureJson(['error' => $this->trans('ai.payload_too_large', [], 'AI payload too large (max 1MB).')], 413);
+        }
+
+        if ($contentError = $this->validateContentType($request)) {
+            return $contentError;
+        }
+
+        [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'project.view');
+        if ($errorResponse !== null) {
+            return $errorResponse;
         }
 
         $body = json_decode($request->getContent(), true);
@@ -303,12 +443,21 @@ class AiController extends AbstractController
             return $this->secureJson(['error' => $this->trans('ai.content_too_large', [], 'Content payload exceeds maximum allowed size.')], 400);
         }
 
+        [$maxTokens, $tokenError] = $this->resolveMaxTokens($body['max_tokens'] ?? $body['maxTokens'] ?? null);
+        if ($tokenError !== null) {
+            return $this->secureJson(['error' => $tokenError], 400);
+        }
+
+        if (isset($body['model']) && ($modelError = $this->validateModelName((string) $body['model']))) {
+            return $this->secureJson(['error' => $modelError], 400);
+        }
+
         try {
             $seoResult = $this->ai->generateSeo($content, $project);
             $this->auditService?->log(
                 toolName: 'ai_seo',
                 project: $project,
-                input: ['fields' => array_keys($content)],
+                input: ['fields' => array_keys($content), 'max_tokens' => $maxTokens],
                 output: ['success' => true],
                 status: 'success',
                 createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
@@ -384,6 +533,107 @@ class AiController extends AbstractController
         }
     }
 
+    #[Route('/api/projects/{uuid}/ai/ask', name: 'ai_ask', methods: ['POST'])]
+    public function ask(string $uuid, Request $request): JsonResponse
+    {
+        if ($rateLimitResponse = $this->checkRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
+        $contentLength = (int) $request->headers->get('Content-Length', 0);
+        if ($contentLength > self::MAX_PAYLOAD_BYTES || strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson(['error' => $this->trans('ai.payload_too_large', [], 'AI payload too large (max 1MB).')], 413);
+        }
+
+        if ($contentError = $this->validateContentType($request)) {
+            return $contentError;
+        }
+
+        [$project, $errorResponse] = $this->findProjectAndCheckAccess($uuid, $request, 'content.create');
+        if ($errorResponse !== null) {
+            return $errorResponse;
+        }
+
+        $body = json_decode($request->getContent(), true);
+        if (!is_array($body)) {
+            return $this->secureJson(['error' => $this->trans('ai.invalid_json', [], 'Invalid JSON payload.')], 400);
+        }
+
+        $rawPrompt = (string) ($body['prompt'] ?? '');
+        if (trim($rawPrompt) === '') {
+            return $this->secureJson(['error' => $this->trans('ai.prompt_required', [], 'Prompt is required.')], 400);
+        }
+
+        $prompt = $this->sanitizePromptInput($rawPrompt);
+        $promptLen = mb_strlen($prompt);
+
+        if ($promptLen < self::MIN_BRIEF_LENGTH) {
+            return $this->secureJson(['error' => $this->trans('ai.prompt_too_short', ['%min%' => (string) self::MIN_BRIEF_LENGTH], sprintf('Prompt is too short (minimum %d characters).', self::MIN_BRIEF_LENGTH))], 400);
+        }
+
+        if ($promptLen > self::MAX_BRIEF_LENGTH) {
+            return $this->secureJson(['error' => $this->trans('ai.prompt_too_long', ['%max%' => (string) self::MAX_BRIEF_LENGTH], sprintf('Prompt exceeds maximum allowed length (%d characters).', self::MAX_BRIEF_LENGTH))], 400);
+        }
+
+        if ($this->containsDangerousPromptBreakout($prompt)) {
+            $this->auditService?->log(
+                toolName: 'ai_ask',
+                project: $project,
+                input: ['prompt_length' => $promptLen],
+                output: ['error' => 'prompt_injection_detected'],
+                status: 'blocked',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                source: 'ai_controller',
+            );
+            $this->auditService?->flush();
+            return $this->secureJson(['error' => $this->trans('ai.prompt_injection_detected', [], 'Prompt rejected: potentially harmful prompt injection detected.')], 400);
+        }
+
+        [$maxTokens, $tokenError] = $this->resolveMaxTokens($body['max_tokens'] ?? $body['maxTokens'] ?? null);
+        if ($tokenError !== null) {
+            return $this->secureJson(['error' => $tokenError], 400);
+        }
+
+        [$temperature, $tempError] = $this->resolveTemperature($body['temperature'] ?? null);
+        if ($tempError !== null) {
+            return $this->secureJson(['error' => $tempError], 400);
+        }
+
+        $rawModel = isset($body['model']) ? (string) $body['model'] : 'gpt-4o-mini';
+        if ($modelError = $this->validateModelName($rawModel)) {
+            return $this->secureJson(['error' => $modelError], 400);
+        }
+
+        $rawProvider = isset($body['provider']) ? (string) $body['provider'] : null;
+        if ($rawProvider !== null && ($providerError = $this->validateProviderName($rawProvider))) {
+            return $this->secureJson(['error' => $providerError], 400);
+        }
+
+        try {
+            $answer = $this->ai->ask($prompt, $rawModel, $rawProvider);
+            $this->auditService?->log(
+                toolName: 'ai_ask',
+                project: $project,
+                input: ['model' => $rawModel, 'max_tokens' => $maxTokens, 'temperature' => $temperature],
+                output: ['success' => true],
+                status: 'success',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                source: 'ai_controller',
+            );
+            $this->auditService?->flush();
+
+            return $this->secureJson([
+                'prompt'      => $prompt,
+                'response'    => $answer,
+                'model'       => $rawModel,
+                'max_tokens'  => $maxTokens,
+                'temperature' => $temperature,
+            ]);
+        } catch (\Throwable $e) {
+            return $this->handleAiException($e);
+        }
+    }
+
     private function sanitizePromptInput(string $input): string
     {
         // Supprime les octets nuls et caractères de contrôle non imprimables (sauf tabulations, retours à la ligne)
@@ -407,6 +657,12 @@ class AiController extends AbstractController
             '/\byou\s+are\s+now\s+(?:in\s+)?(?:developer|dan|jailbreak)\s+mode\b/i',
             '/\b(?:reveal|output|display|show)\s+(?:your\s+)?system\s+prompt\b/i',
             '/\bforget\s+(?:all\s+)?(?:safety|system)\s+(?:rules|instructions)\b/i',
+            '/\bbypass\s+(?:content\s+)?filters\b/i',
+            '/\bact\s+as\s+unrestricted\b/i',
+            '/\bdo\s+anything\s+now\b/i',
+            '/\bsudo\s+mode\b/i',
+            '/\boverride\s+(?:system|safety)\s+protocols\b/i',
+            '/\bjailbreak\b/i',
         ];
         foreach ($patterns as $pattern) {
             if (preg_match($pattern, $input)) {
@@ -486,6 +742,16 @@ class AiController extends AbstractController
             } catch (\Throwable) {}
 
             if (!$this->aiLimiter->create($identifier)->consume(1)->isAccepted()) {
+                $this->auditService?->log(
+                    toolName: 'ai_rate_limit',
+                    project: null,
+                    input: ['identifier' => $identifier],
+                    output: ['error' => 'rate_limit_exceeded'],
+                    status: 'blocked',
+                    createdBy: $identifier,
+                    source: 'ai_controller',
+                );
+                $this->auditService?->flush();
                 return $this->secureJson([
                     'error' => $this->trans('ai.rate_limit_exceeded', [], 'Too many AI requests. Please retry later.')
                 ], 429);
@@ -511,16 +777,46 @@ class AiController extends AbstractController
         // Cloisonnement strict multi-tenant
         $attrProject = $request->attributes->get('_project');
         if ($attrProject instanceof Project && $attrProject->uuid?->toRfc4122() !== $project->uuid?->toRfc4122()) {
+            $this->auditService?->log(
+                toolName: 'ai_tenant_isolation',
+                project: $project,
+                input: ['requested_uuid' => $uuid],
+                output: ['error' => 'token_project_mismatch'],
+                status: 'blocked',
+                createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                source: 'ai_controller',
+            );
+            $this->auditService?->flush();
             return [null, $this->secureJson(['error' => $this->trans('ai.token_project_mismatch', [], 'Forbidden: token belongs to another project.')], 403)];
         }
 
         $token = $this->tokenChecker?->resolve($request);
         if ($token !== null) {
             if ($token->project->uuid?->toRfc4122() !== $project->uuid?->toRfc4122()) {
+                $this->auditService?->log(
+                    toolName: 'ai_tenant_isolation',
+                    project: $project,
+                    input: ['requested_uuid' => $uuid],
+                    output: ['error' => 'token_project_mismatch'],
+                    status: 'blocked',
+                    createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                    source: 'ai_controller',
+                );
+                $this->auditService?->flush();
                 return [null, $this->secureJson(['error' => $this->trans('ai.token_project_mismatch', [], 'Forbidden: token belongs to another project.')], 403)];
             }
             $requiredAbility = ($attribute === 'project.view' || $attribute === 'project.read') ? 'read' : 'write';
             if (!$token->can('*') && !$token->can($requiredAbility)) {
+                $this->auditService?->log(
+                    toolName: 'ai_permissions',
+                    project: $project,
+                    input: ['requested_uuid' => $uuid, 'required' => $requiredAbility],
+                    output: ['error' => 'token_missing_ability'],
+                    status: 'blocked',
+                    createdBy: $this->getUser()?->getUserIdentifier() ?? 'api_token',
+                    source: 'ai_controller',
+                );
+                $this->auditService?->flush();
                 return [null, $this->secureJson(['error' => $this->trans('ai.token_missing_ability', [], 'Forbidden: token missing required ability.')], 403)];
             }
         } else {

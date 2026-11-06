@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Plugin;
 
 use App\Entity\Project;
+use App\Service\Security\SsrfProtectionService;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -74,6 +75,7 @@ class PluginManager
         #[Autowire('%kernel.project_dir%')]
         string $projectDir,
         private readonly ?TranslatorInterface $translator = null,
+        private readonly ?SsrfProtectionService $ssrfProtection = null,
     ) {
         $this->pluginsDir = $projectDir . '/var/plugins';
         if (!is_dir($this->pluginsDir)) {
@@ -278,12 +280,22 @@ class PluginManager
                 preg_match('/<\s*script/i', $node) ||
                 preg_match('/javascript\s*:/i', $node) ||
                 preg_match('/data\s*:\s*text\/html/i', $node) ||
-                preg_match('/vbscript\s*:/i', $node)
+                preg_match('/vbscript\s*:/i', $node) ||
+                preg_match('/(?:file|phar|php|gopher|dict|expect)\s*:/i', $node)
             ) {
                 return [
                     'valid' => false,
                     'error' => $this->trans('plugin.invalid_settings_value', [], 'Configuration value contains prohibited script or dangerous protocol.'),
                 ];
+            }
+            if ($this->ssrfProtection !== null && preg_match('#^https?://#i', $node)) {
+                $reason = null;
+                if (!$this->ssrfProtection->isSafeUrl($node, false, $reason)) {
+                    return [
+                        'valid' => false,
+                        'error' => $this->trans('plugin.settings_ssrf_blocked', [], 'Unauthorized URL in configuration: private network, loopback or cloud metadata target blocked.'),
+                    ];
+                }
             }
         }
 
