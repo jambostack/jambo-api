@@ -2689,6 +2689,8 @@ return [
     'admin_api.field.invalid_json'                    => 'نص JSON غير صالح.',
     'admin_api.field.name_required'                   => 'اسم الحقل مطلوب.',
     'admin_api.field.name_too_long'                   => 'لا يمكن أن يتجاوز اسم الحقل 255 حرفًا.',
+    'admin_api.field.slug_too_long'                   => 'لا يمكن أن يتجاوز الاسم اللطيف للحقل 255 حرفًا.',
+    'admin_api.field.invalid_slug_format'             => 'يمكن أن يحتوي الاسم اللطيف للحقل على أحرف وأرقام وشرطات سفلية وشرطات فقط.',
 
     'admin_api.import.invalid_uuid'                   => 'تنسيق المعرف الفريد للمشروع غير صالح.',
     'admin_api.import.too_many_requests'              => 'طلبات استيراد كثيرة جدًا. يُرجى المحاولة لاحقًا.',
@@ -3199,6 +3201,7 @@ return [
     'admin_api.no_token' => 'لم يتم توفير رمز وصول شخصي.',
     'admin_api.missing_scope' => 'النطاق مفقود: %scope%.',
     'admin_api.rate_limit_exceeded' => 'طلبات واجهة برمجة التطبيقات كثيرة جدًا. يرجى إعادة المحاولة لاحقًا.',
+    'admin_api.invalid_content_type' => 'يجب أن يكون Content-Type من نوع application/json.',
     'admin_api.project.payload_too_large' => 'تتجاوز حمولة المشروع الحد الأقصى للحجم (512 كيلوبايت).',
     'admin_api.project.name_control_chars' => 'يحتوي اسم المشروع على أحرف تحكم غير صالحة.',
     'admin_api.project.max_projects_exceeded' => 'تم تجاوز الحد الأقصى للمشاريع (الحد الأقصى %max% مشروعًا).',

@@ -2687,6 +2687,8 @@ return [
     'admin_api.field.invalid_json'                    => 'Cuerpo JSON inválido.',
     'admin_api.field.name_required'                   => 'El nombre del campo es obligatorio.',
     'admin_api.field.name_too_long'                   => 'El nombre del campo no puede superar los 255 caracteres.',
+    'admin_api.field.slug_too_long'                   => 'El slug del campo no puede superar los 255 caracteres.',
+    'admin_api.field.invalid_slug_format'             => 'El slug del campo solo puede contener letras, números, guiones bajos y guiones.',
 
     'admin_api.import.invalid_uuid'                   => 'Formato UUID de proyecto inválido.',
     'admin_api.import.too_many_requests'              => 'Demasiadas solicitudes de importación. Inténtelo más tarde.',
@@ -3197,6 +3199,7 @@ return [
     'admin_api.no_token' => 'No se proporcionó ningún token de acceso personal.',
     'admin_api.missing_scope' => 'Alcance faltante: %scope%.',
     'admin_api.rate_limit_exceeded' => 'Demasiadas solicitudes de API. Inténtelo de nuevo más tarde.',
+    'admin_api.invalid_content_type' => 'El Content-Type debe ser application/json.',
     'admin_api.project.payload_too_large' => 'La carga útil del proyecto supera el límite de tamaño máximo (512 KB).',
     'admin_api.project.name_control_chars' => 'El nombre del proyecto contiene caracteres de control no válidos.',
     'admin_api.project.max_projects_exceeded' => 'Se ha superado el límite de proyectos (máximo %max% proyectos).',

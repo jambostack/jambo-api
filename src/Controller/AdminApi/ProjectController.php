@@ -24,8 +24,9 @@ class ProjectController extends AbstractController
     public const MAX_PROJECTS_PER_USER = 100;
 
     private const SECURITY_HEADERS = [
-        'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate',
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
     ];
 
     public function __construct(
@@ -58,11 +59,43 @@ class ProjectController extends AbstractController
             }
         } catch (\Throwable) {}
 
+        $pat = $request->attributes->get('_pat');
+        if ($pat instanceof \App\Entity\PersonalAccessToken && $pat->user !== null) {
+            $identifier = $pat->user->getUserIdentifier();
+        }
+
         if (!$this->adminApiLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $this->auditService?->log(
+                toolName: 'admin_project_rate_limit_exceeded',
+                project: null,
+                input: ['ip' => $request->getClientIp()],
+                output: null,
+                status: 'blocked',
+                errorMessage: 'Rate limit exceeded on ProjectController',
+                createdBy: $identifier,
+                source: 'admin_api',
+            );
+            $this->auditService?->flush();
+
             return new JsonResponse([
                 'error' => $this->trans('admin_api.rate_limit_exceeded', [], 'Too many API requests. Please retry later.'),
                 'code' => 'RATE_LIMIT_EXCEEDED',
             ], 429, self::SECURITY_HEADERS);
+        }
+        return null;
+    }
+
+    private function validateContentType(Request $request): ?JsonResponse
+    {
+        $method = $request->getMethod();
+        if (in_array($method, ['POST', 'PATCH', 'PUT'], true) && strlen((string) $request->getContent()) > 0) {
+            $contentType = (string) $request->headers->get('Content-Type', '');
+            if (!str_contains(strtolower($contentType), 'application/json')) {
+                return $this->secureJson([
+                    'error' => $this->trans('admin_api.invalid_content_type', [], 'Content-Type must be application/json.'),
+                    'code'  => 'INVALID_CONTENT_TYPE',
+                ], 415);
+            }
         }
         return null;
     }
@@ -96,6 +129,10 @@ class ProjectController extends AbstractController
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if ($contentTypeResponse = $this->validateContentType($request)) {
+            return $contentTypeResponse;
         }
 
         $this->requireScope($request, 'projects:write');
@@ -145,6 +182,7 @@ class ProjectController extends AbstractController
                 status: 'success',
                 source: 'admin_api',
             );
+            $this->auditService?->flush();
         } catch (SchemaException $e) {
             return $this->secureJson(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
@@ -180,6 +218,10 @@ class ProjectController extends AbstractController
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if ($contentTypeResponse = $this->validateContentType($request)) {
+            return $contentTypeResponse;
         }
 
         if ($err = $this->validateUuid($uuid)) {
@@ -235,6 +277,7 @@ class ProjectController extends AbstractController
             status: 'success',
             source: 'admin_api',
         );
+        $this->auditService?->flush();
         return $this->secureJson(['data' => $this->serialize($project)]);
     }
 

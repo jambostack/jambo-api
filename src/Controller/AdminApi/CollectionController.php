@@ -35,8 +35,9 @@ class CollectionController extends AbstractController
     public const MAX_COLLECTIONS_COUNT = 100;
 
     private const SECURITY_HEADERS = [
-        'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate',
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
     ];
 
     public function __construct(
@@ -74,11 +75,60 @@ class CollectionController extends AbstractController
             }
         } catch (\Throwable) {}
 
+        $pat = $request->attributes->get('_pat');
+        if ($pat instanceof \App\Entity\PersonalAccessToken && $pat->user !== null) {
+            $identifier = $pat->user->getUserIdentifier();
+        }
+
         if (!$this->adminApiLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $this->auditService?->log(
+                toolName: 'admin_collection_rate_limit_exceeded',
+                project: null,
+                input: ['ip' => $request->getClientIp()],
+                output: null,
+                status: 'blocked',
+                errorMessage: 'Rate limit exceeded on CollectionController',
+                createdBy: $identifier,
+                source: 'admin_api',
+            );
+            $this->auditService?->flush();
+
             return new JsonResponse([
                 'error' => $this->trans('admin_api.rate_limit_exceeded', [], 'Too many API requests. Please retry later.'),
                 'code' => 'RATE_LIMIT_EXCEEDED',
             ], 429, self::SECURITY_HEADERS);
+        }
+        return null;
+    }
+
+    private function validateContentType(Request $request): ?JsonResponse
+    {
+        $method = $request->getMethod();
+        if (in_array($method, ['POST', 'PATCH', 'PUT'], true) && strlen((string) $request->getContent()) > 0) {
+            $contentType = (string) $request->headers->get('Content-Type', '');
+            if (!str_contains(strtolower($contentType), 'application/json')) {
+                return $this->secureJson([
+                    'error' => $this->trans('admin_api.invalid_content_type', [], 'Content-Type must be application/json.'),
+                    'code'  => 'INVALID_CONTENT_TYPE',
+                ], 415);
+            }
+        }
+        return null;
+    }
+
+    private function validateSlug(string $slug): ?JsonResponse
+    {
+        if (mb_strlen($slug) > 255) {
+            return $this->secureJson([
+                'error' => $this->trans('admin_api.collection.slug_too_long'),
+                'code' => 'SLUG_TOO_LONG',
+            ], 422);
+        }
+        if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
+            return $this->secureJson([
+                'error' => $this->trans('admin_api.collection.invalid_slug_format'),
+                'code' => 'INVALID_SLUG_FORMAT',
+            ], 422);
         }
         return null;
     }
@@ -113,6 +163,10 @@ class CollectionController extends AbstractController
             return $rateLimitResponse;
         }
 
+        if ($slugResponse = $this->validateSlug($slug)) {
+            return $slugResponse;
+        }
+
         $project = $this->resolveProject($uuid);
         if (!$project) {
             return $this->secureJson(['error' => $this->trans('admin_api.collection.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404);
@@ -130,6 +184,10 @@ class CollectionController extends AbstractController
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if ($contentTypeResponse = $this->validateContentType($request)) {
+            return $contentTypeResponse;
         }
 
         $this->requireScope($request, 'schema:write');
@@ -191,6 +249,7 @@ class CollectionController extends AbstractController
                 status: 'success',
                 source: 'admin_api',
             );
+            $this->auditService?->flush();
         } catch (SchemaException $e) {
             return $this->secureJson(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
@@ -202,6 +261,14 @@ class CollectionController extends AbstractController
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if ($contentTypeResponse = $this->validateContentType($request)) {
+            return $contentTypeResponse;
+        }
+
+        if ($slugResponse = $this->validateSlug($slug)) {
+            return $slugResponse;
         }
 
         $this->requireScope($request, 'schema:write');
@@ -260,6 +327,7 @@ class CollectionController extends AbstractController
             status: 'success',
             source: 'admin_api',
         );
+        $this->auditService?->flush();
         return $this->secureJson(['data' => ['name' => $c->name, 'slug' => $c->slug]]);
     }
 
@@ -268,6 +336,10 @@ class CollectionController extends AbstractController
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if ($slugResponse = $this->validateSlug($slug)) {
+            return $slugResponse;
         }
 
         $this->requireScope($request, 'schema:write');
@@ -290,6 +362,7 @@ class CollectionController extends AbstractController
             status: 'success',
             source: 'admin_api',
         );
+        $this->auditService?->flush();
         return new JsonResponse(null, 204, self::SECURITY_HEADERS);
     }
 
@@ -298,6 +371,10 @@ class CollectionController extends AbstractController
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if ($slugResponse = $this->validateSlug($slug)) {
+            return $slugResponse;
         }
 
         $project = $this->resolveProject($uuid);
@@ -310,6 +387,16 @@ class CollectionController extends AbstractController
         if (!$collection) {
             return $this->secureJson(['error' => $this->trans('admin_api.collection.not_found'), 'code' => 'COLLECTION_NOT_FOUND'], 404);
         }
+
+        $this->auditService?->log(
+            toolName: 'admin_api_collection_export_csv',
+            project: $project,
+            input: ['uuid' => $uuid, 'slug' => $slug],
+            output: null,
+            status: 'success',
+            source: 'admin_api',
+        );
+        $this->auditService?->flush();
 
         $fields = $this->fields->findBy(['collection' => $collection, 'deletedAt' => null]);
         $fieldSlugs = array_map(fn ($f) => $f->slug, $fields);
@@ -385,6 +472,7 @@ class CollectionController extends AbstractController
         $response->headers->set('X-Accel-Buffering', 'no');
         $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('X-Frame-Options', 'DENY');
 
         return $response;
     }

@@ -2687,6 +2687,8 @@ return [
     'admin_api.field.invalid_json'                    => 'Invalid JSON body.',
     'admin_api.field.name_required'                   => 'Field name is required.',
     'admin_api.field.name_too_long'                   => 'Field name cannot exceed 255 characters.',
+    'admin_api.field.slug_too_long'                   => 'Field slug cannot exceed 255 characters.',
+    'admin_api.field.invalid_slug_format'             => 'Field slug can only contain letters, numbers, underscores and hyphens.',
 
     'admin_api.import.invalid_uuid'                   => 'Invalid project UUID format.',
     'admin_api.import.too_many_requests'              => 'Too many import requests. Please retry later.',
@@ -3197,6 +3199,7 @@ return [
     'admin_api.no_token' => 'No personal access token provided.',
     'admin_api.missing_scope' => 'Missing scope: %scope%.',
     'admin_api.rate_limit_exceeded' => 'Too many API requests. Please retry later.',
+    'admin_api.invalid_content_type' => 'Content-Type must be application/json.',
     'admin_api.project.payload_too_large' => 'Project payload exceeds maximum size limit (512 KB).',
     'admin_api.project.name_control_chars' => 'Project name contains invalid control characters.',
     'admin_api.project.max_projects_exceeded' => 'Project limit exceeded (maximum %max% projects).',

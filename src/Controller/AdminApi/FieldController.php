@@ -26,8 +26,9 @@ class FieldController extends AbstractController
     public const MAX_FIELDS_COUNT = 100;
 
     private const SECURITY_HEADERS = [
-        'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate',
         'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
     ];
 
     public function __construct(
@@ -62,11 +63,77 @@ class FieldController extends AbstractController
             }
         } catch (\Throwable) {}
 
+        $pat = $request->attributes->get('_pat');
+        if ($pat instanceof \App\Entity\PersonalAccessToken && $pat->user !== null) {
+            $identifier = $pat->user->getUserIdentifier();
+        }
+
         if (!$this->adminApiLimiter->create($identifier)->consume(1)->isAccepted()) {
+            $this->auditService?->log(
+                toolName: 'admin_field_rate_limit_exceeded',
+                project: null,
+                input: ['ip' => $request->getClientIp()],
+                output: null,
+                status: 'blocked',
+                errorMessage: 'Rate limit exceeded on FieldController',
+                createdBy: $identifier,
+                source: 'admin_api',
+            );
+            $this->auditService?->flush();
+
             return new JsonResponse([
                 'error' => $this->trans('admin_api.rate_limit_exceeded', [], 'Too many API requests. Please retry later.'),
                 'code' => 'RATE_LIMIT_EXCEEDED',
             ], 429, self::SECURITY_HEADERS);
+        }
+        return null;
+    }
+
+    private function validateContentType(Request $request): ?JsonResponse
+    {
+        $method = $request->getMethod();
+        if (in_array($method, ['POST', 'PATCH', 'PUT'], true) && strlen((string) $request->getContent()) > 0) {
+            $contentType = (string) $request->headers->get('Content-Type', '');
+            if (!str_contains(strtolower($contentType), 'application/json')) {
+                return $this->secureJson([
+                    'error' => $this->trans('admin_api.invalid_content_type', [], 'Content-Type must be application/json.'),
+                    'code'  => 'INVALID_CONTENT_TYPE',
+                ], 415);
+            }
+        }
+        return null;
+    }
+
+    private function validateCollectionSlug(string $slug): ?JsonResponse
+    {
+        if (mb_strlen($slug) > 255) {
+            return $this->secureJson([
+                'error' => $this->trans('admin_api.collection.slug_too_long'),
+                'code' => 'SLUG_TOO_LONG',
+            ], 422);
+        }
+        if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
+            return $this->secureJson([
+                'error' => $this->trans('admin_api.collection.invalid_slug_format'),
+                'code' => 'INVALID_SLUG_FORMAT',
+            ], 422);
+        }
+        return null;
+    }
+
+    private function validateFieldSlug(string $slug): ?JsonResponse
+    {
+        if (mb_strlen($slug) > 255) {
+            return $this->secureJson([
+                'error' => $this->trans('admin_api.field.slug_too_long'),
+                'code' => 'SLUG_TOO_LONG',
+            ], 422);
+        }
+        if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
+            return $this->secureJson([
+                'error' => $this->trans('admin_api.field.invalid_slug_format'),
+                'code' => 'INVALID_SLUG_FORMAT',
+            ], 422);
         }
         return null;
     }
@@ -79,6 +146,9 @@ class FieldController extends AbstractController
     /** @return array{0: ?\App\Entity\Collection, 1: ?JsonResponse} */
     private function resolveCollection(string $uuid, string $slug): array
     {
+        if ($err = $this->validateCollectionSlug($slug)) {
+            return [null, $err];
+        }
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $uuid)) {
             return [null, $this->secureJson(['error' => $this->trans('admin_api.field.project_not_found'), 'code' => 'PROJECT_NOT_FOUND'], 404)];
         }
@@ -129,6 +199,10 @@ class FieldController extends AbstractController
             return $rateLimitResponse;
         }
 
+        if ($contentTypeResponse = $this->validateContentType($request)) {
+            return $contentTypeResponse;
+        }
+
         $this->requireScope($request, 'schema:write');
         [$c, $err] = $this->resolveCollection($uuid, $slug);
         if ($err) {
@@ -160,6 +234,16 @@ class FieldController extends AbstractController
             ], 422);
         }
 
+        if (isset($body['slug'])) {
+            $fSlug = trim((string) $body['slug']);
+            if (mb_strlen($fSlug) > 255) {
+                return $this->secureJson(['error' => $this->trans('admin_api.field.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
+            }
+            if ($fSlug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $fSlug)) {
+                return $this->secureJson(['error' => $this->trans('admin_api.field.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
+            }
+        }
+
         $currentFieldsCount = count($this->fields->findByCollection($c));
         if ($currentFieldsCount >= self::MAX_FIELDS_COUNT) {
             return $this->secureJson([
@@ -178,6 +262,7 @@ class FieldController extends AbstractController
                 status: 'success',
                 source: 'admin_api',
             );
+            $this->auditService?->flush();
         } catch (SchemaException $e) {
             return $this->secureJson(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
@@ -189,6 +274,14 @@ class FieldController extends AbstractController
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if ($contentTypeResponse = $this->validateContentType($request)) {
+            return $contentTypeResponse;
+        }
+
+        if ($fieldSlugResponse = $this->validateFieldSlug($fieldSlug)) {
+            return $fieldSlugResponse;
         }
 
         $this->requireScope($request, 'schema:write');
@@ -228,6 +321,16 @@ class FieldController extends AbstractController
             }
         }
 
+        if (isset($body['slug'])) {
+            $fSlug = trim((string) $body['slug']);
+            if (mb_strlen($fSlug) > 255) {
+                return $this->secureJson(['error' => $this->trans('admin_api.field.slug_too_long'), 'code' => 'SLUG_TOO_LONG'], 422);
+            }
+            if ($fSlug !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $fSlug)) {
+                return $this->secureJson(['error' => $this->trans('admin_api.field.invalid_slug_format'), 'code' => 'INVALID_SLUG_FORMAT'], 422);
+            }
+        }
+
         try {
             $this->provisioner->updateField($f, $body);
             $this->auditService?->log(
@@ -238,6 +341,7 @@ class FieldController extends AbstractController
                 status: 'success',
                 source: 'admin_api',
             );
+            $this->auditService?->flush();
         } catch (SchemaException $e) {
             return $this->secureJson(['error' => $e->getMessage(), 'code' => 'SCHEMA_ERROR'], $e->statusCode());
         }
@@ -249,6 +353,10 @@ class FieldController extends AbstractController
     {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
+        }
+
+        if ($fieldSlugResponse = $this->validateFieldSlug($fieldSlug)) {
+            return $fieldSlugResponse;
         }
 
         $this->requireScope($request, 'schema:write');
@@ -271,6 +379,7 @@ class FieldController extends AbstractController
             status: 'success',
             source: 'admin_api',
         );
+        $this->auditService?->flush();
 
         return new JsonResponse(null, 204, self::SECURITY_HEADERS);
     }
