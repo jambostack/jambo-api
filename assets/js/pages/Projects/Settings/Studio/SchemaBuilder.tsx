@@ -17,7 +17,7 @@ import {
   MessageSquare, Send, Bot, User, Check,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   FolderOpen, Pencil, Sparkles,
-  Users, Lock, UserPlus, Shield, GripVertical, ChevronUp, ChevronDown, Settings2,
+  Users, UserPlus, Shield, GripVertical, ChevronUp, ChevronDown, Settings2,
   Database, Table2, Slash,
   Globe, Smile, Fingerprint, Tags, Star,
   Paperclip, Library,

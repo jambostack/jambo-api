@@ -10,6 +10,7 @@ use App\Repository\EndUserRepository;
 use App\Repository\ProjectAuthRefreshTokenRepository;
 use App\Repository\ProjectAuthSessionRepository;
 use App\Repository\ProjectRepository;
+use App\Service\AuditService;
 use App\Service\EndUserCustomFieldsSanitizer;
 use App\Service\EndUserJwtService;
 use App\Service\ProjectAuthLockoutService;
@@ -39,6 +40,13 @@ class EndUserAuthController extends AbstractController
 {
     use EndUserSerializerTrait;
 
+    private const MAX_PAYLOAD_BYTES = 65536; // 64 KB
+    private const SECURITY_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+        'Cache-Control'          => 'no-store',
+    ];
+
     public function __construct(
         private ProjectRepository $projectRepository,
         private EndUserRepository $endUserRepository,
@@ -65,8 +73,14 @@ class EndUserAuthController extends AbstractController
         private readonly ?TranslatorInterface $translator = null,
         private ?EndUserCustomFieldsSanitizer $customFieldsSanitizer = null,
         private ?ProjectAuthLockoutService $lockoutService = null,
+        private ?AuditService $auditService = null,
     ) {
         $this->customFieldsSanitizer ??= new EndUserCustomFieldsSanitizer($this->translator);
+    }
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -75,6 +89,28 @@ class EndUserAuthController extends AbstractController
             return $this->translator->trans($id, $parameters);
         }
         return $default ?? $id;
+    }
+
+    private function audit(
+        string $toolName,
+        ?Project $project = null,
+        ?array $data = null,
+        string $status = 'success',
+        ?string $createdBy = null,
+    ): void {
+        if ($this->auditService !== null) {
+            $this->auditService->log(
+                toolName: $toolName,
+                project: $project,
+                input: $data,
+                output: null,
+                status: $status,
+                errorMessage: null,
+                createdBy: $createdBy,
+                source: 'enduser_auth',
+            );
+            $this->auditService->flush();
+        }
     }
 
     #[OA\Post(
@@ -104,16 +140,22 @@ class EndUserAuthController extends AbstractController
     #[Route('/register', name: 'register', methods: ['POST'])]
     public function register(Request $request, string $projectId): JsonResponse
     {
+        $clientIp = $request->getClientIp() ?: '127.0.0.1';
+
         if ($this->registerLimiter !== null) {
-            $limiter = $this->registerLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            $limiter = $this->registerLimiter->create($clientIp);
             if (!$limiter->consume()->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_register', [], 'Too many registration requests. Please retry later.')], 429);
+                $this->audit('enduser_register_rate_limited', null, [
+                    'project_id' => $projectId,
+                    'ip'         => $clientIp,
+                ], 'failure');
+                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_register', [], 'Too many registration requests. Please retry later.')], 429);
             }
         }
 
         $project = $this->findProject($projectId);
         if (!$project) {
-            return $this->json(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
         }
 
         $data = $this->getJsonPayload($request);
@@ -127,7 +169,7 @@ class EndUserAuthController extends AbstractController
         if ($rawUsername !== null && $rawUsername !== '') {
             $cleaned = trim((string) $rawUsername);
             if (mb_strlen($cleaned) > 100 || preg_match('/[\x00-\x1F\x7F]/', $cleaned)) {
-                return $this->json(['error' => $this->trans('enduser.auth.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
+                return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
             }
             $username = $cleaned !== '' ? $cleaned : null;
         }
@@ -137,26 +179,31 @@ class EndUserAuthController extends AbstractController
             $sanitizer = $this->customFieldsSanitizer ?? new EndUserCustomFieldsSanitizer($this->translator);
             $cfRes = $sanitizer->sanitize($data['custom_fields']);
             if (!$cfRes['valid']) {
-                return $this->json(['error' => $cfRes['error']], 422);
+                return $this->secureJson(['error' => $cfRes['error']], 422);
             }
             $sanitizedCustomFields = $cfRes['sanitized'];
         }
 
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return $this->json(['error' => $this->trans('enduser.auth.email_required', [], 'Valid email is required')], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.email_required', [], 'Valid email is required')], 422);
         }
 
         $normalizedEmail = strtolower(trim((string) $email));
         $regTargetKey = 'reg_' . $projectId . '_' . $normalizedEmail;
         if ($this->lockoutService !== null && $this->lockoutService->isLockedOut($regTargetKey)) {
             $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($regTargetKey);
-            return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_register', [], 'Too many registration requests. Please retry later.')], 429, ['Retry-After' => (string) $retryAfter]);
+            $this->audit('enduser_register_rate_limited', $project, [
+                'project_id' => $projectId,
+                'email'      => $normalizedEmail,
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_register', [], 'Too many registration requests. Please retry later.')], 429, ['Retry-After' => (string) $retryAfter]);
         }
 
         $validator = $this->passwordValidator ?? new PasswordPolicyValidator($this->translator);
         $policyResult = $validator->validate((string) $password, $normalizedEmail, is_string($username) ? $username : null, $project);
         if (!$policyResult['valid']) {
-            return $this->json(['error' => $this->trans('enduser.auth.password_too_weak', [], 'Password must be at least 8 characters'), 'details' => $policyResult['errors']], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.password_too_weak', [], 'Password must be at least 8 characters'), 'details' => $policyResult['errors']], 422);
         }
 
         $existing = $this->endUserRepository->findOneByProjectAndEmail($project, $normalizedEmail);
@@ -164,7 +211,12 @@ class EndUserAuthController extends AbstractController
             // Timing-safe equalization: execute full hash computation to prevent email enumeration timing oracle
             $this->hasher->hashPassword($existing, 'DummyTimingDefensePassword!123');
             $this->lockoutService?->recordTieredFailedAttempt($regTargetKey, [3 => 300, 6 => 900]);
-            return $this->json(['error' => $this->trans('enduser.auth.email_exists', [], 'Email already registered')], 409);
+            $this->audit('enduser_register_conflict', $project, [
+                'project_id' => $projectId,
+                'email'      => $normalizedEmail,
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.email_exists', [], 'Email already registered')], 409);
         }
 
         $endUser = new EndUser($project, $normalizedEmail);
@@ -184,7 +236,13 @@ class EndUserAuthController extends AbstractController
         $accessToken = $this->jwtService->createAccessToken($endUser);
         $refreshToken = $this->issueRefreshToken($endUser, $session?->sessionId);
 
-        return $this->json([
+        $this->audit('enduser_registered', $project, [
+            'project_id' => $projectId,
+            'email'      => $normalizedEmail,
+            'ip'         => $clientIp,
+        ], 'success', (string) $endUser->id);
+
+        return $this->secureJson([
             'data' => [
                 'user' => $this->serializeEndUser($endUser),
                 'access_token'  => $accessToken,
@@ -219,16 +277,22 @@ class EndUserAuthController extends AbstractController
     #[Route('/login', name: 'login', methods: ['POST'])]
     public function login(Request $request, string $projectId): JsonResponse
     {
+        $clientIp = $request->getClientIp() ?: '127.0.0.1';
+
         if ($this->loginLimiter !== null) {
-            $limiter = $this->loginLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            $limiter = $this->loginLimiter->create($clientIp);
             if (!$limiter->consume()->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_login', [], 'Too many login attempts. Please retry later.')], 429);
+                $this->audit('enduser_login_rate_limited', null, [
+                    'project_id' => $projectId,
+                    'ip'         => $clientIp,
+                ], 'failure');
+                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_login', [], 'Too many login attempts. Please retry later.')], 429);
             }
         }
 
         $project = $this->findProject($projectId);
         if (!$project) {
-            return $this->json(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
         }
 
         $data = $this->getJsonPayload($request);
@@ -239,23 +303,35 @@ class EndUserAuthController extends AbstractController
         $password = $data['password'] ?? '';
 
         if (empty($email) || empty($password)) {
-            return $this->json(['error' => $this->trans('enduser.auth.email_password_required', [], 'Email and password are required')], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.email_password_required', [], 'Email and password are required')], 422);
         }
 
         $normalizedEmail = strtolower(trim((string) $email));
         $lockoutKey = 'enduser_login:' . $projectId . ':' . $normalizedEmail;
-        $ipLockoutKey = 'enduser_login_ip:' . $projectId . ':' . ($request->getClientIp() ?: '127.0.0.1');
+        $ipLockoutKey = 'enduser_login_ip:' . $projectId . ':' . $clientIp;
 
         if ($this->lockoutService !== null && $this->lockoutService->isLockedOut($ipLockoutKey)) {
             $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($ipLockoutKey);
-            return new JsonResponse([
+            $this->audit('enduser_login_locked_out', $project, [
+                'project_id' => $projectId,
+                'email'      => $normalizedEmail,
+                'ip'         => $clientIp,
+                'scope'      => 'ip',
+            ], 'failure');
+            return $this->secureJson([
                 'error' => $this->trans('enduser.auth.ip_locked_out', ['%seconds%' => (string) $retryAfter], "Too many failed attempts from this IP address. Please retry in {$retryAfter} seconds."),
             ], 429, ['Retry-After' => (string) $retryAfter]);
         }
 
         if ($this->lockoutService !== null && $this->lockoutService->isLockedOut($lockoutKey)) {
             $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($lockoutKey);
-            return new JsonResponse([
+            $this->audit('enduser_login_locked_out', $project, [
+                'project_id' => $projectId,
+                'email'      => $normalizedEmail,
+                'ip'         => $clientIp,
+                'scope'      => 'account',
+            ], 'failure');
+            return $this->secureJson([
                 'error' => $this->trans('enduser.auth.account_locked_out', ['%seconds%' => (string) $retryAfter], "Too many failed login attempts. Account temporarily locked for security. Please retry in {$retryAfter} seconds."),
             ], 429, ['Retry-After' => (string) $retryAfter]);
         }
@@ -268,17 +344,32 @@ class EndUserAuthController extends AbstractController
             $this->hasher->isPasswordValid($dummyUser, (string) $password);
             $this->lockoutService?->recordTieredFailedAttempt($lockoutKey);
             $this->lockoutService?->recordTieredFailedAttempt($ipLockoutKey, [10 => 300, 20 => 900, 30 => 3600]);
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_credentials', [], 'Invalid credentials')], 401);
+            $this->audit('enduser_login_failed', $project, [
+                'project_id' => $projectId,
+                'email'      => $normalizedEmail,
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_credentials', [], 'Invalid credentials')], 401);
         }
 
         if (!$this->hasher->isPasswordValid($endUser, (string) $password)) {
             $this->lockoutService?->recordTieredFailedAttempt($lockoutKey);
             $this->lockoutService?->recordTieredFailedAttempt($ipLockoutKey, [10 => 300, 20 => 900, 30 => 3600]);
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_credentials', [], 'Invalid credentials')], 401);
+            $this->audit('enduser_login_failed', $project, [
+                'project_id' => $projectId,
+                'email'      => $normalizedEmail,
+                'ip'         => $clientIp,
+            ], 'failure', (string) $endUser->id);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_credentials', [], 'Invalid credentials')], 401);
         }
 
         if (!$endUser->isActive()) {
-            return $this->json(['error' => $this->trans('enduser.auth.account_inactive', [], 'Account is inactive or banned')], 403);
+            $this->audit('enduser_login_inactive', $project, [
+                'project_id' => $projectId,
+                'email'      => $normalizedEmail,
+                'ip'         => $clientIp,
+            ], 'failure', (string) $endUser->id);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.account_inactive', [], 'Account is inactive or banned')], 403);
         }
 
         $this->lockoutService?->clearAttempts($lockoutKey);
@@ -297,7 +388,13 @@ class EndUserAuthController extends AbstractController
                 $emailCodeHash = hash('sha256', $code);
             }
             $twoFactorToken = $this->jwtService->createTwoFactorToken($endUser, $emailCodeHash);
-            return $this->json([
+            $this->audit('enduser_2fa_challenge_issued', $project, [
+                'project_id' => $projectId,
+                'email'      => $normalizedEmail,
+                'method'     => $endUser->twoFactorMethod,
+                'ip'         => $clientIp,
+            ], 'success', (string) $endUser->id);
+            return $this->secureJson([
                 'requires_2fa' => true,
                 'two_factor_token' => $twoFactorToken,
                 'two_factor_method' => $endUser->twoFactorMethod,
@@ -308,7 +405,13 @@ class EndUserAuthController extends AbstractController
         $accessToken = $this->jwtService->createAccessToken($endUser);
         $refreshToken = $this->issueRefreshToken($endUser, $session?->sessionId);
 
-        return $this->json([
+        $this->audit('enduser_login_success', $project, [
+            'project_id' => $projectId,
+            'email'      => $normalizedEmail,
+            'ip'         => $clientIp,
+        ], 'success', (string) $endUser->id);
+
+        return $this->secureJson([
             'data' => [
                 'user' => $this->serializeEndUser($endUser),
                 'access_token'  => $accessToken,
@@ -343,16 +446,22 @@ class EndUserAuthController extends AbstractController
     #[Route('/verify-2fa', name: 'verify_2fa', methods: ['POST'])]
     public function verifyTwoFactor(Request $request, string $projectId): JsonResponse
     {
+        $clientIp = $request->getClientIp() ?: '127.0.0.1';
+
         if ($this->twoFactorLimiter !== null) {
-            $limiter = $this->twoFactorLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            $limiter = $this->twoFactorLimiter->create($clientIp);
             if (!$limiter->consume()->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_2fa', [], 'Too many 2FA verification attempts. Please retry later.')], 429);
+                $this->audit('enduser_2fa_rate_limited', $project, [
+                    'project_id' => $projectId,
+                    'ip'         => $clientIp,
+                ], 'failure');
+                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_2fa', [], 'Too many 2FA verification attempts. Please retry later.')], 429);
             }
         }
 
         $project = $this->findProject($projectId);
         if (!$project) {
-            return $this->json(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
         }
 
         $data = $this->getJsonPayload($request);
@@ -363,13 +472,17 @@ class EndUserAuthController extends AbstractController
         $code = (string) ($data['code'] ?? '');
 
         if (empty($twoFactorToken) || empty($code)) {
-            return $this->json(['error' => $this->trans('enduser.auth.token_code_required', [], 'Token and code are required')], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.token_code_required', [], 'Token and code are required')], 422);
         }
 
         // Validate the 2FA JWT
         $claims = $this->jwtService->validateTwoFactorToken($twoFactorToken);
         if ($claims === null) {
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_2fa_token', [], 'Invalid or expired 2FA token. Please login again.')], 401);
+            $this->audit('enduser_2fa_invalid_token', $project, [
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_2fa_token', [], 'Invalid or expired 2FA token. Please login again.')], 401);
         }
 
         try {
@@ -378,19 +491,27 @@ class EndUserAuthController extends AbstractController
             $endUser = null;
         }
         if (!$endUser || !$endUser->isActive()) {
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_2fa_token', [], 'Invalid or expired 2FA token. Please login again.')], 401);
+            $this->audit('enduser_2fa_failed', $project, [
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_2fa_token', [], 'Invalid or expired 2FA token. Please login again.')], 401);
         }
 
         $tfaLockoutKey = 'enduser_2fa:' . $endUser->uuid?->toString();
         $tfaBackupLockoutKey = 'enduser_2fa_backup:' . $endUser->uuid?->toString();
-        $tfaIpLockoutKey = 'enduser_2fa_ip:' . $projectId . ':' . ($request->getClientIp() ?: '127.0.0.1');
+        $tfaIpLockoutKey = 'enduser_2fa_ip:' . $projectId . ':' . $clientIp;
 
         if ($this->lockoutService !== null && ($this->lockoutService->isLockedOut($tfaLockoutKey) || $this->lockoutService->isLockedOut($tfaIpLockoutKey))) {
             $retryAfter = max(
                 $this->lockoutService->getRemainingLockoutSeconds($tfaLockoutKey),
                 $this->lockoutService->getRemainingLockoutSeconds($tfaIpLockoutKey)
             );
-            return new JsonResponse([
+            $this->audit('enduser_2fa_locked_out', $project, [
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'failure', (string) $endUser->id);
+            return $this->secureJson([
                 'error' => $this->trans('enduser.auth.rate_limit_2fa_lockout', ['%seconds%' => (string) $retryAfter], "Too many invalid two-factor verification attempts. Challenge locked. Please retry in {$retryAfter} seconds."),
             ], 429, ['Retry-After' => (string) $retryAfter]);
         }
@@ -398,7 +519,7 @@ class EndUserAuthController extends AbstractController
         $isBackup = (!empty($data['use_backup'])) || $this->twoFactorService->isBackupCodeFormat($code);
         if ($isBackup && $this->lockoutService !== null && $this->lockoutService->isLockedOut($tfaBackupLockoutKey)) {
             $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($tfaBackupLockoutKey);
-            return new JsonResponse([
+            return $this->secureJson([
                 'error' => $this->trans('enduser.auth.backup_codes_locked', ['%seconds%' => (string) $retryAfter], "Too many invalid backup code attempts. Recovery codes are temporarily locked. Please retry in {$retryAfter} seconds."),
             ], 429, ['Retry-After' => (string) $retryAfter]);
         }
@@ -409,7 +530,11 @@ class EndUserAuthController extends AbstractController
             if ($isBackup) {
                 $this->lockoutService?->recordTieredFailedAttempt($tfaBackupLockoutKey, [3 => 300, 5 => 900, 8 => 3600]);
             }
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_code', [], 'Invalid code')], 422);
+            $this->audit('enduser_2fa_failed', $project, [
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'failure', (string) $endUser->id);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_code', [], 'Invalid code')], 422);
         }
 
         // Verify the code
@@ -440,7 +565,11 @@ class EndUserAuthController extends AbstractController
             if ($isBackup) {
                 $this->lockoutService?->recordTieredFailedAttempt($tfaBackupLockoutKey, [3 => 300, 5 => 900, 8 => 3600]);
             }
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_code', [], 'Invalid code')], 422);
+            $this->audit('enduser_2fa_failed', $project, [
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'failure', (string) $endUser->id);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_code', [], 'Invalid code')], 422);
         }
 
         $this->lockoutService?->clearAttempts($tfaLockoutKey);
@@ -451,7 +580,14 @@ class EndUserAuthController extends AbstractController
         $accessToken = $this->jwtService->createAccessToken($endUser);
         $refreshToken = $this->issueRefreshToken($endUser, $session?->sessionId);
 
-        return $this->json([
+        $this->audit('enduser_2fa_success', $project, [
+            'project_id' => $projectId,
+            'email'      => $endUser->email,
+            'is_backup'  => $isBackup,
+            'ip'         => $clientIp,
+        ], 'success', (string) $endUser->id);
+
+        return $this->secureJson([
             'data' => [
                 'user' => $this->serializeEndUser($endUser),
                 'access_token'  => $accessToken,
@@ -478,9 +614,11 @@ class EndUserAuthController extends AbstractController
     #[Route('/refresh', name: 'refresh', methods: ['POST'])]
     public function refresh(Request $request, string $projectId): JsonResponse
     {
+        $clientIp = $request->getClientIp() ?: '127.0.0.1';
+
         $project = $this->findProject($projectId);
         if (!$project) {
-            return $this->json(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
         }
 
         $data = $this->getJsonPayload($request);
@@ -490,17 +628,27 @@ class EndUserAuthController extends AbstractController
         $refreshJwt = $data['refresh_token'] ?? '';
 
         if (empty($refreshJwt)) {
-            return $this->json(['error' => $this->trans('enduser.auth.refresh_token_required', [], 'Refresh token is required')], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.refresh_token_required', [], 'Refresh token is required')], 422);
         }
 
         $claims = $this->jwtService->validateToken($refreshJwt);
         if ($claims === null || !$this->jwtService->isRefreshToken($claims)) {
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_refresh_token', [], 'Invalid or expired refresh token')], 401);
+            $this->audit('enduser_refresh_failed', $project, [
+                'project_id' => $projectId,
+                'reason'     => 'invalid_or_expired_jwt',
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_refresh_token', [], 'Invalid or expired refresh token')], 401);
         }
 
         $projectUuidStr = $project->uuid?->toString();
         if (isset($claims['pid']) && $claims['pid'] !== $projectUuidStr && (int) $claims['pid'] !== $project->id) {
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_refresh_token', [], 'Invalid or expired refresh token')], 401);
+            $this->audit('enduser_refresh_failed', $project, [
+                'project_id' => $projectId,
+                'reason'     => 'project_mismatch',
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_refresh_token', [], 'Invalid or expired refresh token')], 401);
         }
 
         try {
@@ -509,11 +657,21 @@ class EndUserAuthController extends AbstractController
             $endUser = null;
         }
         if (!$endUser || !$endUser->isActive()) {
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_refresh_token', [], 'Invalid or expired refresh token')], 401);
+            $this->audit('enduser_refresh_failed', $project, [
+                'project_id' => $projectId,
+                'reason'     => 'inactive_or_not_found',
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_refresh_token', [], 'Invalid or expired refresh token')], 401);
         }
 
         if ($endUser->tokenVersion !== $claims['tkn']) {
-            return $this->json(['error' => $this->trans('enduser.auth.token_revoked', [], 'Token has been revoked')], 401);
+            $this->audit('enduser_refresh_failed', $project, [
+                'project_id' => $projectId,
+                'reason'     => 'token_version_mismatch',
+                'ip'         => $clientIp,
+            ], 'failure', (string) $endUser->id);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.token_revoked', [], 'Token has been revoked')], 401);
         }
 
         $tokenHash = ProjectAuthRefreshToken::hash($refreshJwt);
@@ -530,13 +688,24 @@ class EndUserAuthController extends AbstractController
             $endUser->tokenVersion++;
             $this->em->flush();
 
-            return $this->json([
+            $this->audit('enduser_refresh_reuse_detected', $project, [
+                'project_id' => $projectId,
+                'family_id'  => $storedToken->familyId,
+                'ip'         => $clientIp,
+            ], 'failure', (string) $endUser->id);
+
+            return $this->secureJson([
                 'error' => $this->trans('enduser.auth.refresh_reuse_detected', [], 'Refresh token reuse detected. All tokens and sessions have been revoked.'),
             ], 401);
         }
 
         if ($storedToken !== null && $storedToken->isExpired()) {
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_refresh_token', [], 'Invalid or expired refresh token')], 401);
+            $this->audit('enduser_refresh_failed', $project, [
+                'project_id' => $projectId,
+                'reason'     => 'stored_token_expired',
+                'ip'         => $clientIp,
+            ], 'failure', (string) $endUser->id);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_refresh_token', [], 'Invalid or expired refresh token')], 401);
         }
 
         $familyId = $storedToken?->familyId ?? ($claims['fml'] ?? bin2hex(random_bytes(16)));
@@ -558,7 +727,13 @@ class EndUserAuthController extends AbstractController
         $refreshToken = $this->issueRefreshToken($endUser, $familyId, $tokenHash);
         $this->sessionRepo?->createSession($endUser, $request->getClientIp(), $request->headers->get('User-Agent'));
 
-        return $this->json([
+        $this->audit('enduser_refresh_success', $project, [
+            'project_id' => $projectId,
+            'family_id'  => $familyId,
+            'ip'         => $clientIp,
+        ], 'success', (string) $endUser->id);
+
+        return $this->secureJson([
             'data' => [
                 'access_token'  => $accessToken,
                 'refresh_token' => $refreshToken,
@@ -583,10 +758,10 @@ class EndUserAuthController extends AbstractController
     {
         $endUser = $request->attributes->get('_end_user');
         if (!$endUser instanceof EndUser) {
-            return $this->json(['error' => $this->trans('enduser.auth.unauthorized', [], 'Unauthorized')], 401);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.unauthorized', [], 'Unauthorized')], 401);
         }
 
-        return $this->json(['data' => $this->serializeEndUser($endUser)]);
+        return $this->secureJson(['data' => $this->serializeEndUser($endUser)]);
     }
 
     #[OA\Patch(
@@ -611,7 +786,7 @@ class EndUserAuthController extends AbstractController
     {
         $endUser = $request->attributes->get('_end_user');
         if (!$endUser instanceof EndUser) {
-            return $this->json(['error' => $this->trans('enduser.auth.unauthorized', [], 'Unauthorized')], 401);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.unauthorized', [], 'Unauthorized')], 401);
         }
 
         $data = $this->getJsonPayload($request);
@@ -623,7 +798,7 @@ class EndUserAuthController extends AbstractController
             $cleaned = trim((string) $data['username']);
             if ($cleaned !== '') {
                 if (mb_strlen($cleaned) > 100 || preg_match('/[\x00-\x1F\x7F]/', $cleaned)) {
-                    return $this->json(['error' => $this->trans('enduser.auth.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
+                    return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
                 }
             }
             $endUser->username = $cleaned !== '' ? $cleaned : null;
@@ -631,7 +806,7 @@ class EndUserAuthController extends AbstractController
             $cleaned = trim((string) $data['name']);
             if ($cleaned !== '') {
                 if (mb_strlen($cleaned) > 100 || preg_match('/[\x00-\x1F\x7F]/', $cleaned)) {
-                    return $this->json(['error' => $this->trans('enduser.auth.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
+                    return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_username', [], 'Invalid username format or too long (max 100 characters).')], 422);
                 }
             }
             $endUser->username = $cleaned !== '' ? $cleaned : null;
@@ -641,7 +816,7 @@ class EndUserAuthController extends AbstractController
             $sanitizer = $this->customFieldsSanitizer ?? new EndUserCustomFieldsSanitizer($this->translator);
             $cfRes = $sanitizer->sanitize($data['custom_fields']);
             if (!$cfRes['valid']) {
-                return $this->json(['error' => $cfRes['error']], 422);
+                return $this->secureJson(['error' => $cfRes['error']], 422);
             }
             $endUser->customFields = $cfRes['sanitized'];
         }
@@ -652,7 +827,7 @@ class EndUserAuthController extends AbstractController
             $pwChangeLockoutKey = 'pw_change:' . $endUser->uuid?->toString();
             if ($this->lockoutService !== null && $this->lockoutService->isLockedOut($pwChangeLockoutKey)) {
                 $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($pwChangeLockoutKey);
-                return new JsonResponse([
+                return $this->secureJson([
                     'error' => $this->trans('enduser.auth.password_change_locked_out', ['%seconds%' => (string) $retryAfter], "Too many failed current password attempts. Password update locked for security. Please retry in {$retryAfter} seconds."),
                 ], 429, ['Retry-After' => (string) $retryAfter]);
             }
@@ -661,14 +836,14 @@ class EndUserAuthController extends AbstractController
             $rot = $validator->validateRotation($currentPassword, $newPassword, $endUser, $this->hasher);
             if (!$rot['valid']) {
                 $this->lockoutService?->recordTieredFailedAttempt($pwChangeLockoutKey, [5 => 300, 10 => 900, 15 => 3600]);
-                return $this->json(['error' => $rot['error']], 422);
+                return $this->secureJson(['error' => $rot['error']], 422);
             }
 
             $this->lockoutService?->clearAttempts($pwChangeLockoutKey);
 
             $policyResult = $validator->validate($newPassword, $endUser->email, $endUser->username, $endUser->project);
             if (!$policyResult['valid']) {
-                return $this->json(['error' => $this->trans('enduser.auth.password_too_weak', [], 'Password must be at least 8 characters'), 'details' => $policyResult['errors']], 422);
+                return $this->secureJson(['error' => $this->trans('enduser.auth.password_too_weak', [], 'Password must be at least 8 characters'), 'details' => $policyResult['errors']], 422);
             }
 
             $endUser->password = $this->hasher->hashPassword($endUser, $newPassword);
@@ -680,7 +855,12 @@ class EndUserAuthController extends AbstractController
 
         $this->em->flush();
 
-        return $this->json(['data' => $this->serializeEndUser($endUser)]);
+        $this->audit('enduser_profile_updated', $endUser->project, [
+            'project_id' => (string) $endUser->project?->uuid,
+            'ip'         => $request->getClientIp() ?: '127.0.0.1',
+        ], 'success', (string) $endUser->id);
+
+        return $this->secureJson(['data' => $this->serializeEndUser($endUser)]);
     }
 
     #[OA\Post(
@@ -701,9 +881,15 @@ class EndUserAuthController extends AbstractController
             $this->sessionRepo?->revokeAllForEndUser($endUser);
             $this->refreshTokenRepo?->revokeAllForEndUser($endUser);
             $this->em->flush();
+
+            $this->audit('enduser_logout', $endUser->project, [
+                'project_id' => (string) $endUser->project?->uuid,
+                'email'      => $endUser->email,
+                'ip'         => $request->getClientIp() ?: '127.0.0.1',
+            ], 'success', (string) $endUser->id);
         }
 
-        return $this->json(null, 204);
+        return $this->secureJson(null, 204);
     }
 
     #[OA\Get(
@@ -721,7 +907,7 @@ class EndUserAuthController extends AbstractController
     {
         $endUser = $request->attributes->get('_end_user');
         if (!$endUser instanceof EndUser) {
-            return $this->json(['error' => $this->trans('enduser.auth.unauthorized', [], 'Unauthorized')], 401);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.unauthorized', [], 'Unauthorized')], 401);
         }
 
         $sessions = $this->sessionRepo?->findByEndUser($endUser) ?? [];
@@ -733,7 +919,7 @@ class EndUserAuthController extends AbstractController
             'created_at'     => $s->createdAt->format(\DateTimeInterface::ATOM),
         ], $sessions);
 
-        return $this->json(['data' => $data]);
+        return $this->secureJson(['data' => $data]);
     }
 
     #[OA\Delete(
@@ -755,18 +941,24 @@ class EndUserAuthController extends AbstractController
     {
         $endUser = $request->attributes->get('_end_user');
         if (!$endUser instanceof EndUser) {
-            return $this->json(['error' => $this->trans('enduser.auth.unauthorized', [], 'Unauthorized')], 401);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.unauthorized', [], 'Unauthorized')], 401);
         }
 
         $session = $this->sessionRepo?->findOneBy(['sessionId' => $sessionId, 'endUser' => $endUser]);
         if (!$session) {
-            return $this->json(['error' => $this->trans('enduser.auth.session_not_found', [], 'Session not found')], 404);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.session_not_found', [], 'Session not found')], 404);
         }
 
         $this->refreshTokenRepo?->revokeFamily($sessionId);
         $this->sessionRepo->revokeSession($sessionId);
 
-        return $this->json(null, 204);
+        $this->audit('enduser_session_revoked', $endUser->project, [
+            'session_id' => $sessionId,
+            'project_id' => (string) $endUser->project?->uuid,
+            'ip'         => $request->getClientIp() ?: '127.0.0.1',
+        ], 'success', (string) $endUser->id);
+
+        return $this->secureJson(null, 204);
     }
 
     #[OA\Delete(
@@ -786,7 +978,7 @@ class EndUserAuthController extends AbstractController
     {
         $endUser = $request->attributes->get('_end_user');
         if (!$endUser instanceof EndUser) {
-            return $this->json(['error' => $this->trans('enduser.auth.unauthorized', [], 'Unauthorized')], 401);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.unauthorized', [], 'Unauthorized')], 401);
         }
 
         $this->sessionRepo?->revokeAllForEndUser($endUser);
@@ -794,7 +986,12 @@ class EndUserAuthController extends AbstractController
         $endUser->tokenVersion++;
         $this->em->flush();
 
-        return $this->json(['message' => $this->trans('enduser.auth.sessions_revoked', [], 'All sessions have been revoked successfully.')]);
+        $this->audit('enduser_all_sessions_revoked', $endUser->project, [
+            'project_id' => (string) $endUser->project?->uuid,
+            'ip'         => $request->getClientIp() ?: '127.0.0.1',
+        ], 'success', (string) $endUser->id);
+
+        return $this->secureJson(['message' => $this->trans('enduser.auth.sessions_revoked', [], 'All sessions have been revoked successfully.')]);
     }
 
     #[OA\Post(
@@ -814,16 +1011,22 @@ class EndUserAuthController extends AbstractController
     #[Route('/forgot-password', name: 'forgot_password', methods: ['POST'])]
     public function forgotPassword(Request $request, string $projectId): JsonResponse
     {
+        $clientIp = $request->getClientIp() ?: '127.0.0.1';
+
         if ($this->passwordResetLimiter !== null) {
-            $limiter = $this->passwordResetLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            $limiter = $this->passwordResetLimiter->create($clientIp);
             if (!$limiter->consume()->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_forgot', [], 'Too many password reset requests. Please retry later.')], 429);
+                $this->audit('enduser_password_reset_rate_limited', null, [
+                    'project_id' => $projectId,
+                    'ip'         => $clientIp,
+                ], 'failure');
+                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_forgot', [], 'Too many password reset requests. Please retry later.')], 429);
             }
         }
 
         $project = $this->findProject($projectId);
         if (!$project) {
-            return $this->json(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
         }
 
         $data = $this->getJsonPayload($request);
@@ -833,19 +1036,22 @@ class EndUserAuthController extends AbstractController
         $email = $data['email'] ?? '';
 
         if (empty($email)) {
-            return $this->json(['error' => $this->trans('enduser.auth.email_field_required', [], 'Email is required')], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.email_field_required', [], 'Email is required')], 422);
         }
 
         $normalizedEmail = strtolower(trim((string) $email));
         if (strlen($normalizedEmail) > 180 || !filter_var($normalizedEmail, FILTER_VALIDATE_EMAIL)) {
-            return new JsonResponse(['error' => $this->trans('enduser.auth.invalid_email_format', [], 'Invalid email address format.')], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_email_format', [], 'Invalid email address format.')], 422);
         }
 
-        $clientIp = $request->getClientIp() ?: '127.0.0.1';
         $ipSprayKey = 'pw_reset_spray_ip:' . $projectId . ':' . $clientIp;
         if ($this->lockoutService !== null && $this->lockoutService->isLockedOut($ipSprayKey)) {
             $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($ipSprayKey);
-            return new JsonResponse([
+            $this->audit('enduser_password_reset_locked_out', $project, [
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson([
                 'error' => $this->trans('enduser.auth.reset_ip_locked_out', ['%seconds%' => (string) $retryAfter], "Too many password reset requests from this IP address. Please retry in {$retryAfter} seconds."),
             ], 429, ['Retry-After' => (string) $retryAfter]);
         }
@@ -855,7 +1061,7 @@ class EndUserAuthController extends AbstractController
 
         if ($this->lockoutService !== null && $this->lockoutService->hasCooldown($cdKey)) {
             // Cooldown active: return 200 without duplicate email dispatch to prevent mail-bombing
-            return $this->json(['message' => $this->trans('enduser.auth.reset_link_sent', [], 'If the email exists, a reset link has been sent.')]);
+            return $this->secureJson(['message' => $this->trans('enduser.auth.reset_link_sent', [], 'If the email exists, a reset link has been sent.')]);
         }
 
         // Passive cleanup of expired reset tokens for this project
@@ -882,14 +1088,26 @@ class EndUserAuthController extends AbstractController
             $this->em->flush();
 
             $this->sendPasswordResetEmail($project, $normalizedEmail, $token->token);
+
+            $this->audit('enduser_password_reset_requested', $project, [
+                'project_id' => $projectId,
+                'email'      => $normalizedEmail,
+                'ip'         => $clientIp,
+            ], 'success', (string) $endUser->id);
         } else {
             // Timing equalization: simulate token creation, DB latency & hash computation
             $this->lockoutService?->recordProgressiveCooldown($cdKey);
             hash('sha256', bin2hex(random_bytes(32)));
             usleep(random_int(3000, 8000));
+
+            $this->audit('enduser_password_reset_requested', $project, [
+                'project_id' => $projectId,
+                'email'      => $normalizedEmail,
+                'ip'         => $clientIp,
+            ], 'success');
         }
 
-        return $this->json(['message' => $this->trans('enduser.auth.reset_link_sent', [], 'If the email exists, a reset link has been sent.')]);
+        return $this->secureJson(['message' => $this->trans('enduser.auth.reset_link_sent', [], 'If the email exists, a reset link has been sent.')]);
     }
 
     private function sendPasswordResetEmail(Project $project, string $email, string $token): void
@@ -943,22 +1161,32 @@ class EndUserAuthController extends AbstractController
     #[Route('/reset-password', name: 'reset_password', methods: ['POST'])]
     public function resetPassword(Request $request, string $projectId): JsonResponse
     {
+        $clientIp = $request->getClientIp() ?: '127.0.0.1';
+
         if ($this->passwordResetLimiter !== null) {
-            $limiter = $this->passwordResetLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            $limiter = $this->passwordResetLimiter->create($clientIp);
             if (!$limiter->consume()->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_reset', [], 'Too many password reset attempts. Please retry later.')], 429);
+                $this->audit('enduser_password_reset_rate_limited', null, [
+                    'project_id' => $projectId,
+                    'ip'         => $clientIp,
+                ], 'failure');
+                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_reset', [], 'Too many password reset attempts. Please retry later.')], 429);
             }
         }
 
         $project = $this->findProject($projectId);
         if (!$project) {
-            return $this->json(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
         }
 
-        $ipTokenKey = 'pw_reset_token_ip:' . $projectId . ':' . ($request->getClientIp() ?: '127.0.0.1');
+        $ipTokenKey = 'pw_reset_token_ip:' . $projectId . ':' . $clientIp;
         if ($this->lockoutService !== null && $this->lockoutService->isLockedOut($ipTokenKey)) {
             $retryAfter = $this->lockoutService->getRemainingLockoutSeconds($ipTokenKey);
-            return new JsonResponse([
+            $this->audit('enduser_password_reset_locked_out', $project, [
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson([
                 'error' => $this->trans('enduser.auth.token_rate_limit_lockout', ['%seconds%' => (string) $retryAfter], "Too many invalid token attempts. Token validation temporarily locked. Please retry in {$retryAfter} seconds."),
             ], 429, ['Retry-After' => (string) $retryAfter]);
         }
@@ -972,16 +1200,20 @@ class EndUserAuthController extends AbstractController
         $confirmation = $data['password_confirmation'] ?? null;
 
         if (empty($tokenStr) || empty($newPassword)) {
-            return $this->json(['error' => $this->trans('enduser.auth.token_password_required', [], 'Token and password are required')], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.token_password_required', [], 'Token and password are required')], 422);
         }
 
         if ($confirmation !== null && (string) $confirmation !== $newPassword) {
-            return new JsonResponse(['error' => $this->trans('enduser.auth.password_confirmation_mismatch', [], 'Password and password confirmation do not match.')], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.password_confirmation_mismatch', [], 'Password and password confirmation do not match.')], 422);
         }
 
         if (strlen($tokenStr) !== 64 || !ctype_xdigit($tokenStr)) {
             $this->lockoutService?->recordTieredFailedAttempt($ipTokenKey, [5 => 300, 10 => 900, 15 => 3600]);
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_reset_token', [], 'Invalid or expired token')], 400);
+            $this->audit('enduser_password_reset_invalid_token', $project, [
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_reset_token', [], 'Invalid or expired token')], 400);
         }
 
         /** @var PasswordResetTokenRepository $tokenRepo */
@@ -990,24 +1222,32 @@ class EndUserAuthController extends AbstractController
 
         if (!$token || !hash_equals($token->token, $tokenStr) || $token->isExpired()) {
             $this->lockoutService?->recordTieredFailedAttempt($ipTokenKey, [5 => 300, 10 => 900, 15 => 3600]);
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_reset_token', [], 'Invalid or expired token')], 400);
+            $this->audit('enduser_password_reset_invalid_token', $project, [
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_reset_token', [], 'Invalid or expired token')], 400);
         }
 
         $endUser = $this->endUserRepository->findOneByProjectAndEmail($project, $token->email);
         if (!$endUser) {
             // Anti-enumeration defense: uniform 400 response
             $this->lockoutService?->recordTieredFailedAttempt($ipTokenKey, [5 => 300, 10 => 900, 15 => 3600]);
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_reset_token', [], 'Invalid or expired token')], 400);
+            $this->audit('enduser_password_reset_invalid_token', $project, [
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.invalid_reset_token', [], 'Invalid or expired token')], 400);
         }
 
         $validator = $this->passwordValidator ?? new PasswordPolicyValidator($this->translator);
         $policyResult = $validator->validate($newPassword, $endUser->email, $endUser->username, $project);
         if (!$policyResult['valid']) {
-            return $this->json(['error' => $this->trans('enduser.auth.password_too_weak', [], 'Password must be at least 8 characters'), 'details' => $policyResult['errors']], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.password_too_weak', [], 'Password must be at least 8 characters'), 'details' => $policyResult['errors']], 422);
         }
 
         if ($endUser->password !== null && $this->hasher->isPasswordValid($endUser, $newPassword)) {
-            return $this->json(['error' => $this->trans('enduser.auth.password_same_as_current', [], 'New password must be different from previous password.')], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.password_same_as_current', [], 'New password must be different from previous password.')], 422);
         }
 
         $endUser->password = $this->hasher->hashPassword($endUser, $newPassword);
@@ -1025,7 +1265,13 @@ class EndUserAuthController extends AbstractController
         $this->lockoutService?->clearAttempts('enduser_login:' . $projectId . ':' . strtolower(trim($endUser->email)));
         $this->lockoutService?->clearAttempts($ipTokenKey);
 
-        return $this->json(['message' => $this->trans('enduser.auth.password_reset_success', [], 'Password has been reset successfully.')]);
+        $this->audit('enduser_password_reset_success', $project, [
+            'project_id' => $projectId,
+            'email'      => $endUser->email,
+            'ip'         => $clientIp,
+        ], 'success', (string) $endUser->id);
+
+        return $this->secureJson(['message' => $this->trans('enduser.auth.password_reset_success', [], 'Password has been reset successfully.')]);
     }
 
     // ─── Social Login ──────────────────────────────────────────────────────
@@ -1049,34 +1295,36 @@ class EndUserAuthController extends AbstractController
     #[Route('/social/{provider}', name: 'social_url', methods: ['GET'])]
     public function getSocialUrl(Request $request, string $projectId, string $provider): JsonResponse
     {
+        $clientIp = $request->getClientIp() ?: '127.0.0.1';
+
         if ($this->socialAuthLimiter !== null) {
-            $limiter = $this->socialAuthLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            $limiter = $this->socialAuthLimiter->create($clientIp);
             if (!$limiter->consume()->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_social', [], 'Too many social login requests. Please retry later.')], 429);
+                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_social', [], 'Too many social login requests. Please retry later.')], 429);
             }
         }
 
         $project = $this->findProject($projectId);
         if (!$project) {
-            return $this->json(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
         }
 
         if (!in_array($provider, ['google', 'microsoft', 'github', 'gitlab'], true)) {
-            return $this->json(['error' => $this->trans('enduser.auth.unknown_provider', [], 'Unknown provider')], 400);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.unknown_provider', [], 'Unknown provider')], 400);
         }
 
         $security = ($project->settings ?? [])['security'] ?? [];
         if (!($security['endUserSocialLogin'] ?? false)) {
-            return $this->json(['error' => $this->trans('enduser.auth.social_not_enabled', [], 'Social login is not enabled for this project')], 400);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.social_not_enabled', [], 'Social login is not enabled for this project')], 400);
         }
 
         if ($this->socialLogin === null) {
-            return $this->json(['error' => $this->trans('enduser.auth.social_not_available', [], 'Social login is not available')], 500);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.social_not_available', [], 'Social login is not available')], 500);
         }
 
         $credentials = $this->socialLogin->getProjectCredentials($project, $provider);
         if (!$credentials) {
-            return $this->json(['error' => $this->trans('enduser.auth.social_provider_not_configured', ['%provider%' => $provider], "Provider '{$provider}' is not configured for this project")], 400);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.social_provider_not_configured', ['%provider%' => $provider], "Provider '{$provider}' is not configured for this project")], 400);
         }
 
         $redirectUri = $request->getSchemeAndHttpHost() . "/api/{$projectId}/auth/social/{$provider}";
@@ -1091,9 +1339,9 @@ class EndUserAuthController extends AbstractController
                 is_string($codeChallenge) && $codeChallenge !== '' ? $codeChallenge : null,
                 is_string($codeChallengeMethod) ? $codeChallengeMethod : 'S256',
             );
-            return $this->json($data);
+            return $this->secureJson($data);
         } catch (\Throwable $e) {
-            return $this->json(['error' => $e->getMessage()], 400);
+            return $this->secureJson(['error' => $e->getMessage()], 400);
         }
     }
 
@@ -1122,37 +1370,35 @@ class EndUserAuthController extends AbstractController
     #[Route('/social/{provider}', name: 'social_login', methods: ['POST'])]
     public function socialLogin(Request $request, string $projectId, string $provider): JsonResponse
     {
+        $clientIp = $request->getClientIp() ?: '127.0.0.1';
+
         if ($this->loginLimiter !== null) {
-            $limiter = $this->loginLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            $limiter = $this->loginLimiter->create($clientIp);
             if (!$limiter->consume()->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_login', [], 'Too many login attempts. Please retry later.')], 429);
+                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_login', [], 'Too many login attempts. Please retry later.')], 429);
             }
         }
 
         if ($this->socialAuthLimiter !== null) {
-            $socialLimiter = $this->socialAuthLimiter->create($request->getClientIp() ?: '127.0.0.1');
+            $socialLimiter = $this->socialAuthLimiter->create($clientIp);
             if (!$socialLimiter->consume()->isAccepted()) {
-                return new JsonResponse(['error' => $this->trans('enduser.auth.rate_limit_social', [], 'Too many social login requests. Please retry later.')], 429);
+                return $this->secureJson(['error' => $this->trans('enduser.auth.rate_limit_social', [], 'Too many social login requests. Please retry later.')], 429);
             }
-        }
-
-        if (strlen($request->getContent()) > 1048576) {
-            return new JsonResponse(['error' => $this->trans('enduser.auth.payload_too_large', [], 'Payload too large (max 1MB).')], 413);
         }
 
         $project = $this->findProject($projectId);
         if (!$project) {
-            return $this->json(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.project_not_found', [], 'Project not found')], 404);
         }
 
         if (!in_array($provider, ['google', 'microsoft', 'github', 'gitlab'], true)) {
-            return $this->json(['error' => $this->trans('enduser.auth.unknown_provider', [], 'Unknown provider')], 400);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.unknown_provider', [], 'Unknown provider')], 400);
         }
 
         // Vérifier que le Social Login est activé pour ce projet
         $security = ($project->settings ?? [])['security'] ?? [];
         if (!($security['endUserSocialLogin'] ?? false)) {
-            return $this->json(['error' => $this->trans('enduser.auth.social_not_enabled', [], 'Social login is not enabled for this project')], 400);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.social_not_enabled', [], 'Social login is not enabled for this project')], 400);
         }
 
         $data = $this->getJsonPayload($request);
@@ -1165,18 +1411,18 @@ class EndUserAuthController extends AbstractController
             : null;
 
         if (empty($code)) {
-            return $this->json(['error' => $this->trans('enduser.auth.social_code_required', [], 'Authorization code is required')], 422);
+            return $this->secureJson(['error' => $this->trans('enduser.auth.social_code_required', [], 'Authorization code is required')], 422);
         }
 
         try {
             if ($this->socialLogin === null) {
-                return $this->json(['error' => $this->trans('enduser.auth.social_not_available', [], 'Social login is not available')], 500);
+                return $this->secureJson(['error' => $this->trans('enduser.auth.social_not_available', [], 'Social login is not available')], 500);
             }
 
             $redirectUri = $request->getSchemeAndHttpHost() . "/api/{$projectId}/auth/social/{$provider}";
             $credentials = $this->socialLogin->getProjectCredentials($project, $provider);
             if (!$credentials) {
-                return $this->json(['error' => $this->trans('enduser.auth.social_provider_not_configured', ['%provider%' => $provider], "Provider '{$provider}' is not configured for this project")], 400);
+                return $this->secureJson(['error' => $this->trans('enduser.auth.social_provider_not_configured', ['%provider%' => $provider], "Provider '{$provider}' is not configured for this project")], 400);
             }
 
             $socialUser = $this->socialLogin->getUserFromProvider(
@@ -1190,7 +1436,12 @@ class EndUserAuthController extends AbstractController
             $endUser = $this->socialLogin->findOrCreateEndUser($project, $socialUser, $provider);
 
             if (!$endUser->isActive()) {
-                return $this->json(['error' => $this->trans('enduser.auth.account_inactive', [], 'Account is inactive or banned')], 403);
+                $this->audit('enduser_social_login_inactive', $project, [
+                    'provider'   => $provider,
+                    'project_id' => $projectId,
+                    'ip'         => $clientIp,
+                ], 'failure', (string) $endUser->id);
+                return $this->secureJson(['error' => $this->trans('enduser.auth.account_inactive', [], 'Account is inactive or banned')], 403);
             }
 
             // Vérifier 2FA
@@ -1206,7 +1457,13 @@ class EndUserAuthController extends AbstractController
                 }
                 $twoFactorToken = $this->jwtService->createTwoFactorToken($endUser, $emailCodeHash);
 
-                return $this->json([
+                $this->audit('enduser_2fa_challenge_issued', $project, [
+                    'provider'   => $provider,
+                    'project_id' => $projectId,
+                    'ip'         => $clientIp,
+                ], 'success', (string) $endUser->id);
+
+                return $this->secureJson([
                     'requires_2fa' => true,
                     'two_factor_token' => $twoFactorToken,
                     'two_factor_method' => $endUser->twoFactorMethod,
@@ -1217,7 +1474,13 @@ class EndUserAuthController extends AbstractController
             $accessToken = $this->jwtService->createAccessToken($endUser);
             $refreshToken = $this->issueRefreshToken($endUser, $session?->sessionId);
 
-            return $this->json([
+            $this->audit('enduser_social_login_success', $project, [
+                'provider'   => $provider,
+                'project_id' => $projectId,
+                'ip'         => $clientIp,
+            ], 'success', (string) $endUser->id);
+
+            return $this->secureJson([
                 'data' => [
                     'user'          => $this->serializeEndUser($endUser),
                     'access_token'  => $accessToken,
@@ -1225,20 +1488,55 @@ class EndUserAuthController extends AbstractController
                 ],
             ]);
         } catch (\Exception $e) {
-            return $this->json(['error' => $this->trans('enduser.auth.social_login_failed', ['%message%' => $e->getMessage()], 'Social login failed: ' . $e->getMessage())], 400);
+            $this->audit('enduser_social_login_failed', $project ?? null, [
+                'provider'   => $provider,
+                'project_id' => $projectId,
+                'error'      => $e->getMessage(),
+                'ip'         => $clientIp,
+            ], 'failure');
+            return $this->secureJson(['error' => $this->trans('enduser.auth.social_login_failed', ['%message%' => $e->getMessage()], 'Social login failed: ' . $e->getMessage())], 400);
         }
     }
 
     private function getJsonPayload(Request $request): array|JsonResponse
     {
-        if (strlen($request->getContent()) > 65536) {
-            return $this->json(['error' => $this->trans('enduser.auth.payload_too_large', [], 'Request payload too large (max 64KB).')], 413);
+        $contentType = (string) $request->headers->get('Content-Type', '');
+        $method = $request->getMethod();
+        if (in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+            $parsedType = strtolower(trim(explode(';', $contentType)[0]));
+            if ($parsedType !== 'application/json' && $parsedType !== 'application/merge-patch+json') {
+                $this->audit('enduser_auth_invalid_content_type', null, [
+                    'content_type' => $contentType,
+                    'ip'           => $request->getClientIp() ?: '127.0.0.1',
+                ], 'failure');
+                return $this->secureJson([
+                    'error' => $this->trans('enduser.auth.invalid_content_type', [], 'Invalid Content-Type header. Expected application/json.'),
+                    'code'  => 'INVALID_CONTENT_TYPE',
+                ], 415);
+            }
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            $this->audit('enduser_auth_payload_too_large', null, [
+                'bytes' => strlen($request->getContent()),
+                'ip'    => $request->getClientIp() ?: '127.0.0.1',
+            ], 'failure');
+            return $this->secureJson([
+                'error' => $this->trans('enduser.auth.payload_too_large', [], 'Request payload too large (max 64KB).'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413);
         }
 
         try {
             return $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('enduser.auth.invalid_json', [], 'Invalid JSON')], 400);
+            $this->audit('enduser_auth_invalid_json', null, [
+                'ip' => $request->getClientIp() ?: '127.0.0.1',
+            ], 'failure');
+            return $this->secureJson([
+                'error' => $this->trans('enduser.auth.invalid_json', [], 'Invalid JSON'),
+                'code'  => 'INVALID_JSON',
+            ], 400);
         }
     }
 

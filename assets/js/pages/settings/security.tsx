@@ -243,19 +243,6 @@ export default function Security() {
                                     )}
                                 </div>
                             )}
-                                                    <InputOTPGroup>
-                                                        <InputOTPSlot index={0} /><InputOTPSlot index={1} /><InputOTPSlot index={2} />
-                                                        <InputOTPSlot index={3} /><InputOTPSlot index={4} /><InputOTPSlot index={5} />
-                                                    </InputOTPGroup>
-                                                </InputOTP>
-                                            </div>
-                                            <Button onClick={confirmEmail} disabled={code.length < 6} className="w-full" size="sm">
-                                                Vérifier et activer
-                                            </Button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
 
                             {/* Backup Codes */}
                             {status?.has_backup_codes && (

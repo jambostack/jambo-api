@@ -3919,4 +3919,10 @@ return [
     'project_oauth.error.invalid_client' => 'Échec de l\'authentification du client ou identifiants client non valides.',
     'project_oauth.error.revocation_failed' => 'Échec de la révocation du jeton.',
     'project_oauth.success.revoked' => 'Jeton révoqué avec succès.',
+
+    // ─── Cycle 107: End-User & OAuth/OIDC Security Hardening ───
+    'enduser.auth.invalid_content_type' => 'En-tête Content-Type invalide. application/json attendu.',
+    'oidc.discovery_failed' => 'Échec de la découverte OpenID Connect ou fournisseur inaccessible.',
+    'auth.social.callback_rate_limited' => 'Trop de tentatives de retour d\'authentification. Veuillez réessayer plus tard.',
+    'oidc.callback_rate_limited' => 'Trop de tentatives de retour OIDC. Veuillez réessayer plus tard.',
 ];

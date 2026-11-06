@@ -3903,4 +3903,10 @@ return [
     'project_oauth.error.invalid_client' => 'فشل مصادقة العميل أو بيانات اعتماد العميل غير صالحة.',
     'project_oauth.error.revocation_failed' => 'فشل إبطال الرمز.',
     'project_oauth.success.revoked' => 'تم إبطال الرمز بنجاح.',
+
+    // ─── Cycle 107: End-User & OAuth/OIDC Security Hardening ───
+    'enduser.auth.invalid_content_type' => 'رأس Content-Type غير صالح. يُتوقع application/json.',
+    'oidc.discovery_failed' => 'فشل اكتشاف OpenID Connect أو لا يمكن الوصول إلى المزود.',
+    'auth.social.callback_rate_limited' => 'محاولات استرجاع مصادقة كثيرة جدًا. يُرجى إعادة المحاولة لاحقًا.',
+    'oidc.callback_rate_limited' => 'محاولات استرجاع OIDC كثيرة جدًا. يُرجى إعادة المحاولة لاحقًا.',
 ];

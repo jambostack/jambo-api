@@ -60,6 +60,9 @@ class SecurityController extends InertiaController
                 'oidc.invalid_state' => 'oidc.invalid_state',
                 'oidc.provider_not_found' => 'oidc.provider_not_found',
                 'oidc.missing_parameters' => 'oidc.missing_parameters',
+                'oidc.discovery_failed' => 'oidc.discovery_failed',
+                'auth.social.callback_rate_limited' => 'auth.social.callback_rate_limited',
+                'oidc.callback_rate_limited' => 'oidc.callback_rate_limited',
             ];
             if (isset($allowedErrors[$rawError])) {
                 $error = $allowedErrors[$rawError];

@@ -27,13 +27,21 @@ REMOTE = os.getenv('JAMBO_REMOTE_DIR', '/home/gupi7723/api.jambostack.site')
 
 def run_command_subprocess(cmd):
     print(f"\n>> Executing: {cmd}")
-    ssh_cmd = [
-        "ssh",
-        "-o", "BatchMode=yes",
-        "-o", "ConnectTimeout=15",
-    ]
-    if KEY_FILE and os.path.exists(KEY_FILE):
-        ssh_cmd.extend(["-i", KEY_FILE])
+    if PASS and not (KEY_FILE and os.path.exists(KEY_FILE or '')):
+        ssh_cmd = [
+            "sshpass", "-p", PASS,
+            "ssh",
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=15",
+        ]
+    else:
+        ssh_cmd = [
+            "ssh",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=15",
+        ]
+        if KEY_FILE and os.path.exists(KEY_FILE):
+            ssh_cmd.extend(["-i", KEY_FILE])
     ssh_cmd.append(f"{USER}@{HOST}")
     ssh_cmd.append(f"cd {REMOTE} && {cmd}")
 

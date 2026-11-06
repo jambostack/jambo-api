@@ -3901,4 +3901,10 @@ return [
     'project_oauth.error.invalid_client' => 'Client authentication failed or invalid client credentials.',
     'project_oauth.error.revocation_failed' => 'Token revocation failed.',
     'project_oauth.success.revoked' => 'Token revoked successfully.',
+
+    // ─── Cycle 107: End-User & OAuth/OIDC Security Hardening ───
+    'enduser.auth.invalid_content_type' => 'Invalid Content-Type header. Expected application/json.',
+    'oidc.discovery_failed' => 'OpenID Connect discovery failed or provider is unreachable.',
+    'auth.social.callback_rate_limited' => 'Too many authentication callback attempts. Please retry later.',
+    'oidc.callback_rate_limited' => 'Too many OIDC callback attempts. Please retry later.',
 ];

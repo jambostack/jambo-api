@@ -3901,4 +3901,10 @@ return [
     'project_oauth.error.invalid_client' => 'Falló la autenticación del cliente o credenciales de cliente no válidas.',
     'project_oauth.error.revocation_failed' => 'Error al revocar el token.',
     'project_oauth.success.revoked' => 'Token revocado con éxito.',
+
+    // ─── Cycle 107: End-User & OAuth/OIDC Security Hardening ───
+    'enduser.auth.invalid_content_type' => 'Encabezado Content-Type no válido. Se esperaba application/json.',
+    'oidc.discovery_failed' => 'Error de detección de OpenID Connect o proveedor inaccesible.',
+    'auth.social.callback_rate_limited' => 'Demasiados intentos de devolución de autenticación. Inténtelo más tarde.',
+    'oidc.callback_rate_limited' => 'Demasiados intentos de devolución OIDC. Inténtelo más tarde.',
 ];
