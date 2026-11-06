@@ -96,7 +96,7 @@ class Cycle23HardeningTest extends TestCase
         $entry->collection = $collection;
 
         $entryRepo = $this->createMock(ContentEntryRepository::class);
-        $entryRepo->method('find')->with(42)->willReturn($entry);
+        $entryRepo->expects($this->once())->method('find')->with(42)->willReturn($entry);
 
         $controller = new CommentController(
             $this->createMock(ProjectRepository::class),
@@ -129,7 +129,7 @@ class Cycle23HardeningTest extends TestCase
         $entry->collection = $collection;
 
         $entryRepo = $this->createMock(ContentEntryRepository::class);
-        $entryRepo->method('find')->with(42)->willReturn($entry);
+        $entryRepo->expects($this->once())->method('find')->with(42)->willReturn($entry);
 
         $controller = new CommentController(
             $this->createMock(ProjectRepository::class),
@@ -173,7 +173,7 @@ class Cycle23HardeningTest extends TestCase
         $comment->author = $user;
 
         $commentRepo = $this->createMock(CommentRepository::class);
-        $commentRepo->method('find')->with(100)->willReturn($comment);
+        $commentRepo->expects($this->once())->method('find')->with(100)->willReturn($comment);
 
         $controller = new CommentController(
             $this->createMock(ProjectRepository::class),
@@ -215,7 +215,7 @@ class Cycle23HardeningTest extends TestCase
         $comment->entry = $entry;
 
         $commentRepo = $this->createMock(CommentRepository::class);
-        $commentRepo->method('find')->with(100)->willReturn($comment);
+        $commentRepo->expects($this->once())->method('find')->with(100)->willReturn($comment);
 
         $controller = new CommentController(
             $this->createMock(ProjectRepository::class),
@@ -415,7 +415,7 @@ class Cycle23HardeningTest extends TestCase
         $entryRepo->method('findByCollectionPaginated')->willReturn([$entry]);
 
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')->with(Collection::class)->willReturn($collectionRepo);
+        $em->expects($this->once())->method('getRepository')->with(Collection::class)->willReturn($collectionRepo);
 
         $generator = new SitemapGenerator($em, $entryRepo);
         $xml = $generator->generateSitemap($project);
@@ -452,7 +452,7 @@ class Cycle23HardeningTest extends TestCase
         $entryRepo->method('findByCollectionPaginated')->willReturn([$entry]);
 
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')->with(Collection::class)->willReturn($collectionRepo);
+        $em->expects($this->once())->method('getRepository')->with(Collection::class)->willReturn($collectionRepo);
 
         $generator = new SitemapGenerator($em, $entryRepo);
         $xml = $generator->generateSitemap($project);

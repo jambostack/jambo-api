@@ -27,6 +27,7 @@ class MercurePublisher
         private readonly string $projectDir,
         private ?HubInterface $hub = null,
         private ?TranslatorInterface $translator = null,
+        private ?\Symfony\Bundle\SecurityBundle\Security $security = null,
     ) {}
 
     private function trans(string $id, array $parameters = [], ?string $default = null): string
@@ -48,6 +49,17 @@ class MercurePublisher
         $defaultTopic = $this->resolveTopic($projectUuid, $data['event'] ?? 'unknown');
         if (!isset($data['topic'])) {
             $data['topic'] = $defaultTopic;
+        }
+
+        if (!isset($data['actor_id']) && $this->security !== null) {
+            $user = $this->security->getUser();
+            $actorId = $user?->id ?? (is_object($user) && method_exists($user, 'getId') ? $user->getId() : null);
+            if ($actorId !== null) {
+                $data['actor_id'] = $actorId;
+                if (isset($data['data']) && is_array($data['data'])) {
+                    $data['data']['actor_id'] = $actorId;
+                }
+            }
         }
 
         $payload = json_encode($data,

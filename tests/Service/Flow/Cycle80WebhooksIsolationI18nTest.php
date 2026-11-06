@@ -294,7 +294,7 @@ class Cycle80WebhooksIsolationI18nTest extends TestCase
         $webhook->url = 'https://api.example.com/webhook';
 
         $webhookRepo = $this->createMock(WebhookRepository::class);
-        $webhookRepo->method('find')->with(5)->willReturn($webhook);
+        $webhookRepo->expects($this->once())->method('find')->with(5)->willReturn($webhook);
 
         $em = $this->createMock(EntityManagerInterface::class);
         $httpClient = $this->createMock(HttpClientInterface::class);
@@ -349,7 +349,7 @@ class Cycle80WebhooksIsolationI18nTest extends TestCase
         $webhook->url = 'https://api.example.com/webhook';
 
         $webhookRepo = $this->createMock(WebhookRepository::class);
-        $webhookRepo->method('find')->with(5)->willReturn($webhook);
+        $webhookRepo->expects($this->once())->method('find')->with(5)->willReturn($webhook);
 
         $em = $this->createMock(EntityManagerInterface::class);
         $httpClient = $this->createMock(HttpClientInterface::class);

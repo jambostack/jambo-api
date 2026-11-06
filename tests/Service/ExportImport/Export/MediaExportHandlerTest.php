@@ -49,12 +49,12 @@ class MediaExportHandlerTest extends TestCase
 
         // Mock the repository to return our Media entity
         $repository = $this->createMock(MediaRepository::class);
-        $repository->method('findBy')
+        $repository->expects($this->once())->method('findBy')
             ->with(['project' => $project])
             ->willReturn([$media]);
 
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')
+        $em->expects($this->once())->method('getRepository')
             ->with(Media::class)
             ->willReturn($repository);
 
@@ -141,12 +141,12 @@ class MediaExportHandlerTest extends TestCase
         $deleted->project = $project;
 
         $repository = $this->createMock(MediaRepository::class);
-        $repository->method('findBy')
+        $repository->expects($this->once())->method('findBy')
             ->with(['project' => $project])
             ->willReturn([$active, $deleted]);
 
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')
+        $em->expects($this->once())->method('getRepository')
             ->with(Media::class)
             ->willReturn($repository);
 
@@ -191,12 +191,12 @@ class MediaExportHandlerTest extends TestCase
         $project->uuid = Uuid::v4();
 
         $repository = $this->createMock(MediaRepository::class);
-        $repository->method('findBy')
+        $repository->expects($this->once())->method('findBy')
             ->with(['project' => $project])
             ->willReturn([]);
 
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')
+        $em->expects($this->once())->method('getRepository')
             ->with(Media::class)
             ->willReturn($repository);
 

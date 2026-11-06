@@ -145,7 +145,7 @@ class Cycle22HardeningTest extends TestCase
 
         $project = new Project();
         $project->uuid = Uuid::v4();
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
         $projectRepo->method('findOneBy')->willReturn($project);
 
         $user = new User();
@@ -178,7 +178,7 @@ class Cycle22HardeningTest extends TestCase
 
         $project = new Project();
         $project->uuid = Uuid::v4();
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
         $projectRepo->method('findOneBy')->willReturn($project);
 
         $user = new User();
@@ -215,7 +215,7 @@ class Cycle22HardeningTest extends TestCase
 
         $project = new Project();
         $project->uuid = Uuid::v4();
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
         $projectRepo->method('findOneBy')->willReturn($project);
 
         $user = new User();

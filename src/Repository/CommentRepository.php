@@ -4,6 +4,7 @@ namespace App\Repository;
 use App\Entity\Comment;
 use App\Entity\Project;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\Tools\Pagination\Paginator;
 use Doctrine\Persistence\ManagerRegistry;
 
 class CommentRepository extends ServiceEntityRepository
@@ -16,15 +17,17 @@ class CommentRepository extends ServiceEntityRepository
     /** @return Comment[] */
     public function findByEntryPaginated(int $entryId, int $page = 1, int $perPage = 15): array
     {
-        return $this->createQueryBuilder('c')
+        $qb = $this->createQueryBuilder('c')
             ->leftJoin('c.children', 'ch')->addSelect('ch')
             ->leftJoin('c.author', 'a')->addSelect('a')
             ->leftJoin('ch.author', 'cha')->addSelect('cha')
             ->where('c.entry = :entryId')->andWhere('c.parent IS NULL')
             ->setParameter('entryId', $entryId)
             ->orderBy('c.createdAt', 'ASC')->addOrderBy('ch.createdAt', 'ASC')
-            ->setFirstResult(($page - 1) * $perPage)->setMaxResults($perPage)
-            ->getQuery()->getResult();
+            ->setFirstResult(($page - 1) * $perPage)->setMaxResults($perPage);
+
+        $paginator = new Paginator($qb->getQuery(), fetchJoinCollection: true);
+        return iterator_to_array($paginator);
     }
 
     public function countByEntry(int $entryId): int

@@ -249,7 +249,7 @@ class Cycle106AuthHardeningTest extends TestCase
         $userRepo = $this->createMock(EntityRepository::class);
         $existingUser = new User();
         $userRepo->method('findOneBy')->willReturn($existingUser);
-        $em->method('getRepository')->with(User::class)->willReturn($userRepo);
+        $em->method('getRepository')->willReturn($userRepo);
 
         $hasher = $this->createMock(UserPasswordHasherInterface::class);
         $validator = Validation::createValidator();
@@ -286,7 +286,7 @@ class Cycle106AuthHardeningTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $userRepo = $this->createMock(EntityRepository::class);
         $userRepo->method('findOneBy')->willReturn(null);
-        $em->method('getRepository')->with(User::class)->willReturn($userRepo);
+        $em->method('getRepository')->willReturn($userRepo);
 
         $em->expects($this->once())->method('persist');
         $em->expects($this->once())->method('flush');

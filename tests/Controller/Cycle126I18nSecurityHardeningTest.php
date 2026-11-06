@@ -154,7 +154,7 @@ class Cycle126I18nSecurityHardeningTest extends TestCase
             ->willThrowException(new \RuntimeException('Sensitive DB credentials host=secret-db.internal user=admin'));
 
         $translator = $this->createMock(TranslatorInterface::class);
-        $translator->method('trans')
+        $translator->expects($this->once())->method('trans')
             ->with('health.db_connection_failed')
             ->willReturn('La connexion à la base de données a échoué');
 

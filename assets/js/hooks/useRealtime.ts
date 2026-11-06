@@ -1,14 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { usePage } from '@inertiajs/react';
+import { type SharedData } from '@/types/index.d';
 
 const STORAGE_PREFIX = 'rt_since_';
 
-function getStoredSince(projectUuid: string): number {
+function getStoredSince(projectUuid: string): number | null {
     try {
         const v = sessionStorage.getItem(STORAGE_PREFIX + projectUuid);
-        return v !== null ? parseInt(v, 10) || 0 : 0;
+        return v !== null ? parseInt(v, 10) : null;
     } catch {
-        return 0;
+        return null;
     }
 }
 
@@ -38,7 +40,9 @@ function storeSince(projectUuid: string, since: number): void {
  * Usage : useRealtime(project.uuid);
  */
 export function useRealtime(projectUuid?: string) {
-    const sinceRef = useRef(projectUuid ? getStoredSince(projectUuid) : 0);
+    const pageProps = usePage<SharedData>().props;
+    const currentUserId = pageProps.auth?.user?.id;
+    const sinceRef = useRef<number | null>(projectUuid ? getStoredSince(projectUuid) : null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -87,6 +91,10 @@ export function useRealtime(projectUuid?: string) {
                 es.addEventListener('message', (e) => {
                     try {
                         const evt = JSON.parse(e.data);
+                        // Ne pas afficher de toast pour les actions déclenchées par l'utilisateur connecté lui-même
+                        if (currentUserId && (evt.actor_id === currentUserId || evt.data?.actor_id === currentUserId)) {
+                            return;
+                        }
                         dispatchToast(evt);
                     } catch {
                         // Payload invalide — ignoré
@@ -120,17 +128,36 @@ export function useRealtime(projectUuid?: string) {
         const startPolling = () => {
             const poll = async () => {
                 try {
+                    const sinceParam = sinceRef.current !== null ? sinceRef.current : 'latest';
                     const r = await fetch(
-                        `/api/projects/${encodeURIComponent(projectUuid)}/realtime?since=${sinceRef.current}`,
+                        `/api/projects/${encodeURIComponent(projectUuid)}/realtime?since=${sinceParam}`,
                         { credentials: 'same-origin' },
                     );
                     if (!r.ok) return;
                     const json = await r.json();
-                    if (!json.events?.length) return;
+
+                    // Premier appel sans curseur : initialise avec le dernier index sans rejouer les toasts passés
+                    if (sinceRef.current === null) {
+                        sinceRef.current = typeof json.since === 'number' ? json.since : 0;
+                        storeSince(projectUuid, sinceRef.current);
+                        return;
+                    }
+
+                    if (!json.events?.length) {
+                        if (typeof json.since === 'number' && json.since !== sinceRef.current) {
+                            sinceRef.current = json.since;
+                            storeSince(projectUuid, sinceRef.current);
+                        }
+                        return;
+                    }
 
                     for (const evt of json.events) {
                         if (evt._id !== undefined) {
                             sinceRef.current = Math.max(sinceRef.current, evt._id + 1);
+                        }
+                        // Ne pas afficher de toast pour les actions déclenchées par l'utilisateur connecté lui-même
+                        if (currentUserId && (evt.actor_id === currentUserId || evt.data?.actor_id === currentUserId)) {
+                            continue;
                         }
                         dispatchToast(evt);
                     }

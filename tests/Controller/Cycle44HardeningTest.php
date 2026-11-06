@@ -100,7 +100,7 @@ class Cycle44HardeningTest extends TestCase
         $media->mimeType = 'image/jpeg';
 
         $mediaRepo->method('findOneBy')->willReturn($media);
-        $em->method('getRepository')->with(Media::class)->willReturn($mediaRepo);
+        $em->method('getRepository')->willReturn($mediaRepo);
 
         $tempDir = sys_get_temp_dir() . '/jambo_cdn_test_' . bin2hex(random_bytes(4));
         @mkdir($tempDir . '/public/uploads/media/' . $project->uuid->toRfc4122(), 0755, true);
@@ -167,7 +167,7 @@ class Cycle44HardeningTest extends TestCase
         $media->mimeType = 'image/jpeg';
 
         $mediaRepo->method('findOneBy')->willReturn($media);
-        $em->method('getRepository')->with(Media::class)->willReturn($mediaRepo);
+        $em->method('getRepository')->willReturn($mediaRepo);
 
         $tempDir = sys_get_temp_dir() . '/jambo_cdn_err_' . bin2hex(random_bytes(4));
         @mkdir($tempDir . '/public/uploads/media/' . $project->uuid->toRfc4122(), 0755, true);
@@ -422,7 +422,7 @@ class Cycle44HardeningTest extends TestCase
         $media->mimeType = 'image/svg+xml';
 
         $mediaRepo->method('findOneBy')->willReturn($media);
-        $em->method('getRepository')->with(Media::class)->willReturn($mediaRepo);
+        $em->method('getRepository')->willReturn($mediaRepo);
 
         $tempDir = sys_get_temp_dir() . '/jambo_cdn_svg_' . bin2hex(random_bytes(4));
         @mkdir($tempDir . '/public/uploads/media/' . $project->uuid->toRfc4122(), 0755, true);

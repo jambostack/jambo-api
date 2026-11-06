@@ -579,7 +579,7 @@ class Cycle45HardeningTest extends TestCase
 
         // Non-existent UUID
         $uuid = '00000000-0000-0000-0000-000000000000';
-        $projects->method('findOneBy')->with(['uuid' => $uuid])->willReturn(null);
+        $projects->expects($this->once())->method('findOneBy')->with(['uuid' => $uuid])->willReturn(null);
         $payloadMissing = json_encode(['project_uuid' => $uuid]);
         $sigMissing = 'sha256=' . hash_hmac('sha256', (string) $payloadMissing, $secret);
         $reqMissing = new Request([], [], [], [], [], ['HTTP_X_JAMBO_SIGNATURE' => $sigMissing], (string) $payloadMissing);
@@ -623,11 +623,11 @@ class Cycle45HardeningTest extends TestCase
         $project = new Project();
         $project->id = 10;
         $uuid = '11111111-2222-3333-4444-555555555555';
-        $projects->method('findOneBy')->with(['uuid' => $uuid])->willReturn($project);
+        $projects->expects($this->once())->method('findOneBy')->with(['uuid' => $uuid])->willReturn($project);
 
         $d = new Deployment();
         $d->branch = 'feature-x';
-        $deployments->method('findForProject')->with($project, 25)->willReturn([$d]);
+        $deployments->expects($this->once())->method('findForProject')->with($project, 25)->willReturn([$d]);
 
         $controller = new DeploymentController($em, $deployments, $projects);
         $user = new User();
@@ -710,7 +710,7 @@ class Cycle45HardeningTest extends TestCase
         $uuid = '22222222-3333-4444-5555-666666666666';
         $project = new Project();
         $project->id = 5;
-        $projectRepo->method('findOneBy')->with(['uuid' => $uuid])->willReturn($project);
+        $projectRepo->expects($this->once())->method('findOneBy')->with(['uuid' => $uuid])->willReturn($project);
 
         $collection = new Collection();
         $collection->deletedAt = new \DateTimeImmutable();

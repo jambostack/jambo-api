@@ -304,7 +304,7 @@ class Cycle16HardeningTest extends TestCase
 
         $project = new Project();
         $projectRepo->method('findOneBy')->willReturn($project);
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
 
         $container = new Container();
         $authChecker = $this->createMock(\Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface::class);

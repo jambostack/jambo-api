@@ -104,10 +104,10 @@ class TwoFactorChallengeControllerTest extends TestCase
         $user->twoFactorSecret = 'JBSWY3DPEHPK3PXP';
 
         $repo = $this->createMock(EntityRepository::class);
-        $repo->method('find')->with(42)->willReturn($user);
+        $repo->method('find')->willReturn($user);
 
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')->with(User::class)->willReturn($repo);
+        $em->method('getRepository')->willReturn($repo);
 
         $controller = $this->createController(em: $em);
 
@@ -141,10 +141,10 @@ class TwoFactorChallengeControllerTest extends TestCase
         $user->twoFactorMethod = 'email';
 
         $repo = $this->createMock(EntityRepository::class);
-        $repo->method('find')->with(10)->willReturn($user);
+        $repo->method('find')->willReturn($user);
 
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')->with(User::class)->willReturn($repo);
+        $em->method('getRepository')->willReturn($repo);
 
         $mailer = $this->createMock(TwoFactorMailer::class);
         $mailer->expects($this->exactly(3))->method('sendCode');
@@ -180,10 +180,10 @@ class TwoFactorChallengeControllerTest extends TestCase
         $user->twoFactorSecret = 'JBSWY3DPEHPK3PXP';
 
         $repo = $this->createMock(EntityRepository::class);
-        $repo->method('find')->with(99)->willReturn($user);
+        $repo->method('find')->willReturn($user);
 
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')->with(User::class)->willReturn($repo);
+        $em->method('getRepository')->willReturn($repo);
 
         $lockoutService = $this->createMock(ProjectAuthLockoutService::class);
         $lockoutService->method('isLockedOut')
@@ -211,10 +211,10 @@ class TwoFactorChallengeControllerTest extends TestCase
         $user->twoFactorSecret = 'JBSWY3DPEHPK3PXP';
 
         $repo = $this->createMock(EntityRepository::class);
-        $repo->method('find')->with(77)->willReturn($user);
+        $repo->method('find')->willReturn($user);
 
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')->with(User::class)->willReturn($repo);
+        $em->method('getRepository')->willReturn($repo);
 
         $lockoutService = $this->createMock(ProjectAuthLockoutService::class);
         $lockoutService->method('isLockedOut')

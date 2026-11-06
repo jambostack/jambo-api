@@ -80,7 +80,7 @@ class Cycle86TwoFactorAndBackupCodesHardeningTest extends TestCase
         $targetUser->twoFactorConfirmedAt = new \DateTimeImmutable();
 
         $userRepo = $this->createMock(UserRepository::class);
-        $userRepo->method('find')->with(12)->willReturn($targetUser);
+        $userRepo->expects($this->once())->method('find')->with(12)->willReturn($targetUser);
 
         $roleRepo = $this->createMock(RoleRepository::class);
         $em = $this->createMock(EntityManagerInterface::class);
@@ -142,7 +142,7 @@ class Cycle86TwoFactorAndBackupCodesHardeningTest extends TestCase
         $targetUser->twoFactorEnabled = false;
 
         $userRepo = $this->createMock(UserRepository::class);
-        $userRepo->method('find')->with(15)->willReturn($targetUser);
+        $userRepo->expects($this->once())->method('find')->with(15)->willReturn($targetUser);
 
         $roleRepo = $this->createMock(RoleRepository::class);
         $em = $this->createMock(EntityManagerInterface::class);
@@ -179,7 +179,7 @@ class Cycle86TwoFactorAndBackupCodesHardeningTest extends TestCase
         $superAdmin->roles = ['ROLE_SUPER_ADMIN'];
 
         $userRepo = $this->createMock(UserRepository::class);
-        $userRepo->method('find')->with(1)->willReturn($superAdmin);
+        $userRepo->expects($this->once())->method('find')->with(1)->willReturn($superAdmin);
 
         $controller = new UserController(
             $userRepo,
@@ -220,10 +220,10 @@ class Cycle86TwoFactorAndBackupCodesHardeningTest extends TestCase
         $endUser->twoFactorBackupCodes = [['hash' => 'hash99', 'used' => false]];
 
         $projectRepo = $this->createMock(ProjectRepository::class);
-        $projectRepo->method('findOneBy')->with(['uuid' => $projectUuid])->willReturn($project);
+        $projectRepo->expects($this->once())->method('findOneBy')->with(['uuid' => $projectUuid])->willReturn($project);
 
         $endUserRepo = $this->createMock(EndUserRepository::class);
-        $endUserRepo->method('findOneBy')->with(['uuid' => $endUserUuid, 'project' => $project])->willReturn($endUser);
+        $endUserRepo->expects($this->once())->method('findOneBy')->with(['uuid' => $endUserUuid, 'project' => $project])->willReturn($endUser);
 
         $memberRepo = $this->createMock(ProjectMemberRepository::class);
         $em = $this->createMock(EntityManagerInterface::class);

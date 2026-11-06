@@ -312,7 +312,7 @@ class Cycle88StudioAndPageHardeningTest extends TestCase
         $projectRepo = $this->createMock(ProjectRepository::class);
         $project = new Project();
         $project->uuid = Uuid::v4();
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
         $projectRepo->method('findOneBy')->willReturn($project);
 
         $translator = $this->createTranslator();
@@ -338,8 +338,8 @@ class Cycle88StudioAndPageHardeningTest extends TestCase
         $container = $this->createMock(\Psr\Container\ContainerInterface::class);
         $securityChecker = $this->createMock(\Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface::class);
         $securityChecker->method('isGranted')->willReturn(true);
-        $container->method('has')->with('security.authorization_checker')->willReturn(true);
-        $container->method('get')->with('security.authorization_checker')->willReturn($securityChecker);
+        $container->method('has')->willReturn(true);
+        $container->method('get')->willReturn($securityChecker);
         $controller->setContainer($container);
 
         $collections = [];
@@ -361,7 +361,7 @@ class Cycle88StudioAndPageHardeningTest extends TestCase
         $projectRepo = $this->createMock(ProjectRepository::class);
         $project = new Project();
         $project->uuid = Uuid::v4();
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
         $projectRepo->method('findOneBy')->willReturn($project);
 
         $translator = $this->createTranslator();
@@ -386,8 +386,8 @@ class Cycle88StudioAndPageHardeningTest extends TestCase
         $container = $this->createMock(\Psr\Container\ContainerInterface::class);
         $securityChecker = $this->createMock(\Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface::class);
         $securityChecker->method('isGranted')->willReturn(true);
-        $container->method('has')->with('security.authorization_checker')->willReturn(true);
-        $container->method('get')->with('security.authorization_checker')->willReturn($securityChecker);
+        $container->method('has')->willReturn(true);
+        $container->method('get')->willReturn($securityChecker);
         $controller->setContainer($container);
 
         // 15 niveaux dans options
@@ -420,7 +420,7 @@ class Cycle88StudioAndPageHardeningTest extends TestCase
         $projectRepo = $this->createMock(ProjectRepository::class);
         $project = new Project();
         $project->uuid = Uuid::v4();
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
         $projectRepo->method('findOneBy')->willReturn($project);
 
         $translator = $this->createTranslator();
@@ -445,8 +445,8 @@ class Cycle88StudioAndPageHardeningTest extends TestCase
         $container = $this->createMock(\Psr\Container\ContainerInterface::class);
         $securityChecker = $this->createMock(\Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface::class);
         $securityChecker->method('isGranted')->willReturn(true);
-        $container->method('has')->with('security.authorization_checker')->willReturn(true);
-        $container->method('get')->with('security.authorization_checker')->willReturn($securityChecker);
+        $container->method('has')->willReturn(true);
+        $container->method('get')->willReturn($securityChecker);
         $controller->setContainer($container);
 
         $nested = 'deep';

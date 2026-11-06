@@ -144,8 +144,8 @@ class Cycle45OAuthSecurityHardeningTest extends TestCase
         $container = $this->createMock(\Psr\Container\ContainerInterface::class);
         $router = $this->createMock(\Symfony\Component\Routing\RouterInterface::class);
         $router->method('generate')->willReturn('https://example.com/connect/google/check');
-        $container->method('has')->with('router')->willReturn(true);
-        $container->method('get')->with('router')->willReturn($router);
+        $container->method('has')->willReturn(true);
+        $container->expects($this->once())->method('get')->with('router')->willReturn($router);
         $controller->setContainer($container);
 
         $session = new Session(new MockArraySessionStorage());

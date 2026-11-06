@@ -186,7 +186,7 @@ class CliSecurityHardeningTest extends TestCase
         $token->name = 'Production Key';
 
         $repo = $this->createMock(ApiTokenRepository::class);
-        $repo->method('find')->with(42)->willReturn($token);
+        $repo->expects($this->once())->method('find')->with(42)->willReturn($token);
 
         $em = $this->createMock(EntityManagerInterface::class);
         $em->expects($this->never())->method('remove');
@@ -205,7 +205,7 @@ class CliSecurityHardeningTest extends TestCase
         $token->name = 'Production Key';
 
         $repo = $this->createMock(ApiTokenRepository::class);
-        $repo->method('find')->with(42)->willReturn($token);
+        $repo->expects($this->once())->method('find')->with(42)->willReturn($token);
 
         $em = $this->createMock(EntityManagerInterface::class);
         $em->expects($this->once())->method('remove')->with($token);

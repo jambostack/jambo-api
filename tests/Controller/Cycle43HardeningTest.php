@@ -65,9 +65,7 @@ class Cycle43HardeningTest extends WebTestCase
         $entry = new ContentEntry();
         $entry->project = $col->project;
         $entry->collection = $col;
-        $entry->data = ['title' => 'Test Post'];
         $entry->status = 'draft';
-        $entry->currentVersion = 1;
         $em->persist($entry);
         $em->flush();
         return $entry;

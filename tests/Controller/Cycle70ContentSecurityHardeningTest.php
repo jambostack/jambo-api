@@ -206,7 +206,6 @@ class Cycle70ContentSecurityHardeningTest extends WebTestCase
         $roleViewer = new Role();
         $roleViewer->name = 'viewer_' . bin2hex(random_bytes(4));
         $roleViewer->label = 'Viewer';
-        $roleViewer->project = $project;
         $em->persist($roleViewer);
 
         $member = new ProjectMember();

@@ -17,6 +17,7 @@ class NotificationSubscriber implements EventSubscriberInterface
         private EntityManagerInterface $em,
         private UserRepository $userRepository,
         private ?NotificationService $notificationService = null,
+        private ?\Symfony\Bundle\SecurityBundle\Security $security = null,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -32,6 +33,18 @@ class NotificationSubscriber implements EventSubscriberInterface
         $project = $event->project;
 
         if ($entry->assignedTo && $entry->status !== 'draft') {
+            // Ne pas auto-notifier l'utilisateur s'il est l'auteur de la modification
+            $author = $entry->updatedBy ?? $this->security?->getUser();
+            $authorId = $author?->id ?? (is_object($author) && method_exists($author, 'getId') ? $author->getId() : null);
+            if ($authorId !== null && $entry->assignedTo->id === $authorId) {
+                return;
+            }
+
+            // Ne pas notifier si le statut antérieur est renseigné et inchangé
+            if ($event->previousStatus !== '' && $event->previousStatus === $entry->status) {
+                return;
+            }
+
             if ($this->notificationService !== null) {
                 $this->notificationService->notifyStatusChange(
                     recipient: $entry->assignedTo,

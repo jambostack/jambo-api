@@ -41,7 +41,7 @@ class SchemaProvisionerLimitTest extends TestCase
         $query->method('getSingleScalarResult')->willReturn(2);
 
         $repo->method('createQueryBuilder')->willReturn($qb);
-        $em->method('getRepository')->with(Collection::class)->willReturn($repo);
+        $em->expects($this->once())->method('getRepository')->with(Collection::class)->willReturn($repo);
 
         $em->method('wrapInTransaction')->willReturnCallback(function ($callback) {
             return $callback();

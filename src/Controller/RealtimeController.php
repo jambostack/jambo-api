@@ -451,7 +451,9 @@ class RealtimeController extends AbstractController
         }
         $actor = $userEntity ?? $apiToken;
 
-        $since = min(1000000, max(0, (int) $request->query->get('since', '0')));
+        $rawSince = $request->query->get('since');
+        $isLatest = ($rawSince === 'latest');
+        $since = $isLatest ? 0 : min(1000000, max(0, (int) ($rawSince ?? '0')));
         $limit = min(100, max(1, (int) $request->query->get('limit', 100)));
         $safeUuid = $project->uuid?->toRfc4122() ?? $projectUuid;
 
@@ -498,30 +500,39 @@ class RealtimeController extends AbstractController
             $realPath = realpath($eventFile);
             if ($realBase !== false && $realPath !== false && str_starts_with($realPath, $realBase)) {
                 $lines = file($realPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-                if ($lines !== false && count($lines) > $since) {
-                    $end = min(count($lines), $since + $limit);
-                    for ($i = $since; $i < $end; $i++) {
-                        $data = json_decode($lines[$i], true);
-                        if ($data !== null) {
-                            $data['_id'] = $i;
-                            $match = true;
-                            if (is_string($filterEvent) && $filterEvent !== '') {
-                                $ev = (string) ($data['event'] ?? '');
-                                if (str_ends_with($filterEvent, '*')) {
-                                    $prefix = rtrim($filterEvent, '*');
-                                    $match = str_starts_with($ev, $prefix);
-                                } else {
-                                    $match = $ev === $filterEvent;
+                $totalLines = ($lines !== false) ? count($lines) : 0;
+
+                if ($isLatest) {
+                    $lastId = $totalLines;
+                } else {
+                    if ($lines !== false && $since > $totalLines) {
+                        $since = $totalLines;
+                        $lastId = $totalLines;
+                    } elseif ($lines !== false && $totalLines > $since) {
+                        $end = min($totalLines, $since + $limit);
+                        for ($i = $since; $i < $end; $i++) {
+                            $data = json_decode($lines[$i], true);
+                            if ($data !== null) {
+                                $data['_id'] = $i;
+                                $match = true;
+                                if (is_string($filterEvent) && $filterEvent !== '') {
+                                    $ev = (string) ($data['event'] ?? '');
+                                    if (str_ends_with($filterEvent, '*')) {
+                                        $prefix = rtrim($filterEvent, '*');
+                                        $match = str_starts_with($ev, $prefix);
+                                    } else {
+                                        $match = $ev === $filterEvent;
+                                    }
                                 }
+                                if ($match && is_string($filterTopic) && $filterTopic !== '') {
+                                    $top = (string) ($data['topic'] ?? '');
+                                    $match = $top === $filterTopic;
+                                }
+                                if ($match) {
+                                    $events[] = $data;
+                                }
+                                $lastId = $i + 1;
                             }
-                            if ($match && is_string($filterTopic) && $filterTopic !== '') {
-                                $top = (string) ($data['topic'] ?? '');
-                                $match = $top === $filterTopic;
-                            }
-                            if ($match) {
-                                $events[] = $data;
-                            }
-                            $lastId = $i + 1;
                         }
                     }
                 }

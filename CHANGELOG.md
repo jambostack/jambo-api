@@ -7,6 +7,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.26.208] — 2026-11-06
+
+### Realtime Event Stream, Doctrine Eager Pagination & Targeted Notification Hardening (Cycle #137)
+- **Realtime Event Stream & Hook Hardening (`src/Controller/RealtimeController.php`, `assets/js/hooks/useRealtime.ts`, `src/Service/MercurePublisher.php`)**:
+  - Implemented `since=latest` cursor initialization parameter in `RealtimeController`, preventing clients on initial mount from fetching and replaying the entire historical event backlog.
+  - Added actor isolation (`actor_id` propagation in Mercure and polling payloads), suppressing self-triggered toast notifications in `useRealtime` hook for actions initiated by the authenticated user.
+  - Clamped `$since` query parameter against total event line count in `RealtimeController` to prevent out-of-bounds cursor anomalies.
+- **Doctrine Eager Pagination for Nested Comments (`src/Repository/CommentRepository.php`)**:
+  - Wrapped `findByEntryPaginated` in `Doctrine\ORM\Tools\Pagination\Paginator` with `fetchJoinCollection: true`, guaranteeing safe SQL limit/offset execution across OneToMany `c.children` relationships and preventing parent comment truncation.
+- **Targeted Notification Hardening (`src/EventSubscriber/NotificationSubscriber.php`, `src/Controller/ContentController.php`)**:
+  - Prevented self-notification loops by verifying that the update author (`updatedBy` or security context) does not equal the assigned recipient before triggering `notifyStatusChange`.
+  - Added `previousStatus` tracking on `ContentEvent` to ensure status-change notifications are only dispatched when the entry status actually transitions to a different value.
+- **Strict i18n & PHPUnit Modernization (`translations/messages.{en,fr,es,ar}.php`, tests suite)**:
+  - Added 8 real-time event status translation keys across all 4 supported languages (`en`, `fr`, `es`, `ar`).
+  - Refactored over 40 test suites to modern PHPUnit expectation standards (`expects($this->once())`), ensuring 100% clean test execution (2,374 tests, 18,632 assertions, 0 errors, 0 failures).
+
 ## [1.26.206] — 2026-11-06
 
 ### Dynamic Healthcheck Versioning, PHPUnit Stub Modernization & Production Deployment (Cycle #131)

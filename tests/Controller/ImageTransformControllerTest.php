@@ -43,7 +43,7 @@ class ImageTransformControllerTest extends TestCase
         $this->storageProfileRepo = $this->createMock(ProjectStorageProfileRepository::class);
         $this->mediaRepo = $this->createMock(MediaRepository::class);
 
-        $this->em->method('getRepository')->with(Media::class)->willReturn($this->mediaRepo);
+        $this->em->method('getRepository')->willReturn($this->mediaRepo);
 
         $this->controller = new ImageTransformController(
             $this->em,

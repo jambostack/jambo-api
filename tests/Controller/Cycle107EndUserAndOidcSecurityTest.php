@@ -247,7 +247,7 @@ class Cycle107EndUserAndOidcSecurityTest extends TestCase
         $twoFactorService = $this->createMock(TwoFactorService::class);
         $em = $this->createMock(EntityManagerInterface::class);
         $tokenRepo = $this->createMock(PasswordResetTokenRepository::class);
-        $em->method('getRepository')->with(PasswordResetToken::class)->willReturn($tokenRepo);
+        $em->expects($this->once())->method('getRepository')->with(PasswordResetToken::class)->willReturn($tokenRepo);
 
         $auditService = $this->createMock(AuditService::class);
         $auditService->expects($this->once())

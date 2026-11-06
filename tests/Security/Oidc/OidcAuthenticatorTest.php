@@ -98,6 +98,7 @@ class OidcAuthenticatorTest extends TestCase
     public function testOnAuthenticationFailureRedirectsToLogin(): void
     {
         $this->urlGenerator
+            ->expects(self::once())
             ->method('generate')
             ->with('app_login')
             ->willReturn('/login');

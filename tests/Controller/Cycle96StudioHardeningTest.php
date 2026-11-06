@@ -184,7 +184,7 @@ class Cycle96StudioHardeningTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $projectRepo = $this->createMock(EntityRepository::class);
         $projectRepo->method('findOneBy')->willReturn($project);
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
 
         $controller = $this->createController($em);
 
@@ -210,7 +210,7 @@ class Cycle96StudioHardeningTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $projectRepo = $this->createMock(EntityRepository::class);
         $projectRepo->method('findOneBy')->willReturn($project);
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
 
         $controller = $this->createController($em);
 
@@ -248,7 +248,7 @@ class Cycle96StudioHardeningTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $projectRepo = $this->createMock(EntityRepository::class);
         $projectRepo->method('findOneBy')->willReturn($project);
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
 
         $controller = $this->createController($em);
 
@@ -285,7 +285,7 @@ class Cycle96StudioHardeningTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $projectRepo = $this->createMock(EntityRepository::class);
         $projectRepo->method('findOneBy')->willReturn($project);
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
 
         $controller = $this->createController($em);
 
@@ -424,7 +424,7 @@ class Cycle96StudioHardeningTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $projectRepo = $this->createMock(EntityRepository::class);
         $projectRepo->method('findOneBy')->willReturn($project);
-        $em->method('getRepository')->with(Project::class)->willReturn($projectRepo);
+        $em->method('getRepository')->willReturn($projectRepo);
 
         $auditService = $this->createMock(AuditService::class);
         $auditService->expects($this->once())

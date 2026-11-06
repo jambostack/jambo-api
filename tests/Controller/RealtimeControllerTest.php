@@ -74,6 +74,20 @@ class RealtimeControllerTest extends WebTestCase
         $this->assertIsInt($body['time']);
     }
 
+    public function testPollSupportsSinceLatest(): void
+    {
+        $client = $this->createAuthenticatedClient();
+        $client->request('GET', '/api/projects/' . $this->projectUuid . '/realtime?since=latest');
+
+        $this->assertResponseStatusCodeSame(200);
+        $body = json_decode($client->getResponse()->getContent(), true);
+        $this->assertArrayHasKey('events', $body);
+        $this->assertArrayHasKey('since', $body);
+        $this->assertIsArray($body['events']);
+        $this->assertEmpty($body['events']);
+        $this->assertIsInt($body['since']);
+    }
+
     public function testTokenReturnsJwtToken(): void
     {
         $client = $this->createAuthenticatedClient();

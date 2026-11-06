@@ -81,7 +81,7 @@ class Cycle121ImageOptimizationAndSecurityHardeningTest extends TestCase
             imagepng($im, $path);
         }
 
-        imagedestroy($im);
+        unset($im);
         return $path;
     }
 

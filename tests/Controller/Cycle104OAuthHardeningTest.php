@@ -279,7 +279,7 @@ class Cycle104OAuthHardeningTest extends TestCase
         $endUserFromB->id = 99;
 
         $this->jwtService->method('validateToken')->willReturn(['sub' => 99]);
-        $this->endUserRepo->method('find')->with(99)->willReturn($endUserFromB);
+        $this->endUserRepo->expects($this->once())->method('find')->with(99)->willReturn($endUserFromB);
 
         $this->auditService->expects($this->once())
             ->method('log')

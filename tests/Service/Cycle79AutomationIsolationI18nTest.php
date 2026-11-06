@@ -90,8 +90,8 @@ class Cycle79AutomationIsolationI18nTest extends TestCase
         $run->status = 'pending';
         $run->automation = $autoB; // Run appartient à autoB
 
-        $runRepo->method('find')->with(100)->willReturn($run);
-        $autoRepo->method('find')->with(10)->willReturn($autoA); // Message cible autoA
+        $runRepo->expects($this->once())->method('find')->with(100)->willReturn($run);
+        $autoRepo->expects($this->once())->method('find')->with(10)->willReturn($autoA); // Message cible autoA
 
         $handler = new ExecuteAutomationMessageHandler(
             $autoRepo,
@@ -134,8 +134,8 @@ class Cycle79AutomationIsolationI18nTest extends TestCase
         $run->status = 'pending';
         $run->automation = $auto;
 
-        $runRepo->method('find')->with(101)->willReturn($run);
-        $autoRepo->method('find')->with(15)->willReturn($auto);
+        $runRepo->expects($this->once())->method('find')->with(101)->willReturn($run);
+        $autoRepo->expects($this->once())->method('find')->with(15)->willReturn($auto);
 
         $handler = new ExecuteAutomationMessageHandler(
             $autoRepo,
@@ -179,8 +179,8 @@ class Cycle79AutomationIsolationI18nTest extends TestCase
         $run->status = 'pending';
         $run->automation = $auto;
 
-        $runRepo->method('find')->with(102)->willReturn($run);
-        $autoRepo->method('find')->with(18)->willReturn($auto);
+        $runRepo->expects($this->once())->method('find')->with(102)->willReturn($run);
+        $autoRepo->expects($this->once())->method('find')->with(18)->willReturn($auto);
 
         $handler = new ExecuteAutomationMessageHandler(
             $autoRepo,
@@ -281,7 +281,7 @@ class Cycle79AutomationIsolationI18nTest extends TestCase
         $collection->project = $project;
 
         $colRepoSuccess = $this->createMock(CollectionRepository::class);
-        $colRepoSuccess->method('findOneBy')->with(['slug' => 'articles', 'project' => $project])->willReturn($collection);
+        $colRepoSuccess->expects($this->once())->method('findOneBy')->with(['slug' => 'articles', 'project' => $project])->willReturn($collection);
 
         $entryRepoSuccess = $this->createMock(ContentEntryRepository::class);
         $entryRepoSuccess->expects($this->once())
@@ -330,7 +330,7 @@ class Cycle79AutomationIsolationI18nTest extends TestCase
         $collection->project = $project;
 
         $colRepoSuccess = $this->createMock(CollectionRepository::class);
-        $colRepoSuccess->method('findOneBy')->with(['slug' => 'posts', 'project' => $project])->willReturn($collection);
+        $colRepoSuccess->expects($this->once())->method('findOneBy')->with(['slug' => 'posts', 'project' => $project])->willReturn($collection);
 
         $e1 = new ContentEntry();
         $e1->id = 1;
@@ -524,7 +524,7 @@ class Cycle79AutomationIsolationI18nTest extends TestCase
         $project->name = 'Mon Projet';
         $project->uuid = Uuid::fromString('88888888-8888-8888-8888-888888888888');
 
-        $projRepo->method('findOneBy')->with(['uuid' => '88888888-8888-8888-8888-888888888888'])->willReturn($project);
+        $projRepo->expects($this->once())->method('findOneBy')->with(['uuid' => '88888888-8888-8888-8888-888888888888'])->willReturn($project);
 
         $autoRepo->expects($this->once())
             ->method('findActiveScheduled')

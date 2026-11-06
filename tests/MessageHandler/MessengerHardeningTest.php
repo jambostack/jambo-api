@@ -57,7 +57,7 @@ class MessengerHardeningTest extends TestCase
         $run->status = 'pending';
 
         $runRepo = $this->createMock(AutomationRunRepository::class);
-        $runRepo->method('find')->with(123)->willReturn($run);
+        $runRepo->expects($this->once())->method('find')->with(123)->willReturn($run);
 
         $autoRepo = $this->createMock(AutomationRepository::class);
         $engine = $this->createMock(AutomationEngine::class);
@@ -86,7 +86,7 @@ class MessengerHardeningTest extends TestCase
         $run->status = 'success';
 
         $runRepo = $this->createMock(AutomationRunRepository::class);
-        $runRepo->method('find')->with(456)->willReturn($run);
+        $runRepo->expects($this->once())->method('find')->with(456)->willReturn($run);
 
         $autoRepo = $this->createMock(AutomationRepository::class);
         $engine = $this->createMock(AutomationEngine::class);

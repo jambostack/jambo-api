@@ -493,7 +493,7 @@ class Cycle46AuthOidcSecurityHardeningTest extends TestCase
         $existingUser->name = 'Original Name';
 
         $userRepo->method('findOneByOidc')->willReturn(null);
-        $userRepo->method('findByEmail')->with('legit.admin@example.com')->willReturn($existingUser);
+        $userRepo->expects(self::once())->method('findByEmail')->with('legit.admin@example.com')->willReturn($existingUser);
         $em->expects(self::once())->method('flush');
 
         $passport = $authenticator->authenticate($request);
@@ -564,7 +564,7 @@ class Cycle46AuthOidcSecurityHardeningTest extends TestCase
         ]);
 
         $userRepo->method('findOneByOidc')->willReturn(null);
-        $userRepo->method('findByEmail')->with('new.admin@example.com')->willReturn(null);
+        $userRepo->expects(self::once())->method('findByEmail')->with('new.admin@example.com')->willReturn(null);
 
         $persistedUser = null;
         $em->expects(self::once())->method('persist')->willReturnCallback(function (User $u) use (&$persistedUser) {

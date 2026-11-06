@@ -404,7 +404,7 @@ class Cycle90CommentAndNotificationHardeningTest extends TestCase
         $commentRepo = $this->createMock(CommentRepository::class);
         $commentRepo->method('countByEntry')->willReturn(3);
         $commentRepo->method('countByProject')->willReturn(3);
-        $commentRepo->method('find')->with(3)->willReturn($subchild);
+        $commentRepo->expects($this->once())->method('find')->with(3)->willReturn($subchild);
 
         $em = $this->createMock(EntityManagerInterface::class);
 
@@ -450,7 +450,7 @@ class Cycle90CommentAndNotificationHardeningTest extends TestCase
         $commentRepo = $this->createMock(CommentRepository::class);
         $commentRepo->method('countByEntry')->willReturn(0);
         $commentRepo->method('countByProject')->willReturn(0);
-        $commentRepo->method('find')->with(999)->willReturn($foreignComment);
+        $commentRepo->expects($this->once())->method('find')->with(999)->willReturn($foreignComment);
 
         $em = $this->createMock(EntityManagerInterface::class);
 
@@ -690,7 +690,7 @@ class Cycle90CommentAndNotificationHardeningTest extends TestCase
         $recipient = $this->createMockUser(42);
 
         // Recipient already has 1000 notifications (max limit)
-        $notifRepo->method('countByRecipient')->with($recipient)->willReturn(1000);
+        $notifRepo->expects($this->once())->method('countByRecipient')->with($recipient)->willReturn(1000);
         // Expects pruneOldestForUser to be called to keep count below 1000
         $notifRepo->expects($this->once())->method('pruneOldestForUser')->with($recipient, 999)->willReturn(1);
 

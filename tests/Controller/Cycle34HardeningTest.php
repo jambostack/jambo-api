@@ -302,7 +302,7 @@ class Cycle34HardeningTest extends WebTestCase
         $project->name = 'Test Project';
         // Malicious or private previewUrl pointing to cloud metadata
         $project->previewUrl = 'http://169.254.169.254/latest';
-        $project->seoSettings = ['enableSitemap' => true];
+        $project->settings = ['seo' => ['enableSitemap' => true]];
 
         $projectRepo = $this->createStub(ProjectRepository::class);
         $projectRepo->method('findOneBy')->willReturn($project);

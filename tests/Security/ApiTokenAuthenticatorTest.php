@@ -68,7 +68,7 @@ class ApiTokenAuthenticatorTest extends TestCase
     {
         $repo = $this->createMock(ApiTokenRepository::class);
         $translator = $this->createMock(TranslatorInterface::class);
-        $translator->method('trans')->with('auth.api_token.expired')->willReturn('Le jeton API a expiré.');
+        $translator->expects($this->once())->method('trans')->with('auth.api_token.expired')->willReturn('Le jeton API a expiré.');
 
         $authenticator = new ApiTokenAuthenticator($repo, $translator);
 

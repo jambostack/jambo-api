@@ -161,7 +161,7 @@ class Cycle86ExportImportAndBackupQuotasHardeningTest extends TestCase
         $projectRepo = $this->createMock(ProjectRepository::class);
         // Simulate user already having 100 projects
         $fakeProjects = array_fill(0, 100, new Project());
-        $projectRepo->method('findByMember')->with($user)->willReturn($fakeProjects);
+        $projectRepo->expects($this->once())->method('findByMember')->with($user)->willReturn($fakeProjects);
 
         $exporter = $this->createMock(ProjectExporter::class);
         $importer = $this->createMock(ProjectImporter::class);
@@ -325,7 +325,7 @@ class Cycle86ExportImportAndBackupQuotasHardeningTest extends TestCase
 
             $mediaRepo = $this->createMock(MediaRepository::class);
             // Simulate 1MB already fully consumed (1048576 bytes)
-            $mediaRepo->method('getTotalSizeByProject')->with($project)->willReturn(1048576);
+            $mediaRepo->expects($this->once())->method('getTotalSizeByProject')->with($project)->willReturn(1048576);
 
             $handler = new MediaImportHandler($tmpBase, $this->createTranslator(), $mediaRepo);
 

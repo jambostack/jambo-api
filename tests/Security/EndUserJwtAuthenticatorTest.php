@@ -94,7 +94,7 @@ class EndUserJwtAuthenticatorTest extends TestCase
             'ref'  => false,
         ]);
         $this->jwtService->method('isRefreshToken')->willReturn(false);
-        $this->endUserRepo->method('findOneBy')->with(['uuid' => $userUuid])->willReturn($endUser);
+        $this->endUserRepo->expects($this->once())->method('findOneBy')->with(['uuid' => $userUuid])->willReturn($endUser);
 
         $req = new Request();
         $req->headers->set('Authorization', 'Bearer valid_jwt_old_version');
@@ -126,7 +126,7 @@ class EndUserJwtAuthenticatorTest extends TestCase
             'ref'  => false,
         ]);
         $this->jwtService->method('isRefreshToken')->willReturn(false);
-        $this->endUserRepo->method('findOneBy')->with(['uuid' => $userUuid])->willReturn($endUser);
+        $this->endUserRepo->expects($this->once())->method('findOneBy')->with(['uuid' => $userUuid])->willReturn($endUser);
 
         $req = new Request();
         $req->headers->set('Authorization', 'Bearer valid_jwt');
@@ -158,7 +158,7 @@ class EndUserJwtAuthenticatorTest extends TestCase
             'ref'  => false,
         ]);
         $this->jwtService->method('isRefreshToken')->willReturn(false);
-        $this->endUserRepo->method('findOneBy')->with(['uuid' => $userUuid])->willReturn($endUser);
+        $this->endUserRepo->expects($this->once())->method('findOneBy')->with(['uuid' => $userUuid])->willReturn($endUser);
 
         $req = new Request();
         $req->headers->set('Authorization', 'Bearer valid_jwt');

@@ -462,7 +462,7 @@ class Cycle86OAuthAndOidcHardeningTest extends TestCase
         // The User repository must NOT be called if the password fails policy!
         $userRepo = $this->createMock(EntityRepository::class);
         $userRepo->expects($this->never())->method('findOneBy');
-        $em->method('getRepository')->with(User::class)->willReturn($userRepo);
+        $em->method('getRepository')->willReturn($userRepo);
 
         $hasher = $this->createMock(UserPasswordHasherInterface::class);
         $validator = $this->createMock(ValidatorInterface::class);

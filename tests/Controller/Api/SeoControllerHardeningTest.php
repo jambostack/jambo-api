@@ -59,7 +59,7 @@ class SeoControllerHardeningTest extends TestCase
         $project = new Project();
 
         $this->projectRepo->method('findOneBy')->willReturn($project);
-        $this->authChecker->method('isGranted')
+        $this->authChecker->expects($this->once())->method('isGranted')
             ->with('content.update', $project)
             ->willReturn(false);
 

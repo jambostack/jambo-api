@@ -216,8 +216,8 @@ class ProjectOAuthControllerTest extends TestCase
         $endUser->id = 7;
         $endUser->status = 'active';
 
-        $this->jwtService->method('validateToken')->with('valid_jwt_token')->willReturn(['sub' => 7]);
-        $this->endUserRepo->method('find')->with(7)->willReturn($endUser);
+        $this->jwtService->expects($this->once())->method('validateToken')->with('valid_jwt_token')->willReturn(['sub' => 7]);
+        $this->endUserRepo->expects($this->once())->method('find')->with(7)->willReturn($endUser);
 
         $this->oauthService->expects($this->once())
             ->method('createAuthorizationCode')

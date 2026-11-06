@@ -277,7 +277,7 @@ class Cycle81AuditAndNotificationIntegrityTest extends TestCase
         $mentionedUser->name = 'Dave';
         $mentionedUser->locale = 'en';
 
-        $userRepo->method('findOneBy')
+        $userRepo->expects($this->once())->method('findOneBy')
             ->with(['name' => 'Dave'])
             ->willReturn($mentionedUser);
 
@@ -305,6 +305,42 @@ class Cycle81AuditAndNotificationIntegrityTest extends TestCase
         $subscriber->onContentUpdated($event);
 
         $this->assertSame(['content.updated' => 'onContentUpdated'], NotificationSubscriber::getSubscribedEvents());
+    }
+
+    public function testNotificationSubscriberSuppressesSelfNotificationAndUnchangedStatus(): void
+    {
+        $notificationService = $this->createMock(NotificationService::class);
+        $userRepo = $this->createMock(UserRepository::class);
+
+        $subscriber = new NotificationSubscriber($this->em, $userRepo, $notificationService);
+
+        $assignedUser = new User();
+        $assignedUser->id = 10;
+        $assignedUser->locale = 'en';
+
+        $project = new Project();
+        $project->uuid = Uuid::v4();
+
+        $entry = new ContentEntry();
+        $entry->id = 99;
+        $entry->status = 'review';
+        $entry->assignedTo = $assignedUser;
+        $entry->updatedBy = $assignedUser; // Same user as assignedTo -> should be suppressed
+        $entry->project = $project;
+
+        // notificationService should NEVER be called because user updated their own assigned entry
+        $notificationService->expects($this->never())->method('notifyStatusChange');
+
+        $event = new ContentEvent(ContentEvent::UPDATED, $project, $entry);
+        $event->previousStatus = 'draft';
+        $subscriber->onContentUpdated($event);
+
+        // Second case: different author, but status is unchanged ('review' === 'review')
+        $authorUser = new User();
+        $authorUser->id = 11;
+        $entry->updatedBy = $authorUser;
+        $event->previousStatus = 'review'; // Unchanged status -> should be suppressed
+        $subscriber->onContentUpdated($event);
     }
 
     public function testSendNotificationHandlerRequiresRecipientOrResolvesFromContext(): void
@@ -342,7 +378,7 @@ class Cycle81AuditAndNotificationIntegrityTest extends TestCase
         $targetUser->email = 'target@example.com';
         $targetUser->name = 'Target User';
 
-        $userRepo->method('findOneBy')
+        $userRepo->expects($this->once())->method('findOneBy')
             ->with(['email' => 'target@example.com'])
             ->willReturn($targetUser);
 

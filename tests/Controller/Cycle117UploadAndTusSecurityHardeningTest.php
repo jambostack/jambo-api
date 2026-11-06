@@ -71,8 +71,7 @@ class Cycle117UploadAndTusSecurityHardeningTest extends WebTestCase
 
         $roleViewer = new Role();
         $roleViewer->name = "Viewer {$suffix}";
-        $roleViewer->slug = "viewer_{$suffix}";
-        $roleViewer->project = $this->project;
+        $roleViewer->label = "Viewer {$suffix}";
 
         foreach (['content.create', 'project.view'] as $pName) {
             $perm = $this->em->getRepository(Permission::class)->findOneBy(['name' => $pName]);

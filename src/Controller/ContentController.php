@@ -448,7 +448,9 @@ class ContentController extends AbstractController
             $this->em->flush();
         }
 
-        $this->dispatcher->dispatch(new ContentEvent(ContentEvent::UPDATED, $entry->project, $entry));
+        $updateEvent = new ContentEvent(ContentEvent::UPDATED, $entry->project, $entry);
+        $updateEvent->previousStatus = $previousStatus;
+        $this->dispatcher->dispatch($updateEvent);
 
         // Dispatch STATUS_CHANGED si le statut a changé
         if ($previousStatus !== $entry->status) {
