@@ -53,8 +53,7 @@ class DirectUploadController extends AbstractController
         return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
     }
 
-    #[Route('/intent', name: 'intent', methods: ['POST'])]
-    public function createIntent(string $projectUuid, Request $request): JsonResponse
+    private function validateRequestHeadersAndProject(string $projectUuid, Request $request, bool $requireJson = true): ?JsonResponse
     {
         if ($this->directUploadLimiter !== null) {
             $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
@@ -95,8 +94,24 @@ class DirectUploadController extends AbstractController
             ], 404);
         }
 
+        $authProject = $request->attributes->get('_project');
+        if ($authProject instanceof Project && $authProject->uuid?->toRfc4122() !== $project->uuid?->toRfc4122()) {
+            return $this->jsonResponse([
+                'error' => $this->trans('direct_upload.access_denied', [], 'Access denied to project direct uploads.'),
+                'code' => 'ACCESS_DENIED',
+            ], 403);
+        }
+
         if ($this->getUser()) {
             $this->denyAccessUnlessGranted('content.create', $project);
+        }
+
+        $contentLength = $request->headers->get('Content-Length');
+        if ($contentLength !== null && is_numeric($contentLength) && (int) $contentLength > self::MAX_PAYLOAD_BYTES) {
+            return $this->jsonResponse([
+                'error' => $this->trans('direct_upload.payload_too_large', [], 'Direct upload payload too large (max 512KB).'),
+                'code' => 'PAYLOAD_TOO_LARGE',
+            ], 413);
         }
 
         if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
@@ -105,6 +120,29 @@ class DirectUploadController extends AbstractController
                 'code' => 'PAYLOAD_TOO_LARGE',
             ], 413);
         }
+
+        if ($requireJson && $request->getContent() !== '') {
+            $rawContentType = (string) $request->headers->get('Content-Type', '');
+            $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
+            if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+                return $this->jsonResponse([
+                    'error' => $this->trans('direct_upload.unsupported_media_type', [], 'Content-Type must be application/json.'),
+                    'code' => 'UNSUPPORTED_MEDIA_TYPE',
+                ], 415);
+            }
+        }
+
+        return null;
+    }
+
+    #[Route('/intent', name: 'intent', methods: ['POST'])]
+    public function createIntent(string $projectUuid, Request $request): JsonResponse
+    {
+        if ($error = $this->validateRequestHeadersAndProject($projectUuid, $request, true)) {
+            return $error;
+        }
+
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
 
         try {
             $payload = $request->toArray();
@@ -126,6 +164,19 @@ class DirectUploadController extends AbstractController
             return $this->jsonResponse([
                 'error' => $this->trans('direct_upload.filename_too_long', [], 'Filename cannot exceed 255 characters.'),
                 'code' => 'FILENAME_TOO_LONG',
+            ], 422);
+        }
+        if (preg_match('/[\x00-\x1F\x7F]/', $filename)) {
+            return $this->jsonResponse([
+                'error' => $this->trans('direct_upload.filename_control_chars', [], 'Filename contains forbidden control characters.'),
+                'code' => 'FILENAME_CONTROL_CHARS',
+            ], 422);
+        }
+
+        if (isset($payload['mode']) && !in_array($payload['mode'], [AssetUploadIntent::MODE_SINGLE_PUT, AssetUploadIntent::MODE_MULTIPART], true)) {
+            return $this->jsonResponse([
+                'error' => $this->trans('direct_upload.invalid_mode', [], 'Direct upload mode must be single_put or multipart.'),
+                'code' => 'INVALID_MODE',
             ], 422);
         }
 
@@ -174,28 +225,8 @@ class DirectUploadController extends AbstractController
     #[Route('/sign-part', name: 'sign_part', methods: ['POST'])]
     public function signPart(string $projectUuid, Request $request): JsonResponse
     {
-        if ($this->directUploadLimiter !== null) {
-            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
-            if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->jsonResponse([
-                    'error' => $this->trans('direct_upload.rate_limit_exceeded', [], 'Too many direct upload requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
-            }
-        }
-
-        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
-            return $this->jsonResponse([
-                'error' => $this->trans('project.not_found', [], 'Project not found'),
-                'code' => 'PROJECT_NOT_FOUND',
-            ], 404);
-        }
-
-        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->jsonResponse([
-                'error' => $this->trans('direct_upload.payload_too_large', [], 'Direct upload payload too large (max 512KB).'),
-                'code' => 'PAYLOAD_TOO_LARGE',
-            ], 413);
+        if ($error = $this->validateRequestHeadersAndProject($projectUuid, $request, true)) {
+            return $error;
         }
 
         try {
@@ -231,15 +262,11 @@ class DirectUploadController extends AbstractController
             ], 404);
         }
 
-        if (!$this->getUser() && !$request->attributes->get('_project')) {
+        if ($intent->mode !== AssetUploadIntent::MODE_MULTIPART || !$intent->s3MultipartUploadId) {
             return $this->jsonResponse([
-                'error' => $this->trans('direct_upload.auth_required', [], 'Authentication required'),
-                'code' => 'AUTH_REQUIRED',
-            ], 401);
-        }
-
-        if ($this->getUser()) {
-            $this->denyAccessUnlessGranted('content.create', $intent->project);
+                'error' => $this->trans('direct_upload.invalid_intent_mode', [], 'Cannot sign a part for a non-multipart upload intent.'),
+                'code' => 'INVALID_INTENT_MODE',
+            ], 400);
         }
 
         try {
@@ -265,28 +292,8 @@ class DirectUploadController extends AbstractController
     #[Route('/complete', name: 'complete', methods: ['POST'])]
     public function complete(string $projectUuid, Request $request, #[CurrentUser] ?User $user = null): JsonResponse
     {
-        if ($this->directUploadLimiter !== null) {
-            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
-            if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->jsonResponse([
-                    'error' => $this->trans('direct_upload.rate_limit_exceeded', [], 'Too many direct upload requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
-            }
-        }
-
-        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
-            return $this->jsonResponse([
-                'error' => $this->trans('project.not_found', [], 'Project not found'),
-                'code' => 'PROJECT_NOT_FOUND',
-            ], 404);
-        }
-
-        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->jsonResponse([
-                'error' => $this->trans('direct_upload.payload_too_large', [], 'Direct upload payload too large (max 512KB).'),
-                'code' => 'PAYLOAD_TOO_LARGE',
-            ], 413);
+        if ($error = $this->validateRequestHeadersAndProject($projectUuid, $request, true)) {
+            return $error;
         }
 
         try {
@@ -351,15 +358,11 @@ class DirectUploadController extends AbstractController
             ], 404);
         }
 
-        if (!$this->getUser() && !$request->attributes->get('_project')) {
+        if ($intent->mode === AssetUploadIntent::MODE_MULTIPART && empty($parts)) {
             return $this->jsonResponse([
-                'error' => $this->trans('direct_upload.auth_required', [], 'Authentication required'),
-                'code' => 'AUTH_REQUIRED',
-            ], 401);
-        }
-
-        if ($this->getUser()) {
-            $this->denyAccessUnlessGranted('content.create', $intent->project);
+                'error' => $this->trans('direct_upload.parts_required_multipart', [], 'Parts list cannot be empty for multipart upload completion.'),
+                'code' => 'PARTS_REQUIRED',
+            ], 422);
         }
 
         try {
@@ -384,28 +387,8 @@ class DirectUploadController extends AbstractController
     #[Route('/abort', name: 'abort', methods: ['POST'])]
     public function abort(string $projectUuid, Request $request): JsonResponse
     {
-        if ($this->directUploadLimiter !== null) {
-            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
-            if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->jsonResponse([
-                    'error' => $this->trans('direct_upload.rate_limit_exceeded', [], 'Too many direct upload requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
-            }
-        }
-
-        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
-            return $this->jsonResponse([
-                'error' => $this->trans('project.not_found', [], 'Project not found'),
-                'code' => 'PROJECT_NOT_FOUND',
-            ], 404);
-        }
-
-        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
-            return $this->jsonResponse([
-                'error' => $this->trans('direct_upload.payload_too_large', [], 'Direct upload payload too large (max 512KB).'),
-                'code' => 'PAYLOAD_TOO_LARGE',
-            ], 413);
+        if ($error = $this->validateRequestHeadersAndProject($projectUuid, $request, true)) {
+            return $error;
         }
 
         try {
@@ -433,17 +416,6 @@ class DirectUploadController extends AbstractController
             ], 404);
         }
 
-        if (!$this->getUser() && !$request->attributes->get('_project')) {
-            return $this->jsonResponse([
-                'error' => $this->trans('direct_upload.auth_required', [], 'Authentication required'),
-                'code' => 'AUTH_REQUIRED',
-            ], 401);
-        }
-
-        if ($this->getUser()) {
-            $this->denyAccessUnlessGranted('content.create', $intent->project);
-        }
-
         try {
             $this->directUploadService->abortUpload($intent);
 
@@ -463,48 +435,11 @@ class DirectUploadController extends AbstractController
     #[Route('/cleanup-orphans', name: 'cleanup_orphans', methods: ['POST'])]
     public function cleanupOrphans(string $projectUuid, Request $request): JsonResponse
     {
-        if ($this->directUploadLimiter !== null) {
-            $identifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?: '127.0.0.1';
-            if (false === $this->directUploadLimiter->create($identifier)->consume(1)->isAccepted()) {
-                return $this->jsonResponse([
-                    'error' => $this->trans('direct_upload.rate_limit_exceeded', [], 'Too many direct upload requests. Please retry later.'),
-                    'code' => 'RATE_LIMIT_EXCEEDED',
-                ], 429);
-            }
+        if ($error = $this->validateRequestHeadersAndProject($projectUuid, $request, false)) {
+            return $error;
         }
 
-        if (!$this->getUser() && !$request->attributes->get('_project')) {
-            return $this->jsonResponse([
-                'error' => $this->trans('direct_upload.auth_required', [], 'Authentication required'),
-                'code' => 'AUTH_REQUIRED',
-            ], 401);
-        }
-
-        if (!preg_match(self::UUID_REGEX, $projectUuid)) {
-            return $this->jsonResponse([
-                'error' => $this->trans('project.not_found', [], 'Project not found'),
-                'code' => 'PROJECT_NOT_FOUND',
-            ], 404);
-        }
-
-        try {
-            $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
-        } catch (\Throwable) {
-            return $this->jsonResponse([
-                'error' => $this->trans('project.not_found', [], 'Project not found'),
-                'code' => 'PROJECT_NOT_FOUND',
-            ], 404);
-        }
-        if (!$project) {
-            return $this->jsonResponse([
-                'error' => $this->trans('project.not_found', [], 'Project not found'),
-                'code' => 'PROJECT_NOT_FOUND',
-            ], 404);
-        }
-
-        if ($this->getUser()) {
-            $this->denyAccessUnlessGranted('content.create', $project);
-        }
+        $project = $this->projectRepository->findOneBy(['uuid' => $projectUuid]);
 
         try {
             $count = $this->directUploadService->cleanupExpiredIntents($project, 50);
@@ -517,9 +452,9 @@ class DirectUploadController extends AbstractController
                 'status'        => 'success',
                 'cleaned_count' => $count,
             ]);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return $this->jsonResponse([
-                'error' => $this->trans('direct_upload.cleanup_failed', ['%error%' => $e->getMessage()], $e->getMessage()),
+                'error' => $this->trans('direct_upload.cleanup_failed', [], 'Failed to clean up expired upload intents.'),
                 'code' => 'CLEANUP_FAILED',
             ], 400);
         }

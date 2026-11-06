@@ -19,11 +19,17 @@ class AssetUploadIntentRepository extends ServiceEntityRepository
 
     public function findPendingByUuid(string $uuid): ?AssetUploadIntent
     {
+        if (!\Symfony\Component\Uid\Uuid::isValid($uuid)) {
+            return null;
+        }
+
+        $uuidObj = \Symfony\Component\Uid\Uuid::fromString($uuid);
+
         return $this->createQueryBuilder('i')
             ->where('i.uuid = :uuid')
             ->andWhere('i.status = :status')
             ->andWhere('i.expiresAt > :now')
-            ->setParameter('uuid', $uuid)
+            ->setParameter('uuid', $uuidObj->toBinary())
             ->setParameter('status', AssetUploadIntent::STATUS_PENDING)
             ->setParameter('now', new \DateTimeImmutable())
             ->getQuery()

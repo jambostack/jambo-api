@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Exception\TusChecksumMismatchException;
 use App\Exception\TusChunkOutOfBoundsException;
 use App\Exception\TusConflictException;
 use App\Exception\TusOffsetMismatchException;
@@ -28,7 +29,7 @@ class TusServer
      *
      * @param array $metadata Clés décodées du header Upload-Metadata
      */
-    public function create(string $projectUuid, int $uploadLength, array $metadata): string
+    public function create(string $projectUuid, int $uploadLength, array $metadata, ?string $userIdentifier = null): string
     {
         $uploadId = Uuid::v4()->toRfc4122();
         $dir = $this->uploadDir($projectUuid);
@@ -43,6 +44,7 @@ class TusServer
             'size'           => $uploadLength,
             'offset'         => 0,
             'metadata'       => $metadata,
+            'created_by'     => $userIdentifier,
             'created_at'     => time(),
             'finalized'      => false,
             'finalizing'     => false,
@@ -97,9 +99,9 @@ class TusServer
      *
      * @param resource $stream Flux binaire du chunk
      */
-    public function patch(string $projectUuid, string $uploadId, int $offset, $stream): int
+    public function patch(string $projectUuid, string $uploadId, int $offset, $stream, ?string $expectedAlgo = null, ?string $expectedChecksum = null): int
     {
-        return $this->withLock($projectUuid, $uploadId, function () use ($projectUuid, $uploadId, $offset, $stream): int {
+        return $this->withLock($projectUuid, $uploadId, function () use ($projectUuid, $uploadId, $offset, $stream, $expectedAlgo, $expectedChecksum): int {
             $info = $this->getInfo($projectUuid, $uploadId);
             if ($info === null) {
                 throw new \RuntimeException('Upload not found');
@@ -133,11 +135,30 @@ class TusServer
 
             fseek($fp, $offset);
 
-            // Copier au maximum remaining + 1 octets pour détecter tout dépassement de chunk
-            $bytesCopied = stream_copy_to_stream($stream, $fp, $remaining + 1);
-            if ($bytesCopied === false) {
-                fclose($fp);
-                throw new \RuntimeException('Failed to stream data to upload file');
+            $ctx = $expectedAlgo !== null ? hash_init($expectedAlgo) : null;
+            $bytesCopied = 0;
+
+            if ($ctx !== null) {
+                while (!feof($stream) && $bytesCopied <= $remaining) {
+                    $buf = fread($stream, min(65536, ($remaining + 1) - $bytesCopied));
+                    if ($buf === false || $buf === '') {
+                        break;
+                    }
+                    hash_update($ctx, $buf);
+                    $written = fwrite($fp, $buf);
+                    if ($written === false) {
+                        fclose($fp);
+                        throw new \RuntimeException('Failed to write chunk data');
+                    }
+                    $bytesCopied += $written;
+                }
+            } else {
+                // Copier au maximum remaining + 1 octets pour détecter tout dépassement de chunk
+                $bytesCopied = stream_copy_to_stream($stream, $fp, $remaining + 1);
+                if ($bytesCopied === false) {
+                    fclose($fp);
+                    throw new \RuntimeException('Failed to stream data to upload file');
+                }
             }
 
             if ($bytesCopied > $remaining) {
@@ -153,6 +174,15 @@ class TusServer
                     ftruncate($fp, $offset);
                     fclose($fp);
                     throw new TusChunkOutOfBoundsException('Chunk exceeds declared Upload-Length');
+                }
+            }
+
+            if ($ctx !== null && $expectedChecksum !== null) {
+                $calculatedHash = base64_encode(hash_final($ctx, true));
+                if (!hash_equals($expectedChecksum, $calculatedHash)) {
+                    ftruncate($fp, $offset);
+                    fclose($fp);
+                    throw new TusChecksumMismatchException('Chunk checksum mismatch');
                 }
             }
 

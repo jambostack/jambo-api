@@ -3435,6 +3435,16 @@ return [
     'tus.upload_length_exceeds_project_limit' => 'La longueur de l\'upload dépasse la limite maximale de taille de fichier du projet (%max% Mo).',
     'direct_upload.intent_max_bytes_exceeded' => 'L\'objet téléversé sur le stockage dépasse la limite maximale déclarée.',
     'direct_upload.s3_size_mismatch' => 'La taille de l\'objet sur le stockage ne correspond pas aux spécifications de l\'intention d\'upload.',
+    'direct_upload.access_denied' => 'Accès refusé aux téléversements directs du projet.',
+    'direct_upload.unsupported_media_type' => 'Le Content-Type doit être application/json.',
+    'direct_upload.filename_control_chars' => 'Le nom de fichier contient des caractères de contrôle interdits.',
+    'direct_upload.invalid_mode' => 'Le mode de téléversement direct doit être single_put ou multipart.',
+    'direct_upload.invalid_intent_mode' => 'Impossible de signer une partie pour une intention de téléversement non multipart.',
+    'direct_upload.parts_required_multipart' => 'La liste des parties ne peut pas être vide pour finaliser un téléversement multipart.',
+    'tus.forbidden_non_owner' => 'Seul le propriétaire du téléversement ou les gestionnaires de projet peuvent modifier ce téléversement.',
+    'tus.invalid_checksum_format' => 'Format de l\'en-tête Upload-Checksum invalide.',
+    'tus.unsupported_checksum_algorithm' => 'Algorithme de somme de contrôle non supporté. Algorithmes supportés : sha256, sha1, md5.',
+    'tus.checksum_mismatch' => 'Divergence de la somme de contrôle du fragment.',
 
     // ─── Flux asynchrones, Messenger & Durcissement Erreurs (Phases 79-80) ───
     'automation.error.message_expired' => 'Message d\'exécution de l\'automatisation expiré dans la file d\'attente.',

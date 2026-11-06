@@ -3419,6 +3419,16 @@ return [
     'tus.upload_length_exceeds_project_limit' => 'طول التحميل يتجاوز الحد الأقصى لحجم الملف المحدد للمشروع (%max% ميغابايت).',
     'direct_upload.intent_max_bytes_exceeded' => 'الكائن المحمّل في التخزين يتجاوز الحد الأقصى للحجم المعلن عنه.',
     'direct_upload.s3_size_mismatch' => 'حجم الكائن في التخزين لا يتطابق مع مواصفات نية التحميل.',
+    'direct_upload.access_denied' => 'تم رفض الوصول إلى التحميلات المباشرة للمشروع.',
+    'direct_upload.unsupported_media_type' => 'يجب أن يكون نوع المحتوى (Content-Type) هو application/json.',
+    'direct_upload.filename_control_chars' => 'اسم الملف يحتوي على أحرف تحكم محظورة.',
+    'direct_upload.invalid_mode' => 'يجب أن يكون وضع التحميل المباشر single_put أو multipart.',
+    'direct_upload.invalid_intent_mode' => 'لا يمكن توقيع جزء لعملية تحميل ليست متعددة الأجزاء.',
+    'direct_upload.parts_required_multipart' => 'لا يمكن أن تكون قائمة الأجزاء فارغة لاكتمال التحميل متعدد الأجزاء.',
+    'tus.forbidden_non_owner' => 'يمكن فقط لمالك التحميل أو مديري المشروع تعديل هذا التحميل.',
+    'tus.invalid_checksum_format' => 'تنسيق رأس Upload-Checksum غير صالح.',
+    'tus.unsupported_checksum_algorithm' => 'خوارزمية المجموع الاختباري غير مدعومة. الخوارزميات المدعومة: sha256, sha1, md5.',
+    'tus.checksum_mismatch' => 'عدم تطابق في المجموع الاختباري للقطعة.',
 
     // ─── تدفقات غير متزامنة، ماسنجر وتصليد الأخطاء (المرحلتان 79-80) ───
     'automation.error.message_expired' => 'انتهت صلاحية رسالة تشغيل الأتمتة في قائمة الانتظار.',

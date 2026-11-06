@@ -3417,6 +3417,16 @@ return [
     'tus.upload_length_exceeds_project_limit' => 'Upload length exceeds project maximum file size limit (%max% MB).',
     'direct_upload.intent_max_bytes_exceeded' => 'Uploaded object on storage exceeds declared maximum size limit.',
     'direct_upload.s3_size_mismatch' => 'Object size on storage does not match upload intent specifications.',
+    'direct_upload.access_denied' => 'Access denied to project direct uploads.',
+    'direct_upload.unsupported_media_type' => 'Content-Type must be application/json.',
+    'direct_upload.filename_control_chars' => 'Filename contains forbidden control characters.',
+    'direct_upload.invalid_mode' => 'Direct upload mode must be single_put or multipart.',
+    'direct_upload.invalid_intent_mode' => 'Cannot sign a part for a non-multipart upload intent.',
+    'direct_upload.parts_required_multipart' => 'Parts list cannot be empty for multipart upload completion.',
+    'tus.forbidden_non_owner' => 'Only the upload owner or project managers can modify this upload.',
+    'tus.invalid_checksum_format' => 'Invalid Upload-Checksum header format.',
+    'tus.unsupported_checksum_algorithm' => 'Unsupported checksum algorithm. Supported algorithms: sha256, sha1, md5.',
+    'tus.checksum_mismatch' => 'Chunk checksum mismatch.',
 
     // ─── Async Flows, Messenger & Error Hardening (Phase 79-80) ───
     'automation.error.message_expired' => 'Automation execution message expired in queue.',

@@ -220,7 +220,7 @@ class WebhookController extends AbstractController
 
         $rawContentType = (string) $request->headers->get('Content-Type', '');
         $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
-        if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+        if ($request->getContent() !== '' && $contentType !== '' && !str_contains($contentType, 'application/json')) {
             return $this->secureJson([
                 'error' => $this->trans('webhook.unsupported_content_type', [], 'Unsupported Content-Type header. Expected application/json.'),
                 'code' => 'UNSUPPORTED_MEDIA_TYPE',
@@ -409,7 +409,7 @@ class WebhookController extends AbstractController
 
         $rawContentType = (string) $request->headers->get('Content-Type', '');
         $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
-        if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+        if ($request->getContent() !== '' && $contentType !== '' && !str_contains($contentType, 'application/json')) {
             return $this->secureJson([
                 'error' => $this->trans('webhook.unsupported_content_type', [], 'Unsupported Content-Type header. Expected application/json.'),
                 'code' => 'UNSUPPORTED_MEDIA_TYPE',
@@ -568,7 +568,7 @@ class WebhookController extends AbstractController
 
         $rawContentType = (string) $request->headers->get('Content-Type', '');
         $contentType = strtolower(trim(explode(';', $rawContentType)[0]));
-        if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+        if ($request->getContent() !== '' && $contentType !== '' && !str_contains($contentType, 'application/json')) {
             return $this->secureJson([
                 'error' => $this->trans('webhook.unsupported_content_type', [], 'Unsupported Content-Type header. Expected application/json.'),
                 'code' => 'UNSUPPORTED_MEDIA_TYPE',

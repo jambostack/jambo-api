@@ -3417,6 +3417,16 @@ return [
     'tus.upload_length_exceeds_project_limit' => 'La longitud de subida supera el límite de tamaño de archivo del proyecto (%max% MB).',
     'direct_upload.intent_max_bytes_exceeded' => 'El objeto subido en el almacenamiento supera el límite de tamaño máximo declarado.',
     'direct_upload.s3_size_mismatch' => 'El tamaño del objeto en el almacenamiento no coincide con las especificaciones de la intención de subida.',
+    'direct_upload.access_denied' => 'Acceso denegado a las subidas directas del proyecto.',
+    'direct_upload.unsupported_media_type' => 'Content-Type debe ser application/json.',
+    'direct_upload.filename_control_chars' => 'El nombre del archivo contiene caracteres de control prohibidos.',
+    'direct_upload.invalid_mode' => 'El modo de subida directa debe ser single_put o multipart.',
+    'direct_upload.invalid_intent_mode' => 'No se puede firmar una parte para una intención de subida que no sea multiparte.',
+    'direct_upload.parts_required_multipart' => 'La lista de partes no puede estar vacía para completar la subida multiparte.',
+    'tus.forbidden_non_owner' => 'Solo el propietario de la subida o los administradores del proyecto pueden modificar esta subida.',
+    'tus.invalid_checksum_format' => 'Formato de encabezado Upload-Checksum no válido.',
+    'tus.unsupported_checksum_algorithm' => 'Algoritmo de suma de comprobación no compatible. Algoritmos admitidos: sha256, sha1, md5.',
+    'tus.checksum_mismatch' => 'Discrepancia en la suma de comprobación del fragmento.',
 
     // ─── Flujos Asíncronos, Messenger y Errores (Fases 79-80) ───
     'automation.error.message_expired' => 'Mensaje de ejecución de automatización expirado en cola.',

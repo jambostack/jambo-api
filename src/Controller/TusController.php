@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\Media;
 use App\Entity\MediaFolder;
 use App\Entity\Project;
+use App\Exception\TusChecksumMismatchException;
 use App\Exception\TusChunkOutOfBoundsException;
 use App\Exception\TusConflictException;
 use App\Exception\TusOffsetMismatchException;
@@ -102,10 +103,11 @@ class TusController extends AbstractController
     public function options(): Response
     {
         return new Response('', 204, [
-            'Tus-Resumable' => '1.0.0',
-            'Tus-Version'   => '1.0.0',
-            'Tus-Extension' => 'creation,termination',
-            'Tus-Max-Size'  => (string) self::MAX_TUS_SIZE,
+            'Tus-Resumable'          => '1.0.0',
+            'Tus-Version'            => '1.0.0',
+            'Tus-Extension'          => 'creation,termination,checksum',
+            'Tus-Checksum-Algorithm' => 'sha256,sha1,md5',
+            'Tus-Max-Size'           => (string) self::MAX_TUS_SIZE,
         ]);
     }
 
@@ -181,7 +183,7 @@ class TusController extends AbstractController
             return $this->errorResponse($this->trans('tus.validation_failed', ['%error%' => $e->getMessage()], sprintf('TUS upload validation failed: %s.', $e->getMessage())), 'VALIDATION_FAILED', 400);
         }
 
-        $uploadId = $this->tusServer->create($projectUuid, $uploadLength, $metadata);
+        $uploadId = $this->tusServer->create($projectUuid, $uploadLength, $metadata, $this->getUser()?->getUserIdentifier());
 
         $location = $this->generateUrl('api_tus_process', [
             'projectUuid' => $projectUuid,
@@ -226,6 +228,41 @@ class TusController extends AbstractController
             return $this->errorResponse($this->trans('tus.upload_not_found', [], 'Upload not found'), 'UPLOAD_NOT_FOUND', 404);
         }
 
+        $info = $this->tusServer->getInfo($projectUuid, $uploadId);
+        if ($info !== null && isset($info['created_by']) && $info['created_by'] !== null) {
+            $currentUser = $this->getUser();
+            $currentIdentifier = $currentUser?->getUserIdentifier();
+            $isSuperAdmin = $currentUser && in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true);
+            $isProjectManager = false;
+            if ($currentUser && !$isSuperAdmin) {
+                $member = $this->memberRepo->findActiveByUserAndProject($currentUser, $project);
+                $isProjectManager = $member?->role?->hasPermission('project.manage') ?? false;
+            }
+            if (!$isSuperAdmin && !$isProjectManager && $currentIdentifier !== $info['created_by']) {
+                return $this->errorResponse($this->trans('tus.forbidden_non_owner', [], 'Only the upload owner or project managers can modify this upload.'), 'FORBIDDEN_NON_OWNER', 403);
+            }
+        }
+
+        $expectedAlgo = null;
+        $expectedChecksum = null;
+        if ($request->headers->has('Upload-Checksum')) {
+            $rawChecksum = trim((string) $request->headers->get('Upload-Checksum'));
+            $parts = preg_split('/\s+/', $rawChecksum, 2);
+            if (count($parts) !== 2) {
+                return $this->errorResponse($this->trans('tus.invalid_checksum_format', [], 'Invalid Upload-Checksum header format.'), 'INVALID_CHECKSUM_FORMAT', 400);
+            }
+            [$algo, $b64Hash] = $parts;
+            $algo = strtolower($algo);
+            if (!in_array($algo, ['sha256', 'sha1', 'md5'], true)) {
+                return $this->errorResponse($this->trans('tus.unsupported_checksum_algorithm', [], 'Unsupported checksum algorithm. Supported algorithms: sha256, sha1, md5.'), 'CHECKSUM_ALGORITHM_NOT_SUPPORTED', 400);
+            }
+            if (base64_decode($b64Hash, true) === false || trim($b64Hash) === '') {
+                return $this->errorResponse($this->trans('tus.invalid_checksum_format', [], 'Invalid Upload-Checksum header format.'), 'INVALID_CHECKSUM_FORMAT', 400);
+            }
+            $expectedAlgo = $algo;
+            $expectedChecksum = $b64Hash;
+        }
+
         if (!$request->headers->has('Upload-Offset')) {
             return $this->errorResponse($this->trans('tus.missing_upload_offset', [], 'Missing Upload-Offset header'), 'MISSING_UPLOAD_OFFSET', 400);
         }
@@ -254,12 +291,14 @@ class TusController extends AbstractController
         $stream = $request->getContent(true); // resource
 
         try {
-            $newOffset = $this->tusServer->patch($projectUuid, $uploadId, $offset, $stream);
+            $newOffset = $this->tusServer->patch($projectUuid, $uploadId, $offset, $stream, $expectedAlgo, $expectedChecksum);
         } catch (TusOffsetMismatchException $e) {
             return new Response('', 409, array_merge([
                 'Upload-Offset' => (string) $e->getCurrentOffset(),
                 'Tus-Resumable' => '1.0.0',
             ], self::SECURITY_HEADERS));
+        } catch (TusChecksumMismatchException $e) {
+            return $this->errorResponse($this->trans('tus.checksum_mismatch', [], 'Chunk checksum mismatch.'), 'CHECKSUM_MISMATCH', 460);
         } catch (TusChunkOutOfBoundsException $e) {
             return $this->errorResponse($this->trans('tus.chunk_out_of_bounds', [], 'TUS chunk offset exceeds upload length.'), 'CHUNK_OUT_OF_BOUNDS', 413);
         } catch (TusConflictException $e) {
@@ -315,6 +354,10 @@ class TusController extends AbstractController
             return $rateLimitResponse;
         }
 
+        if ($request->headers->has('Tus-Resumable') && $request->headers->get('Tus-Resumable') !== '1.0.0') {
+            return new Response('', 412, array_merge(['Tus-Version' => '1.0.0'], self::SECURITY_HEADERS));
+        }
+
         $project = $this->findProject($projectUuid);
         if (!$project) {
             return $this->errorResponse($this->trans('tus.project_not_found', [], 'Project not found'), 'PROJECT_NOT_FOUND', 404);
@@ -324,6 +367,22 @@ class TusController extends AbstractController
         if (!$this->isValidUploadId($uploadId) || !$this->tusServer->exists($projectUuid, $uploadId)) {
             return $this->errorResponse($this->trans('tus.upload_not_found', [], 'Upload not found'), 'UPLOAD_NOT_FOUND', 404);
         }
+
+        $info = $this->tusServer->getInfo($projectUuid, $uploadId);
+        if ($info !== null && isset($info['created_by']) && $info['created_by'] !== null) {
+            $currentUser = $this->getUser();
+            $currentIdentifier = $currentUser?->getUserIdentifier();
+            $isSuperAdmin = $currentUser && in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true);
+            $isProjectManager = false;
+            if ($currentUser && !$isSuperAdmin) {
+                $member = $this->memberRepo->findActiveByUserAndProject($currentUser, $project);
+                $isProjectManager = $member?->role?->hasPermission('project.manage') ?? false;
+            }
+            if (!$isSuperAdmin && !$isProjectManager && $currentIdentifier !== $info['created_by']) {
+                return $this->errorResponse($this->trans('tus.forbidden_non_owner', [], 'Only the upload owner or project managers can modify this upload.'), 'FORBIDDEN_NON_OWNER', 403);
+            }
+        }
+
         $this->tusServer->cancel($projectUuid, $uploadId);
 
         $this->auditService?->log('tus_upload_delete', $project, ['upload_id' => $uploadId], null, 'success', null, $this->getUser()?->getUserIdentifier(), 'admin_api');
@@ -516,7 +575,10 @@ class TusController extends AbstractController
      */
     private function denyProjectAccess(Project $project, ?Request $request = null, string $permission = 'content.create'): void
     {
-        if ($request !== null && $request->attributes->get('_project') === $project) {
+        if ($request !== null && ($reqProject = $request->attributes->get('_project')) instanceof Project) {
+            if ($reqProject->uuid?->toRfc4122() !== $project->uuid?->toRfc4122()) {
+                throw $this->createAccessDeniedException($this->trans('tus.access_denied', [], 'Access denied'));
+            }
             return;
         }
         $user = $this->getUser();
