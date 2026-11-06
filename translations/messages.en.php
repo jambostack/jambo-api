@@ -3825,4 +3825,17 @@ return [
     'cli.prune_orphans.success' => 'Orphan upload cleanup completed successfully.',
     'cli.prune_orphans.purging_soft_deleted' => '2. Purging soft-deleted media older than %days% days...',
     'cli.prune_orphans.scanning_disk' => '3. Scanning local storage for unreferenced physical files...',
+
+    // Cycle #96: Content API & CSV Import Hardening
+    'api_content.rate_limit_exceeded' => 'Too many content API requests. Please retry later.',
+    'api_content.payload_too_large' => 'Content payload exceeds maximum size limit (%max%).',
+    'api_content.too_many_fields' => 'Payload exceeds maximum allowed fields count (max %max%).',
+    'api_content.collection_quota_exceeded' => 'Collection entry limit reached (maximum %max% entries).',
+    'api_content.invalid_status' => 'Invalid status for this collection.',
+    'api_content.assignee_not_member' => 'User is not a member of this project.',
+    'api_content.field_value_unique' => 'The value "%value%" already exists for field "%field%".',
+    'api_content.invalid_uuid_format' => 'Invalid UUID format.',
+    'api_content.slug_too_long' => 'Slug exceeds maximum allowed length (%max% characters).',
+    'admin_api.import.quota_exceeded' => 'Collection entry limit reached (maximum %max% entries).',
+    'admin_api.import.cell_control_chars' => 'Cell contains invalid control characters in column "%column%".',
 ];

@@ -13,9 +13,12 @@ use App\Repository\EndUserRepository;
 use App\Repository\MediaRepository;
 use App\Repository\ProjectRepository;
 use App\Service\ApiTokenChecker;
+use App\Service\AuditService;
 use App\Service\EavDataFormatterService;
 use App\Service\EavFieldHelperService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\String\Slugger\SluggerInterface;
 use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -29,6 +32,20 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/{projectId}/{collectionSlug}', name: 'public_api_content_', requirements: ['projectId' => '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'])]
 class ContentController extends AbstractController
 {
+    public const MAX_PAYLOAD_BYTES = 2097152; // 2MB
+    public const MAX_FIELDS_COUNT = 100;
+    public const MAX_ENTRIES_PER_COLLECTION = 10000;
+    public const MAX_SLUG_LENGTH = 128;
+
+    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+
+    private const SECURITY_HEADERS = [
+        'Cache-Control'          => 'no-store, no-cache, must-revalidate, private',
+        'Pragma'                 => 'no-cache',
+        'X-Content-Type-Options' => 'nosniff',
+        'X-Frame-Options'        => 'DENY',
+    ];
+
     public function __construct(
         private ApiTokenChecker $tokenChecker,
         private ProjectRepository $projectRepository,
@@ -44,11 +61,34 @@ class ContentController extends AbstractController
         private EavFieldHelperService $fieldValidator,
         private SluggerInterface $slugger,
         private ?TranslatorInterface $translator = null,
+        #[Autowire(service: 'limiter.project_limiter')]
+        private ?RateLimiterFactory $contentLimiter = null,
+        private ?AuditService $auditService = null,
     ) {}
 
     private function trans(string $key, array $params = [], string $default = ''): string
     {
         return $this->translator ? $this->translator->trans($key, $params) : ($default ?: $key);
+    }
+
+    private function secureJson(mixed $data, int $status = 200, array $headers = []): JsonResponse
+    {
+        return new JsonResponse($data, $status, array_merge(self::SECURITY_HEADERS, $headers));
+    }
+
+    private function checkRateLimit(Request $request, ?string $projectIdentifier = null): ?JsonResponse
+    {
+        if ($this->contentLimiter === null) {
+            return null;
+        }
+        $identifier = $projectIdentifier ?: ($request->getClientIp() ?: '127.0.0.1');
+        if (false === $this->contentLimiter->create($identifier)->consume(1)->isAccepted()) {
+            return $this->secureJson([
+                'error' => $this->trans('api_content.rate_limit_exceeded', [], 'Too many content API requests. Please retry later.'),
+                'code'  => 'RATE_LIMIT_EXCEEDED',
+            ], 429);
+        }
+        return null;
     }
 
     #[OA\Get(
@@ -74,6 +114,14 @@ class ContentController extends AbstractController
     #[Route('', name: 'index', methods: ['GET'])]
     public function index(Request $request, string $projectId, string $collectionSlug): JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $projectId)) {
+            return $this->secureJson(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
+        }
+
+        if ($rateLimitResponse = $this->checkRateLimit($request, $projectId)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolvePublicProject($projectId);
         if ($project instanceof JsonResponse) {
             return $project;
@@ -81,7 +129,7 @@ class ContentController extends AbstractController
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
         }
 
         $locale  = $request->query->getString('locale', $project->defaultLocale);
@@ -103,7 +151,7 @@ class ContentController extends AbstractController
         );
         $total = $this->entryRepository->countByCollection($collection, $locale, $statusFilter, $search, $dateFrom, $dateTo);
 
-        return $this->json([
+        return $this->secureJson([
             'data' => array_values(array_map(fn ($e) => $this->formatter->formatEntry($e), $entries)),
             'meta' => [
                 'total'    => $total,
@@ -129,8 +177,20 @@ class ContentController extends AbstractController
         ]
     )]
     #[Route('/{uuid}', name: 'show', methods: ['GET'])]
-    public function show(Request $_request, string $projectId, string $collectionSlug, string $uuid): JsonResponse
+    public function show(Request $request, string $projectId, string $collectionSlug, string $uuid): JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $projectId)) {
+            return $this->secureJson(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
+        }
+
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return $this->secureJson(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
+        }
+
+        if ($rateLimitResponse = $this->checkRateLimit($request, $projectId)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolvePublicProject($projectId);
         if ($project instanceof JsonResponse) {
             return $project;
@@ -138,19 +198,19 @@ class ContentController extends AbstractController
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
         }
 
         try {
             $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
         if ($entry === null) {
-            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
 
-        return $this->json($this->formatter->formatEntry($entry));
+        return $this->secureJson($this->formatter->formatEntry($entry));
     }
 
     #[OA\Post(
@@ -176,6 +236,14 @@ class ContentController extends AbstractController
     #[Route('', name: 'store', methods: ['POST'])]
     public function store(Request $request, string $projectId, string $collectionSlug): JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $projectId)) {
+            return $this->secureJson(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
+        }
+
+        if ($rateLimitResponse = $this->checkRateLimit($request, $projectId)) {
+            return $rateLimitResponse;
+        }
+
         $project = $this->resolvePublicProject($projectId);
         if ($project instanceof JsonResponse) {
             return $project;
@@ -183,7 +251,7 @@ class ContentController extends AbstractController
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
         }
 
         // Vérifier l'authentification : soit token API, soit collection en public_create
@@ -191,15 +259,22 @@ class ContentController extends AbstractController
         $publicCreate = $collection->settings['public_create'] ?? false;
 
         if ($token === null && !$publicCreate) {
-            return $this->json(['error' => $this->trans('api_content.auth_required', [], 'Authentication required. Provide an API token or enable public_create on the collection.')], 401);
+            return $this->secureJson(['error' => $this->trans('api_content.auth_required', [], 'Authentication required. Provide an API token or enable public_create on the collection.')], 401);
         }
 
         if ($token !== null && $token->project->uuid->toString() !== $projectId) {
-            return $this->json(['error' => $this->trans('api_content.forbidden', [], 'Forbidden.')], 403);
+            return $this->secureJson(['error' => $this->trans('api_content.forbidden', [], 'Forbidden.')], 403);
         }
 
         if ($token !== null && !$token->can('create')) {
-            return $this->json(['error' => $this->trans('api_content.token_create_required', [], 'Unauthorized. Token requires create ability.')], 401);
+            return $this->secureJson(['error' => $this->trans('api_content.token_create_required', [], 'Unauthorized. Token requires create ability.')], 401);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('api_content.payload_too_large', ['%max%' => '2MB'], 'Content payload exceeds maximum size limit (2MB).'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413);
         }
 
         // Accepter JSON ou multipart/form-data
@@ -213,9 +288,24 @@ class ContentController extends AbstractController
             try {
                 $data = $request->toArray();
             } catch (\Throwable) {
-                return $this->json(['error' => $this->trans('api_content.invalid_json', [], 'Invalid JSON')], 400);
+                return $this->secureJson(['error' => $this->trans('api_content.invalid_json', [], 'Invalid JSON')], 400);
             }
             $uploadedFiles = [];
+        }
+
+        if (count($data) > self::MAX_FIELDS_COUNT) {
+            return $this->secureJson([
+                'error' => $this->trans('api_content.too_many_fields', ['%max%' => (string) self::MAX_FIELDS_COUNT], sprintf('Payload exceeds maximum allowed fields count (max %d).', self::MAX_FIELDS_COUNT)),
+                'code'  => 'TOO_MANY_FIELDS',
+            ], 422);
+        }
+
+        $activeEntriesCount = $this->entryRepository->countByCollection($collection);
+        if ($activeEntriesCount >= self::MAX_ENTRIES_PER_COLLECTION) {
+            return $this->secureJson([
+                'error' => $this->trans('api_content.collection_quota_exceeded', ['%max%' => (string) self::MAX_ENTRIES_PER_COLLECTION], sprintf('Collection entry limit reached (maximum %d entries).', self::MAX_ENTRIES_PER_COLLECTION)),
+                'code'  => 'QUOTA_EXCEEDED',
+            ], 422);
         }
 
         $locale = $data['locale'] ?? $token?->project->defaultLocale ?? $project->defaultLocale;
@@ -229,17 +319,17 @@ class ContentController extends AbstractController
         $systemStatuses = ['draft', 'scheduled'];
         $validStatuses = array_merge(array_column($statuses, 'slug'), $systemStatuses);
         if (!in_array($status, $validStatuses, true)) {
-            return $this->json(['errors' => ['status' => 'Invalid status for this collection.']], 422);
+            return $this->secureJson(['errors' => ['status' => $this->trans('api_content.invalid_status', [], 'Invalid status for this collection.')]], 422);
         }
         $entry->status = $status;
 
         // Handle assignment
         if (isset($data['assigned_to_id'])) {
             $assignee = $this->em->getRepository(\App\Entity\User::class)->find($data['assigned_to_id']);
-            if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $token->project) !== null) {
+            if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $project) !== null) {
                 $entry->assignedTo = $assignee;
             } elseif ($assignee !== null) {
-                return $this->json(['errors' => ['assigned_to_id' => 'User is not a member of this project.']], 422);
+                return $this->secureJson(['errors' => ['assigned_to_id' => $this->trans('api_content.assignee_not_member', [], 'User is not a member of this project.')]], 422);
             }
         }
 
@@ -247,7 +337,7 @@ class ContentController extends AbstractController
             $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
         }
         if ($entry->status === 'scheduled' && $entry->scheduledAt === null) {
-            return $this->json(['error' => $this->trans('api_content.scheduled_at_required', [], 'scheduledAt is required when status is scheduled.')], 422);
+            return $this->secureJson(['error' => $this->trans('api_content.scheduled_at_required', [], 'scheduledAt is required when status is scheduled.')], 422);
         }
 
         // Si multipart : uploader les fichiers et les remplacer par leurs UUIDs
@@ -302,7 +392,7 @@ class ContentController extends AbstractController
             }
         }
         if (!empty($validationErrors)) {
-            return $this->json(['errors' => $validationErrors], 422);
+            return $this->secureJson(['errors' => $validationErrors], 422);
         }
 
         // Vérification d'unicité
@@ -333,15 +423,15 @@ class ContentController extends AbstractController
 
             $count = $qb->getQuery()->getSingleScalarResult();
             if ($count > 0) {
-                $validationErrors[$field->slug] = sprintf(
-                    'La valeur "%s" existe déjà pour le champ "%s".',
-                    (string)$fieldValue,
-                    $field->name
+                $validationErrors[$field->slug] = $this->trans(
+                    'api_content.field_value_unique',
+                    ['%value%' => (string) $fieldValue, '%field%' => $field->name],
+                    sprintf('The value "%s" already exists for field "%s".', (string) $fieldValue, $field->name)
                 );
             }
         }
         if (!empty($validationErrors)) {
-            return $this->json(['errors' => $validationErrors], 422);
+            return $this->secureJson(['errors' => $validationErrors], 422);
         }
 
         // Generate slug from data or first meaningful field value and ensure uniqueness
@@ -352,12 +442,28 @@ class ContentController extends AbstractController
                 $rawSlug = $firstValue;
             }
         }
+        if ($rawSlug !== null && strlen($rawSlug) > self::MAX_SLUG_LENGTH) {
+            return $this->secureJson([
+                'error' => $this->trans('api_content.slug_too_long', ['%max%' => (string) self::MAX_SLUG_LENGTH], sprintf('Slug exceeds maximum allowed length (%d characters).', self::MAX_SLUG_LENGTH)),
+                'code'  => 'SLUG_TOO_LONG',
+            ], 422);
+        }
         $entry->slug = $this->ensureUniqueSlug($collection, $rawSlug ?? ('entry-' . bin2hex(random_bytes(4))), $entry->locale);
 
         $this->em->persist($entry);
         $this->em->flush();
 
-        return $this->json($this->formatter->formatEntry($entry), 201);
+        $this->auditService?->log(
+            toolName: 'api_content_create',
+            project: $project,
+            input: ['collection' => $collectionSlug, 'status' => $entry->status, 'locale' => $entry->locale],
+            output: ['uuid' => $entry->uuid?->toString(), 'slug' => $entry->slug],
+            status: 'success',
+            createdBy: $token ? ('token:' . $token->id) : 'public',
+            source: 'public_api',
+        );
+
+        return $this->secureJson($this->formatter->formatEntry($entry), 201);
     }
 
     #[OA\Patch(
@@ -385,33 +491,59 @@ class ContentController extends AbstractController
     #[Route('/{uuid}', name: 'update', methods: ['PUT', 'PATCH'])]
     public function update(Request $request, string $projectId, string $collectionSlug, string $uuid): JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $projectId)) {
+            return $this->secureJson(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
+        }
+
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return $this->secureJson(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
+        }
+
+        if ($rateLimitResponse = $this->checkRateLimit($request, $projectId)) {
+            return $rateLimitResponse;
+        }
+
         $token = $this->tokenChecker->resolve($request);
         if ($token === null || !$token->can('create')) {
-            return $this->json(['error' => $this->trans('api_content.token_write_required', [], 'Unauthorized. Token requires write ability.')], 401);
+            return $this->secureJson(['error' => $this->trans('api_content.token_write_required', [], 'Unauthorized. Token requires write ability.')], 401);
         }
 
         if ($token->project->uuid->toString() !== $projectId) {
-            return $this->json(['error' => $this->trans('api_content.forbidden', [], 'Forbidden.')], 403);
+            return $this->secureJson(['error' => $this->trans('api_content.forbidden', [], 'Forbidden.')], 403);
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($token->project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
         }
 
         try {
             $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
         if ($entry === null) {
-            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
+        }
+
+        if (strlen($request->getContent()) > self::MAX_PAYLOAD_BYTES) {
+            return $this->secureJson([
+                'error' => $this->trans('api_content.payload_too_large', ['%max%' => '2MB'], 'Content payload exceeds maximum size limit (2MB).'),
+                'code'  => 'PAYLOAD_TOO_LARGE',
+            ], 413);
         }
 
         try {
             $data = $request->toArray();
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('api_content.invalid_json', [], 'Invalid JSON')], 400);
+            return $this->secureJson(['error' => $this->trans('api_content.invalid_json', [], 'Invalid JSON')], 400);
+        }
+
+        if (count($data) > self::MAX_FIELDS_COUNT) {
+            return $this->secureJson([
+                'error' => $this->trans('api_content.too_many_fields', ['%max%' => (string) self::MAX_FIELDS_COUNT], sprintf('Payload exceeds maximum allowed fields count (max %d).', self::MAX_FIELDS_COUNT)),
+                'code'  => 'TOO_MANY_FIELDS',
+            ], 422);
         }
 
         if (isset($data['status'])) {
@@ -420,7 +552,7 @@ class ContentController extends AbstractController
             $validStatuses = array_column($statuses, 'slug');
             $validStatuses[] = 'scheduled';
             if (!in_array($status, $validStatuses, true)) {
-                return $this->json(['errors' => ['status' => 'Invalid status for this collection.']], 422);
+                return $this->secureJson(['errors' => ['status' => $this->trans('api_content.invalid_status', [], 'Invalid status for this collection.')]], 422);
             }
             $entry->status = $status;
         }
@@ -428,16 +560,22 @@ class ContentController extends AbstractController
             try {
                 $entry->scheduledAt = new \DateTimeImmutable($data['scheduledAt']);
             } catch (\Exception) {
-                return $this->json(['error' => $this->trans('api_content.invalid_scheduled_at', [], 'Format de date scheduledAt invalide.')], 422);
+                return $this->secureJson(['error' => $this->trans('api_content.invalid_scheduled_at', [], 'Format de date scheduledAt invalide.')], 422);
             }
         }
         if ($entry->status === 'scheduled' && $entry->scheduledAt === null) {
-            return $this->json(['error' => $this->trans('api_content.scheduled_at_required', [], 'scheduledAt is required when status is scheduled.')], 422);
+            return $this->secureJson(['error' => $this->trans('api_content.scheduled_at_required', [], 'scheduledAt is required when status is scheduled.')], 422);
         }
         if (isset($data['locale'])) {
             $entry->locale = $data['locale'];
         }
         if (isset($data['slug']) && is_string($data['slug']) && trim($data['slug']) !== '') {
+            if (strlen($data['slug']) > self::MAX_SLUG_LENGTH) {
+                return $this->secureJson([
+                    'error' => $this->trans('api_content.slug_too_long', ['%max%' => (string) self::MAX_SLUG_LENGTH], sprintf('Slug exceeds maximum allowed length (%d characters).', self::MAX_SLUG_LENGTH)),
+                    'code'  => 'SLUG_TOO_LONG',
+                ], 422);
+            }
             $entry->slug = $this->ensureUniqueSlug($collection, $data['slug'], $entry->locale, $entry->id);
         }
 
@@ -447,7 +585,7 @@ class ContentController extends AbstractController
             if ($assignee !== null && $this->memberRepo->findActiveByUserAndProject($assignee, $token->project) !== null) {
                 $entry->assignedTo = $assignee;
             } elseif ($assignee !== null) {
-                return $this->json(['errors' => ['assigned_to_id' => 'User is not a member of this project.']], 422);
+                return $this->secureJson(['errors' => ['assigned_to_id' => $this->trans('api_content.assignee_not_member', [], 'User is not a member of this project.')]], 422);
             }
         }
 
@@ -469,7 +607,7 @@ class ContentController extends AbstractController
             }
         }
         if (!empty($validationErrors)) {
-            return $this->json(['errors' => $validationErrors], 422);
+            return $this->secureJson(['errors' => $validationErrors], 422);
         }
 
         // Vérification d'unicité
@@ -500,20 +638,30 @@ class ContentController extends AbstractController
 
             $count = $qb->getQuery()->getSingleScalarResult();
             if ($count > 0) {
-                $validationErrors[$field->slug] = sprintf(
-                    'La valeur "%s" existe déjà pour le champ "%s".',
-                    (string)$fieldValue,
-                    $field->name
+                $validationErrors[$field->slug] = $this->trans(
+                    'api_content.field_value_unique',
+                    ['%value%' => (string) $fieldValue, '%field%' => $field->name],
+                    sprintf('The value "%s" already exists for field "%s".', (string) $fieldValue, $field->name)
                 );
             }
         }
         if (!empty($validationErrors)) {
-            return $this->json(['errors' => $validationErrors], 422);
+            return $this->secureJson(['errors' => $validationErrors], 422);
         }
 
         $this->em->flush();
 
-        return $this->json($this->formatter->formatEntry($entry));
+        $this->auditService?->log(
+            toolName: 'api_content_update',
+            project: $token->project,
+            input: ['collection' => $collectionSlug, 'uuid' => $uuid],
+            output: ['slug' => $entry->slug, 'status' => $entry->status],
+            status: 'success',
+            createdBy: 'token:' . $token->id,
+            source: 'public_api',
+        );
+
+        return $this->secureJson($this->formatter->formatEntry($entry));
     }
 
     #[OA\Delete(
@@ -534,48 +682,74 @@ class ContentController extends AbstractController
     #[Route('/{uuid}', name: 'destroy', methods: ['DELETE'])]
     public function destroy(Request $request, string $projectId, string $collectionSlug, string $uuid): JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $projectId)) {
+            return $this->secureJson(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
+        }
+
+        if (!preg_match(self::UUID_REGEX, $uuid)) {
+            return $this->secureJson(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
+        }
+
+        if ($rateLimitResponse = $this->checkRateLimit($request, $projectId)) {
+            return $rateLimitResponse;
+        }
+
         $token = $this->tokenChecker->resolve($request);
         if ($token === null || !$token->can('delete')) {
-            return $this->json(['error' => $this->trans('api_content.token_delete_required', [], 'Unauthorized. Token requires delete ability.')], 401);
+            return $this->secureJson(['error' => $this->trans('api_content.token_delete_required', [], 'Unauthorized. Token requires delete ability.')], 401);
         }
 
         if ($token->project->uuid->toString() !== $projectId) {
-            return $this->json(['error' => $this->trans('api_content.forbidden', [], 'Forbidden.')], 403);
+            return $this->secureJson(['error' => $this->trans('api_content.forbidden', [], 'Forbidden.')], 403);
         }
 
         $collection = $this->collectionRepository->findOneByProjectAndSlug($token->project, $collectionSlug);
         if ($collection === null) {
-            return $this->json(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.collection_not_found', [], 'Collection not found.')], 404);
         }
 
         try {
             $entry = $this->entryRepository->findOneBy(['uuid' => $uuid, 'collection' => $collection, 'deletedAt' => null]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
         if ($entry === null) {
-            return $this->json(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.entry_not_found', [], 'Entry not found.')], 404);
         }
 
         $entry->deletedAt = new \DateTimeImmutable();
         $this->em->flush();
 
-        return $this->json(null, 204);
+        $this->auditService?->log(
+            toolName: 'api_content_delete',
+            project: $token->project,
+            input: ['collection' => $collectionSlug, 'uuid' => $uuid],
+            output: ['deleted' => true],
+            status: 'success',
+            createdBy: 'token:' . $token->id,
+            source: 'public_api',
+        );
+
+        return $this->secureJson(null, 204);
     }
 
     private function resolvePublicProject(string $projectId): Project|JsonResponse
     {
+        if (!preg_match(self::UUID_REGEX, $projectId)) {
+            return $this->secureJson(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
+        }
+
         try {
             $project = $this->projectRepository->findOneBy(['uuid' => $projectId]);
         } catch (\Throwable) {
-            return $this->json(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
         }
         if ($project === null) {
-            return $this->json(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
+            return $this->secureJson(['error' => $this->trans('api_content.project_not_found', [], 'Project not found.')], 404);
         }
 
         if (!$project->publicApi) {
-            return $this->json(['error' => $this->trans('api_content.public_disabled', [], 'Public API access is disabled for this project.')], 403);
+            return $this->secureJson(['error' => $this->trans('api_content.public_disabled', [], 'Public API access is disabled for this project.')], 403);
         }
 
         return $project;

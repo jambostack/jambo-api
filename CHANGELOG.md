@@ -7,7 +7,51 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.26.162] — 2026-11-05
+## [1.26.166] — 2026-11-06
+
+### Content API & AdminApi CSV Import Security Hardening (Cycle #96)
+- **Public & Token Content API Hardening (`ContentController`)**:
+  - Enforced strict security headers (`Cache-Control: no-store, private`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Pragma: no-cache`) across all endpoints via `secureJson()`.
+  - Added rate limiting protection via `limiter.project_limiter` for read, write, update, and delete actions.
+  - Implemented strict payload size limits (`MAX_PAYLOAD_BYTES = 2MB`) returning `413 PAYLOAD_TOO_LARGE`.
+  - Added request field count limits (`MAX_FIELDS_COUNT = 100`) returning `422 TOO_MANY_FIELDS`.
+  - Enforced collection entry quotas (`MAX_ENTRIES_PER_COLLECTION = 10,000`) preventing storage exhaustion.
+  - Added slug length bounds (`MAX_SLUG_LENGTH = 128`) returning `422 SLUG_TOO_LONG`.
+  - Refactored all error messages and validation exceptions to strict i18n translation keys (`api_content.invalid_status`, `api_content.assignee_not_member`, `api_content.field_value_unique`, `api_content.collection_quota_exceeded`, `api_content.rate_limit_exceeded`, `api_content.payload_too_large`, `api_content.too_many_fields`, `api_content.slug_too_long`).
+  - Added comprehensive audit logging for content creation (`api_content_create`), update (`api_content_update`), and soft-deletion (`api_content_delete`).
+- **AdminApi CSV Import Hardening (`AdminApi\ImportController`)**:
+  - Enforced `SECURITY_HEADERS` on JSON and stream-file import endpoints.
+  - Implemented collection quota bounds: checked current active entries against `MAX_ENTRIES_PER_COLLECTION = 10,000` before and during streaming.
+  - Added cell sanitization: stripped ASCII control characters (`[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]`) to prevent log poisoning and corrupted stored records.
+  - Added comprehensive audit logging for CSV imports (`admin_api_import_csv`) tracking created entries, errors count, and executing actor.
+- **I18n Translation Completeness & Testing**:
+  - Added 11 new translation keys across English, French, Spanish, and Arabic (3,520 keys per language, 100% symmetry).
+  - Created dedicated test suite `Cycle96ContentAndImportSecurityHardeningTest` (10 tests, 126 assertions, 100% pass).
+
+## [1.26.165] — 2026-11-06
+
+### Studio AI & Schema Hardening, Quotas & Type Sanitization (Cycle #96)
+- **Studio Security Hardening (`StudioController`)**:
+  - Added payload size validation on AI endpoints (2MB schema, 10MB chat).
+  - Added quotas on batch operations (max 50 actions, max 10 image generation prompts, max 20 translation entries).
+  - Enforced project collection limit (max 100 collections).
+  - TypeScript interface and identifier sanitization preventing arbitrary symbol injection in generated types.
+  - Added audit logging on automated actions and schema provisionings.
+
+## [1.26.164] — 2026-11-06
+
+### Media & Asset Security Hardening, Magic Bytes Inspection & Orphan Retention (Cycle #95)
+- **Media & Upload Hardening (`UploadSecurityValidator`, `DirectUploadService`, `MediaController`)**:
+  - Full magic bytes validation for all formats (images, audio, video, documents, archives).
+  - Cross-validation between declared MIME and real bytes; active script detection in text/data formats.
+  - Head inspection on S3 multipart complete uploads with automatic quarantine and malicious object eviction.
+  - Partition disk space protection (< 50MB check) and automatic remote Flysystem/S3 purging.
+  - New pruning CLI command `app:media:prune-orphans` (`PruneOrphanUploadsCommand`).
+
+## [1.26.163] — 2026-11-06
+
+### Blueprint Import & Collection Template Hardening (Cycle #94)
+- Hardened collection template application, alias normalization, and collection quota limits.
 
 ### Schema & Template Hardening, Anti-Injection & Inter-Collection Relation Isolation (Cycle #94)
 - **Collection Template Security Hardening (`CollectionTemplateController`)**:

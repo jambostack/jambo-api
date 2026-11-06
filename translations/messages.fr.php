@@ -3843,4 +3843,17 @@ return [
     'cli.prune_orphans.success' => 'Nettoyage des téléversements orphelins terminé avec succès.',
     'cli.prune_orphans.purging_soft_deleted' => '2. Purge définitive des médias supprimés depuis plus de %days% jours...',
     'cli.prune_orphans.scanning_disk' => '3. Analyse du stockage local à la recherche de fichiers physiques orphelins...',
+
+    // Cycle #96: Content API & CSV Import Hardening
+    'api_content.rate_limit_exceeded' => 'Trop de requêtes vers l\'API de contenu. Veuillez réessayer plus tard.',
+    'api_content.payload_too_large' => 'La charge utile du contenu dépasse la limite maximale (%max%).',
+    'api_content.too_many_fields' => 'La charge utile dépasse le nombre maximal de champs autorisés (max %max%).',
+    'api_content.collection_quota_exceeded' => 'Limite d\'entrées atteinte pour cette collection (maximum %max% entrées).',
+    'api_content.invalid_status' => 'Statut invalide pour cette collection.',
+    'api_content.assignee_not_member' => 'L\'utilisateur n\'est pas membre de ce projet.',
+    'api_content.field_value_unique' => 'La valeur "%value%" existe déjà pour le champ "%field%".',
+    'api_content.invalid_uuid_format' => 'Format d\'UUID invalide.',
+    'api_content.slug_too_long' => 'Le slug dépasse la longueur maximale autorisée (%max% caractères).',
+    'admin_api.import.quota_exceeded' => 'Limite d\'entrées atteinte pour cette collection (maximum %max% entrées).',
+    'admin_api.import.cell_control_chars' => 'La cellule contient des caractères de contrôle invalides dans la colonne "%column%".',
 ];

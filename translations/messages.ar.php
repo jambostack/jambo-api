@@ -3827,4 +3827,17 @@ return [
     'cli.prune_orphans.success' => 'اكتمل تنظيف التحميلات اليتيمة بنجاح.',
     'cli.prune_orphans.purging_soft_deleted' => '2. تفريغ نهائي للوسائط المحذوفة منذ أكثر من %days% يوماً...',
     'cli.prune_orphans.scanning_disk' => '3. فحص التخزين المحلي للبحث عن ملفات مادية غير مسجلة...',
+
+    // Cycle #96: Content API & CSV Import Hardening
+    'api_content.rate_limit_exceeded' => 'عدد كبير جداً من طلبات واجهة برمجة المحتوى. يرجى المحاولة لاحقاً.',
+    'api_content.payload_too_large' => 'حمولة المحتوى تتجاوز الحد الأقصى المسموح به (%max%).',
+    'api_content.too_many_fields' => 'الحمولة تتجاوز الحد الأقصى لعدد الحقول المسموح بها (أقصى %max%).',
+    'api_content.collection_quota_exceeded' => 'تم الوصول إلى الحد الأقصى للمدخلات في هذه المجموعة (الحد الأقصى %max% مدخل).',
+    'api_content.invalid_status' => 'حالة غير صالحة لهذه المجموعة.',
+    'api_content.assignee_not_member' => 'المستخدم ليس عضواً في هذا المشروع.',
+    'api_content.field_value_unique' => 'القيمة "%value%" موجودة بالفعل للحقل "%field%".',
+    'api_content.invalid_uuid_format' => 'تنسيق UUID غير صالح.',
+    'api_content.slug_too_long' => 'يتجاوز المعرّف اللطيف الطول الأقصى المسموح به (%max% حرف).',
+    'admin_api.import.quota_exceeded' => 'تم الوصول إلى الحد الأقصى للمدخلات في هذه المجموعة (الحد الأقصى %max% مدخل).',
+    'admin_api.import.cell_control_chars' => 'تحتوي الخلية على أحرف تحكم غير صالحة في العمود "%column%".',
 ];

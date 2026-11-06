@@ -3825,4 +3825,17 @@ return [
     'cli.prune_orphans.success' => 'Limpieza de cargas huérfanas completada con éxito.',
     'cli.prune_orphans.purging_soft_deleted' => '2. Purgando medios eliminados hace más de %days% días...',
     'cli.prune_orphans.scanning_disk' => '3. Analizando el almacenamiento local en busca de archivos físicos huérfanos...',
+
+    // Cycle #96: Content API & CSV Import Hardening
+    'api_content.rate_limit_exceeded' => 'Demasiadas solicitudes a la API de contenido. Inténtelo más tarde.',
+    'api_content.payload_too_large' => 'La carga útil del contenido excede el límite de tamaño máximo (%max%).',
+    'api_content.too_many_fields' => 'La carga útil excede el número máximo de campos permitidos (máx %max%).',
+    'api_content.collection_quota_exceeded' => 'Límite de entradas alcanzado para esta colección (máximo %max% entradas).',
+    'api_content.invalid_status' => 'Estado no válido para esta colección.',
+    'api_content.assignee_not_member' => 'El usuario no es miembro de este proyecto.',
+    'api_content.field_value_unique' => 'El valor "%value%" ya existe para el campo "%field%".',
+    'api_content.invalid_uuid_format' => 'Formato de UUID no válido.',
+    'api_content.slug_too_long' => 'El slug supera la longitud máxima permitida (%max% caracteres).',
+    'admin_api.import.quota_exceeded' => 'Límite de entradas alcanzado para esta colección (máximo %max% entradas).',
+    'admin_api.import.cell_control_chars' => 'La celda contiene caracteres de control no válidos en la columna "%column%".',
 ];
