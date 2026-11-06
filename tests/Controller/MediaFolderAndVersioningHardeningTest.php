@@ -251,12 +251,11 @@ class MediaFolderAndVersioningHardeningTest extends WebTestCase
         $media = new Media();
         $media->project = $project;
         $media->folder = $parent;
-        $media->filename = 'test.jpg';
-        $media->originalFilename = 'test.jpg';
+        $media->fileName = 'test.jpg';
+        $media->originalName = 'test.jpg';
         $media->mimeType = 'image/jpeg';
-        $media->size = 1024;
-        $media->storage = 'local';
-        $media->path = 'uploads/test.jpg';
+        $media->fileSize = 1024;
+        $media->storagePaths = ['default' => 'uploads/test.jpg'];
         $em->persist($media);
 
         $em->flush();

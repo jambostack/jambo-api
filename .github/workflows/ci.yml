@@ -73,7 +73,7 @@ jobs:
         env:
           DATABASE_URL: "sqlite:///%kernel.project_dir%/var/test.db"
           APP_ENV: test
-        run: php -d memory_limit=2G vendor/bin/phpunit --no-coverage
+        run: php -d memory_limit=2G vendor/bin/phpunit -c phpunit.xml.dist --no-coverage
 
   frontend-build:
     name: Frontend Assets Compilation (Node.js 20)

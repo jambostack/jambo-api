@@ -27,9 +27,9 @@ class NativeTwigSecurityPolicy implements SecurityPolicyInterface
         );
     }
 
-    public function checkSecurity($tags, $filters, $functions): void
+    public function checkSecurity($tags, $filters, $functions, array $tests = []): void
     {
-        $this->policy->checkSecurity($tags, $filters, $functions);
+        $this->policy->checkSecurity($tags, $filters, $functions, $tests);
     }
 
     public function checkMethodAllowed($obj, $method): void

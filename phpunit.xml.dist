@@ -3,6 +3,10 @@
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          backupGlobals="false"
          colors="true"
+         failOnDeprecation="false"
+         failOnNotice="false"
+         failOnWarning="false"
+         failOnPhpunitDeprecation="false"
          bootstrap="tests/bootstrap.php"
 >
     <php>
@@ -21,6 +25,8 @@
             <directory>tests/Enum</directory>
             <directory>tests/Twig</directory>
             <directory>tests/Service</directory>
+            <directory>tests/DependencyInjection</directory>
+            <directory>tests/MessageHandler</directory>
         </testsuite>
         <testsuite name="security">
             <directory>tests/Security</directory>
